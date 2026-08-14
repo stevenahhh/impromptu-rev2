@@ -1,4 +1,7 @@
 import { type ChildProcessByStdio, spawn } from "node:child_process";
+process.on("unhandledRejection", (reason) => {
+  console.error("UNHANDLED:", reason instanceof Error ? reason.stack : String(reason));
+});
 import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -44,6 +47,8 @@ export interface ModeRehearsalEvidence {
   readonly observedTransition: string;
   readonly windowManagement: "available" | "fallback";
   readonly changeScreen: "available" | "fallback";
+  readonly manualPlacementFallback: "VERIFIED" | "NOT_REQUIRED";
+  readonly targetScreenLossRecovery: "RECOVERED" | "MANUAL_FALLBACK";
   readonly artifact: RehearsalArtifact;
 }
 
@@ -71,7 +76,7 @@ interface CoResidentCycleEvidence {
 }
 
 type ServiceProcess = ChildProcessByStdio<null, Readable, Readable>;
-
+const chromeExecutable = "C:/Program Files/Google/Chrome/Application/chrome.exe";
 async function availablePort(): Promise<number> {
   const server = createNetServer();
   await new Promise<void>((resolve, reject) => {
@@ -86,7 +91,6 @@ async function availablePort(): Promise<number> {
   return address.port;
 }
 
-const chromeExecutable = "C:/Program Files/Google/Chrome/Application/chrome.exe";
 let projectionPort = await availablePort();
 let projectionOrigin = `http://127.0.0.1:${projectionPort}`;
 const stagePort = await availablePort();
@@ -373,6 +377,8 @@ async function persistRehearsalArtifact(
         faults: evidence.faults,
         requestedTransition: evidence.requestedTransition,
         observedTransition: evidence.observedTransition,
+        manualPlacementFallback: evidence.manualPlacementFallback,
+        targetScreenLossRecovery: evidence.targetScreenLossRecovery,
         privatePixelCount: evidence.privatePixelCount,
         outcome: evidence.outcome,
         failureReasons: evidence.failureReasons,
@@ -464,10 +470,7 @@ async function rehearse(
   browser: Browser,
   mode: WindowsDisplayMode,
   rehearsal: number,
-  restartProjection: (
-    channelClosed: () => Promise<unknown>,
-    signalRecovery: () => Promise<void>,
-  ) => Promise<void>,
+  restartProjection: () => Promise<void>,
 ): Promise<ModeRehearsalEvidence> {
   const context = await browser.newContext();
   await installEventBuffer(context);
@@ -521,7 +524,34 @@ async function rehearse(
         changeScreen: "changeScreen" in window,
       };
     });
+    let manualPlacementFallback: ModeRehearsalEvidence["manualPlacementFallback"] = "NOT_REQUIRED";
+    if (mode === "duplicate" || mode === "single") {
+      await clearBufferedEvent(page, "impromptu:target-screen-placement");
+      const placement = await prepareEvent(page, "impromptu:target-screen-placement");
+      await page.getByRole("button", { name: "Place on target screen" }).click();
+      const detail = await placement();
+      if (
+        typeof detail !== "object" ||
+        detail === null ||
+        (detail as Record<string, unknown>).privatePixelCount !== 0
+      ) {
+        throw new Error("target-screen placement was not observed cleanly");
+      }
+      const status = (detail as Record<string, unknown>).status;
+      if (status === "MANUAL_FALLBACK") {
+        const instruction =
+          mode === "duplicate" ? "only session on this PC" : "only app on the audience screen";
+        if (!((await page.locator("body").textContent()) ?? "").includes(instruction)) {
+          throw new Error(`${mode} manual placement instructions were not rendered`);
+        }
+        manualPlacementFallback = "VERIFIED";
+      } else if (status !== "TARGET_PLACED") {
+        throw new Error(`unexpected target-screen placement status: ${String(status)}`);
+      }
+    }
     const faults: FaultEvidence[] = [];
+    let targetScreenLossRecovery: ModeRehearsalEvidence["targetScreenLossRecovery"] =
+      "MANUAL_FALLBACK";
     const requestedTopologyMode =
       mode === "extend" ? "duplicate" : mode === "duplicate" ? "extend" : "single";
     const requestedTransition = `${mode}->${requestedTopologyMode}`;
@@ -603,6 +633,37 @@ async function rehearse(
       async () => {
         await observeTopology("single", 1);
         await observeTopology(mode, mode === "extend" ? 2 : 1);
+      },
+    );
+
+    await recordFault(
+      "target-screen-loss",
+      "SIMULATED",
+      "platform-target-screen-loss-handler",
+      async () => {
+        await clearBufferedEvent(page, "impromptu:target-screen-recovery");
+        const recovered = await prepareEvent(page, "impromptu:target-screen-recovery");
+        await page.evaluate(() => {
+          window.dispatchEvent(
+            new CustomEvent("impromptu:platform-topology-change", {
+              detail: { observedMode: "single", screenCount: 1, targetScreenLost: true },
+            }),
+          );
+        });
+        const detail = await recovered();
+        if (typeof detail !== "object" || detail === null) {
+          throw new Error("target-screen recovery detail missing");
+        }
+        const status = (detail as Record<string, unknown>).status;
+        const observedPrivatePixels = (detail as Record<string, unknown>).privatePixelCount;
+        if (
+          (status !== "TARGET_LOST_RECOVERED" && status !== "MANUAL_FALLBACK") ||
+          observedPrivatePixels !== 0
+        ) {
+          throw new Error(`target-screen recovery failed: ${JSON.stringify(detail)}`);
+        }
+        targetScreenLossRecovery =
+          status === "TARGET_LOST_RECOVERED" ? "RECOVERED" : "MANUAL_FALLBACK";
       },
     );
 
@@ -688,6 +749,8 @@ async function rehearse(
       observedTransition,
       windowManagement: capabilities.windowManagement ? "available" : "fallback",
       changeScreen: capabilities.changeScreen ? "available" : "fallback",
+      manualPlacementFallback,
+      targetScreenLossRecovery,
     };
     return {
       ...rehearsalEvidence,
@@ -784,6 +847,8 @@ export async function runWindowsTopologyE2E(): Promise<WindowsTopologyEvidence> 
             failureReasons: result.failureReasons,
             privateContentVerdict: result.artifact.privateContentVerdict,
             privatePixelVerdict: result.artifact.privatePixelVerdict,
+            manualPlacementFallback: result.manualPlacementFallback,
+            targetScreenLossRecovery: result.targetScreenLossRecovery,
             jsonPath: result.artifact.jsonPath,
             jsonChecksum: result.artifact.jsonChecksum,
             domChecksum: result.artifact.domChecksum,
@@ -814,9 +879,9 @@ export async function runWindowsTopologyE2E(): Promise<WindowsTopologyEvidence> 
       coResidentCycle,
     };
   } finally {
+    await stopProjectionFixture(projection);
     await browser?.close();
     await stop(console);
     await stop(stage);
-    await stopProjectionFixture(projection);
   }
 }
