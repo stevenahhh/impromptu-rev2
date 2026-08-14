@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { EvidenceCandidate } from "@impromptu/contracts/private";
+import type { PublicationTombstone, PublishedAudienceCard } from "@impromptu/contracts/public";
 import { PreparedEvidenceProjectionGateway } from "@impromptu/projection-gateway";
 import {
   createPreparedEvidenceStore,
@@ -72,10 +73,29 @@ async function createBoundFlow(
   nowMs = 1_000,
   liveEvidenceAuthorizer?: { authorize(candidate: EvidenceCandidate): Promise<boolean> },
   livePublicEnabled = false,
+  observeProjection?: (
+    store: ReturnType<typeof createPreparedEvidenceStore>,
+    event: PublishedAudienceCard | PublicationTombstone,
+  ) => void,
 ) {
   const gateway = new PreparedEvidenceProjectionGateway();
   const store = createPreparedEvidenceStore();
-  const coordinator = new PreparedEvidenceCoordinator(gateway, store, {
+  const projection =
+    observeProjection === undefined
+      ? gateway
+      : {
+          bindDisplay: gateway.bindDisplay.bind(gateway),
+          projectPlayback: gateway.projectPlayback.bind(gateway),
+          recordPlaybackApplied: gateway.recordPlaybackApplied.bind(gateway),
+          projectCard(
+            presentationSessionId: string,
+            event: PublishedAudienceCard | PublicationTombstone,
+          ) {
+            observeProjection(store, event);
+            return gateway.projectCard(presentationSessionId, event);
+          },
+        };
+  const coordinator = new PreparedEvidenceCoordinator(projection, store, {
     accountSessionTtlMs: 10_000,
     presentationCapabilityTtlMs: 10_000,
     ...(liveEvidenceAuthorizer === undefined ? {} : { liveEvidenceAuthorizer }),
@@ -504,6 +524,160 @@ describe("prepared evidence private coordinator", () => {
     ).toEqual({ outcome: "REJECTED", reason: "EVIDENCE_AUTHORIZATION_DENIED" });
     expect(authorizationChecks).toBe(3);
     expect(flow.gateway.snapshot(flow.bound.audienceDisplaySessionId, 1_004)?.cards).toEqual([]);
+  });
+
+  test("rejects conflicting concurrent reuse of one approval id", async () => {
+    const flow = await createBoundFlow(
+      1_000,
+      {
+        async authorize() {
+          return true;
+        },
+      },
+      true,
+    );
+    const candidate = {
+      candidateId: "candidate_live_idempotency",
+      candidateVersion: "candidate-version-1",
+      provenance: "LIVE_VERIFIED",
+      verdict: "SUPPORTED",
+      claimText: "Idempotent live claim",
+      evidenceExcerpt: "Authoritative support",
+      privateSourceUri: "private://source/idempotency",
+      causal: {
+        presentationSessionId: flow.created.lifecycle.presentationSessionId,
+        presentationSessionEpoch: "pse_1",
+        displayBindingEpoch: "dbe_1",
+        deckVersion: publicDeck.deckVersion,
+        manifestHash,
+        occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+        transcriptFinalId: "transcript_idempotency",
+        source: {
+          sourceId: "source_idempotency",
+          revision: "source-revision-1",
+          contentHash: sourceHash,
+        },
+        decisions: {
+          acl: "acl-1",
+          publicationPolicy: "publication-policy-1",
+          rights: "rights-1",
+          dlp: "dlp-1",
+        },
+      },
+    } as const;
+    expect(
+      (await flow.coordinator.addLiveCandidate(flow.account.accountSessionId, candidate, 1_002))
+        .outcome,
+    ).toBe("APPLIED");
+    const snapshot = flow.coordinator.readLiveCandidateSnapshot(
+      flow.account.accountSessionId,
+      flow.created.lifecycle.presentationSessionId,
+      1_003,
+    );
+    if (snapshot.outcome !== "APPLIED") throw new Error("snapshot failed");
+    const approval = {
+      presentationSessionId: flow.created.lifecycle.presentationSessionId,
+      candidateId: candidate.candidateId,
+      candidateVersion: candidate.candidateVersion,
+      expectedCandidateRevision: "candrev_1",
+      expectedPublicCardRevision: "pcr_0",
+      authorityId: flow.created.authority.authorityId,
+      approvalId: "approval_conflicting_reuse",
+      authoritativeSnapshotHash: snapshot.value.authoritativeSnapshotHash,
+      expiresAtMs: null,
+    } as const;
+    const [winner, conflict] = await Promise.all([
+      flow.coordinator.approveCandidate(flow.account.accountSessionId, approval, 1_004),
+      flow.coordinator.approveCandidate(
+        flow.account.accountSessionId,
+        { ...approval, candidateId: "candidate_wrong_request" },
+        1_004,
+      ),
+    ]);
+    expect(winner.outcome).toBe("APPLIED");
+    expect(conflict).toEqual({ outcome: "REJECTED", reason: "IDEMPOTENCY_CONFLICT" });
+  });
+
+  test("commits private publication before emitting it and orders a racing retract", async () => {
+    const projectionObservations: string[] = [];
+    let resolveRacingRetraction: (result: unknown) => void = () => undefined;
+    const racingRetraction = new Promise<unknown>((resolve) => {
+      resolveRacingRetraction = resolve;
+    });
+    let launchRacingRetraction: (event: PublishedAudienceCard) => void = () => undefined;
+    const flow = await createBoundFlow(1_000, undefined, false, (store, event) => {
+      const presentation = [...store.presentations.values()][0];
+      const isPrivatelyVisible =
+        event.status === "PUBLISHED"
+          ? presentation?.cards.cards[event.projectionId] !== undefined
+          : presentation?.cards.cards[event.projectionId] === undefined;
+      projectionObservations.push(`${event.status}:${String(isPrivatelyVisible)}`);
+      if (event.status === "PUBLISHED") launchRacingRetraction(event);
+    });
+    launchRacingRetraction = (event) => {
+      void flow.coordinator
+        .terminateCard(
+          flow.account.accountSessionId,
+          {
+            presentationSessionId: flow.created.lifecycle.presentationSessionId,
+            projectionId: event.projectionId,
+            expectedPublicCardRevision: "pcr_1",
+            authorityId: flow.created.authority.authorityId,
+            operationId: "retract_commit_order",
+            status: "RETRACTED",
+          },
+          1_004,
+        )
+        .then(resolveRacingRetraction);
+    };
+    const candidate = {
+      candidateId: "candidate_curated_commit_order",
+      candidateVersion: "candidate-version-1",
+      provenance: "CURATED_PREAPPROVED",
+      verdict: "SUPPORTED",
+      claimText: "Committed first",
+      evidenceExcerpt: "Curated support",
+      privateSourceUri: "private://source/commit-order",
+      causal: {
+        presentationSessionId: flow.created.lifecycle.presentationSessionId,
+        presentationSessionEpoch: "pse_1",
+        displayBindingEpoch: "dbe_1",
+        deckVersion: publicDeck.deckVersion,
+        manifestHash,
+        occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+        transcriptFinalId: null,
+        source: {
+          sourceId: "source_commit_order",
+          revision: "source-revision-1",
+          contentHash: sourceHash,
+        },
+        decisions: {
+          acl: "acl-1",
+          publicationPolicy: "publication-policy-1",
+          rights: "rights-1",
+          dlp: "dlp-1",
+        },
+      },
+    } as const;
+    expect(
+      flow.coordinator.addCuratedCandidate(flow.account.accountSessionId, candidate, 1_002).outcome,
+    ).toBe("APPLIED");
+    const publication = await flow.coordinator.approveCandidate(
+      flow.account.accountSessionId,
+      {
+        presentationSessionId: flow.created.lifecycle.presentationSessionId,
+        candidateId: candidate.candidateId,
+        expectedCandidateRevision: "candrev_1",
+        expectedPublicCardRevision: "pcr_0",
+        authorityId: flow.created.authority.authorityId,
+        approvalId: "approval_commit_order",
+        expiresAtMs: null,
+      },
+      1_003,
+    );
+    if (publication.outcome !== "APPLIED") throw new Error("publication failed");
+    expect(await racingRetraction).toMatchObject({ outcome: "APPLIED" });
+    expect(projectionObservations).toEqual(["PUBLISHED:true", "RETRACTED:true"]);
   });
 
   test("linearizes supervised live approval and retract with durable idempotency", async () => {
