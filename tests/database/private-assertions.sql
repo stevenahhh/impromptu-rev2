@@ -49,14 +49,35 @@ SELECT pg_temp.assert_true(
   'tenant-owned tables must have fail-closed read and write policies'
 );
 SELECT pg_temp.assert_true(
+  has_table_privilege(
+    'publication_dispatcher',
+    'private_app.publication_outbox',
+    'SELECT,UPDATE'
+  )
+    AND NOT has_table_privilege(
+      'publication_dispatcher',
+      'private_app.publication_outbox',
+      'INSERT,DELETE'
+    )
+    AND NOT has_table_privilege(
+      'publication_dispatcher',
+      'private_app.presentation_sessions',
+      'SELECT,INSERT,UPDATE,DELETE'
+    ),
+  'publication_dispatcher must have only claim and delivery access to the outbox'
+);
+SELECT pg_temp.assert_true(
   NOT has_schema_privilege('projection_app', 'private_app', 'USAGE'),
   'projection_app must not have private schema usage'
 );
 SELECT pg_temp.assert_true(
   (
-    SELECT count(*) = 1
+    SELECT count(*) = 2
     FROM _migrations.applied_migrations
-    WHERE migration_name = '0001_private_foundation.sql'
+    WHERE migration_name IN (
+      '0001_private_foundation.sql',
+      '0002_publication_dispatcher.sql'
+    )
       AND checksum ~ '^[0-9a-f]{64}$'
   ),
   'private migration must be recorded with a checksum'

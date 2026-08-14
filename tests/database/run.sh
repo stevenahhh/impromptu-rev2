@@ -13,6 +13,7 @@ readonly PROJECT_NAME="${DATABASE_TEST_PROJECT_NAME:-impromptu-r2-${WORKTREE_TAG
 readonly BOOTSTRAP_ROLE="impromptu_bootstrap"
 readonly PRIVATE_ROLE="private_app"
 readonly PROJECTION_ROLE="projection_app"
+readonly DISPATCHER_ROLE="publication_dispatcher"
 readonly DEFAULT_DATABASE="postgres"
 readonly PRIVATE_DATABASE="impromptu_private"
 readonly PROJECTION_DATABASE="impromptu_projection"
@@ -216,6 +217,7 @@ run_migrations
 
 rerun_output="$(run_migrations)"
 if [[ "$rerun_output" != *"SKIP private/0001_private_foundation.sql"* \
+  || "$rerun_output" != *"SKIP private/0002_publication_dispatcher.sql"* \
   || "$rerun_output" != *"SKIP projection/0001_projection_foundation.sql"* ]]; then
   echo "migration assertion failed: rerun did not skip applied migrations" >&2
   echo "$rerun_output" >&2
@@ -243,6 +245,8 @@ expect_connection_denied "$PRIVATE_ROLE" "$DEFAULT_DATABASE"
 expect_connection_denied "$PRIVATE_ROLE" "template1"
 expect_connection_denied "migration" "$DEFAULT_DATABASE"
 expect_connection_denied "migration" "template1"
+expect_connection_denied "$DISPATCHER_ROLE" "$DEFAULT_DATABASE"
+expect_connection_denied "$DISPATCHER_ROLE" "template1"
 expect_denied \
   "$PROJECTION_ROLE" "$PROJECTION_DATABASE" \
   "measure the private database" \
@@ -273,6 +277,16 @@ expect_denied \
   "create a PostgreSQL large object from bytes" \
   "SELECT pg_catalog.lo_from_bytea(0, decode('00', 'hex'))" \
   "permission denied for function lo_from_bytea"
+expect_denied \
+  "$DISPATCHER_ROLE" "$PRIVATE_DATABASE" \
+  "read private presentation sessions" \
+  "SELECT count(*) FROM private_app.presentation_sessions" \
+  "permission denied for table presentation_sessions"
+expect_denied \
+  "$DISPATCHER_ROLE" "$PRIVATE_DATABASE" \
+  "insert a private outbox row" \
+  "INSERT INTO private_app.publication_outbox (tenant_id, outbox_id, projection_id, event_kind, public_payload) VALUES ('10000000-0000-4000-8000-000000000001', '66666666-6666-4666-8666-666666666666', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'publish_card', '{}'::jsonb)" \
+  "permission denied for table publication_outbox"
 expect_denied \
   "$PRIVATE_ROLE" "$PRIVATE_DATABASE" \
   "insert a tenant B row while scoped to tenant A" \

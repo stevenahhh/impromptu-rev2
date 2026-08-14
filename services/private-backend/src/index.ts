@@ -13,3 +13,13 @@ export {
   type ServerModelCapability,
   type ServerModelRouter,
 } from "./ports/server-model-router.ts";
+export {
+  createPostgresPrivatePublicationOutbox,
+  dispatchPublicationOutboxBatch,
+  type PrivatePublicationOutbox,
+  type PrivatePublicationOutboxTransaction,
+  type ProjectionDispatchBoundary,
+  type PublicationDispatch,
+  type PublicationDispatchBatchResult,
+  type PublicationEventKind,
+} from "./publication/outbox-dispatcher.ts";
