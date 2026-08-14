@@ -1,0 +1,37 @@
+[
+  {
+    "type": "SLIDE_SET",
+    "presentationSessionId": "session-1",
+    "presentationSessionEpoch": 3,
+    "actorId": "actor-controller-1",
+    "controllerEpoch": 6,
+    "commandId": "command-1",
+    "baseRevision": 10,
+    "requestHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "delivery": "LIVE",
+    "publicSlideKey": "public-slide-1"
+  },
+  {
+    "type": "SLIDE_NEXT",
+    "presentationSessionId": "session-1",
+    "presentationSessionEpoch": 3,
+    "actorId": "actor-controller-1",
+    "controllerEpoch": 6,
+    "commandId": "command-2",
+    "baseRevision": 11,
+    "requestHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "delivery": "LIVE"
+  },
+  {
+    "type": "BLACKOUT_SET",
+    "presentationSessionId": "session-1",
+    "presentationSessionEpoch": 3,
+    "actorId": "actor-controller-1",
+    "controllerEpoch": 6,
+    "commandId": "command-3",
+    "baseRevision": 12,
+    "requestHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "delivery": "LIVE",
+    "enabled": true
+  }
+]

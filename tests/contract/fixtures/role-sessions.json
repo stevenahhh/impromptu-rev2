@@ -1,0 +1,37 @@
+[
+  {
+    "role": "CONTROLLER",
+    "presentationSessionId": "session-1",
+    "presentationSessionEpoch": 3,
+    "actorId": "actor-controller-1",
+    "lease": {
+      "leaseId": "lease-1",
+      "actorId": "actor-controller-1",
+      "controllerEpoch": 6,
+      "expiresAtMs": 1800000000000
+    }
+  },
+  {
+    "role": "PUBLIC_STAGE",
+    "presentationSessionId": "session-1",
+    "presentationSessionEpoch": 3,
+    "display": {
+      "audienceDisplaySessionId": "display-session-1",
+      "displayId": "display-1",
+      "displayBindingEpoch": 4,
+      "expiresAtMs": 1800000000000
+    }
+  },
+  {
+    "role": "PUBLISHER",
+    "presentationSessionId": "session-1",
+    "presentationSessionEpoch": 3,
+    "actorId": "actor-publisher-1",
+    "authority": {
+      "authorityId": "publication-authority-1",
+      "actorId": "actor-publisher-1",
+      "policyVersion": "publication-policy-v2",
+      "expiresAtMs": 1800000000000
+    }
+  }
+]

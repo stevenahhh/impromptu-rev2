@@ -21,6 +21,9 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.2.0",
+    "@impromptu/contracts": "workspace:*",
+    "@impromptu/state": "workspace:*",
+    "@impromptu/test-harness": "workspace:*",
     "@types/bun": "1.2.20",
     "fast-check": "4.3.0",
     "typescript": "5.9.2"

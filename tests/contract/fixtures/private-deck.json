@@ -1,0 +1,19 @@
+{
+  "deckId": "private-deck-1",
+  "deckVersion": "deck-v7",
+  "manifestHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "title": "Guarded pilot briefing",
+  "ownerAccountId": "account-1",
+  "aclPolicyVersion": "acl-v3",
+  "privateObjectPrefix": "private-decks/account-1/deck-1/",
+  "slides": [
+    {
+      "privateSlideId": "private-slide-1",
+      "publicSlideKey": "public-slide-1",
+      "ordinal": 1,
+      "speakerNotes": "Do not display this note.",
+      "extractedText": "Internal retrieval text.",
+      "sourceAssetIds": ["private-asset-1"]
+    }
+  ]
+}

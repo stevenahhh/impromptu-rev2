@@ -1,0 +1,18 @@
+{
+  "deckVersion": "deck-v7",
+  "manifestHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "title": "Guarded pilot briefing",
+  "slides": [
+    {
+      "publicSlideKey": "public-slide-1",
+      "ordinal": 1,
+      "image": {
+        "url": "https://published.example/assets/slide-1.png",
+        "contentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "width": 1920,
+        "height": 1080
+      },
+      "accessibilityLabel": "Title slide for the guarded pilot briefing"
+    }
+  ]
+}
