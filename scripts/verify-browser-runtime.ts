@@ -640,6 +640,23 @@ async function verifyCrossOriginFrameRejection(context: BrowserContext) {
   console.log("Stage rejected a cross-origin iframe parent.");
 }
 
+async function closePersistentContext(context: BrowserContext): Promise<void> {
+  const browser = context.browser();
+  const disconnected = browser?.isConnected()
+    ? new Promise<void>((resolve, reject) => {
+        const signal = AbortSignal.timeout(5_000);
+        browser.once("disconnected", resolve);
+        signal.addEventListener(
+          "abort",
+          () => reject(new Error("persistent Chrome process did not disconnect")),
+          { once: true },
+        );
+      })
+    : Promise.resolve();
+  await context.close();
+  await disconnected;
+}
+
 async function verifyColdOfflineRestart() {
   const cleanup = new CleanupStack();
   const closePreviewOrigins: Array<() => Promise<void>> = [];
@@ -661,7 +678,7 @@ async function verifyColdOfflineRestart() {
       headless: chromeHeadless,
       serviceWorkers: "allow",
     });
-    const closeOnlineContext = cleanup.add(() => onlineContext.close());
+    const closeOnlineContext = cleanup.add(() => closePersistentContext(onlineContext));
 
     for (const surface of surfaces) {
       await installOfflineShell(onlineContext, surface);
@@ -681,7 +698,7 @@ async function verifyColdOfflineRestart() {
       headless: chromeHeadless,
       serviceWorkers: "allow",
     });
-    const closeOfflineContext = cleanup.add(() => offlineContext.close());
+    const closeOfflineContext = cleanup.add(() => closePersistentContext(offlineContext));
     for (const surface of surfaces) {
       const page = await offlineContext.newPage();
       await page.goto(address(surface), { waitUntil: "domcontentloaded" });
