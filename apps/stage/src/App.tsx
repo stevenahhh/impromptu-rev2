@@ -3,7 +3,7 @@ import {
   createRealtimeStageState,
   type RealtimeStageState,
   type RealtimeTransition,
-} from "@impromptu/state";
+} from "@impromptu/state/realtime";
 import { Badge, Brand, Button, Panel, Shell, StatusDot } from "@impromptu/ui";
 import { useEffect, useId, useMemo, useState } from "react";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
