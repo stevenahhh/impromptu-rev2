@@ -608,14 +608,32 @@ async function verifyStageLayouts(context: BrowserContext) {
   await fullscreenPage
     .getByRole("button", { name: "Enter fullscreen" })
     .waitFor({ state: "visible" });
-  const enterFullscreen = fullscreenPage.waitForFunction(() => document.fullscreenElement !== null);
+  const enteredMarker = "IMPROMPTU_FULLSCREEN_ENTERED";
+  const enterFullscreen = fullscreenPage.waitForEvent("console", {
+    predicate: (message) => message.text() === enteredMarker,
+  });
+  await fullscreenPage.evaluate((marker) => {
+    document.addEventListener("fullscreenchange", () => console.info(marker), { once: true });
+  }, enteredMarker);
   await fullscreenPage.getByRole("button", { name: "Enter fullscreen" }).click();
   await enterFullscreen;
+  if (!(await fullscreenPage.evaluate(() => document.fullscreenElement !== null))) {
+    throw new Error("Fullscreen enter event fired without an active fullscreen element");
+  }
   await assertStageFitsViewport(fullscreenPage, "physical-fullscreen", routes[1].critical.slice());
   await fullscreenPage.screenshot({ path: join(artifactPath, "stage-physical-fullscreen.png") });
-  const exitFullscreen = fullscreenPage.waitForFunction(() => document.fullscreenElement === null);
+  const exitedMarker = "IMPROMPTU_FULLSCREEN_EXITED";
+  const exitFullscreen = fullscreenPage.waitForEvent("console", {
+    predicate: (message) => message.text() === exitedMarker,
+  });
+  await fullscreenPage.evaluate((marker) => {
+    document.addEventListener("fullscreenchange", () => console.info(marker), { once: true });
+  }, exitedMarker);
   await fullscreenPage.getByRole("button", { name: "Exit fullscreen" }).click();
   await exitFullscreen;
+  if (await fullscreenPage.evaluate(() => document.fullscreenElement !== null)) {
+    throw new Error("Fullscreen exit event fired while fullscreen remained active");
+  }
   await fullscreenPage.close();
   console.log("Stage layout and fullscreen controls fit every required viewport.");
 }
