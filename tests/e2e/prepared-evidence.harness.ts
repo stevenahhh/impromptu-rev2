@@ -805,7 +805,19 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
   } finally {
     trace("cleanup-start");
     await context?.close();
-    await browser?.close();
+    const activeBrowser = browser;
+    if (activeBrowser?.isConnected()) {
+      const disconnected = new Promise<void>((resolve, reject) => {
+        const signal = AbortSignal.timeout(5_000);
+        activeBrowser.once("disconnected", () => resolve());
+        signal.addEventListener("abort", () => reject(new Error("Chrome close timeout")), {
+          once: true,
+        });
+      });
+      const session = await activeBrowser.newBrowserCDPSession();
+      await session.send("Browser.close");
+      await disconnected;
+    }
     for (const process of processes.toReversed()) await stopProcess(process);
     rmSync(profilePath, { force: true, recursive: true });
     rmSync(privateSnapshotPath, { force: true });
