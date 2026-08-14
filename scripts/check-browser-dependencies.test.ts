@@ -16,9 +16,7 @@ describe("browser forbidden dependency checker", () => {
 
   test("fails closed when configured frontend roots are missing", () => {
     const manifest = loadBrowserDependencyManifest();
-    const violations = scanBrowserDependencies(manifest, [
-      "scripts/fixtures/does-not-exist",
-    ]);
+    const violations = scanBrowserDependencies(manifest, ["scripts/fixtures/does-not-exist"]);
 
     expect(violations).toEqual([
       {
