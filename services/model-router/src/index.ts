@@ -1,3 +1,4 @@
+export * from "./bakeoff.ts";
 export * from "./context.ts";
 export * from "./deadline.ts";
 export * from "./errors.ts";
