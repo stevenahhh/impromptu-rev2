@@ -24,6 +24,8 @@ console.log(
     reconnectTombstoneStatuses: evidence.reconnectTombstoneStatuses,
     browserStorageEntries: evidence.browserStorageEntries,
     samples: evidence.latencySamples,
+    livePublicationRetractP95Ms: Number(evidence.livePublicationRetractP95Ms.toFixed(3)),
+    livePublicationRetractSamples: evidence.livePublicationRetractSamples,
     publicCorrelationMatches: evidence.publicCorrelationMatches,
     surface: "real-service-mains+clean-chrome-stage",
   }),

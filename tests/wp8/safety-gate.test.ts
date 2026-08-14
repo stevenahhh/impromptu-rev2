@@ -8,13 +8,21 @@ import {
 } from "@impromptu/test-harness";
 
 interface GateManifest {
-  readonly status: "FROZEN";
-  readonly scope: string;
-  readonly representativeArtifact: Readonly<{ path: string; sha256: string }>;
-  readonly adversarialArtifact: Readonly<{
-    path: string;
-    sha256: string;
-    separateFromRepresentative: boolean;
+  readonly wp0KoreanAcceptance: Readonly<{
+    collectionStatus: "NOT_COLLECTED";
+    gateStatus: "BLOCKED";
+    eligibleToEnableLivePublication: false;
+  }>;
+  readonly deterministicHarness: Readonly<{
+    collectionStatus: "COLLECTED";
+    freezeStatus: "FROZEN";
+    scope: string;
+    representativeArtifact: Readonly<{ path: string; sha256: string }>;
+    adversarialArtifact: Readonly<{
+      path: string;
+      sha256: string;
+      separateFromRepresentative: boolean;
+    }>;
   }>;
   readonly thresholds: Wp8GateThresholds;
   readonly failureMode: Readonly<{
@@ -36,22 +44,40 @@ describe("WP8 frozen deterministic safety gate", () => {
   test("pins disjoint representative and adversarial artifacts by hash", async () => {
     const manifest = await jsonFile<GateManifest>("tests/corpus/wp8-gate-manifest.json");
     expect(manifest).toMatchObject({
-      status: "FROZEN",
-      scope: "DETERMINISTIC_GUARDED_PILOT_HARNESS",
-      adversarialArtifact: { separateFromRepresentative: true },
+      wp0KoreanAcceptance: {
+        collectionStatus: "NOT_COLLECTED",
+        gateStatus: "BLOCKED",
+        eligibleToEnableLivePublication: false,
+      },
+      deterministicHarness: {
+        collectionStatus: "COLLECTED",
+        freezeStatus: "FROZEN",
+        scope: "DETERMINISTIC_GUARDED_PILOT_HARNESS",
+        adversarialArtifact: { separateFromRepresentative: true },
+      },
     });
-    expect(await sha256(manifest.representativeArtifact.path)).toBe(
-      manifest.representativeArtifact.sha256,
+    expect(await sha256(manifest.deterministicHarness.representativeArtifact.path)).toBe(
+      manifest.deterministicHarness.representativeArtifact.sha256,
     );
-    expect(await sha256(manifest.adversarialArtifact.path)).toBe(
-      manifest.adversarialArtifact.sha256,
+    expect(await sha256(manifest.deterministicHarness.adversarialArtifact.path)).toBe(
+      manifest.deterministicHarness.adversarialArtifact.sha256,
     );
-    expect(manifest.representativeArtifact.path).not.toBe(manifest.adversarialArtifact.path);
+    expect(manifest.deterministicHarness.representativeArtifact.path).not.toBe(
+      manifest.deterministicHarness.adversarialArtifact.path,
+    );
   });
 
   test("passes every preregistered representative quality, latency, and interaction threshold", async () => {
     const manifest = await jsonFile<GateManifest>("tests/corpus/wp8-gate-manifest.json");
-    const holdout = await jsonFile<Wp8RepresentativeHoldout>(manifest.representativeArtifact.path);
+    const holdout = await jsonFile<Wp8RepresentativeHoldout>(
+      manifest.deterministicHarness.representativeArtifact.path,
+    );
+    expect(new Set(holdout.qualityCases.map(({ caseId }) => caseId)).size).toBe(
+      holdout.qualityCases.length,
+    );
+    expect(holdout.qualityCases).toHaveLength(760);
+    expect(holdout.approvalCases).toHaveLength(100);
+    expect(holdout.interactionCases).toHaveLength(12);
     const evidence = evaluateWp8SafetyGate(holdout, manifest.thresholds);
     expect(evidence).toEqual({
       passed: true,
@@ -75,20 +101,27 @@ describe("WP8 frozen deterministic safety gate", () => {
 
   test("has zero critical adversarial escapes and selects the guarded fallback on failure", async () => {
     const manifest = await jsonFile<GateManifest>("tests/corpus/wp8-gate-manifest.json");
-    const adversarial = await jsonFile<Wp8AdversarialSuite>(manifest.adversarialArtifact.path);
+    const adversarial = await jsonFile<Wp8AdversarialSuite>(
+      manifest.deterministicHarness.adversarialArtifact.path,
+    );
     expect(evaluateWp8AdversarialSuite(adversarial)).toBe(true);
-    expect(adversarial).toMatchObject({ criticalCases: 120, criticalEscapes: 0 });
+    expect(adversarial.cases).toHaveLength(120);
+    expect(new Set(adversarial.cases.map(({ caseId }) => caseId)).size).toBe(120);
+    expect(
+      adversarial.cases.filter(({ observedOutcome }) => observedOutcome === "ESCAPED"),
+    ).toEqual([]);
 
     const failedHoldout = await jsonFile<Wp8RepresentativeHoldout>(
-      manifest.representativeArtifact.path,
+      manifest.deterministicHarness.representativeArtifact.path,
     );
-    const failed = evaluateWp8SafetyGate(
-      {
-        ...failedHoldout,
-        representative: { ...failedHoldout.representative, falseSupport: 1 },
-      },
-      manifest.thresholds,
+    const firstNonSupportable = failedHoldout.qualityCases.findIndex(
+      ({ metric }) => metric === "NON_SUPPORTABLE",
     );
+    const qualityCases = [...failedHoldout.qualityCases];
+    const failedCase = qualityCases[firstNonSupportable];
+    if (failedCase === undefined) throw new Error("non-supportable fixture is missing");
+    qualityCases[firstNonSupportable] = { ...failedCase, observedOutcome: "FALSE_SUPPORT" };
+    const failed = evaluateWp8SafetyGate({ ...failedHoldout, qualityCases }, manifest.thresholds);
     expect(failed.passed).toBe(false);
     expect(manifest.failureMode).toEqual({
       livePublicEnabled: false,
@@ -98,8 +131,10 @@ describe("WP8 frozen deterministic safety gate", () => {
     console.log(
       JSON.stringify({
         suite: "wp8-adversarial",
-        criticalCases: adversarial.criticalCases,
-        criticalEscapes: adversarial.criticalEscapes,
+        criticalCases: adversarial.cases.length,
+        criticalEscapes: adversarial.cases.filter(
+          ({ observedOutcome }) => observedOutcome === "ESCAPED",
+        ).length,
       }),
     );
   });

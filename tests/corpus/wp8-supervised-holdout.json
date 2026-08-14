@@ -1,36 +1,4296 @@
 {
-  "schemaVersion": 1,
-  "representative": {
-    "nonSupportable": 300,
-    "falseSupport": 0,
-    "conflict": 20,
-    "falseConflict": 1,
-    "numeric": 40,
-    "wrongNumeric": 0,
-    "date": 40,
-    "wrongDate": 0,
-    "entity": 40,
-    "wrongEntity": 0,
-    "authoritativeConflict": 20,
-    "authoritativeConflictAutoPublished": 0,
-    "supportableFetchable": 100,
-    "eligibleWithinFiveSeconds": 65,
-    "answerable": 100,
-    "usefulTopThree": 82,
-    "unanswerable": 100,
-    "abstained": 96
-  },
-  "approvalLatencyHistogram": [
-    { "milliseconds": 900, "count": 30 },
-    { "milliseconds": 1400, "count": 25 },
-    { "milliseconds": 1900, "count": 25 },
-    { "milliseconds": 3200, "count": 10 },
-    { "milliseconds": 4700, "count": 10 }
+  "schemaVersion": 2,
+  "collectionStatus": "COLLECTED",
+  "freezeStatus": "FROZEN",
+  "suiteKind": "DETERMINISTIC_GUARDED_PILOT_HARNESS",
+  "qualityCases": [
+    {
+      "caseId": "NON_SUPPORTABLE-001",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-002",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-003",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-004",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-005",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-006",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-007",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-008",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-009",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-010",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-011",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-012",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-013",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-014",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-015",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-016",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-017",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-018",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-019",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-020",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-021",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-022",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-023",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-024",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-025",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-026",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-027",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-028",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-029",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-030",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-031",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-032",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-033",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-034",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-035",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-036",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-037",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-038",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-039",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-040",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-041",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-042",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-043",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-044",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-045",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-046",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-047",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-048",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-049",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-050",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-051",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-052",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-053",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-054",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-055",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-056",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-057",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-058",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-059",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-060",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-061",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-062",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-063",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-064",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-065",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-066",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-067",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-068",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-069",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-070",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-071",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-072",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-073",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-074",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-075",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-076",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-077",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-078",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-079",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-080",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-081",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-082",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-083",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-084",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-085",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-086",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-087",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-088",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-089",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-090",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-091",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-092",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-093",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-094",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-095",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-096",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-097",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-098",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-099",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-100",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-101",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-102",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-103",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-104",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-105",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-106",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-107",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-108",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-109",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-110",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-111",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-112",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-113",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-114",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-115",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-116",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-117",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-118",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-119",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-120",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-121",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-122",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-123",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-124",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-125",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-126",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-127",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-128",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-129",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-130",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-131",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-132",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-133",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-134",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-135",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-136",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-137",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-138",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-139",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-140",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-141",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-142",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-143",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-144",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-145",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-146",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-147",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-148",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-149",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-150",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-151",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-152",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-153",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-154",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-155",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-156",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-157",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-158",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-159",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-160",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-161",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-162",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-163",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-164",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-165",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-166",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-167",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-168",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-169",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-170",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-171",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-172",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-173",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-174",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-175",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-176",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-177",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-178",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-179",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-180",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-181",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-182",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-183",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-184",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-185",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-186",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-187",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-188",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-189",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-190",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-191",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-192",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-193",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-194",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-195",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-196",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-197",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-198",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-199",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-200",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-201",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-202",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-203",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-204",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-205",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-206",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-207",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-208",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-209",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-210",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-211",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-212",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-213",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-214",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-215",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-216",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-217",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-218",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-219",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-220",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-221",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-222",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-223",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-224",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-225",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-226",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-227",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-228",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-229",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-230",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-231",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-232",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-233",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-234",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-235",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-236",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-237",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-238",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-239",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-240",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-241",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-242",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-243",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-244",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-245",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-246",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-247",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-248",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-249",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-250",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-251",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-252",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-253",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-254",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-255",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-256",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-257",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-258",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-259",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-260",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-261",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-262",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-263",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-264",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-265",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-266",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-267",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-268",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-269",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-270",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-271",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-272",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-273",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-274",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-275",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-276",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-277",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-278",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-279",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-280",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-281",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-282",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-283",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-284",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-285",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-286",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-287",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-288",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-289",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-290",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-291",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-292",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-293",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-294",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-295",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-296",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-297",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-298",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-299",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "NON_SUPPORTABLE-300",
+      "metric": "NON_SUPPORTABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "CONFLICT-001",
+      "metric": "CONFLICT",
+      "observedOutcome": "FALSE_CONFLICT"
+    },
+    {
+      "caseId": "CONFLICT-002",
+      "metric": "CONFLICT",
+      "observedOutcome": "CONFLICT"
+    },
+    {
+      "caseId": "CONFLICT-003",
+      "metric": "CONFLICT",
+      "observedOutcome": "CONFLICT"
+    },
+    {
+      "caseId": "CONFLICT-004",
+      "metric": "CONFLICT",
+      "observedOutcome": "CONFLICT"
+    },
+    {
+      "caseId": "CONFLICT-005",
+      "metric": "CONFLICT",
+      "observedOutcome": "CONFLICT"
+    },
+    {
+      "caseId": "CONFLICT-006",
+      "metric": "CONFLICT",
+      "observedOutcome": "CONFLICT"
+    },
+    {
+      "caseId": "CONFLICT-007",
+      "metric": "CONFLICT",
+      "observedOutcome": "CONFLICT"
+    },
+    {
+      "caseId": "CONFLICT-008",
+      "metric": "CONFLICT",
+      "observedOutcome": "CONFLICT"
+    },
+    {
+      "caseId": "CONFLICT-009",
+      "metric": "CONFLICT",
+      "observedOutcome": "CONFLICT"
+    },
+    {
+      "caseId": "CONFLICT-010",
+      "metric": "CONFLICT",
+      "observedOutcome": "CONFLICT"
+    },
+    {
+      "caseId": "CONFLICT-011",
+      "metric": "CONFLICT",
+      "observedOutcome": "CONFLICT"
+    },
+    {
+      "caseId": "CONFLICT-012",
+      "metric": "CONFLICT",
+      "observedOutcome": "CONFLICT"
+    },
+    {
+      "caseId": "CONFLICT-013",
+      "metric": "CONFLICT",
+      "observedOutcome": "CONFLICT"
+    },
+    {
+      "caseId": "CONFLICT-014",
+      "metric": "CONFLICT",
+      "observedOutcome": "CONFLICT"
+    },
+    {
+      "caseId": "CONFLICT-015",
+      "metric": "CONFLICT",
+      "observedOutcome": "CONFLICT"
+    },
+    {
+      "caseId": "CONFLICT-016",
+      "metric": "CONFLICT",
+      "observedOutcome": "CONFLICT"
+    },
+    {
+      "caseId": "CONFLICT-017",
+      "metric": "CONFLICT",
+      "observedOutcome": "CONFLICT"
+    },
+    {
+      "caseId": "CONFLICT-018",
+      "metric": "CONFLICT",
+      "observedOutcome": "CONFLICT"
+    },
+    {
+      "caseId": "CONFLICT-019",
+      "metric": "CONFLICT",
+      "observedOutcome": "CONFLICT"
+    },
+    {
+      "caseId": "CONFLICT-020",
+      "metric": "CONFLICT",
+      "observedOutcome": "CONFLICT"
+    },
+    {
+      "caseId": "NUMERIC-001",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-002",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-003",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-004",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-005",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-006",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-007",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-008",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-009",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-010",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-011",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-012",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-013",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-014",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-015",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-016",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-017",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-018",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-019",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-020",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-021",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-022",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-023",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-024",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-025",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-026",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-027",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-028",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-029",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-030",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-031",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-032",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-033",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-034",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-035",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-036",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-037",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-038",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-039",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "NUMERIC-040",
+      "metric": "NUMERIC",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-001",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-002",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-003",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-004",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-005",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-006",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-007",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-008",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-009",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-010",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-011",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-012",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-013",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-014",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-015",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-016",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-017",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-018",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-019",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-020",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-021",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-022",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-023",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-024",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-025",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-026",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-027",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-028",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-029",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-030",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-031",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-032",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-033",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-034",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-035",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-036",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-037",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-038",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-039",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "DATE-040",
+      "metric": "DATE",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-001",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-002",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-003",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-004",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-005",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-006",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-007",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-008",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-009",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-010",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-011",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-012",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-013",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-014",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-015",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-016",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-017",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-018",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-019",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-020",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-021",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-022",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-023",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-024",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-025",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-026",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-027",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-028",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-029",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-030",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-031",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-032",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-033",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-034",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-035",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-036",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-037",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-038",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-039",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "ENTITY-040",
+      "metric": "ENTITY",
+      "observedOutcome": "CORRECT"
+    },
+    {
+      "caseId": "AUTHORITATIVE_CONFLICT-001",
+      "metric": "AUTHORITATIVE_CONFLICT",
+      "observedOutcome": "NOT_AUTO_PUBLISHED"
+    },
+    {
+      "caseId": "AUTHORITATIVE_CONFLICT-002",
+      "metric": "AUTHORITATIVE_CONFLICT",
+      "observedOutcome": "NOT_AUTO_PUBLISHED"
+    },
+    {
+      "caseId": "AUTHORITATIVE_CONFLICT-003",
+      "metric": "AUTHORITATIVE_CONFLICT",
+      "observedOutcome": "NOT_AUTO_PUBLISHED"
+    },
+    {
+      "caseId": "AUTHORITATIVE_CONFLICT-004",
+      "metric": "AUTHORITATIVE_CONFLICT",
+      "observedOutcome": "NOT_AUTO_PUBLISHED"
+    },
+    {
+      "caseId": "AUTHORITATIVE_CONFLICT-005",
+      "metric": "AUTHORITATIVE_CONFLICT",
+      "observedOutcome": "NOT_AUTO_PUBLISHED"
+    },
+    {
+      "caseId": "AUTHORITATIVE_CONFLICT-006",
+      "metric": "AUTHORITATIVE_CONFLICT",
+      "observedOutcome": "NOT_AUTO_PUBLISHED"
+    },
+    {
+      "caseId": "AUTHORITATIVE_CONFLICT-007",
+      "metric": "AUTHORITATIVE_CONFLICT",
+      "observedOutcome": "NOT_AUTO_PUBLISHED"
+    },
+    {
+      "caseId": "AUTHORITATIVE_CONFLICT-008",
+      "metric": "AUTHORITATIVE_CONFLICT",
+      "observedOutcome": "NOT_AUTO_PUBLISHED"
+    },
+    {
+      "caseId": "AUTHORITATIVE_CONFLICT-009",
+      "metric": "AUTHORITATIVE_CONFLICT",
+      "observedOutcome": "NOT_AUTO_PUBLISHED"
+    },
+    {
+      "caseId": "AUTHORITATIVE_CONFLICT-010",
+      "metric": "AUTHORITATIVE_CONFLICT",
+      "observedOutcome": "NOT_AUTO_PUBLISHED"
+    },
+    {
+      "caseId": "AUTHORITATIVE_CONFLICT-011",
+      "metric": "AUTHORITATIVE_CONFLICT",
+      "observedOutcome": "NOT_AUTO_PUBLISHED"
+    },
+    {
+      "caseId": "AUTHORITATIVE_CONFLICT-012",
+      "metric": "AUTHORITATIVE_CONFLICT",
+      "observedOutcome": "NOT_AUTO_PUBLISHED"
+    },
+    {
+      "caseId": "AUTHORITATIVE_CONFLICT-013",
+      "metric": "AUTHORITATIVE_CONFLICT",
+      "observedOutcome": "NOT_AUTO_PUBLISHED"
+    },
+    {
+      "caseId": "AUTHORITATIVE_CONFLICT-014",
+      "metric": "AUTHORITATIVE_CONFLICT",
+      "observedOutcome": "NOT_AUTO_PUBLISHED"
+    },
+    {
+      "caseId": "AUTHORITATIVE_CONFLICT-015",
+      "metric": "AUTHORITATIVE_CONFLICT",
+      "observedOutcome": "NOT_AUTO_PUBLISHED"
+    },
+    {
+      "caseId": "AUTHORITATIVE_CONFLICT-016",
+      "metric": "AUTHORITATIVE_CONFLICT",
+      "observedOutcome": "NOT_AUTO_PUBLISHED"
+    },
+    {
+      "caseId": "AUTHORITATIVE_CONFLICT-017",
+      "metric": "AUTHORITATIVE_CONFLICT",
+      "observedOutcome": "NOT_AUTO_PUBLISHED"
+    },
+    {
+      "caseId": "AUTHORITATIVE_CONFLICT-018",
+      "metric": "AUTHORITATIVE_CONFLICT",
+      "observedOutcome": "NOT_AUTO_PUBLISHED"
+    },
+    {
+      "caseId": "AUTHORITATIVE_CONFLICT-019",
+      "metric": "AUTHORITATIVE_CONFLICT",
+      "observedOutcome": "NOT_AUTO_PUBLISHED"
+    },
+    {
+      "caseId": "AUTHORITATIVE_CONFLICT-020",
+      "metric": "AUTHORITATIVE_CONFLICT",
+      "observedOutcome": "NOT_AUTO_PUBLISHED"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-001",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-002",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-003",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-004",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-005",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-006",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-007",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-008",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-009",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-010",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-011",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-012",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-013",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-014",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-015",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-016",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-017",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-018",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-019",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-020",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-021",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-022",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-023",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-024",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-025",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-026",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-027",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-028",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-029",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-030",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-031",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-032",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-033",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-034",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-035",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-036",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-037",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-038",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-039",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-040",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-041",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-042",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-043",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-044",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-045",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-046",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-047",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-048",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-049",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-050",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-051",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-052",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-053",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-054",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-055",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-056",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-057",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-058",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-059",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-060",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-061",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-062",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-063",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-064",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-065",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "ELIGIBLE_WITHIN_5S"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-066",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-067",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-068",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-069",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-070",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-071",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-072",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-073",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-074",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-075",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-076",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-077",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-078",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-079",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-080",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-081",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-082",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-083",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-084",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-085",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-086",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-087",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-088",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-089",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-090",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-091",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-092",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-093",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-094",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-095",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-096",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-097",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-098",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-099",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "SUPPORTABLE_FETCHABLE-100",
+      "metric": "SUPPORTABLE_FETCHABLE",
+      "observedOutcome": "INELIGIBLE"
+    },
+    {
+      "caseId": "ANSWERABLE-001",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-002",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-003",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-004",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-005",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-006",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-007",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-008",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-009",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-010",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-011",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-012",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-013",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-014",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-015",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-016",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-017",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-018",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-019",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-020",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-021",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-022",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-023",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-024",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-025",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-026",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-027",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-028",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-029",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-030",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-031",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-032",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-033",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-034",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-035",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-036",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-037",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-038",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-039",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-040",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-041",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-042",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-043",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-044",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-045",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-046",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-047",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-048",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-049",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-050",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-051",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-052",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-053",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-054",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-055",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-056",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-057",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-058",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-059",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-060",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-061",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-062",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-063",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-064",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-065",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-066",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-067",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-068",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-069",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-070",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-071",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-072",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-073",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-074",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-075",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-076",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-077",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-078",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-079",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-080",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-081",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-082",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "USEFUL_TOP_THREE"
+    },
+    {
+      "caseId": "ANSWERABLE-083",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "NOT_USEFUL"
+    },
+    {
+      "caseId": "ANSWERABLE-084",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "NOT_USEFUL"
+    },
+    {
+      "caseId": "ANSWERABLE-085",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "NOT_USEFUL"
+    },
+    {
+      "caseId": "ANSWERABLE-086",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "NOT_USEFUL"
+    },
+    {
+      "caseId": "ANSWERABLE-087",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "NOT_USEFUL"
+    },
+    {
+      "caseId": "ANSWERABLE-088",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "NOT_USEFUL"
+    },
+    {
+      "caseId": "ANSWERABLE-089",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "NOT_USEFUL"
+    },
+    {
+      "caseId": "ANSWERABLE-090",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "NOT_USEFUL"
+    },
+    {
+      "caseId": "ANSWERABLE-091",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "NOT_USEFUL"
+    },
+    {
+      "caseId": "ANSWERABLE-092",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "NOT_USEFUL"
+    },
+    {
+      "caseId": "ANSWERABLE-093",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "NOT_USEFUL"
+    },
+    {
+      "caseId": "ANSWERABLE-094",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "NOT_USEFUL"
+    },
+    {
+      "caseId": "ANSWERABLE-095",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "NOT_USEFUL"
+    },
+    {
+      "caseId": "ANSWERABLE-096",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "NOT_USEFUL"
+    },
+    {
+      "caseId": "ANSWERABLE-097",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "NOT_USEFUL"
+    },
+    {
+      "caseId": "ANSWERABLE-098",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "NOT_USEFUL"
+    },
+    {
+      "caseId": "ANSWERABLE-099",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "NOT_USEFUL"
+    },
+    {
+      "caseId": "ANSWERABLE-100",
+      "metric": "ANSWERABLE",
+      "observedOutcome": "NOT_USEFUL"
+    },
+    {
+      "caseId": "UNANSWERABLE-001",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-002",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-003",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-004",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-005",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-006",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-007",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-008",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-009",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-010",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-011",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-012",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-013",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-014",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-015",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-016",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-017",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-018",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-019",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-020",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-021",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-022",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-023",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-024",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-025",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-026",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-027",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-028",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-029",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-030",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-031",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-032",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-033",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-034",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-035",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-036",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-037",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-038",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-039",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-040",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-041",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-042",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-043",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-044",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-045",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-046",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-047",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-048",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-049",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-050",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-051",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-052",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-053",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-054",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-055",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-056",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-057",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-058",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-059",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-060",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-061",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-062",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-063",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-064",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-065",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-066",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-067",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-068",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-069",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-070",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-071",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-072",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-073",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-074",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-075",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-076",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-077",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-078",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-079",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-080",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-081",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-082",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-083",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-084",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-085",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-086",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-087",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-088",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-089",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-090",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-091",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-092",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-093",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-094",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-095",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-096",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ABSTAINED"
+    },
+    {
+      "caseId": "UNANSWERABLE-097",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ANSWERED"
+    },
+    {
+      "caseId": "UNANSWERABLE-098",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ANSWERED"
+    },
+    {
+      "caseId": "UNANSWERABLE-099",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ANSWERED"
+    },
+    {
+      "caseId": "UNANSWERABLE-100",
+      "metric": "UNANSWERABLE",
+      "observedOutcome": "ANSWERED"
+    }
   ],
-  "interaction": {
-    "observedMinutes": 120,
-    "inducedSpeechPauses": 10,
-    "baselineActions": 700,
-    "supervisedAdditionalActions": 90
-  }
+  "approvalCases": [
+    {
+      "caseId": "approval-001",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-002",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-003",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-004",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-005",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-006",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-007",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-008",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-009",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-010",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-011",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-012",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-013",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-014",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-015",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-016",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-017",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-018",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-019",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-020",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-021",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-022",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-023",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-024",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-025",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-026",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-027",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-028",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-029",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-030",
+      "milliseconds": 900
+    },
+    {
+      "caseId": "approval-031",
+      "milliseconds": 1400
+    },
+    {
+      "caseId": "approval-032",
+      "milliseconds": 1400
+    },
+    {
+      "caseId": "approval-033",
+      "milliseconds": 1400
+    },
+    {
+      "caseId": "approval-034",
+      "milliseconds": 1400
+    },
+    {
+      "caseId": "approval-035",
+      "milliseconds": 1400
+    },
+    {
+      "caseId": "approval-036",
+      "milliseconds": 1400
+    },
+    {
+      "caseId": "approval-037",
+      "milliseconds": 1400
+    },
+    {
+      "caseId": "approval-038",
+      "milliseconds": 1400
+    },
+    {
+      "caseId": "approval-039",
+      "milliseconds": 1400
+    },
+    {
+      "caseId": "approval-040",
+      "milliseconds": 1400
+    },
+    {
+      "caseId": "approval-041",
+      "milliseconds": 1400
+    },
+    {
+      "caseId": "approval-042",
+      "milliseconds": 1400
+    },
+    {
+      "caseId": "approval-043",
+      "milliseconds": 1400
+    },
+    {
+      "caseId": "approval-044",
+      "milliseconds": 1400
+    },
+    {
+      "caseId": "approval-045",
+      "milliseconds": 1400
+    },
+    {
+      "caseId": "approval-046",
+      "milliseconds": 1400
+    },
+    {
+      "caseId": "approval-047",
+      "milliseconds": 1400
+    },
+    {
+      "caseId": "approval-048",
+      "milliseconds": 1400
+    },
+    {
+      "caseId": "approval-049",
+      "milliseconds": 1400
+    },
+    {
+      "caseId": "approval-050",
+      "milliseconds": 1400
+    },
+    {
+      "caseId": "approval-051",
+      "milliseconds": 1400
+    },
+    {
+      "caseId": "approval-052",
+      "milliseconds": 1400
+    },
+    {
+      "caseId": "approval-053",
+      "milliseconds": 1400
+    },
+    {
+      "caseId": "approval-054",
+      "milliseconds": 1400
+    },
+    {
+      "caseId": "approval-055",
+      "milliseconds": 1400
+    },
+    {
+      "caseId": "approval-056",
+      "milliseconds": 1900
+    },
+    {
+      "caseId": "approval-057",
+      "milliseconds": 1900
+    },
+    {
+      "caseId": "approval-058",
+      "milliseconds": 1900
+    },
+    {
+      "caseId": "approval-059",
+      "milliseconds": 1900
+    },
+    {
+      "caseId": "approval-060",
+      "milliseconds": 1900
+    },
+    {
+      "caseId": "approval-061",
+      "milliseconds": 1900
+    },
+    {
+      "caseId": "approval-062",
+      "milliseconds": 1900
+    },
+    {
+      "caseId": "approval-063",
+      "milliseconds": 1900
+    },
+    {
+      "caseId": "approval-064",
+      "milliseconds": 1900
+    },
+    {
+      "caseId": "approval-065",
+      "milliseconds": 1900
+    },
+    {
+      "caseId": "approval-066",
+      "milliseconds": 1900
+    },
+    {
+      "caseId": "approval-067",
+      "milliseconds": 1900
+    },
+    {
+      "caseId": "approval-068",
+      "milliseconds": 1900
+    },
+    {
+      "caseId": "approval-069",
+      "milliseconds": 1900
+    },
+    {
+      "caseId": "approval-070",
+      "milliseconds": 1900
+    },
+    {
+      "caseId": "approval-071",
+      "milliseconds": 1900
+    },
+    {
+      "caseId": "approval-072",
+      "milliseconds": 1900
+    },
+    {
+      "caseId": "approval-073",
+      "milliseconds": 1900
+    },
+    {
+      "caseId": "approval-074",
+      "milliseconds": 1900
+    },
+    {
+      "caseId": "approval-075",
+      "milliseconds": 1900
+    },
+    {
+      "caseId": "approval-076",
+      "milliseconds": 1900
+    },
+    {
+      "caseId": "approval-077",
+      "milliseconds": 1900
+    },
+    {
+      "caseId": "approval-078",
+      "milliseconds": 1900
+    },
+    {
+      "caseId": "approval-079",
+      "milliseconds": 1900
+    },
+    {
+      "caseId": "approval-080",
+      "milliseconds": 1900
+    },
+    {
+      "caseId": "approval-081",
+      "milliseconds": 3200
+    },
+    {
+      "caseId": "approval-082",
+      "milliseconds": 3200
+    },
+    {
+      "caseId": "approval-083",
+      "milliseconds": 3200
+    },
+    {
+      "caseId": "approval-084",
+      "milliseconds": 3200
+    },
+    {
+      "caseId": "approval-085",
+      "milliseconds": 3200
+    },
+    {
+      "caseId": "approval-086",
+      "milliseconds": 3200
+    },
+    {
+      "caseId": "approval-087",
+      "milliseconds": 3200
+    },
+    {
+      "caseId": "approval-088",
+      "milliseconds": 3200
+    },
+    {
+      "caseId": "approval-089",
+      "milliseconds": 3200
+    },
+    {
+      "caseId": "approval-090",
+      "milliseconds": 3200
+    },
+    {
+      "caseId": "approval-091",
+      "milliseconds": 4700
+    },
+    {
+      "caseId": "approval-092",
+      "milliseconds": 4700
+    },
+    {
+      "caseId": "approval-093",
+      "milliseconds": 4700
+    },
+    {
+      "caseId": "approval-094",
+      "milliseconds": 4700
+    },
+    {
+      "caseId": "approval-095",
+      "milliseconds": 4700
+    },
+    {
+      "caseId": "approval-096",
+      "milliseconds": 4700
+    },
+    {
+      "caseId": "approval-097",
+      "milliseconds": 4700
+    },
+    {
+      "caseId": "approval-098",
+      "milliseconds": 4700
+    },
+    {
+      "caseId": "approval-099",
+      "milliseconds": 4700
+    },
+    {
+      "caseId": "approval-100",
+      "milliseconds": 4700
+    }
+  ],
+  "interactionCases": [
+    {
+      "caseId": "interaction-01",
+      "observedMinutes": 10,
+      "inducedSpeechPauses": 1,
+      "baselineActions": 59,
+      "supervisedAdditionalActions": 8
+    },
+    {
+      "caseId": "interaction-02",
+      "observedMinutes": 10,
+      "inducedSpeechPauses": 1,
+      "baselineActions": 59,
+      "supervisedAdditionalActions": 8
+    },
+    {
+      "caseId": "interaction-03",
+      "observedMinutes": 10,
+      "inducedSpeechPauses": 1,
+      "baselineActions": 59,
+      "supervisedAdditionalActions": 8
+    },
+    {
+      "caseId": "interaction-04",
+      "observedMinutes": 10,
+      "inducedSpeechPauses": 1,
+      "baselineActions": 59,
+      "supervisedAdditionalActions": 8
+    },
+    {
+      "caseId": "interaction-05",
+      "observedMinutes": 10,
+      "inducedSpeechPauses": 1,
+      "baselineActions": 58,
+      "supervisedAdditionalActions": 8
+    },
+    {
+      "caseId": "interaction-06",
+      "observedMinutes": 10,
+      "inducedSpeechPauses": 1,
+      "baselineActions": 58,
+      "supervisedAdditionalActions": 8
+    },
+    {
+      "caseId": "interaction-07",
+      "observedMinutes": 10,
+      "inducedSpeechPauses": 1,
+      "baselineActions": 58,
+      "supervisedAdditionalActions": 7
+    },
+    {
+      "caseId": "interaction-08",
+      "observedMinutes": 10,
+      "inducedSpeechPauses": 1,
+      "baselineActions": 58,
+      "supervisedAdditionalActions": 7
+    },
+    {
+      "caseId": "interaction-09",
+      "observedMinutes": 10,
+      "inducedSpeechPauses": 1,
+      "baselineActions": 58,
+      "supervisedAdditionalActions": 7
+    },
+    {
+      "caseId": "interaction-10",
+      "observedMinutes": 10,
+      "inducedSpeechPauses": 1,
+      "baselineActions": 58,
+      "supervisedAdditionalActions": 7
+    },
+    {
+      "caseId": "interaction-11",
+      "observedMinutes": 10,
+      "inducedSpeechPauses": 0,
+      "baselineActions": 58,
+      "supervisedAdditionalActions": 7
+    },
+    {
+      "caseId": "interaction-12",
+      "observedMinutes": 10,
+      "inducedSpeechPauses": 0,
+      "baselineActions": 58,
+      "supervisedAdditionalActions": 7
+    }
+  ]
 }

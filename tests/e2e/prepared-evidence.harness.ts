@@ -16,6 +16,8 @@ export interface PreparedEvidenceEvidence {
   readonly browserStorageEntries: number;
   readonly tombstoneP95Ms: number;
   readonly latencySamples: number;
+  readonly livePublicationRetractP95Ms: number;
+  readonly livePublicationRetractSamples: number;
   readonly publicCorrelationMatches: number;
 }
 
@@ -625,6 +627,87 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
       trace(`card-${index}-done`);
     }
 
+    const liveRetractLatencies: number[] = [];
+    for (let index = 0; index < 20; index += 1) {
+      const publishedRevision = `pcr_${41 + index * 2}`;
+      const tombstoneRevision = `pcr_${42 + index * 2}`;
+      const projectionId = `projection_live_browser_${index}`;
+      const claim = `Live browser retract probe ${index}`;
+      const publishedAtMs = Date.now();
+      const waitPublished = await prepareBrowserEvent(page, {
+        name: "impromptu:card-event",
+        revision: publishedRevision,
+        status: "PUBLISHED",
+      });
+      const waitVisible = index === 0 ? await prepareTextMutation(page, claim, true) : null;
+      const publishResponse = await fetch(`${projectionOrigin}/internal/cards`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${serviceToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          presentationSessionId,
+          event: {
+            projectionId,
+            status: "PUBLISHED",
+            mode: "LIVE",
+            leaseExpiresAtMs: publishedAtMs + 3_000,
+            publicationPolicyVersion: "publication-policy-1",
+            cardVersion: `card-version-browser-${index}`,
+            liveBinding: {
+              presentationSessionEpoch: "pse_1",
+              publicSlideOccurrence: { publicSlideKey, occurrenceSeq: 1 },
+              publicationPolicyVersion: "publication-policy-1",
+              cardVersion: `card-version-browser-${index}`,
+            },
+            claim,
+            supportSummary: "Real service and Chrome retract measurement",
+            sourceLabel: "Public source",
+            publishedAtMs,
+            expiresAtMs: publishedAtMs + 3_000,
+            publicCardRevision: publishedRevision,
+            deckVersion,
+            manifestHash,
+            occurrence: { publicSlideKey, occurrenceSeq: 1 },
+          },
+        }),
+      });
+      if (!publishResponse.ok) throw new Error("live publication probe failed");
+      await waitPublished();
+      await waitVisible?.();
+      cardEvents.push(`${publishedRevision}:PUBLISHED`);
+
+      const waitTombstone = await prepareBrowserEvent(page, {
+        name: "impromptu:card-event",
+        revision: tombstoneRevision,
+        status: "RETRACTED",
+      });
+      const waitHidden = index === 0 ? await prepareTextMutation(page, claim, false) : null;
+      const startedAt = performance.now();
+      const retractResponse = await fetch(`${projectionOrigin}/internal/cards`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${serviceToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          presentationSessionId,
+          event: {
+            projectionId,
+            status: "RETRACTED",
+            publicCardRevision: tombstoneRevision,
+            occurredAtMs: Date.now(),
+          },
+        }),
+      });
+      if (!retractResponse.ok) throw new Error("live retract probe failed");
+      await waitTombstone();
+      await waitHidden?.();
+      liveRetractLatencies.push(performance.now() - startedAt);
+      cardEvents.push(`${tombstoneRevision}:RETRACTED`);
+    }
+
     await stopProcess(privateProcess);
     await stopProcess(projectionProcess);
     projectionProcess = await startProcess(
@@ -666,7 +749,7 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
         : "INVALID",
     );
     if (
-      restoredTombstoneStatuses.length !== 20 ||
+      restoredTombstoneStatuses.length !== 40 ||
       !restoredTombstoneStatuses.includes("RETRACTED") ||
       !restoredTombstoneStatuses.includes("EXPIRED") ||
       restoredTombstoneStatuses.includes("INVALID")
@@ -808,6 +891,7 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
         "published-card-visible",
         "ordered-retract-tombstone",
         "ordered-expiry-tombstone",
+        "live-publication-chrome-retract-measured",
         "both-mains-restarted",
         "restart-tombstones-restored",
         "restart-prefix-applied",
@@ -825,6 +909,8 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
       browserStorageEntries,
       tombstoneP95Ms: p95,
       latencySamples: tombstoneLatencies.length,
+      livePublicationRetractP95Ms: percentile95(liveRetractLatencies),
+      livePublicationRetractSamples: liveRetractLatencies.length,
       publicCorrelationMatches,
     };
   } finally {

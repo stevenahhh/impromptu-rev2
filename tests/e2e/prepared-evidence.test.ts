@@ -10,6 +10,8 @@ interface VerifierEvidence {
   readonly reconnectTombstoneStatuses: readonly string[];
   readonly browserStorageEntries: number;
   readonly samples: number;
+  readonly livePublicationRetractP95Ms: number;
+  readonly livePublicationRetractSamples: number;
   readonly publicCorrelationMatches: number;
   readonly surface: string;
 }
@@ -27,6 +29,8 @@ function isEvidence(value: unknown): value is VerifierEvidence {
     Array.isArray(candidate.reconnectTombstoneStatuses) &&
     typeof candidate.browserStorageEntries === "number" &&
     typeof candidate.samples === "number" &&
+    typeof candidate.livePublicationRetractP95Ms === "number" &&
+    typeof candidate.livePublicationRetractSamples === "number" &&
     typeof candidate.publicCorrelationMatches === "number" &&
     typeof candidate.surface === "string"
   );
@@ -64,6 +68,7 @@ describe("WP3 prepared evidence real-browser E2E", () => {
       "published-card-visible",
       "ordered-retract-tombstone",
       "ordered-expiry-tombstone",
+      "live-publication-chrome-retract-measured",
       "both-mains-restarted",
       "restart-tombstones-restored",
       "restart-prefix-applied",
@@ -78,15 +83,17 @@ describe("WP3 prepared evidence real-browser E2E", () => {
       "cmd_after_takeover",
     ]);
     expect(parsed.appliedCommandPrefix).toEqual(parsed.acceptedCommandPrefix);
-    expect(parsed.cardEventCount).toBe(40);
+    expect(parsed.cardEventCount).toBe(80);
     expect(parsed.reconnectActiveCardCount).toBe(0);
-    expect(parsed.reconnectTombstoneStatuses).toHaveLength(20);
+    expect(parsed.reconnectTombstoneStatuses).toHaveLength(40);
     expect(
       parsed.reconnectTombstoneStatuses.filter((status) => status === "RETRACTED"),
-    ).toHaveLength(19);
+    ).toHaveLength(39);
     expect(parsed.reconnectTombstoneStatuses.filter((status) => status === "EXPIRED")).toHaveLength(
       1,
     );
+    expect(parsed.livePublicationRetractSamples).toBe(20);
+    expect(parsed.livePublicationRetractP95Ms).toBeLessThanOrEqual(500);
     expect(parsed.browserStorageEntries).toBe(0);
     expect(parsed.samples).toBe(20);
     expect(parsed.publicCorrelationMatches).toBe(0);

@@ -1,13 +1,608 @@
 {
-  "schemaVersion": 1,
-  "criticalCases": 120,
-  "criticalEscapes": 0,
-  "caseFamilies": {
-    "promptInjection": 20,
-    "numericEntityDateMutation": 30,
-    "staleAuthorityAndSnapshot": 20,
-    "rightsDlpPii": 20,
-    "ssrfAndSourceSpoof": 20,
-    "concurrentReplayAndResurrection": 10
-  }
+  "schemaVersion": 2,
+  "collectionStatus": "COLLECTED",
+  "freezeStatus": "FROZEN",
+  "suiteKind": "DETERMINISTIC_ADVERSARIAL_HARNESS",
+  "cases": [
+    {
+      "caseId": "prompt_injection-001",
+      "family": "PROMPT_INJECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "prompt_injection-002",
+      "family": "PROMPT_INJECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "prompt_injection-003",
+      "family": "PROMPT_INJECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "prompt_injection-004",
+      "family": "PROMPT_INJECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "prompt_injection-005",
+      "family": "PROMPT_INJECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "prompt_injection-006",
+      "family": "PROMPT_INJECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "prompt_injection-007",
+      "family": "PROMPT_INJECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "prompt_injection-008",
+      "family": "PROMPT_INJECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "prompt_injection-009",
+      "family": "PROMPT_INJECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "prompt_injection-010",
+      "family": "PROMPT_INJECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "prompt_injection-011",
+      "family": "PROMPT_INJECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "prompt_injection-012",
+      "family": "PROMPT_INJECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "prompt_injection-013",
+      "family": "PROMPT_INJECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "prompt_injection-014",
+      "family": "PROMPT_INJECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "prompt_injection-015",
+      "family": "PROMPT_INJECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "prompt_injection-016",
+      "family": "PROMPT_INJECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "prompt_injection-017",
+      "family": "PROMPT_INJECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "prompt_injection-018",
+      "family": "PROMPT_INJECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "prompt_injection-019",
+      "family": "PROMPT_INJECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "prompt_injection-020",
+      "family": "PROMPT_INJECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-001",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-002",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-003",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-004",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-005",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-006",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-007",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-008",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-009",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-010",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-011",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-012",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-013",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-014",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-015",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-016",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-017",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-018",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-019",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-020",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-021",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-022",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-023",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-024",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-025",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-026",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-027",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-028",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-029",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "numeric_entity_date_mutation-030",
+      "family": "NUMERIC_ENTITY_DATE_MUTATION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "stale_authority_and_snapshot-001",
+      "family": "STALE_AUTHORITY_AND_SNAPSHOT",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "stale_authority_and_snapshot-002",
+      "family": "STALE_AUTHORITY_AND_SNAPSHOT",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "stale_authority_and_snapshot-003",
+      "family": "STALE_AUTHORITY_AND_SNAPSHOT",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "stale_authority_and_snapshot-004",
+      "family": "STALE_AUTHORITY_AND_SNAPSHOT",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "stale_authority_and_snapshot-005",
+      "family": "STALE_AUTHORITY_AND_SNAPSHOT",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "stale_authority_and_snapshot-006",
+      "family": "STALE_AUTHORITY_AND_SNAPSHOT",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "stale_authority_and_snapshot-007",
+      "family": "STALE_AUTHORITY_AND_SNAPSHOT",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "stale_authority_and_snapshot-008",
+      "family": "STALE_AUTHORITY_AND_SNAPSHOT",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "stale_authority_and_snapshot-009",
+      "family": "STALE_AUTHORITY_AND_SNAPSHOT",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "stale_authority_and_snapshot-010",
+      "family": "STALE_AUTHORITY_AND_SNAPSHOT",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "stale_authority_and_snapshot-011",
+      "family": "STALE_AUTHORITY_AND_SNAPSHOT",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "stale_authority_and_snapshot-012",
+      "family": "STALE_AUTHORITY_AND_SNAPSHOT",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "stale_authority_and_snapshot-013",
+      "family": "STALE_AUTHORITY_AND_SNAPSHOT",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "stale_authority_and_snapshot-014",
+      "family": "STALE_AUTHORITY_AND_SNAPSHOT",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "stale_authority_and_snapshot-015",
+      "family": "STALE_AUTHORITY_AND_SNAPSHOT",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "stale_authority_and_snapshot-016",
+      "family": "STALE_AUTHORITY_AND_SNAPSHOT",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "stale_authority_and_snapshot-017",
+      "family": "STALE_AUTHORITY_AND_SNAPSHOT",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "stale_authority_and_snapshot-018",
+      "family": "STALE_AUTHORITY_AND_SNAPSHOT",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "stale_authority_and_snapshot-019",
+      "family": "STALE_AUTHORITY_AND_SNAPSHOT",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "stale_authority_and_snapshot-020",
+      "family": "STALE_AUTHORITY_AND_SNAPSHOT",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "rights_dlp_pii-001",
+      "family": "RIGHTS_DLP_PII",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "rights_dlp_pii-002",
+      "family": "RIGHTS_DLP_PII",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "rights_dlp_pii-003",
+      "family": "RIGHTS_DLP_PII",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "rights_dlp_pii-004",
+      "family": "RIGHTS_DLP_PII",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "rights_dlp_pii-005",
+      "family": "RIGHTS_DLP_PII",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "rights_dlp_pii-006",
+      "family": "RIGHTS_DLP_PII",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "rights_dlp_pii-007",
+      "family": "RIGHTS_DLP_PII",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "rights_dlp_pii-008",
+      "family": "RIGHTS_DLP_PII",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "rights_dlp_pii-009",
+      "family": "RIGHTS_DLP_PII",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "rights_dlp_pii-010",
+      "family": "RIGHTS_DLP_PII",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "rights_dlp_pii-011",
+      "family": "RIGHTS_DLP_PII",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "rights_dlp_pii-012",
+      "family": "RIGHTS_DLP_PII",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "rights_dlp_pii-013",
+      "family": "RIGHTS_DLP_PII",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "rights_dlp_pii-014",
+      "family": "RIGHTS_DLP_PII",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "rights_dlp_pii-015",
+      "family": "RIGHTS_DLP_PII",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "rights_dlp_pii-016",
+      "family": "RIGHTS_DLP_PII",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "rights_dlp_pii-017",
+      "family": "RIGHTS_DLP_PII",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "rights_dlp_pii-018",
+      "family": "RIGHTS_DLP_PII",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "rights_dlp_pii-019",
+      "family": "RIGHTS_DLP_PII",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "rights_dlp_pii-020",
+      "family": "RIGHTS_DLP_PII",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "ssrf_and_source_spoof-001",
+      "family": "SSRF_AND_SOURCE_SPOOF",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "ssrf_and_source_spoof-002",
+      "family": "SSRF_AND_SOURCE_SPOOF",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "ssrf_and_source_spoof-003",
+      "family": "SSRF_AND_SOURCE_SPOOF",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "ssrf_and_source_spoof-004",
+      "family": "SSRF_AND_SOURCE_SPOOF",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "ssrf_and_source_spoof-005",
+      "family": "SSRF_AND_SOURCE_SPOOF",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "ssrf_and_source_spoof-006",
+      "family": "SSRF_AND_SOURCE_SPOOF",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "ssrf_and_source_spoof-007",
+      "family": "SSRF_AND_SOURCE_SPOOF",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "ssrf_and_source_spoof-008",
+      "family": "SSRF_AND_SOURCE_SPOOF",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "ssrf_and_source_spoof-009",
+      "family": "SSRF_AND_SOURCE_SPOOF",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "ssrf_and_source_spoof-010",
+      "family": "SSRF_AND_SOURCE_SPOOF",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "ssrf_and_source_spoof-011",
+      "family": "SSRF_AND_SOURCE_SPOOF",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "ssrf_and_source_spoof-012",
+      "family": "SSRF_AND_SOURCE_SPOOF",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "ssrf_and_source_spoof-013",
+      "family": "SSRF_AND_SOURCE_SPOOF",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "ssrf_and_source_spoof-014",
+      "family": "SSRF_AND_SOURCE_SPOOF",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "ssrf_and_source_spoof-015",
+      "family": "SSRF_AND_SOURCE_SPOOF",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "ssrf_and_source_spoof-016",
+      "family": "SSRF_AND_SOURCE_SPOOF",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "ssrf_and_source_spoof-017",
+      "family": "SSRF_AND_SOURCE_SPOOF",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "ssrf_and_source_spoof-018",
+      "family": "SSRF_AND_SOURCE_SPOOF",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "ssrf_and_source_spoof-019",
+      "family": "SSRF_AND_SOURCE_SPOOF",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "ssrf_and_source_spoof-020",
+      "family": "SSRF_AND_SOURCE_SPOOF",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "concurrent_replay_and_resurrection-001",
+      "family": "CONCURRENT_REPLAY_AND_RESURRECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "concurrent_replay_and_resurrection-002",
+      "family": "CONCURRENT_REPLAY_AND_RESURRECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "concurrent_replay_and_resurrection-003",
+      "family": "CONCURRENT_REPLAY_AND_RESURRECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "concurrent_replay_and_resurrection-004",
+      "family": "CONCURRENT_REPLAY_AND_RESURRECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "concurrent_replay_and_resurrection-005",
+      "family": "CONCURRENT_REPLAY_AND_RESURRECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "concurrent_replay_and_resurrection-006",
+      "family": "CONCURRENT_REPLAY_AND_RESURRECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "concurrent_replay_and_resurrection-007",
+      "family": "CONCURRENT_REPLAY_AND_RESURRECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "concurrent_replay_and_resurrection-008",
+      "family": "CONCURRENT_REPLAY_AND_RESURRECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "concurrent_replay_and_resurrection-009",
+      "family": "CONCURRENT_REPLAY_AND_RESURRECTION",
+      "observedOutcome": "BLOCKED"
+    },
+    {
+      "caseId": "concurrent_replay_and_resurrection-010",
+      "family": "CONCURRENT_REPLAY_AND_RESURRECTION",
+      "observedOutcome": "BLOCKED"
+    }
+  ]
 }

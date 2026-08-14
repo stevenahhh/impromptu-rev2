@@ -1,35 +1,35 @@
+export type Wp8QualityMetric =
+  | "NON_SUPPORTABLE"
+  | "CONFLICT"
+  | "NUMERIC"
+  | "DATE"
+  | "ENTITY"
+  | "AUTHORITATIVE_CONFLICT"
+  | "SUPPORTABLE_FETCHABLE"
+  | "ANSWERABLE"
+  | "UNANSWERABLE";
+
 export interface Wp8RepresentativeHoldout {
-  readonly schemaVersion: 1;
-  readonly representative: Readonly<{
-    nonSupportable: number;
-    falseSupport: number;
-    conflict: number;
-    falseConflict: number;
-    numeric: number;
-    wrongNumeric: number;
-    date: number;
-    wrongDate: number;
-    entity: number;
-    wrongEntity: number;
-    authoritativeConflict: number;
-    authoritativeConflictAutoPublished: number;
-    supportableFetchable: number;
-    eligibleWithinFiveSeconds: number;
-    answerable: number;
-    usefulTopThree: number;
-    unanswerable: number;
-    abstained: number;
-  }>;
-  readonly approvalLatencyHistogram: readonly Readonly<{
-    milliseconds: number;
-    count: number;
+  readonly schemaVersion: 2;
+  readonly collectionStatus: "COLLECTED";
+  readonly freezeStatus: "FROZEN";
+  readonly suiteKind: "DETERMINISTIC_GUARDED_PILOT_HARNESS";
+  readonly qualityCases: readonly Readonly<{
+    caseId: string;
+    metric: Wp8QualityMetric;
+    observedOutcome: string;
   }>[];
-  readonly interaction: Readonly<{
+  readonly approvalCases: readonly Readonly<{
+    caseId: string;
+    milliseconds: number;
+  }>[];
+  readonly interactionCases: readonly Readonly<{
+    caseId: string;
     observedMinutes: number;
     inducedSpeechPauses: number;
     baselineActions: number;
     supervisedAdditionalActions: number;
-  }>;
+  }>[];
 }
 
 export interface Wp8GateThresholds {
@@ -75,17 +75,17 @@ function nearestRank(values: readonly number[], percentile: number): number {
   );
 }
 
-function expandHistogram(
-  histogram: Wp8RepresentativeHoldout["approvalLatencyHistogram"],
-): number[] {
-  return histogram.flatMap(({ milliseconds, count }) =>
-    Number.isSafeInteger(milliseconds) &&
-    milliseconds >= 0 &&
-    Number.isSafeInteger(count) &&
-    count > 0
-      ? Array.from({ length: count }, () => milliseconds)
-      : [],
-  );
+function casesFor(holdout: Wp8RepresentativeHoldout, metric: Wp8QualityMetric) {
+  return holdout.qualityCases.filter((testCase) => testCase.metric === metric);
+}
+
+function countOutcome(
+  holdout: Wp8RepresentativeHoldout,
+  metric: Wp8QualityMetric,
+  outcome: string,
+): number {
+  return casesFor(holdout, metric).filter((testCase) => testCase.observedOutcome === outcome)
+    .length;
 }
 
 /** Exact one-sided 95% Clopper-Pearson upper bound for the preregistered zero-event gate. */
@@ -99,38 +99,65 @@ export function evaluateWp8SafetyGate(
   holdout: Wp8RepresentativeHoldout,
   thresholds: Wp8GateThresholds,
 ): Wp8GateEvidence {
-  const representative = holdout.representative;
-  const approvalLatencies = expandHistogram(holdout.approvalLatencyHistogram);
-  const falseSupportRate = rate(representative.falseSupport, representative.nonSupportable);
+  const nonSupportable = casesFor(holdout, "NON_SUPPORTABLE");
+  const falseSupport = countOutcome(holdout, "NON_SUPPORTABLE", "FALSE_SUPPORT");
+  const conflicts = casesFor(holdout, "CONFLICT");
+  const falseConflict = countOutcome(holdout, "CONFLICT", "FALSE_CONFLICT");
+  const supportable = casesFor(holdout, "SUPPORTABLE_FETCHABLE");
+  const answerable = casesFor(holdout, "ANSWERABLE");
+  const unanswerable = casesFor(holdout, "UNANSWERABLE");
+  const falseSupportRate = rate(falseSupport, nonSupportable.length);
   const falseSupportUpper95 =
-    representative.falseSupport === 0
-      ? zeroEventUpper95(representative.nonSupportable)
-      : Number.POSITIVE_INFINITY;
-  const falseConflictRate = rate(representative.falseConflict, representative.conflict);
-  const eligibleYield = rate(
-    representative.eligibleWithinFiveSeconds,
-    representative.supportableFetchable,
+    falseSupport === 0 ? zeroEventUpper95(nonSupportable.length) : Number.POSITIVE_INFINITY;
+  const falseConflictRate = rate(falseConflict, conflicts.length);
+  const wrongNumeric = countOutcome(holdout, "NUMERIC", "WRONG");
+  const wrongDate = countOutcome(holdout, "DATE", "WRONG");
+  const wrongEntity = countOutcome(holdout, "ENTITY", "WRONG");
+  const authoritativeConflictAutoPublished = countOutcome(
+    holdout,
+    "AUTHORITATIVE_CONFLICT",
+    "AUTO_PUBLISHED",
   );
-  const usefulness = rate(representative.usefulTopThree, representative.answerable);
-  const abstention = rate(representative.abstained, representative.unanswerable);
+  const eligibleYield = rate(
+    countOutcome(holdout, "SUPPORTABLE_FETCHABLE", "ELIGIBLE_WITHIN_5S"),
+    supportable.length,
+  );
+  const usefulness = rate(
+    countOutcome(holdout, "ANSWERABLE", "USEFUL_TOP_THREE"),
+    answerable.length,
+  );
+  const abstention = rate(countOutcome(holdout, "UNANSWERABLE", "ABSTAINED"), unanswerable.length);
+  const approvalLatencies = holdout.approvalCases.map((testCase) => testCase.milliseconds);
   const approvalMedianMs = nearestRank(approvalLatencies, 0.5);
   const approvalP90Ms = nearestRank(approvalLatencies, 0.9);
-  const inducedSpeechPausesPerTenMinutes = rate(
-    holdout.interaction.inducedSpeechPauses * 10,
-    holdout.interaction.observedMinutes,
+  const observedMinutes = holdout.interactionCases.reduce(
+    (total, testCase) => total + testCase.observedMinutes,
+    0,
   );
-  const effortDelta = rate(
-    holdout.interaction.supervisedAdditionalActions,
-    holdout.interaction.baselineActions,
+  const inducedSpeechPauses = holdout.interactionCases.reduce(
+    (total, testCase) => total + testCase.inducedSpeechPauses,
+    0,
   );
+  const baselineActions = holdout.interactionCases.reduce(
+    (total, testCase) => total + testCase.baselineActions,
+    0,
+  );
+  const additionalActions = holdout.interactionCases.reduce(
+    (total, testCase) => total + testCase.supervisedAdditionalActions,
+    0,
+  );
+  const inducedSpeechPausesPerTenMinutes = rate(inducedSpeechPauses * 10, observedMinutes);
+  const effortDelta = rate(additionalActions, baselineActions);
   const passed =
+    holdout.collectionStatus === "COLLECTED" &&
+    holdout.freezeStatus === "FROZEN" &&
     falseSupportRate <= thresholds.falseSupportMaximum &&
     falseSupportUpper95 < thresholds.falseSupportUpper95MaximumExclusive &&
-    representative.wrongNumeric === 0 &&
-    representative.wrongDate === 0 &&
-    representative.wrongEntity === 0 &&
+    wrongNumeric === 0 &&
+    wrongDate === 0 &&
+    wrongEntity === 0 &&
     falseConflictRate <= thresholds.falseConflictMaximum &&
-    representative.authoritativeConflictAutoPublished === 0 &&
+    authoritativeConflictAutoPublished === 0 &&
     eligibleYield >= thresholds.eligibleYieldMinimum &&
     usefulness >= thresholds.usefulnessMinimum &&
     abstention >= thresholds.abstentionMinimum &&
@@ -143,10 +170,10 @@ export function evaluateWp8SafetyGate(
     falseSupportRate,
     falseSupportUpper95,
     falseConflictRate,
-    wrongNumeric: representative.wrongNumeric,
-    wrongDate: representative.wrongDate,
-    wrongEntity: representative.wrongEntity,
-    authoritativeConflictAutoPublished: representative.authoritativeConflictAutoPublished,
+    wrongNumeric,
+    wrongDate,
+    wrongEntity,
+    authoritativeConflictAutoPublished,
     eligibleYield,
     usefulness,
     abstention,
@@ -158,11 +185,22 @@ export function evaluateWp8SafetyGate(
 }
 
 export interface Wp8AdversarialSuite {
-  readonly schemaVersion: 1;
-  readonly criticalCases: number;
-  readonly criticalEscapes: number;
+  readonly schemaVersion: 2;
+  readonly collectionStatus: "COLLECTED";
+  readonly freezeStatus: "FROZEN";
+  readonly suiteKind: "DETERMINISTIC_ADVERSARIAL_HARNESS";
+  readonly cases: readonly Readonly<{
+    caseId: string;
+    family: string;
+    observedOutcome: "BLOCKED" | "ESCAPED";
+  }>[];
 }
 
 export function evaluateWp8AdversarialSuite(suite: Wp8AdversarialSuite): boolean {
-  return suite.criticalCases > 0 && suite.criticalEscapes === 0;
+  return (
+    suite.collectionStatus === "COLLECTED" &&
+    suite.freezeStatus === "FROZEN" &&
+    suite.cases.length > 0 &&
+    suite.cases.every((testCase) => testCase.observedOutcome === "BLOCKED")
+  );
 }

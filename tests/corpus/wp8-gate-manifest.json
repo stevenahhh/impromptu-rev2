@@ -1,17 +1,25 @@
 {
-  "schemaVersion": 1,
-  "manifestId": "wp8-supervised-publication-deterministic-v1",
-  "status": "FROZEN",
-  "scope": "DETERMINISTIC_GUARDED_PILOT_HARNESS",
-  "acceptanceClaim": "This freezes the WP8 machine harness and preregistered thresholds. It does not replace the blocked WP0 collected Korean acceptance corpus.",
-  "representativeArtifact": {
-    "path": "tests/corpus/wp8-supervised-holdout.json",
-    "sha256": "4a8e92733432d293993b05d8dee6aee0cf08f8edf65cc1ee68ba8d3a36410041"
+  "schemaVersion": 2,
+  "manifestId": "wp8-supervised-publication-deterministic-v2",
+  "wp0KoreanAcceptance": {
+    "collectionStatus": "NOT_COLLECTED",
+    "gateStatus": "BLOCKED",
+    "eligibleToEnableLivePublication": false
   },
-  "adversarialArtifact": {
-    "path": "tests/corpus/wp8-adversarial.json",
-    "sha256": "6a5d77022874d3545b05128b6cbb998b1a0a4d3c24b276f4dc417bd85f24e8e1",
-    "separateFromRepresentative": true
+  "deterministicHarness": {
+    "collectionStatus": "COLLECTED",
+    "freezeStatus": "FROZEN",
+    "scope": "DETERMINISTIC_GUARDED_PILOT_HARNESS",
+    "acceptanceClaim": "This machine harness is not the WP0 Korean product-acceptance corpus.",
+    "representativeArtifact": {
+      "path": "tests/corpus/wp8-supervised-holdout.json",
+      "sha256": "92c1578d09142e54dd88bd71698f8f73b338de7179dedd839b023d47228bb724"
+    },
+    "adversarialArtifact": {
+      "path": "tests/corpus/wp8-adversarial.json",
+      "sha256": "15e73db6aa3d7d7df0aee101bed499a71042e088d1faab9239752562efce4a0d",
+      "separateFromRepresentative": true
+    }
   },
   "thresholds": {
     "falseSupportMaximum": 0.01,
