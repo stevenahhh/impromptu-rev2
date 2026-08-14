@@ -1,4 +1,4 @@
-import type { PublicSlideOccurrence } from "@impromptu/contracts";
+import type { AudienceSnapshot, PublicSlideOccurrence } from "@impromptu/contracts";
 
 export type PublicPlaybackState = Readonly<{
   presentationSessionId: string;
@@ -71,6 +71,22 @@ export function applyPublicPlaybackEvent(
     return { state, outcome: "GAP_REQUIRES_SNAPSHOT" };
   }
   return { state: structuredClone(event), outcome: "APPLIED" };
+}
+
+export function applyAudiencePlaybackSnapshot(
+  state: PublicPlaybackState,
+  snapshot: AudienceSnapshot,
+): PublicPlaybackResult {
+  return applyPublicPlaybackSnapshot(state, {
+    presentationSessionId: snapshot.presentationSessionId,
+    presentationSessionEpoch: snapshot.presentationSessionEpoch,
+    displayBindingEpoch: snapshot.displayBindingEpoch,
+    deckVersion: snapshot.deck.deckVersion,
+    manifestHash: snapshot.deck.manifestHash,
+    publicPlaybackRevision: snapshot.publicPlaybackRevision,
+    occurrence: snapshot.occurrence,
+    blackout: snapshot.blackout,
+  });
 }
 
 export function applyPublicPlaybackSnapshot(

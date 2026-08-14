@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { PlaybackCommand } from "@impromptu/contracts";
+import type { AudienceSnapshot, PlaybackCommand } from "@impromptu/contracts";
 import {
+  applyAudiencePlaybackSnapshot,
   applyPublicPlaybackEvent,
   applyPublicPlaybackSnapshot,
   createPlaybackAuthorityState,
@@ -215,6 +216,57 @@ describe("public playback projection", () => {
     expect(recovered.outcome).toBe("APPLIED");
     expect(recovered.state.publicPlaybackRevision).toBe(5);
     expect(recovered.state.occurrence.publicSlideKey).toBe("slide-3");
+  });
+
+  test("restores public playback only from the PUBLIC_STAGE snapshot shape", () => {
+    const initial = initialPublicPlaybackState({
+      presentationSessionId: "session-1",
+      presentationSessionEpoch: 3,
+      displayBindingEpoch: 2,
+      deckVersion: "deck-v1",
+      manifestHash: hash("a"),
+      occurrence: { publicSlideKey: "slide-1", occurrenceSeq: 1 },
+      blackout: false,
+    });
+    const snapshot: AudienceSnapshot = {
+      role: "PUBLIC_STAGE",
+      presentationSessionId: "session-1",
+      presentationSessionEpoch: 3,
+      displayBindingEpoch: 2,
+      publicPlaybackRevision: 7,
+      publicCardRevision: 4,
+      deck: {
+        deckVersion: "deck-v1",
+        manifestHash: hash("a"),
+        title: "Published deck",
+        slides: [
+          {
+            publicSlideKey: "slide-2",
+            ordinal: 1,
+            image: {
+              url: "https://published.example/slide-2.png",
+              contentHash: hash("b"),
+              width: 1920,
+              height: 1080,
+            },
+            accessibilityLabel: "Published slide",
+          },
+        ],
+      },
+      occurrence: { publicSlideKey: "slide-2", occurrenceSeq: 8 },
+      blackout: true,
+      cards: [],
+      tombstones: [],
+      tombstoneWatermark: 4,
+    };
+
+    const restored = applyAudiencePlaybackSnapshot(initial, snapshot);
+    expect(restored.outcome).toBe("APPLIED");
+    expect(restored.state).toMatchObject({
+      publicPlaybackRevision: 7,
+      occurrence: { publicSlideKey: "slide-2", occurrenceSeq: 8 },
+      blackout: true,
+    });
   });
 });
 

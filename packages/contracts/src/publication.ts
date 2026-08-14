@@ -34,7 +34,7 @@ export const CausalEnvelopeSchema = z
     deckVersion: VersionIdSchema,
     manifestHash: Sha256Schema,
     occurrence: PublicSlideOccurrenceSchema,
-    transcriptFinalId: OpaqueIdSchema,
+    transcriptFinalId: OpaqueIdSchema.nullable(),
     source: SourceRevisionSchema,
     decisions: DecisionVersionsSchema,
   })
@@ -51,7 +51,16 @@ export const EvidenceCandidateSchema = z
     privateSourceUri: z.string().min(1),
     causal: CausalEnvelopeSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((candidate, context) => {
+    if (candidate.provenance === "LIVE_VERIFIED" && candidate.causal.transcriptFinalId === null) {
+      context.addIssue({
+        code: "custom",
+        message: "live verified evidence requires a final transcript identity",
+        path: ["causal", "transcriptFinalId"],
+      });
+    }
+  });
 
 export const PublishedAudienceCardSchema = z
   .object({

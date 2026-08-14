@@ -272,7 +272,7 @@ export const AudienceSnapshotSchema = z
     occurrence: PublicSlideOccurrenceSchema,
     blackout: z.boolean(),
     cards: z.array(PublishedAudienceCardSchema),
-    tombstones: z.array(PublicationTombstoneSchema).optional().default([]),
+    tombstones: z.array(PublicationTombstoneSchema),
     tombstoneWatermark: RevisionSchema,
   })
   .strict();

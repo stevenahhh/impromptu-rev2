@@ -5,6 +5,7 @@ import {
   authorizeRoleAction,
   BuildHandshakeSchema,
   checkHandshakeCompatibility,
+  EvidenceCandidateSchema,
   PlaybackCommandSchema,
   PrivateDeckContextSchema,
   PublicationTombstoneSchema,
@@ -35,7 +36,8 @@ describe("protocol contract fixtures", () => {
     for (const command of commands) PlaybackCommandSchema.parse(command);
   });
 
-  test("parse published cards, tombstones, and audience snapshots", () => {
+  test("parse evidence causal envelopes, published cards, tombstones, and audience snapshots", () => {
+    EvidenceCandidateSchema.parse(fixture("evidence-candidate"));
     const card = PublishedAudienceCardSchema.parse(fixture("published-card"));
     PublicationTombstoneSchema.parse(fixture("publication-tombstone"));
     AudienceSnapshotSchema.parse({
@@ -49,6 +51,7 @@ describe("protocol contract fixtures", () => {
       occurrence: { publicSlideKey: "public-slide-1", occurrenceSeq: 2 },
       blackout: false,
       cards: [card],
+      tombstones: [fixture("publication-tombstone")],
       tombstoneWatermark: 5,
     });
   });
@@ -88,6 +91,20 @@ describe("closed public contracts", () => {
 
   test("does not accept a private deck as a published artifact", () => {
     expect(PublishedDeckArtifactSchema.safeParse(fixture("private-deck")).success).toBe(false);
+  });
+
+  test("requires transcript identity only for live verified evidence", () => {
+    const curated = EvidenceCandidateSchema.parse(fixture("evidence-candidate"));
+    expect(
+      EvidenceCandidateSchema.safeParse({ ...curated, provenance: "LIVE_VERIFIED" }).success,
+    ).toBe(false);
+    expect(
+      EvidenceCandidateSchema.safeParse({
+        ...curated,
+        provenance: "LIVE_VERIFIED",
+        causal: { ...curated.causal, transcriptFinalId: "transcript-final-1" },
+      }).success,
+    ).toBe(true);
   });
 });
 
