@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PublicSlideKeySchema } from "./public-identifiers.ts";
 
 export const OpaqueIdSchema = z.string().min(1).max(200);
 export const VersionIdSchema = z.string().min(1).max(200);
@@ -9,7 +10,7 @@ export const TimestampMsSchema = z.number().int().nonnegative();
 
 export const PublicSlideOccurrenceSchema = z
   .object({
-    publicSlideKey: OpaqueIdSchema,
+    publicSlideKey: PublicSlideKeySchema,
     occurrenceSeq: z.number().int().positive(),
   })
   .strict();

@@ -10,10 +10,10 @@
     "presentationSessionId": "session-1",
     "presentationSessionEpoch": 3,
     "displayBindingEpoch": 4,
-    "deckVersion": "deck-v7",
+    "deckVersion": "deck_v7",
     "manifestHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "occurrence": {
-      "publicSlideKey": "public-slide-1",
+      "publicSlideKey": "slide_public-1",
       "occurrenceSeq": 2
     },
     "transcriptFinalId": null,

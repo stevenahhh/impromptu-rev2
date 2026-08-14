@@ -1,6 +1,18 @@
 import { describe, expect, test } from "bun:test";
-import { authorizeRoleAction, type PlaybackCommand } from "@impromptu/contracts/control";
-import { PublishedAudienceCardSchema } from "@impromptu/contracts/public";
+import {
+  authorizeRoleAction,
+  type PlaybackCommand,
+  PlaybackControlLeaseSchema,
+} from "@impromptu/contracts/control";
+import {
+  DeckVersionIdSchema,
+  displayBindingEpoch,
+  PresentationSessionIdSchema,
+  PublicSlideKeySchema,
+  PublishedAudienceCardSchema,
+  presentationSessionEpoch,
+  publicPlaybackRevision,
+} from "@impromptu/contracts/public";
 import {
   createPublicationState,
   initialPublicPlaybackState,
@@ -25,7 +37,7 @@ const manifestHash = "a".repeat(64);
 const intentArbitrary: fc.Arbitrary<PlaybackIntent> = fc.oneof(
   fc.record({
     type: fc.constant("SLIDE_SET" as const),
-    publicSlideKey: fc.constantFrom("slide-1", "slide-2", "slide-3"),
+    publicSlideKey: fc.constantFrom("slide_1", "slide_2", "slide_3"),
   }),
   fc.record({ type: fc.constant("BLACKOUT_SET" as const), enabled: fc.boolean() }),
 );
@@ -62,7 +74,7 @@ describe("generated playback fault schedules", () => {
             ...commands.map((command) => ({
               type: "STAGE_APPLY" as const,
               commandId: command.commandId,
-              displayBindingEpoch: 1,
+              displayBindingEpoch: displayBindingEpoch(1),
             })),
           ];
           const expected = runPlaybackFaultSchedule(playbackAuthorityFixture(), [
@@ -70,7 +82,7 @@ describe("generated playback fault schedules", () => {
             ...commands.map((command) => ({
               type: "STAGE_APPLY" as const,
               commandId: command.commandId,
-              displayBindingEpoch: 1,
+              displayBindingEpoch: displayBindingEpoch(1),
             })),
           ]);
           const first = runPlaybackFaultSchedule(playbackAuthorityFixture(), faultSchedule);
@@ -78,32 +90,38 @@ describe("generated playback fault schedules", () => {
 
           expect(first).toEqual(replay);
           expect(first.state).toEqual(expected.state);
-          expect(first.state.controlRevision).toBe(commands.length);
-          expect(first.state.publicPlaybackRevision).toBe(commands.length);
+          expect(String(first.state.controlRevision)).toBe(`cr_${commands.length}`);
+          expect(String(first.state.publicPlaybackRevision)).toBe(`pbr_${commands.length}`);
         },
       ),
       propertyOptions,
     );
   });
 
-  test("stale-epoch duplicates remain rejected after generated takeovers", () => {
+  test("old-lease duplicates remain rejected after generated takeovers", () => {
     fc.assert(
       fc.property(fc.integer({ min: 2, max: 1_000 }), (nextEpoch) => {
+        const initial = playbackAuthorityFixture();
         const original = playbackCommandFixture(1, {
           type: "BLACKOUT_SET",
           enabled: true,
         });
-        const result = runPlaybackFaultSchedule(playbackAuthorityFixture(), [
+        const replacement = PlaybackControlLeaseSchema.parse({
+          ...initial.activeLease,
+          leaseId: `lease_takeover-${nextEpoch}`,
+          controllerEpoch: `ce_${nextEpoch}`,
+        });
+        const result = runPlaybackFaultSchedule(initial, [
           { type: "COMMAND", command: original },
-          { type: "TAKEOVER", actorId: "new-controller", controllerEpoch: nextEpoch },
+          { type: "TAKEOVER", lease: replacement },
           { type: "COMMAND", command: original },
         ]);
         const finalTrace = result.trace.at(-1);
         expect(finalTrace).toMatchObject({
           type: "COMMAND",
-          receipt: { status: "REJECTED", reason: "STALE_CONTROLLER_EPOCH" },
+          receipt: { status: "REJECTED", reason: "STALE_LEASE" },
         });
-        expect(result.state.controlRevision).toBe(1);
+        expect(String(result.state.controlRevision)).toBe("cr_1");
       }),
       propertyOptions,
     );
@@ -112,14 +130,14 @@ describe("generated playback fault schedules", () => {
 
 function publicEvent(revision: number): PublicPlaybackEvent {
   return {
-    presentationSessionId: "session-public",
-    presentationSessionEpoch: 1,
-    displayBindingEpoch: 1,
-    deckVersion: "deck-v1",
+    presentationSessionId: PresentationSessionIdSchema.parse("ps_public"),
+    presentationSessionEpoch: presentationSessionEpoch(1),
+    displayBindingEpoch: displayBindingEpoch(1),
+    deckVersion: DeckVersionIdSchema.parse("deck_v1"),
     manifestHash,
-    publicPlaybackRevision: revision,
+    publicPlaybackRevision: publicPlaybackRevision(revision),
     occurrence: {
-      publicSlideKey: `slide-${(revision % 3) + 1}`,
+      publicSlideKey: PublicSlideKeySchema.parse(`slide_${(revision % 3) + 1}`),
       occurrenceSeq: revision + 1,
     },
     blackout: revision % 2 === 0,
@@ -131,7 +149,7 @@ describe("generated public projection schedules", () => {
     const events = Array.from({ length: 8 }, (_, index) => publicEvent(index + 1));
     const initial = initialPublicPlaybackState({
       ...publicEvent(0),
-      occurrence: { publicSlideKey: "slide-1", occurrenceSeq: 1 },
+      occurrence: { publicSlideKey: PublicSlideKeySchema.parse("slide_1"), occurrenceSeq: 1 },
     });
     const authoritative = publicEvent(events.length);
     const descriptorArbitrary = fc.oneof(
@@ -163,7 +181,7 @@ describe("generated public projection schedules", () => {
   test("does not queue partitioned events for later relative replay", () => {
     const initial = initialPublicPlaybackState({
       ...publicEvent(0),
-      occurrence: { publicSlideKey: "slide-1", occurrenceSeq: 1 },
+      occurrence: { publicSlideKey: PublicSlideKeySchema.parse("slide_1"), occurrenceSeq: 1 },
     });
     const result = runPublicProjectionFaultSchedule(initial, [
       { type: "PARTITION", active: true },
@@ -268,17 +286,17 @@ describe("generated security contracts", () => {
       .string({ minLength: 1, maxLength: 30 })
       .filter((field) => !knownFields.has(field));
     const card = {
-      projectionId: "projection-1",
+      projectionId: "projection_1",
       status: "PUBLISHED",
       claim: "A declassified claim",
       supportSummary: "A declassified summary",
       sourceLabel: "Approved source",
       publishedAtMs: 1,
       expiresAtMs: null,
-      publicCardRevision: 1,
-      deckVersion: "deck-v1",
+      publicCardRevision: "pcr_1",
+      deckVersion: "deck_v1",
       manifestHash,
-      occurrence: { publicSlideKey: "slide-1", occurrenceSeq: 1 },
+      occurrence: { publicSlideKey: PublicSlideKeySchema.parse("slide_1"), occurrenceSeq: 1 },
     };
     fc.assert(
       fc.property(unknownField, fc.jsonValue(), (field, value) => {

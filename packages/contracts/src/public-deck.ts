@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { OpaqueIdSchema, Sha256Schema, VersionIdSchema } from "./common.ts";
+import { Sha256Schema } from "./common.ts";
+import { DeckVersionIdSchema, PublicSlideKeySchema } from "./public-identifiers.ts";
 
 export const PublishedSlideImageSchema = z
   .object({
@@ -12,7 +13,7 @@ export const PublishedSlideImageSchema = z
 
 export const PublishedSlideSchema = z
   .object({
-    publicSlideKey: OpaqueIdSchema,
+    publicSlideKey: PublicSlideKeySchema,
     ordinal: z.number().int().positive(),
     image: PublishedSlideImageSchema,
     accessibilityLabel: z.string().min(1).max(1_000),
@@ -21,7 +22,7 @@ export const PublishedSlideSchema = z
 
 export const PublishedDeckArtifactSchema = z
   .object({
-    deckVersion: VersionIdSchema,
+    deckVersion: DeckVersionIdSchema,
     manifestHash: Sha256Schema,
     title: z.string().min(1).max(500),
     slides: z.array(PublishedSlideSchema).min(1),

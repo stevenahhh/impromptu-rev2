@@ -1,24 +1,22 @@
 import { z } from "zod";
+import { PublicSlideOccurrenceSchema, Sha256Schema, TimestampMsSchema } from "./common.ts";
 import {
-  OpaqueIdSchema,
-  PublicSlideOccurrenceSchema,
-  RevisionSchema,
-  Sha256Schema,
-  TimestampMsSchema,
-  VersionIdSchema,
-} from "./common.ts";
+  DeckVersionIdSchema,
+  ProjectionIdSchema,
+  PublicCardRevisionSchema,
+} from "./public-identifiers.ts";
 
 export const PublishedAudienceCardSchema = z
   .object({
-    projectionId: OpaqueIdSchema,
+    projectionId: ProjectionIdSchema,
     status: z.literal("PUBLISHED"),
     claim: z.string().min(1).max(2_000),
     supportSummary: z.string().min(1).max(4_000),
     sourceLabel: z.string().min(1).max(500),
     publishedAtMs: TimestampMsSchema,
     expiresAtMs: TimestampMsSchema.nullable(),
-    publicCardRevision: RevisionSchema,
-    deckVersion: VersionIdSchema,
+    publicCardRevision: PublicCardRevisionSchema,
+    deckVersion: DeckVersionIdSchema,
     manifestHash: Sha256Schema,
     occurrence: PublicSlideOccurrenceSchema,
   })
@@ -26,9 +24,9 @@ export const PublishedAudienceCardSchema = z
 
 export const PublicationTombstoneSchema = z
   .object({
-    projectionId: OpaqueIdSchema,
+    projectionId: ProjectionIdSchema,
     status: z.enum(["RETRACTED", "EXPIRED"]),
-    publicCardRevision: RevisionSchema,
+    publicCardRevision: PublicCardRevisionSchema,
     occurredAtMs: TimestampMsSchema,
   })
   .strict();

@@ -1,6 +1,6 @@
 {
   "deckId": "private-deck-1",
-  "deckVersion": "deck-v7",
+  "deckVersion": "deck_v7",
   "manifestHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "title": "Guarded pilot briefing",
   "ownerAccountId": "account-1",
@@ -9,7 +9,7 @@
   "slides": [
     {
       "privateSlideId": "private-slide-1",
-      "publicSlideKey": "public-slide-1",
+      "publicSlideKey": "slide_public-1",
       "ordinal": 1,
       "speakerNotes": "Do not display this note.",
       "extractedText": "Internal retrieval text.",

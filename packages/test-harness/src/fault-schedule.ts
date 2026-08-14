@@ -1,4 +1,10 @@
-import type { CommandReceipt, PlaybackCommand } from "@impromptu/contracts/control";
+import type {
+  CommandId,
+  CommandReceipt,
+  PlaybackCommand,
+  PlaybackControlLease,
+} from "@impromptu/contracts/control";
+import type { DisplayBindingEpoch } from "@impromptu/contracts/public";
 import {
   applyPublicPlaybackEvent,
   applyPublicPlaybackSnapshot,
@@ -9,6 +15,7 @@ import {
   type PublicPlaybackSnapshot,
   type PublicPlaybackState,
   reducePlaybackCommand,
+  replacePlaybackLease,
   restorePlaybackAuthority,
   type StageApplyOutcome,
   type StageStatus,
@@ -17,17 +24,21 @@ import {
 
 export type PlaybackFaultAction =
   | Readonly<{ type: "COMMAND"; command: PlaybackCommand }>
-  | Readonly<{ type: "STAGE_APPLY"; commandId: string; displayBindingEpoch: number }>
+  | Readonly<{
+      type: "STAGE_APPLY";
+      commandId: CommandId;
+      displayBindingEpoch: DisplayBindingEpoch;
+    }>
   | Readonly<{ type: "RESTART" }>
   | Readonly<{ type: "STAGE_STATUS"; status: StageStatus }>
-  | Readonly<{ type: "TAKEOVER"; actorId: string; controllerEpoch: number }>;
+  | Readonly<{ type: "TAKEOVER"; lease: PlaybackControlLease }>;
 
 export type PlaybackFaultTrace =
   | Readonly<{ type: "COMMAND"; receipt: CommandReceipt }>
   | Readonly<{ type: "STAGE_APPLY"; outcome: StageApplyOutcome }>
   | Readonly<{ type: "RESTART" }>
   | Readonly<{ type: "STAGE_STATUS"; status: StageStatus }>
-  | Readonly<{ type: "TAKEOVER"; actorId: string; controllerEpoch: number }>;
+  | Readonly<{ type: "TAKEOVER"; lease: PlaybackControlLease }>;
 
 export type PlaybackScheduleResult = Readonly<{
   state: PlaybackAuthorityState;
@@ -37,13 +48,14 @@ export type PlaybackScheduleResult = Readonly<{
 export function runPlaybackFaultSchedule(
   initial: PlaybackAuthorityState,
   actions: readonly PlaybackFaultAction[],
+  nowMs = 1_700_000_000_000,
 ): PlaybackScheduleResult {
   let state = initial;
   const trace: PlaybackFaultTrace[] = [];
   for (const action of actions) {
     switch (action.type) {
       case "COMMAND": {
-        const reduction = reducePlaybackCommand(state, action.command);
+        const reduction = reducePlaybackCommand(state, action.command, nowMs);
         state = reduction.state;
         trace.push({ type: "COMMAND", receipt: reduction.receipt });
         break;
@@ -63,12 +75,8 @@ export function runPlaybackFaultSchedule(
         trace.push({ type: "STAGE_STATUS", status: action.status });
         break;
       case "TAKEOVER":
-        state = { ...state, actorId: action.actorId, controllerEpoch: action.controllerEpoch };
-        trace.push({
-          type: "TAKEOVER",
-          actorId: action.actorId,
-          controllerEpoch: action.controllerEpoch,
-        });
+        state = replacePlaybackLease(state, action.lease);
+        trace.push({ type: "TAKEOVER", lease: action.lease });
         break;
     }
   }

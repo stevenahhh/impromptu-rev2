@@ -1,4 +1,19 @@
-import type { PlaybackCommand } from "@impromptu/contracts/control";
+import {
+  ActorIdSchema,
+  CommandIdSchema,
+  controllerEpoch,
+  controlRevision,
+  type PlaybackCommand,
+  PlaybackCommandSchema,
+  PlaybackControlLeaseIdSchema,
+  PlaybackControlLeaseSchema,
+} from "@impromptu/contracts/control";
+import {
+  displayBindingEpoch,
+  PresentationSessionIdSchema,
+  PublicSlideKeySchema,
+  presentationSessionEpoch,
+} from "@impromptu/contracts/public";
 import { createPlaybackAuthorityState, type PlaybackAuthorityState } from "@impromptu/state";
 
 export type PlaybackIntent =
@@ -11,37 +26,37 @@ export function deterministicHash(sequence: number): string {
 }
 
 export function playbackCommandFixture(sequence: number, intent: PlaybackIntent): PlaybackCommand {
-  const header = {
-    presentationSessionId: "session-fixture",
-    presentationSessionEpoch: 1,
-    actorId: "controller-fixture",
-    controllerEpoch: 1,
-    commandId: `command-${sequence}`,
-    baseRevision: sequence - 1,
-    requestHash: deterministicHash(sequence),
-    delivery: "LIVE" as const,
-  };
-  switch (intent.type) {
-    case "SLIDE_SET":
-      return { ...header, ...intent };
-    case "SLIDE_NEXT":
-    case "SLIDE_PREVIOUS":
-      return { ...header, ...intent };
-    case "BLACKOUT_SET":
-      return { ...header, ...intent };
-  }
+  return PlaybackCommandSchema.parse({
+    ...intent,
+    presentationSessionId: "ps_fixture",
+    presentationSessionEpoch: "pse_1",
+    actorId: "actor_fixture",
+    leaseId: "lease_fixture",
+    controllerEpoch: "ce_1",
+    commandId: `cmd_${sequence}`,
+    baseRevision: `cr_${sequence - 1}`,
+    delivery: "LIVE",
+  });
 }
 
 export function playbackAuthorityFixture(): PlaybackAuthorityState {
+  const presentationSessionId = PresentationSessionIdSchema.parse("ps_fixture");
+  const sessionEpoch = presentationSessionEpoch(1);
   return createPlaybackAuthorityState({
-    presentationSessionId: "session-fixture",
-    presentationSessionEpoch: 1,
-    actorId: "controller-fixture",
-    controllerEpoch: 1,
-    displayBindingEpoch: 1,
+    presentationSessionId,
+    presentationSessionEpoch: sessionEpoch,
+    activeLease: PlaybackControlLeaseSchema.parse({
+      leaseId: PlaybackControlLeaseIdSchema.parse("lease_fixture"),
+      presentationSessionId,
+      presentationSessionEpoch: sessionEpoch,
+      actorId: ActorIdSchema.parse("actor_fixture"),
+      controllerEpoch: controllerEpoch(1),
+      expiresAtMs: 1_800_000_000_000,
+    }),
+    displayBindingEpoch: displayBindingEpoch(1),
     stageStatus: "READY",
-    slideOrder: ["slide-1", "slide-2", "slide-3"],
-    initialSlideKey: "slide-1",
+    slideOrder: ["slide_1", "slide_2", "slide_3"].map((key) => PublicSlideKeySchema.parse(key)),
+    initialSlideKey: PublicSlideKeySchema.parse("slide_1"),
   });
 }
 
@@ -53,3 +68,10 @@ export const PROTOCOL_TRANSITION_MATRIX = [
   { scenario: "STALE_ROLE_SNAPSHOT", expected: "STALE_SNAPSHOT" },
   { scenario: "INCOMPATIBLE_BUILD", expected: "PROTOCOL_RANGE_MISMATCH" },
 ] as const;
+
+export const fixtureIdentitySchemas = {
+  actor: ActorIdSchema,
+  command: CommandIdSchema,
+  lease: PlaybackControlLeaseIdSchema,
+  controlRevision,
+} as const;

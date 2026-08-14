@@ -44,17 +44,17 @@ describe("protocol contract fixtures", () => {
     PublicationTombstoneSchema.parse(fixture("publication-tombstone"));
     AudienceSnapshotSchema.parse({
       role: "PUBLIC_STAGE",
-      presentationSessionId: "session-1",
-      presentationSessionEpoch: 3,
-      displayBindingEpoch: 4,
-      publicPlaybackRevision: 11,
-      publicCardRevision: 8,
+      presentationSessionId: "ps_session-1",
+      presentationSessionEpoch: "pse_3",
+      displayBindingEpoch: "dbe_4",
+      publicPlaybackRevision: "pbr_11",
+      publicCardRevision: "pcr_8",
       deck: fixture("published-deck"),
-      occurrence: { publicSlideKey: "public-slide-1", occurrenceSeq: 2 },
+      occurrence: { publicSlideKey: "slide_public-1", occurrenceSeq: 2 },
       blackout: false,
       cards: [card],
       tombstones: [fixture("publication-tombstone")],
-      tombstoneWatermark: 5,
+      tombstoneWatermark: "pcr_5",
     });
   });
 });
@@ -176,17 +176,17 @@ describe("role topic authorization", () => {
   test("does not disclose a role-scoped snapshot to another role", () => {
     const audienceSnapshot = {
       role: "PUBLIC_STAGE",
-      presentationSessionId: "session-1",
-      presentationSessionEpoch: 3,
-      displayBindingEpoch: 4,
-      publicPlaybackRevision: 11,
-      publicCardRevision: 8,
+      presentationSessionId: "ps_session-1",
+      presentationSessionEpoch: "pse_3",
+      displayBindingEpoch: "dbe_4",
+      publicPlaybackRevision: "pbr_11",
+      publicCardRevision: "pcr_8",
       deck: fixture("published-deck"),
-      occurrence: { publicSlideKey: "public-slide-1", occurrenceSeq: 2 },
+      occurrence: { publicSlideKey: "slide_public-1", occurrenceSeq: 2 },
       blackout: false,
       cards: [fixture("published-card")],
       tombstones: [fixture("publication-tombstone")],
-      tombstoneWatermark: 5,
+      tombstoneWatermark: "pcr_5",
     };
     expect(authorizeRoleSnapshot("PUBLIC_STAGE", audienceSnapshot)).toBe(true);
     expect(authorizeRoleSnapshot("CONTROLLER", audienceSnapshot)).toBe(false);

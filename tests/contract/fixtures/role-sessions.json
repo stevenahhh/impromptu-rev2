@@ -1,35 +1,46 @@
 [
   {
     "role": "CONTROLLER",
-    "presentationSessionId": "session-1",
-    "presentationSessionEpoch": 3,
-    "actorId": "actor-controller-1",
+    "presentationSessionId": "ps_session-1",
+    "presentationSessionEpoch": "pse_3",
+    "actorId": "actor_controller-1",
     "lease": {
-      "leaseId": "lease-1",
-      "actorId": "actor-controller-1",
-      "controllerEpoch": 6,
+      "leaseId": "lease_primary",
+      "presentationSessionId": "ps_session-1",
+      "presentationSessionEpoch": "pse_3",
+      "actorId": "actor_controller-1",
+      "controllerEpoch": "ce_6",
       "expiresAtMs": 1800000000000
     }
   },
   {
     "role": "PUBLIC_STAGE",
-    "presentationSessionId": "session-1",
-    "presentationSessionEpoch": 3,
+    "presentationSessionId": "ps_session-1",
+    "presentationSessionEpoch": "pse_3",
     "display": {
-      "audienceDisplaySessionId": "display-session-1",
-      "displayId": "display-1",
-      "displayBindingEpoch": 4,
+      "audienceDisplaySessionId": "audience_stage-1",
+      "binding": {
+        "displayBindingId": "binding_stage-1",
+        "presentationSessionId": "ps_session-1",
+        "presentationSessionEpoch": "pse_3",
+        "displayId": "display_stage-1",
+        "displayBindingEpoch": "dbe_4",
+        "deckVersion": "deck_v7",
+        "manifestHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
       "expiresAtMs": 1800000000000
     }
   },
   {
     "role": "PUBLISHER",
-    "presentationSessionId": "session-1",
-    "presentationSessionEpoch": 3,
-    "actorId": "actor-publisher-1",
+    "presentationSessionId": "ps_session-1",
+    "presentationSessionEpoch": "pse_3",
+    "actorId": "actor_publisher-1",
     "authority": {
-      "authorityId": "publication-authority-1",
-      "actorId": "actor-publisher-1",
+      "authorityId": "pubauth_primary",
+      "presentationSessionId": "ps_session-1",
+      "presentationSessionEpoch": "pse_3",
+      "actorId": "actor_publisher-1",
       "policyVersion": "publication-policy-v2",
       "expiresAtMs": 1800000000000
     }

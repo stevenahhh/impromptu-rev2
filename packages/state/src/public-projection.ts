@@ -1,23 +1,35 @@
-import type { AudienceSnapshot, PublicSlideOccurrence } from "@impromptu/contracts/public";
+import type {
+  AudienceSnapshot,
+  DeckVersionId,
+  DisplayBindingEpoch,
+  PresentationSessionEpoch,
+  PresentationSessionId,
+  PublicPlaybackRevision,
+  PublicSlideOccurrence,
+} from "@impromptu/contracts/public";
+import {
+  presentationSessionEpochValue,
+  publicPlaybackRevision,
+  publicPlaybackRevisionValue,
+} from "@impromptu/contracts/public";
 
 export type PublicPlaybackState = Readonly<{
-  presentationSessionId: string;
-  presentationSessionEpoch: number;
-  displayBindingEpoch: number;
-  deckVersion: string;
+  presentationSessionId: PresentationSessionId;
+  presentationSessionEpoch: PresentationSessionEpoch;
+  displayBindingEpoch: DisplayBindingEpoch;
+  deckVersion: DeckVersionId;
   manifestHash: string;
-  publicPlaybackRevision: number;
+  publicPlaybackRevision: PublicPlaybackRevision;
   occurrence: PublicSlideOccurrence;
   blackout: boolean;
 }>;
 
 export type PublicPlaybackEvent = PublicPlaybackState;
 export type PublicPlaybackSnapshot = PublicPlaybackState;
-
 export type InitialPublicPlaybackState = Omit<PublicPlaybackState, "publicPlaybackRevision">;
 
 export function initialPublicPlaybackState(input: InitialPublicPlaybackState): PublicPlaybackState {
-  return { ...input, publicPlaybackRevision: 0 };
+  return { ...input, publicPlaybackRevision: publicPlaybackRevision(0) };
 }
 
 export type PublicPlaybackOutcome =
@@ -27,7 +39,6 @@ export type PublicPlaybackOutcome =
   | "STALE_OR_CONFLICTING"
   | "STALE_CAUSAL_ENVELOPE"
   | "STALE_SNAPSHOT";
-
 export type PublicPlaybackResult = Readonly<{
   state: PublicPlaybackState;
   outcome: PublicPlaybackOutcome;
@@ -58,16 +69,18 @@ export function applyPublicPlaybackEvent(
   if (!sameCausalIdentity(state, event)) {
     return { state, outcome: "STALE_CAUSAL_ENVELOPE" };
   }
-  if (event.publicPlaybackRevision === state.publicPlaybackRevision) {
+  const currentRevision = publicPlaybackRevisionValue(state.publicPlaybackRevision);
+  const eventRevision = publicPlaybackRevisionValue(event.publicPlaybackRevision);
+  if (eventRevision === currentRevision) {
     return {
       state,
       outcome: sameVisibleState(state, event) ? "DUPLICATE" : "STALE_OR_CONFLICTING",
     };
   }
-  if (event.publicPlaybackRevision < state.publicPlaybackRevision) {
+  if (eventRevision < currentRevision) {
     return { state, outcome: "STALE_OR_CONFLICTING" };
   }
-  if (event.publicPlaybackRevision !== state.publicPlaybackRevision + 1) {
+  if (eventRevision !== currentRevision + 1) {
     return { state, outcome: "GAP_REQUIRES_SNAPSHOT" };
   }
   return { state: structuredClone(event), outcome: "APPLIED" };
@@ -96,7 +109,10 @@ export function applyPublicPlaybackSnapshot(
   if (snapshot.presentationSessionId !== state.presentationSessionId) {
     return { state, outcome: "STALE_CAUSAL_ENVELOPE" };
   }
-  if (snapshot.presentationSessionEpoch < state.presentationSessionEpoch) {
+  if (
+    presentationSessionEpochValue(snapshot.presentationSessionEpoch) <
+    presentationSessionEpochValue(state.presentationSessionEpoch)
+  ) {
     return { state, outcome: "STALE_SNAPSHOT" };
   }
   if (
@@ -107,7 +123,8 @@ export function applyPublicPlaybackSnapshot(
   }
   if (
     snapshot.presentationSessionEpoch === state.presentationSessionEpoch &&
-    snapshot.publicPlaybackRevision < state.publicPlaybackRevision
+    publicPlaybackRevisionValue(snapshot.publicPlaybackRevision) <
+      publicPlaybackRevisionValue(state.publicPlaybackRevision)
   ) {
     return { state, outcome: "STALE_SNAPSHOT" };
   }

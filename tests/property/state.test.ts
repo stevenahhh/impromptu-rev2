@@ -1,6 +1,18 @@
 import { describe, expect, test } from "bun:test";
-import type { PlaybackCommand } from "@impromptu/contracts/control";
-import type { AudienceSnapshot } from "@impromptu/contracts/public";
+import {
+  type PlaybackCommand,
+  PlaybackCommandSchema,
+  PlaybackControlLeaseSchema,
+} from "@impromptu/contracts/control";
+import {
+  AudienceSnapshotSchema,
+  DeckVersionIdSchema,
+  displayBindingEpoch,
+  PresentationSessionIdSchema,
+  PublicSlideKeySchema,
+  presentationSessionEpoch,
+  publicPlaybackRevision,
+} from "@impromptu/contracts/public";
 import {
   applyAudiencePlaybackSnapshot,
   applyPublicPlaybackEvent,
@@ -13,62 +25,104 @@ import {
   type PublicPlaybackEvent,
   reducePlaybackCommand,
   reducePublication,
+  replacePlaybackLease,
   restorePlaybackAuthority,
   snapshotPlaybackAuthority,
 } from "@impromptu/state";
 
 const hash = (digit: string): string => digit.repeat(64);
+const nowMs = 1_700_000_000_000;
 
-function command(
-  overrides: Partial<PlaybackCommand> & Pick<PlaybackCommand, "type">,
-): PlaybackCommand {
+interface CommandOverrides {
+  type: PlaybackCommand["type"];
+  actorId?: string;
+  leaseId?: string;
+  presentationSessionEpoch?: string;
+  controllerEpoch?: string;
+  commandId?: string;
+  baseRevision?: number;
+  delivery?: "LIVE" | "OFFLINE_REPLAY";
+  publicSlideKey?: string;
+  enabled?: boolean;
+}
+
+function command(overrides: CommandOverrides): PlaybackCommand {
   const base = {
-    presentationSessionId: "session-1",
-    presentationSessionEpoch: 3,
-    actorId: "controller-1",
-    controllerEpoch: 7,
-    commandId: "command-1",
-    baseRevision: 0,
-    requestHash: hash("a"),
-    delivery: "LIVE" as const,
+    presentationSessionId: "ps_session-1",
+    presentationSessionEpoch: overrides.presentationSessionEpoch ?? "pse_3",
+    actorId: overrides.actorId ?? "actor_controller-1",
+    leaseId: overrides.leaseId ?? "lease_primary",
+    controllerEpoch: overrides.controllerEpoch ?? "ce_7",
+    commandId: overrides.commandId ?? "cmd_1",
+    baseRevision: `cr_${overrides.baseRevision ?? 0}`,
+    delivery: overrides.delivery ?? "LIVE",
   };
-  switch (overrides.type) {
-    case "SLIDE_SET":
-      return { ...base, publicSlideKey: "slide-2", ...overrides } as PlaybackCommand;
-    case "BLACKOUT_SET":
-      return { ...base, enabled: true, ...overrides } as PlaybackCommand;
-    case "SLIDE_NEXT":
-    case "SLIDE_PREVIOUS":
-      return { ...base, ...overrides } as PlaybackCommand;
+  if (overrides.type === "SLIDE_SET") {
+    return PlaybackCommandSchema.parse({
+      ...base,
+      type: overrides.type,
+      publicSlideKey: overrides.publicSlideKey ?? "slide_2",
+    });
   }
+  if (overrides.type === "BLACKOUT_SET") {
+    return PlaybackCommandSchema.parse({
+      ...base,
+      type: overrides.type,
+      enabled: overrides.enabled ?? true,
+    });
+  }
+  return PlaybackCommandSchema.parse({ ...base, type: overrides.type });
 }
 
 function authority(stageStatus: "READY" | "DISCONNECTED" | "UNBOUND" = "READY") {
+  const presentationSessionId = PresentationSessionIdSchema.parse("ps_session-1");
+  const sessionEpoch = presentationSessionEpoch(3);
   return createPlaybackAuthorityState({
-    presentationSessionId: "session-1",
-    presentationSessionEpoch: 3,
-    actorId: "controller-1",
-    controllerEpoch: 7,
-    displayBindingEpoch: 2,
+    presentationSessionId,
+    presentationSessionEpoch: sessionEpoch,
+    activeLease: PlaybackControlLeaseSchema.parse({
+      leaseId: "lease_primary",
+      presentationSessionId,
+      presentationSessionEpoch: sessionEpoch,
+      actorId: "actor_controller-1",
+      controllerEpoch: "ce_7",
+      expiresAtMs: 1_800_000_000_000,
+    }),
+    displayBindingEpoch: displayBindingEpoch(2),
     stageStatus,
-    slideOrder: ["slide-1", "slide-2", "slide-3"],
-    initialSlideKey: "slide-1",
+    slideOrder: ["slide_1", "slide_2", "slide_3"].map((key) => PublicSlideKeySchema.parse(key)),
+    initialSlideKey: PublicSlideKeySchema.parse("slide_1"),
   });
 }
 
 describe("playback authority reducer", () => {
-  test("deduplicates equal requests and rejects command-id payload conflicts", () => {
-    const first = reducePlaybackCommand(authority(), command({ type: "SLIDE_NEXT" }));
-    expect(first.receipt).toMatchObject({ status: "ACCEPTED", acceptedControlRevision: 1 });
-    expect(first.state.occurrence).toEqual({ publicSlideKey: "slide-2", occurrenceSeq: 2 });
+  test("deduplicates canonical requests and rejects changed payload under a reused command ID", () => {
+    const first = reducePlaybackCommand(
+      authority(),
+      command({ type: "SLIDE_SET", publicSlideKey: "slide_2" }),
+      nowMs,
+    );
+    expect(first.receipt).toMatchObject({ status: "ACCEPTED", acceptedControlRevision: "cr_1" });
+    expect({
+      ...first.state.occurrence,
+      publicSlideKey: String(first.state.occurrence.publicSlideKey),
+    }).toEqual({
+      publicSlideKey: "slide_2",
+      occurrenceSeq: 2,
+    });
 
-    const duplicate = reducePlaybackCommand(first.state, command({ type: "SLIDE_NEXT" }));
+    const duplicate = reducePlaybackCommand(
+      first.state,
+      command({ type: "SLIDE_SET", publicSlideKey: "slide_2" }),
+      nowMs,
+    );
     expect(duplicate.receipt).toEqual(first.receipt);
     expect(duplicate.state).toEqual(first.state);
 
     const conflict = reducePlaybackCommand(
       first.state,
-      command({ type: "SLIDE_NEXT", requestHash: hash("b") }),
+      command({ type: "SLIDE_SET", publicSlideKey: "slide_3" }),
+      nowMs,
     );
     expect(conflict.receipt).toMatchObject({
       status: "REJECTED",
@@ -77,21 +131,51 @@ describe("playback authority reducer", () => {
     expect(conflict.state).toEqual(first.state);
   });
 
-  test("validates the current lease before consulting old dedupe records", () => {
-    const first = reducePlaybackCommand(authority(), command({ type: "SLIDE_NEXT" }));
-    const afterTakeover = { ...first.state, actorId: "controller-2", controllerEpoch: 8 };
-    const staleDuplicate = reducePlaybackCommand(afterTakeover, command({ type: "SLIDE_NEXT" }));
-
-    expect(staleDuplicate.receipt).toMatchObject({
-      status: "REJECTED",
-      reason: "STALE_CONTROLLER_EPOCH",
+  test("validates authorization, session, lease expiry, and epoch before dedupe", () => {
+    const first = reducePlaybackCommand(authority(), command({ type: "SLIDE_NEXT" }), nowMs);
+    const replacement = PlaybackControlLeaseSchema.parse({
+      ...first.state.activeLease,
+      leaseId: "lease_replacement",
+      actorId: "actor_controller-2",
+      controllerEpoch: "ce_8",
     });
+    const afterTakeover = replacePlaybackLease(first.state, replacement);
+
+    expect(
+      reducePlaybackCommand(afterTakeover, command({ type: "SLIDE_NEXT" }), nowMs).receipt,
+    ).toMatchObject({ status: "REJECTED", reason: "UNAUTHORIZED" });
+    expect(
+      reducePlaybackCommand(
+        first.state,
+        command({ type: "SLIDE_NEXT", presentationSessionEpoch: "pse_2" }),
+        nowMs,
+      ).receipt,
+    ).toMatchObject({ status: "REJECTED", reason: "STALE_SESSION_EPOCH" });
+    expect(
+      reducePlaybackCommand(
+        first.state,
+        command({ type: "SLIDE_NEXT", leaseId: "lease_old" }),
+        nowMs,
+      ).receipt,
+    ).toMatchObject({ status: "REJECTED", reason: "STALE_LEASE" });
+    expect(
+      reducePlaybackCommand(first.state, command({ type: "SLIDE_NEXT" }), 1_800_000_000_000)
+        .receipt,
+    ).toMatchObject({ status: "REJECTED", reason: "LEASE_EXPIRED" });
+    expect(
+      reducePlaybackCommand(
+        first.state,
+        command({ type: "SLIDE_NEXT", controllerEpoch: "ce_6" }),
+        nowMs,
+      ).receipt,
+    ).toMatchObject({ status: "REJECTED", reason: "STALE_CONTROLLER_EPOCH" });
   });
 
   test("never accepts relative commands from an offline queue or without a ready binding", () => {
     const offline = reducePlaybackCommand(
       authority(),
       command({ type: "SLIDE_NEXT", delivery: "OFFLINE_REPLAY" }),
+      nowMs,
     );
     expect(offline.receipt).toMatchObject({
       status: "REJECTED",
@@ -101,148 +185,139 @@ describe("playback authority reducer", () => {
     const disconnected = reducePlaybackCommand(
       authority("DISCONNECTED"),
       command({ type: "SLIDE_NEXT" }),
+      nowMs,
     );
     expect(disconnected.receipt).toMatchObject({ status: "REJECTED", reason: "STAGE_NOT_READY" });
 
     const absolute = reducePlaybackCommand(
       authority("DISCONNECTED"),
       command({ type: "SLIDE_SET" }),
+      nowMs,
     );
     expect(absolute.receipt.status).toBe("ACCEPTED");
   });
 
   test("separates authority acceptance from ordered Stage application", () => {
-    const acceptedOne = reducePlaybackCommand(authority(), command({ type: "SLIDE_NEXT" }));
+    const acceptedOne = reducePlaybackCommand(authority(), command({ type: "SLIDE_NEXT" }), nowMs);
     const acceptedTwo = reducePlaybackCommand(
       acceptedOne.state,
-      command({
-        type: "BLACKOUT_SET",
-        commandId: "command-2",
-        baseRevision: 1,
-        requestHash: hash("b"),
-      }),
+      command({ type: "BLACKOUT_SET", commandId: "cmd_2", baseRevision: 1 }),
+      nowMs,
     );
 
     expect(acceptedTwo.receipt.status).toBe("ACCEPTED");
-    const outOfOrder = markStageApplied(acceptedTwo.state, "command-2", 2);
+    const outOfOrder = markStageApplied(
+      acceptedTwo.state,
+      command({ type: "SLIDE_NEXT", commandId: "cmd_2" }).commandId,
+      displayBindingEpoch(2),
+    );
     expect(outOfOrder.outcome).toBe("OUT_OF_ORDER");
-    expect(outOfOrder.state.publicPlaybackRevision).toBe(0);
+    expect(String(outOfOrder.state.publicPlaybackRevision)).toBe("pbr_0");
 
-    const appliedOne = markStageApplied(acceptedTwo.state, "command-1", 2);
+    const appliedOne = markStageApplied(
+      acceptedTwo.state,
+      command({ type: "SLIDE_NEXT" }).commandId,
+      displayBindingEpoch(2),
+    );
     expect(appliedOne.outcome).toBe("APPLIED");
     expect(appliedOne.receipt).toMatchObject({
       status: "STAGE_APPLIED",
-      publicPlaybackRevision: 1,
+      publicPlaybackRevision: "pbr_1",
     });
-    const appliedTwo = markStageApplied(appliedOne.state, "command-2", 2);
+    const appliedTwo = markStageApplied(
+      appliedOne.state,
+      command({ type: "SLIDE_NEXT", commandId: "cmd_2" }).commandId,
+      displayBindingEpoch(2),
+    );
     expect(appliedTwo.outcome).toBe("APPLIED");
-    expect(appliedTwo.state.publicPlaybackRevision).toBe(2);
+    expect(String(appliedTwo.state.publicPlaybackRevision)).toBe("pbr_2");
 
-    const duplicate = markStageApplied(appliedTwo.state, "command-1", 2);
+    const duplicate = markStageApplied(
+      appliedTwo.state,
+      command({ type: "SLIDE_NEXT" }).commandId,
+      displayBindingEpoch(2),
+    );
     expect(duplicate.outcome).toBe("DUPLICATE");
     expect(duplicate.receipt).toEqual(appliedOne.receipt);
   });
 
   test("restores all authoritative and idempotency state after restart", () => {
-    const accepted = reducePlaybackCommand(authority(), command({ type: "SLIDE_NEXT" }));
+    const accepted = reducePlaybackCommand(authority(), command({ type: "SLIDE_NEXT" }), nowMs);
     const restored = restorePlaybackAuthority(snapshotPlaybackAuthority(accepted.state));
     expect(restored).toEqual(accepted.state);
 
-    const duplicate = reducePlaybackCommand(restored, command({ type: "SLIDE_NEXT" }));
-    expect(duplicate.state.controlRevision).toBe(1);
+    const duplicate = reducePlaybackCommand(restored, command({ type: "SLIDE_NEXT" }), nowMs);
+    expect(String(duplicate.state.controlRevision)).toBe("cr_1");
     expect(duplicate.receipt).toEqual(accepted.receipt);
   });
 });
 
 describe("public playback projection", () => {
-  const event = (revision: number, slide = "slide-1"): PublicPlaybackEvent => ({
-    presentationSessionId: "session-1",
-    presentationSessionEpoch: 3,
-    displayBindingEpoch: 2,
-    deckVersion: "deck-v1",
+  const event = (revision: number, slide = "slide_1"): PublicPlaybackEvent => ({
+    presentationSessionId: PresentationSessionIdSchema.parse("ps_session-1"),
+    presentationSessionEpoch: presentationSessionEpoch(3),
+    displayBindingEpoch: displayBindingEpoch(2),
+    deckVersion: DeckVersionIdSchema.parse("deck_v1"),
     manifestHash: hash("a"),
-    publicPlaybackRevision: revision,
-    occurrence: { publicSlideKey: slide, occurrenceSeq: revision + 1 },
+    publicPlaybackRevision: publicPlaybackRevision(revision),
+    occurrence: {
+      publicSlideKey: PublicSlideKeySchema.parse(slide),
+      occurrenceSeq: revision + 1,
+    },
     blackout: false,
   });
 
-  test("detects gaps, ignores duplicates, and accepts only the next revision", () => {
-    const initial = initialPublicPlaybackState({
-      presentationSessionId: "session-1",
-      presentationSessionEpoch: 3,
-      displayBindingEpoch: 2,
-      deckVersion: "deck-v1",
+  const initialState = () =>
+    initialPublicPlaybackState({
+      presentationSessionId: PresentationSessionIdSchema.parse("ps_session-1"),
+      presentationSessionEpoch: presentationSessionEpoch(3),
+      displayBindingEpoch: displayBindingEpoch(2),
+      deckVersion: DeckVersionIdSchema.parse("deck_v1"),
       manifestHash: hash("a"),
-      occurrence: { publicSlideKey: "slide-1", occurrenceSeq: 1 },
+      occurrence: { publicSlideKey: PublicSlideKeySchema.parse("slide_1"), occurrenceSeq: 1 },
       blackout: false,
     });
-    const gap = applyPublicPlaybackEvent(initial, event(2, "slide-3"));
+
+  test("detects gaps, ignores duplicates, and accepts only the next revision", () => {
+    const initial = initialState();
+    const gap = applyPublicPlaybackEvent(initial, event(2, "slide_3"));
     expect(gap.outcome).toBe("GAP_REQUIRES_SNAPSHOT");
     expect(gap.state).toEqual(initial);
 
-    const next = applyPublicPlaybackEvent(initial, event(1, "slide-2"));
+    const next = applyPublicPlaybackEvent(initial, event(1, "slide_2"));
     expect(next.outcome).toBe("APPLIED");
-    expect(applyPublicPlaybackEvent(next.state, event(1, "slide-2")).outcome).toBe("DUPLICATE");
-    expect(applyPublicPlaybackEvent(next.state, event(1, "slide-3")).outcome).toBe(
+    expect(applyPublicPlaybackEvent(next.state, event(1, "slide_2")).outcome).toBe("DUPLICATE");
+    expect(applyPublicPlaybackEvent(next.state, event(1, "slide_3")).outcome).toBe(
       "STALE_OR_CONFLICTING",
     );
   });
 
   test("rejects stale snapshots and recovers a gap from a current role snapshot", () => {
-    const initial = initialPublicPlaybackState({
-      presentationSessionId: "session-1",
-      presentationSessionEpoch: 3,
-      displayBindingEpoch: 2,
-      deckVersion: "deck-v1",
-      manifestHash: hash("a"),
-      occurrence: { publicSlideKey: "slide-1", occurrenceSeq: 1 },
-      blackout: false,
-    });
-    const current = applyPublicPlaybackEvent(initial, event(1, "slide-2")).state;
-    const stale = applyPublicPlaybackSnapshot(current, {
-      presentationSessionId: "session-1",
-      presentationSessionEpoch: 3,
-      displayBindingEpoch: 2,
-      deckVersion: "deck-v1",
-      manifestHash: hash("a"),
-      publicPlaybackRevision: 0,
-      occurrence: { publicSlideKey: "slide-1", occurrenceSeq: 1 },
-      blackout: false,
-    });
+    const current = applyPublicPlaybackEvent(initialState(), event(1, "slide_2")).state;
+    const stale = applyPublicPlaybackSnapshot(current, event(0, "slide_1"));
     expect(stale.outcome).toBe("STALE_SNAPSHOT");
 
-    const recovered = applyPublicPlaybackSnapshot(current, {
-      ...event(5, "slide-3"),
-    });
+    const recovered = applyPublicPlaybackSnapshot(current, event(5, "slide_3"));
     expect(recovered.outcome).toBe("APPLIED");
-    expect(recovered.state.publicPlaybackRevision).toBe(5);
-    expect(recovered.state.occurrence.publicSlideKey).toBe("slide-3");
+    expect(String(recovered.state.publicPlaybackRevision)).toBe("pbr_5");
+    expect(String(recovered.state.occurrence.publicSlideKey)).toBe("slide_3");
   });
 
   test("restores public playback only from the PUBLIC_STAGE snapshot shape", () => {
-    const initial = initialPublicPlaybackState({
-      presentationSessionId: "session-1",
-      presentationSessionEpoch: 3,
-      displayBindingEpoch: 2,
-      deckVersion: "deck-v1",
-      manifestHash: hash("a"),
-      occurrence: { publicSlideKey: "slide-1", occurrenceSeq: 1 },
-      blackout: false,
-    });
-    const snapshot: AudienceSnapshot = {
+    const snapshot = AudienceSnapshotSchema.parse({
       role: "PUBLIC_STAGE",
-      presentationSessionId: "session-1",
-      presentationSessionEpoch: 3,
-      displayBindingEpoch: 2,
-      publicPlaybackRevision: 7,
-      publicCardRevision: 4,
+      presentationSessionId: "ps_session-1",
+      presentationSessionEpoch: "pse_3",
+      displayBindingEpoch: "dbe_2",
+      publicPlaybackRevision: "pbr_7",
+      publicCardRevision: "pcr_4",
       deck: {
-        deckVersion: "deck-v1",
+        deckVersion: "deck_v1",
         manifestHash: hash("a"),
         title: "Published deck",
         slides: [
           {
-            publicSlideKey: "slide-2",
+            publicSlideKey: "slide_2",
             ordinal: 1,
             image: {
               url: "https://published.example/slide-2.png",
@@ -254,18 +329,18 @@ describe("public playback projection", () => {
           },
         ],
       },
-      occurrence: { publicSlideKey: "slide-2", occurrenceSeq: 8 },
+      occurrence: { publicSlideKey: "slide_2", occurrenceSeq: 8 },
       blackout: true,
       cards: [],
       tombstones: [],
-      tombstoneWatermark: 4,
-    };
+      tombstoneWatermark: "pcr_4",
+    });
 
-    const restored = applyAudiencePlaybackSnapshot(initial, snapshot);
+    const restored = applyAudiencePlaybackSnapshot(initialState(), snapshot);
     expect(restored.outcome).toBe("APPLIED");
     expect(restored.state).toMatchObject({
-      publicPlaybackRevision: 7,
-      occurrence: { publicSlideKey: "slide-2", occurrenceSeq: 8 },
+      publicPlaybackRevision: "pbr_7",
+      occurrence: { publicSlideKey: "slide_2", occurrenceSeq: 8 },
       blackout: true,
     });
   });
