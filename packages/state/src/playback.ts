@@ -16,6 +16,7 @@ import {
   controlRevision,
   controlRevisionValue,
   nextControlRevision,
+  PlaybackCommandSchema,
   PlaybackControlLeaseSchema,
   StageAppliedReceiptSchema,
 } from "@impromptu/contracts/control";
@@ -51,6 +52,7 @@ export type PlaybackEffect = Readonly<{
 }>;
 
 type AcceptedCommandRecord = Readonly<{
+  command: PlaybackCommand;
   requestHash: string;
   receipt: AcceptedCommandReceipt;
   effect: PlaybackEffect;
@@ -66,6 +68,7 @@ export type PlaybackAuthorityState = Readonly<{
   publicPlaybackRevision: PublicPlaybackRevision;
   stageStatus: StageStatus;
   slideOrder: readonly PublicSlideKey[];
+  initialSlideKey: PublicSlideKey;
   occurrence: PublicSlideOccurrence;
   nextOccurrenceSeq: number;
   blackout: boolean;
@@ -84,6 +87,7 @@ const PlaybackEffectSchema = z
   .strict();
 const AcceptedCommandRecordSchema = z
   .object({
+    command: PlaybackCommandSchema,
     requestHash: Sha256Schema,
     receipt: AcceptedCommandReceiptSchema,
     effect: PlaybackEffectSchema,
@@ -100,6 +104,7 @@ const PlaybackAuthoritySnapshotSchema = z
     publicPlaybackRevision: PublicPlaybackRevisionSchema,
     stageStatus: z.enum(["READY", "DISCONNECTED", "UNBOUND"]),
     slideOrder: z.array(PublicSlideKeySchema),
+    initialSlideKey: PublicSlideKeySchema,
     occurrence: PublicSlideOccurrenceSchema,
     nextOccurrenceSeq: z.number().int().positive(),
     blackout: z.boolean(),
@@ -124,22 +129,157 @@ const PlaybackAuthoritySnapshotSchema = z
       context.addIssue({ code: "custom", path: ["slideOrder"], message: "invalid slide registry" });
     }
     const controlHead = safeEncodedCounterValue(snapshot.controlRevision);
-    if (controlHead === null) return;
+    const playbackHead = safeEncodedCounterValue(snapshot.publicPlaybackRevision);
+    if (controlHead === null || playbackHead === null) return;
+    const recordsByRevision = new Map<number, AcceptedCommandRecord>();
+    const appliedRevisions = new Set<number>();
     for (const [key, record] of Object.entries(snapshot.acceptedCommands)) {
-      const acceptedRevision = safeEncodedCounterValue(record.receipt.acceptedControlRevision);
-      if (
-        record.requestHash !== record.receipt.requestHash ||
-        record.effect.commandId !== record.receipt.commandId ||
-        record.effect.acceptedControlRevision !== record.receipt.acceptedControlRevision ||
-        acceptedRevision === null ||
-        acceptedRevision > controlHead
-      ) {
+      const command = record.command;
+      const receipt = record.receipt;
+      const acceptedRevision = safeEncodedCounterValue(receipt.acceptedControlRevision);
+      const canonicalHash = canonicalPlaybackRequestHash(command);
+      const identityMatches =
+        command.presentationSessionId === receipt.presentationSessionId &&
+        command.presentationSessionEpoch === receipt.presentationSessionEpoch &&
+        command.actorId === receipt.actorId &&
+        command.leaseId === receipt.leaseId &&
+        command.controllerEpoch === receipt.controllerEpoch &&
+        command.commandId === receipt.commandId;
+      let valid =
+        key === commandKey(command) &&
+        command.presentationSessionId === snapshot.presentationSessionId &&
+        command.presentationSessionEpoch === snapshot.presentationSessionEpoch &&
+        identityMatches &&
+        record.requestHash === canonicalHash &&
+        receipt.requestHash === canonicalHash &&
+        record.effect.commandId === receipt.commandId &&
+        record.effect.acceptedControlRevision === receipt.acceptedControlRevision &&
+        acceptedRevision !== null &&
+        acceptedRevision >= 1 &&
+        acceptedRevision <= controlHead &&
+        !recordsByRevision.has(acceptedRevision ?? -1);
+
+      if (record.appliedReceipt !== null) {
+        const applied = record.appliedReceipt;
+        const appliedRevision = safeEncodedCounterValue(applied.publicPlaybackRevision);
+        valid =
+          valid &&
+          applied.presentationSessionId === receipt.presentationSessionId &&
+          applied.presentationSessionEpoch === receipt.presentationSessionEpoch &&
+          applied.actorId === receipt.actorId &&
+          applied.leaseId === receipt.leaseId &&
+          applied.controllerEpoch === receipt.controllerEpoch &&
+          applied.commandId === receipt.commandId &&
+          applied.requestHash === receipt.requestHash &&
+          applied.acceptedControlRevision === receipt.acceptedControlRevision &&
+          appliedRevision !== null &&
+          appliedRevision >= 1 &&
+          appliedRevision <= playbackHead &&
+          !appliedRevisions.has(appliedRevision ?? -1);
+        if (appliedRevision !== null) appliedRevisions.add(appliedRevision);
+      }
+      if (acceptedRevision !== null) recordsByRevision.set(acceptedRevision, record);
+      if (!valid) {
         context.addIssue({
           code: "custom",
           path: ["acceptedCommands", key],
-          message: "invalid accepted command record",
+          message: "invalid accepted command identity or hash",
         });
       }
+    }
+
+    if (recordsByRevision.size !== controlHead || appliedRevisions.size !== playbackHead) {
+      context.addIssue({
+        code: "custom",
+        path: ["acceptedCommands"],
+        message: "accepted or applied revisions are not gap-free",
+      });
+      return;
+    }
+    for (let revision = 1; revision <= controlHead; revision += 1) {
+      if (!recordsByRevision.has(revision)) {
+        context.addIssue({
+          code: "custom",
+          path: ["acceptedCommands"],
+          message: "accepted revisions contain a gap",
+        });
+        return;
+      }
+    }
+    for (let revision = 1; revision <= playbackHead; revision += 1) {
+      if (!appliedRevisions.has(revision)) {
+        context.addIssue({
+          code: "custom",
+          path: ["acceptedCommands"],
+          message: "applied revisions contain a gap",
+        });
+        return;
+      }
+    }
+
+    let occurrence: PublicSlideOccurrence = {
+      publicSlideKey: snapshot.initialSlideKey,
+      occurrenceSeq: 1,
+    };
+    let nextOccurrenceSeq = 2;
+    let blackout = false;
+    for (let revision = 1; revision <= controlHead; revision += 1) {
+      const record = recordsByRevision.get(revision);
+      if (record === undefined) return;
+      const command = record.command;
+      if (safeEncodedCounterValue(command.baseRevision) !== revision - 1) {
+        context.addIssue({
+          code: "custom",
+          path: ["acceptedCommands"],
+          message: "command base revision does not match accepted order",
+        });
+        return;
+      }
+      let target = occurrence.publicSlideKey;
+      if (command.type === "SLIDE_SET") target = command.publicSlideKey;
+      if (command.type === "SLIDE_NEXT" || command.type === "SLIDE_PREVIOUS") {
+        const currentIndex = snapshot.slideOrder.indexOf(occurrence.publicSlideKey);
+        const offset = command.type === "SLIDE_NEXT" ? 1 : -1;
+        const relativeTarget = snapshot.slideOrder[currentIndex + offset];
+        if (relativeTarget === undefined) {
+          context.addIssue({
+            code: "custom",
+            path: ["acceptedCommands"],
+            message: "accepted relative command crosses a slide boundary",
+          });
+          return;
+        }
+        target = relativeTarget;
+      }
+      if (target !== occurrence.publicSlideKey) {
+        occurrence = { publicSlideKey: target, occurrenceSeq: nextOccurrenceSeq };
+        nextOccurrenceSeq += 1;
+      }
+      if (command.type === "BLACKOUT_SET") blackout = command.enabled;
+      if (
+        record.effect.occurrence.publicSlideKey !== occurrence.publicSlideKey ||
+        record.effect.occurrence.occurrenceSeq !== occurrence.occurrenceSeq ||
+        record.effect.blackout !== blackout
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["acceptedCommands"],
+          message: "persisted command effect does not match canonical replay",
+        });
+        return;
+      }
+    }
+    if (
+      snapshot.occurrence.publicSlideKey !== occurrence.publicSlideKey ||
+      snapshot.occurrence.occurrenceSeq !== occurrence.occurrenceSeq ||
+      snapshot.nextOccurrenceSeq !== nextOccurrenceSeq ||
+      snapshot.blackout !== blackout
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["occurrence"],
+        message: "playback state does not match canonical command replay",
+      });
     }
   });
 
@@ -175,6 +315,7 @@ export function createPlaybackAuthorityState(
     displayBindingEpoch: input.displayBindingEpoch,
     stageStatus: input.stageStatus,
     slideOrder: [...input.slideOrder],
+    initialSlideKey: input.initialSlideKey,
     controlRevision: controlRevision(0),
     publicPlaybackRevision: publicPlaybackRevision(0),
     occurrence: { publicSlideKey: input.initialSlideKey, occurrenceSeq: 1 },
@@ -334,6 +475,7 @@ export function reducePlaybackCommand(
     blackout,
   };
   const record: AcceptedCommandRecord = {
+    command,
     requestHash,
     receipt,
     effect,

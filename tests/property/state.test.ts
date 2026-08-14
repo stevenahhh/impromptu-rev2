@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  controlRevision,
   type PlaybackCommand,
   PlaybackCommandSchema,
   PlaybackControlLeaseSchema,
@@ -166,6 +167,74 @@ describe("playback authority reducer", () => {
         nowMs,
       ).receipt,
     ).toMatchObject({ status: "REJECTED", reason: "STALE_CONTROLLER_EPOCH" });
+  });
+
+  test("rejects forged persisted dedupe keys, identities, and revision gaps", () => {
+    const accepted = reducePlaybackCommand(authority(), command({ type: "SLIDE_NEXT" }), nowMs);
+    const snapshot = snapshotPlaybackAuthority(accepted.state);
+    const entry = Object.entries(snapshot.acceptedCommands)[0];
+    if (entry === undefined) throw new Error("accepted command was not persisted");
+    const [key, record] = entry;
+
+    expect(
+      restorePlaybackAuthority({
+        ...snapshot,
+        acceptedCommands: { forged: record },
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+    expect(
+      restorePlaybackAuthority({
+        ...snapshot,
+        acceptedCommands: {
+          [key]: {
+            ...record,
+            receipt: { ...record.receipt, actorId: "actor_forged" },
+          },
+        },
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+    expect(
+      restorePlaybackAuthority({
+        ...snapshot,
+        acceptedCommands: {
+          [key]: {
+            ...record,
+            command: { ...record.command, type: "SLIDE_PREVIOUS" },
+          },
+        },
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+    expect(
+      restorePlaybackAuthority({
+        ...snapshot,
+        controlRevision: "cr_2",
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+
+    const second = reducePlaybackCommand(
+      accepted.state,
+      command({ type: "BLACKOUT_SET", commandId: "cmd_2", baseRevision: 1 }),
+      nowMs,
+    );
+    const duplicateRevision = structuredClone(snapshotPlaybackAuthority(second.state));
+    const secondEntry = Object.entries(duplicateRevision.acceptedCommands).find(
+      ([entryKey]) => entryKey !== key,
+    );
+    if (secondEntry === undefined) throw new Error("second accepted command was not persisted");
+    const [secondKey, secondRecord] = secondEntry;
+    expect(
+      restorePlaybackAuthority({
+        ...duplicateRevision,
+        acceptedCommands: {
+          ...duplicateRevision.acceptedCommands,
+          [secondKey]: {
+            ...secondRecord,
+            receipt: { ...secondRecord.receipt, acceptedControlRevision: controlRevision(1) },
+            effect: { ...secondRecord.effect, acceptedControlRevision: controlRevision(1) },
+          },
+        },
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
   });
 
   test("never accepts relative commands from an offline queue or without a ready binding", () => {
