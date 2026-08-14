@@ -1,6 +1,7 @@
 import { Badge, Brand, Button, Panel, Shell, StatusDot } from "@impromptu/ui";
 import { createContext, type ReactNode, useContext, useId, useMemo, useState } from "react";
 import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation } from "react-router-dom";
+import { AudioConsentControl } from "./audio-capture";
 import {
   type AccountSessionView,
   type ConsoleSessionClient,
@@ -233,6 +234,15 @@ function SessionPage() {
         <Panel title="3. Enter fullscreen there" tone="inset">
           <p>The Stage operator clicks fullscreen locally. Console never forces another window.</p>
         </Panel>
+        <AudioConsentControl
+          notice={{
+            purpose: "Live Korean transcription and slide attribution",
+            vendors: ["Session-selected transcription service"],
+            region: "Configured processing region",
+            retention: "Raw samples stay in memory for at most 30 seconds; no durable storage.",
+            deletion: "Capture tracks and the remote stream close on stop or revoke.",
+          }}
+        />
       </div>
     </section>
   );
