@@ -5,6 +5,7 @@ import {
   createStageSessionClient,
   type DisplayJoinView,
   type StageCardEvent,
+  type StageEventObserver,
   type StageSessionClient,
   type StageSnapshotView,
   type StageSubscription,
@@ -182,6 +183,7 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
   useEffect(() => {
     let active = true;
     let subscription: StageSubscription | null = null;
+    let sseSubscription: StageSubscription | null = null;
     let latestSnapshot: StageSnapshotView | null = null;
     const leaseTimers = new Map<string, number>();
 
@@ -219,8 +221,7 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
 
     const connect = async (pins?: StageSnapshotView): Promise<void> => {
       try {
-        const subscribe = client.subscribeRealtime?.bind(client) ?? client.subscribe.bind(client);
-        subscription = await subscribe({
+        const observer: StageEventObserver = {
           onPlayback(event) {
             if (!active) return;
             setSnapshot((current) => {
@@ -270,7 +271,12 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
             });
             void connect(latestSnapshot ?? undefined);
           },
-        });
+        };
+        if (client.subscribeRealtime !== undefined && sseSubscription === null) {
+          sseSubscription = await client.subscribe(observer);
+        }
+        const subscribe = client.subscribeRealtime?.bind(client) ?? client.subscribe.bind(client);
+        subscription = await subscribe(observer);
         if (!active) {
           subscription.close();
           return;
@@ -293,6 +299,7 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
     return () => {
       active = false;
       subscription?.close();
+      sseSubscription?.close();
       for (const timer of leaseTimers.values()) window.clearTimeout(timer);
     };
   }, [client]);
