@@ -1,0 +1,15 @@
+{
+  "name": "@impromptu/private-backend",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/main.ts",
+    "start": "bun run src/main.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

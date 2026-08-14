@@ -10,6 +10,10 @@
         "typescript": "5.9.2",
       },
     },
+    "services/private-backend": {
+      "name": "@impromptu/private-backend",
+      "version": "0.0.0",
+    },
   },
   "packages": {
     "@biomejs/biome": ["@biomejs/biome@2.2.0", "", { "optionalDependencies": { "@biomejs/cli-darwin-arm64": "2.2.0", "@biomejs/cli-darwin-x64": "2.2.0", "@biomejs/cli-linux-arm64": "2.2.0", "@biomejs/cli-linux-arm64-musl": "2.2.0", "@biomejs/cli-linux-x64": "2.2.0", "@biomejs/cli-linux-x64-musl": "2.2.0", "@biomejs/cli-win32-arm64": "2.2.0", "@biomejs/cli-win32-x64": "2.2.0" }, "bin": { "biome": "bin/biome" } }, "sha512-3On3RSYLsX+n9KnoSgfoYlckYBoU6VRM22cw1gB4Y0OuUVSYd/O/2saOJMrA4HFfA1Ff0eacOvMN1yAAvHtzIw=="],
@@ -29,6 +33,8 @@
     "@biomejs/cli-win32-arm64": ["@biomejs/cli-win32-arm64@2.2.0", "", { "os": "win32", "cpu": "arm64" }, "sha512-n9a1/f2CwIDmNMNkFs+JI0ZjFnMO0jdOyGNtihgUNFnlmd84yIYY2KMTBmMV58ZlVHjgmY5Y6E1hVTnSRieggA=="],
 
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.2.0", "", { "os": "win32", "cpu": "x64" }, "sha512-Nawu5nHjP/zPKTIryh2AavzTc/KEg4um/MxWdXW0A6P/RZOyIpa7+QSjeXwAwX/utJGaCoXRPWtF3m5U/bB3Ww=="],
+
+    "@impromptu/private-backend": ["@impromptu/private-backend@workspace:services/private-backend"],
 
     "@types/bun": ["@types/bun@1.2.20", "", { "dependencies": { "bun-types": "1.2.20" } }, "sha512-dX3RGzQ8+KgmMw7CsW4xT5ITBSCrSbfHc36SNT31EOUg/LA9JWq0VDdEXDRSe1InVWpd2yLUM1FUF/kEOyTzYA=="],
 
