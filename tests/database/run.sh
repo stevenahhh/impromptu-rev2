@@ -235,6 +235,54 @@ fi
 
 psql_file "$PRIVATE_ROLE" "$PRIVATE_DATABASE" "$REPO_ROOT/tests/database/private-seed.sql"
 psql_file "$BOOTSTRAP_ROLE" "$PROJECTION_DATABASE" "$REPO_ROOT/tests/database/projection-seed.sql"
+
+readonly DATABASE_HOST_PORT="$(compose port postgres 5432)"
+readonly DATABASE_PORT="${DATABASE_HOST_PORT##*:}"
+readonly PRIVATE_DRIVER_URL="postgresql://$BOOTSTRAP_ROLE:local-test-only@127.0.0.1:$DATABASE_PORT/$PRIVATE_DATABASE"
+readonly PROJECTION_DRIVER_URL="postgresql://$BOOTSTRAP_ROLE:local-test-only@127.0.0.1:$DATABASE_PORT/$PROJECTION_DATABASE"
+
+run_real_dispatch() {
+  local mode="$1"
+  PRIVATE_DATABASE_URL="$PRIVATE_DRIVER_URL" \
+    PROJECTION_DATABASE_URL="$PROJECTION_DRIVER_URL" \
+    bun run "$REPO_ROOT/services/private-backend/test/support/dispatch-integration.ts" "$mode"
+}
+
+run_real_dispatch valid
+
+set +e
+PRIVATE_DATABASE_URL="$PRIVATE_DRIVER_URL" \
+  PROJECTION_DATABASE_URL="$PROJECTION_DRIVER_URL" \
+  bun run "$REPO_ROOT/services/private-backend/test/support/dispatch-integration.ts" crash
+crash_status=$?
+set -e
+if (( crash_status != 86 )); then
+  echo "dispatcher crash assertion failed: expected status 86, got $crash_status" >&2
+  exit 1
+fi
+
+undelivered_after_crash="$(psql_value "$BOOTSTRAP_ROLE" "$PRIVATE_DATABASE" \
+  "SELECT count(*) FROM private_app.publication_outbox WHERE delivered_at IS NULL")"
+applied_after_crash="$(psql_value "$BOOTSTRAP_ROLE" "$PROJECTION_DATABASE" \
+  "SELECT count(*) FROM public_projection.applied_publications WHERE dispatch_key = '33333333-3333-4333-8333-333333333334'")"
+if [[ "$undelivered_after_crash" != "1" || "$applied_after_crash" != "1" ]]; then
+  echo "dispatcher crash assertion failed: undelivered=$undelivered_after_crash applied=$applied_after_crash" >&2
+  exit 1
+fi
+
+run_real_dispatch replay
+
+delivery_count="$(psql_value "$BOOTSTRAP_ROLE" "$PRIVATE_DATABASE" \
+  "SELECT count(*) FROM private_app.publication_outbox WHERE delivered_at IS NOT NULL")"
+inbox_shape="$(psql_value "$BOOTSTRAP_ROLE" "$PROJECTION_DATABASE" \
+  "SELECT count(*) || ':' || count(DISTINCT dispatch_key) || ':' || bool_and(jsonb_typeof(public_payload) = 'object') FROM public_projection.publication_inbox WHERE dispatch_key IN ('33333333-3333-4333-8333-333333333333', '33333333-3333-4333-8333-333333333334')")"
+applied_shape="$(psql_value "$BOOTSTRAP_ROLE" "$PROJECTION_DATABASE" \
+  "SELECT count(*) || ':' || count(DISTINCT dispatch_key) FROM public_projection.applied_publications WHERE dispatch_key IN ('33333333-3333-4333-8333-333333333333', '33333333-3333-4333-8333-333333333334')")"
+if [[ "$delivery_count" != "2" || "$inbox_shape" != "2:2:true" || "$applied_shape" != "2:2" ]]; then
+  echo "real dispatcher assertion failed: delivered=$delivery_count inbox=$inbox_shape applied=$applied_shape" >&2
+  exit 1
+fi
+echo "Real PostgreSQL dispatch and crash/restart replay verified."
 psql_file "$BOOTSTRAP_ROLE" "$PRIVATE_DATABASE" "$REPO_ROOT/tests/database/private-assertions.sql"
 psql_file "$BOOTSTRAP_ROLE" "$PROJECTION_DATABASE" "$REPO_ROOT/tests/database/projection-assertions.sql"
 psql_file "$PRIVATE_ROLE" "$PRIVATE_DATABASE" "$REPO_ROOT/tests/database/private-app.sql"

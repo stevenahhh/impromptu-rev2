@@ -10,10 +10,6 @@ export function createPostgresProjectionDispatchBoundary(sql: Sql): ProjectionDi
   return {
     async dispatch(message: PublicationDispatch) {
       const validated = PublicationDispatchSchema.parse(message);
-      const payload = JSON.stringify(validated.publicPayload);
-      if (payload === undefined) {
-        throw new TypeError("public payload must be JSON serializable");
-      }
 
       const rows = await sql<readonly DispatchOutcomeRow[]>`
         SELECT public_projection.dispatch_publication(
@@ -21,7 +17,7 @@ export function createPostgresProjectionDispatchBoundary(sql: Sql): ProjectionDi
           ${validated.tenantId}::uuid,
           ${validated.projectionId}::uuid,
           ${validated.eventKind},
-          ${payload}::jsonb
+          ${sql.json(validated.publicPayload)}
         ) AS outcome
       `;
       const outcome = rows[0]?.outcome;

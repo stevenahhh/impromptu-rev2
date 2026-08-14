@@ -5,6 +5,8 @@ services:
       POSTGRES_DB: postgres
       POSTGRES_USER: impromptu_bootstrap
       POSTGRES_PASSWORD: local-test-only
+    ports:
+      - "127.0.0.1::5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready --username impromptu_bootstrap --dbname postgres"]
       interval: 1s

@@ -45,13 +45,45 @@ INSERT INTO private_app.publication_outbox (
   event_kind,
   public_payload
 )
-VALUES (
-  '10000000-0000-4000-8000-000000000001',
-  '33333333-3333-4333-8333-333333333333',
-  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  'publish_card',
-  '{"id":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","title":"Public evidence"}'::jsonb
-);
+VALUES
+  (
+    '10000000-0000-4000-8000-000000000001',
+    '33333333-3333-4333-8333-333333333333',
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    'publish_card',
+    '{
+      "cardId":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "cardVersion":1,
+      "publicSlideKey":"slide-public-2",
+      "occurrenceSeq":1,
+      "title":"Public evidence one",
+      "body":"Audience-safe body one",
+      "sourceLabel":"Public source",
+      "canonicalUrl":"https://example.test/evidence/one",
+      "publishedAt":"2026-08-14T08:00:00Z",
+      "expiresAt":"2026-08-14T09:00:00Z",
+      "revision":10
+    }'::jsonb
+  ),
+  (
+    '10000000-0000-4000-8000-000000000001',
+    '33333333-3333-4333-8333-333333333334',
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    'publish_card',
+    '{
+      "cardId":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbc",
+      "cardVersion":1,
+      "publicSlideKey":"slide-public-2",
+      "occurrenceSeq":1,
+      "title":"Public evidence two",
+      "body":"Audience-safe body two",
+      "sourceLabel":"Public source",
+      "canonicalUrl":"https://example.test/evidence/two",
+      "publishedAt":"2026-08-14T08:00:00Z",
+      "expiresAt":"2026-08-14T09:00:00Z",
+      "revision":11
+    }'::jsonb
+  );
 COMMIT;
 
 BEGIN;
