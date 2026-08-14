@@ -28,12 +28,16 @@ function renderStage(path: string) {
 describe("public Stage boundary", () => {
   test("keeps both Stage routes public and audience-only", () => {
     renderStage("/");
-    expect(within(document.body).getByRole("heading", { name: "A clean screen for the room" })).toBeTruthy();
+    expect(
+      within(document.body).getByRole("heading", { name: "A clean screen for the room" }),
+    ).toBeTruthy();
     expect(within(document.body).queryByText("Private workspace")).toBeNull();
 
     cleanup();
     renderStage("/display/rehearsal");
-    expect(within(document.body).getByRole("heading", { name: "Evidence, without the detour" })).toBeTruthy();
+    expect(
+      within(document.body).getByRole("heading", { name: "Evidence, without the detour" }),
+    ).toBeTruthy();
     expect(within(document.body).queryByText("Private workspace")).toBeNull();
   });
 

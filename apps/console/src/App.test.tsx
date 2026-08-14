@@ -25,7 +25,9 @@ describe("Console route boundary", () => {
   test("redirects a signed-out visitor away from every private route", () => {
     renderConsole("/session", false);
 
-    expect(within(document.body).getByRole("heading", { name: "Private presentation control" })).toBeTruthy();
+    expect(
+      within(document.body).getByRole("heading", { name: "Private presentation control" }),
+    ).toBeTruthy();
     expect(within(document.body).queryByRole("heading", { name: "Session controls" })).toBeNull();
   });
 
@@ -33,13 +35,17 @@ describe("Console route boundary", () => {
     renderConsole("/sign-in", true);
 
     expect(within(document.body).getByRole("heading", { name: "Ready for the room" })).toBeTruthy();
-    expect(within(document.body).queryByRole("heading", { name: "Private presentation control" })).toBeNull();
+    expect(
+      within(document.body).queryByRole("heading", { name: "Private presentation control" }),
+    ).toBeNull();
   });
 
   test("renders an explicit private navigation landmark", () => {
     renderConsole("/", true);
 
-    expect(within(document.body).getByRole("navigation", { name: "Private workspace" })).toBeTruthy();
+    expect(
+      within(document.body).getByRole("navigation", { name: "Private workspace" }),
+    ).toBeTruthy();
     expect(within(document.body).getByText("Private workspace")).toBeTruthy();
   });
 });
