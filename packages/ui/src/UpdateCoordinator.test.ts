@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
+import "../../../tests/setup.ts";
+
 import { ACTIVATION_MESSAGE, type ActivationReason, UpdateCoordinator } from "./UpdateCoordinator";
 
 class FakeWorker extends EventTarget {

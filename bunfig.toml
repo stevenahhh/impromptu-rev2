@@ -3,4 +3,3 @@ exact = true
 
 [test]
 root = "."
-preload = ["./tests/setup.ts"]

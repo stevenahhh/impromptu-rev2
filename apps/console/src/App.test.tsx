@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import "../../../tests/setup.ts";
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
