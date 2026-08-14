@@ -1,6 +1,6 @@
 import {
-  KOREAN_STT_BAKEOFF_CASES,
   createOfflineKoreanSttProviders,
+  KOREAN_STT_BAKEOFF_CASES,
   runKoreanSttBakeoff,
 } from "../src/bakeoff.ts";
 

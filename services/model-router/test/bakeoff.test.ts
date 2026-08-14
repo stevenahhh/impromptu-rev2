@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
-  KOREAN_STT_BAKEOFF_CASES,
   createOfflineKoreanSttProviders,
+  KOREAN_STT_BAKEOFF_CASES,
   runKoreanSttBakeoff,
 } from "../src/bakeoff.ts";
 
@@ -22,7 +22,8 @@ describe("offline Korean STT provider bakeoff", () => {
   });
 
   test("returns immutable copies rather than exposing fake output fixtures", async () => {
-    const provider = createOfflineKoreanSttProviders()[0]!;
+    const provider = createOfflineKoreanSttProviders()[0];
+    if (provider === undefined) throw new Error("provider fixture is required");
     const first = await provider.transcribe("ko-case-1");
     const second = await provider.transcribe("ko-case-1");
 

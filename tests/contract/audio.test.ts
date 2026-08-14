@@ -38,9 +38,9 @@ describe("audio contracts", () => {
     });
 
     expect(grant.expiresAtMs - grant.issuedAtMs).toBe(60_000);
-    expect(AudioCaptureConsentSchema.safeParse({ ...consent, explicitlyAccepted: false }).success).toBe(
-      false,
-    );
+    expect(
+      AudioCaptureConsentSchema.safeParse({ ...consent, explicitlyAccepted: false }).success,
+    ).toBe(false);
     expect(CaptureGrantSchema.safeParse({ ...grant, expiresAtMs: 1_000 }).success).toBe(false);
   });
 

@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import type { AudioCaptureConsent } from "@impromptu/contracts/private";
 import {
   AudioCaptureCoordinator,
-  AudioSttPortError,
   type AudioStreamTerminal,
+  AudioSttPortError,
   RouterBackedAudioSttPort,
   type ServerAudioSttPort,
 } from "../src/audio-capture.ts";
@@ -58,7 +58,10 @@ describe("model-router audio streaming port", () => {
     const boundary = {
       async *streamStt(chunks: AsyncIterable<{ sequence: number; audio: Uint8Array }>) {
         for await (const chunk of chunks) seen.push(chunk.sequence);
-        yield { kind: "complete" as const, result: { ok: false as const, error: { code: "policy_denied" } } };
+        yield {
+          kind: "complete" as const,
+          result: { ok: false as const, error: { code: "policy_denied" } },
+        };
       },
     };
     const port = new RouterBackedAudioSttPort(boundary, (signal) => ({ signal }));
@@ -88,7 +91,9 @@ describe("audio consent and capture lifecycle", () => {
 
     const grant = coordinator.issueGrant(consent(), 1_000);
     const terminal = coordinator.startCapture(grant.captureGrantId, consent().actorId, 1_001);
-    expect(coordinator.pushFrame(grant.captureGrantId, 0, new Uint8Array([1, 2]), 10, 1_002)).toEqual({
+    expect(
+      coordinator.pushFrame(grant.captureGrantId, 0, new Uint8Array([1, 2]), 10, 1_002),
+    ).toEqual({
       outcome: "ACCEPTED",
     });
     expect(coordinator.stopCapture(grant.captureGrantId, 1_003)).toEqual({ outcome: "STOPPED" });

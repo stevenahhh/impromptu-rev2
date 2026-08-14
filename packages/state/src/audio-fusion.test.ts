@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
+  SlideOccurrenceWindowSchema,
   type TimedTranscript,
   TimedTranscriptSchema,
-  SlideOccurrenceWindowSchema,
 } from "@impromptu/contracts/private";
 import { fuseTranscriptToSlide, mapDeviceIntervalToSession } from "./audio-fusion.ts";
 
@@ -42,6 +42,8 @@ const slides = [
     endSessionMs: 2_400,
   }),
 ];
+const firstSlide = slides[0];
+if (firstSlide === undefined) throw new Error("slide fixture is required");
 
 describe("cross-device clock mapping", () => {
   test("maps injected device offset and expands by bounded uncertainty", () => {
@@ -59,9 +61,10 @@ describe("cross-device clock mapping", () => {
       outcome: "AMBIGUOUS",
       reason: "CLOCK_UNCERTAINTY_EXCEEDED",
     });
-    expect(
-      mapDeviceIntervalToSession(transcript(), 899, 1_500, 50),
-    ).toEqual({ outcome: "AMBIGUOUS", reason: "CLOCK_REFERENCE_OUT_OF_RANGE" });
+    expect(mapDeviceIntervalToSession(transcript(), 899, 1_500, 50)).toEqual({
+      outcome: "AMBIGUOUS",
+      reason: "CLOCK_REFERENCE_OUT_OF_RANGE",
+    });
   });
 });
 
@@ -71,7 +74,7 @@ describe("slide occurrence STT fusion", () => {
     expect(result).toEqual({
       outcome: "ATTRIBUTED",
       transcriptFinalId: "transcript_alpha",
-      occurrence: slides[0]!.occurrence,
+      occurrence: firstSlide.occurrence,
       interval: {
         mappingVersion: "clock-v1",
         startSessionMs: 1_210,
@@ -92,7 +95,10 @@ describe("slide occurrence STT fusion", () => {
     });
     expect(
       fuseTranscriptToSlide(
-        transcript({ audioEndDeviceMs: 1_700, words: [{ text: "경계", startDeviceMs: 1_650, endDeviceMs: 1_690 }] }),
+        transcript({
+          audioEndDeviceMs: 1_700,
+          words: [{ text: "경계", startDeviceMs: 1_650, endDeviceMs: 1_690 }],
+        }),
         slides,
       ),
     ).toEqual({ outcome: "AMBIGUOUS", reason: "SLIDE_BOUNDARY_CROSSED" });
