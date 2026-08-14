@@ -46,4 +46,16 @@ describe("shared visual system", () => {
       expect(existsSync(`packages/ui/src/${file}`), file).toBe(true);
     }
   });
+
+  test("reduces token-driven animation, delay, and transition motion at the root", () => {
+    const styles = readFileSync("packages/ui/src/styles.css", "utf8");
+    const tokens = readFileSync(tokenPath, "utf8");
+
+    expect(tokens).toContain("--duration-motion-reduced:");
+    expect(tokens).toContain("--delay-motion-reduced:");
+    expect(styles).toContain("--duration-reveal: var(--duration-motion-reduced)");
+    expect(styles).toContain("--duration-fast: var(--duration-motion-reduced)");
+    expect(styles).toContain("--delay-2: var(--delay-motion-reduced)");
+    expect(styles).toContain("--delay-3: var(--delay-motion-reduced)");
+  });
 });

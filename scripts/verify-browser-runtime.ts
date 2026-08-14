@@ -128,6 +128,42 @@ async function installOfflineShell(context: BrowserContext, surface: AppSurface)
   console.log(`Installed ${surface.app} offline shell (${shell.urls.length} entries).`);
 }
 
+async function verifyReducedMotion(context: BrowserContext) {
+  for (const surface of surfaces) {
+    const page = await context.newPage();
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto(address(surface), { waitUntil: "networkidle" });
+    const offenders = await page.locator("*").evaluateAll((elements) => {
+      const toMilliseconds = (value: string) =>
+        value.split(",").map((part) => {
+          const duration = part.trim();
+          return duration.endsWith("ms")
+            ? Number.parseFloat(duration)
+            : Number.parseFloat(duration) * 1000;
+        });
+
+      return elements.flatMap((element) => {
+        const style = getComputedStyle(element);
+        const durations = [
+          ...toMilliseconds(style.animationDuration),
+          ...toMilliseconds(style.animationDelay),
+          ...toMilliseconds(style.transitionDuration),
+          ...toMilliseconds(style.transitionDelay),
+        ];
+        return durations.some((duration) => duration > 1)
+          ? [`${element.tagName.toLowerCase()}.${element.className}`]
+          : [];
+      });
+    });
+    if (offenders.length > 0) {
+      throw new Error(`${surface.app} reduced-motion overrides missed: ${offenders.join(", ")}`);
+    }
+    await page.screenshot({ path: join(artifactPath, `${surface.app}-reduced-motion.png`) });
+    await page.close();
+  }
+  console.log("Computed motion is at most 1ms under reduced-motion preference.");
+}
+
 async function verifyCrossOriginFrameRejection(context: BrowserContext) {
   const page = await context.newPage();
   const violation = page.waitForEvent("console", {
@@ -167,6 +203,7 @@ async function verifyColdOfflineRestart() {
       await installOfflineShell(onlineContext, surface);
     }
     await verifyCrossOriginFrameRejection(onlineContext);
+    await verifyReducedMotion(onlineContext);
   } finally {
     console.log("Closing online Chrome and preview origins...");
     await onlineContext.close();

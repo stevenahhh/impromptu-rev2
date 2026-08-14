@@ -296,13 +296,22 @@ a {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: var(--duration-motion-reduced);
+    --duration-reveal: var(--duration-motion-reduced);
+    --duration-ambient: var(--duration-motion-reduced);
+    --delay-1: var(--delay-motion-reduced);
+    --delay-2: var(--delay-motion-reduced);
+    --delay-3: var(--delay-motion-reduced);
+  }
+
   *,
   *::before,
   *::after {
     scroll-behavior: auto;
-    animation-duration: var(--duration-fast);
+    animation-duration: var(--duration-motion-reduced);
     animation-iteration-count: var(--count-once);
-    transition-duration: var(--duration-fast);
+    transition-duration: var(--duration-motion-reduced);
   }
 }
 

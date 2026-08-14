@@ -90,10 +90,12 @@
   --duration-fast: 140ms;
   --duration-reveal: 520ms;
   --duration-ambient: 14s;
+  --duration-motion-reduced: 1ms;
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --delay-1: 70ms;
   --delay-2: 140ms;
   --delay-3: 210ms;
+  --delay-motion-reduced: 0ms;
   --opacity-muted: 0.72;
   --opacity-soft: 0.48;
   --count-once: 1;
