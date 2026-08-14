@@ -123,7 +123,8 @@ function controllerEventStream(
 function csrfToken(internalAuthToken: string, accountSessionId: string): string {
   return new Bun.CryptoHasher("sha256")
     .update(`account-csrf:${internalAuthToken}:${accountSessionId}`)
-    .digest("hex");
+    .digest("hex")
+    .slice(0, 48);
 }
 
 export function createPrivateBackendHandler(
