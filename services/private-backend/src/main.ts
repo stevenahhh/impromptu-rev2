@@ -1,6 +1,12 @@
 import { parsePrivateBackendConfig } from "./config.ts";
 import { createPrivateBackendHandler } from "./http.ts";
-import { PreparedEvidenceCoordinator } from "./prepared-evidence.ts";
+import {
+  createPreparedEvidenceStore,
+  PreparedEvidenceCoordinator,
+  PreparedEvidenceSnapshotError,
+  restorePreparedEvidenceStore,
+  snapshotPreparedEvidenceStore,
+} from "./prepared-evidence.ts";
 import { ProjectionHttpPort } from "./projection-http-port.ts";
 
 function required(name: string): string {
@@ -15,7 +21,26 @@ const expectedAuthorizationCode = required("CONTROLLER_AUTHORIZATION_CODE");
 const accountId = required("CONTROLLER_ACCOUNT_ID");
 const actorId = required("CONTROLLER_ACTOR_ID");
 const projection = new ProjectionHttpPort(required("PROJECTION_GATEWAY_ORIGIN"), internalAuthToken);
-const coordinator = new PreparedEvidenceCoordinator(projection);
+const snapshotPath = required("PRIVATE_SNAPSHOT_PATH");
+const snapshotFile = Bun.file(snapshotPath);
+let store = createPreparedEvidenceStore();
+if (await snapshotFile.exists()) {
+  let input: unknown;
+  try {
+    input = await snapshotFile.json();
+  } catch {
+    throw new PreparedEvidenceSnapshotError("private snapshot is not valid JSON");
+  }
+  const restored = restorePreparedEvidenceStore(input);
+  if (restored.outcome !== "RESTORED") {
+    throw new PreparedEvidenceSnapshotError("private snapshot failed validation");
+  }
+  store = restored.store;
+}
+const coordinator = new PreparedEvidenceCoordinator(projection, store);
+const persist = async () => {
+  await Bun.write(snapshotPath, JSON.stringify(snapshotPreparedEvidenceStore(store)));
+};
 const server = Bun.serve({
   hostname: config.host,
   port: config.port,
@@ -28,6 +53,7 @@ const server = Bun.serve({
       },
     },
     now: Date.now,
+    persist,
   }),
 });
 

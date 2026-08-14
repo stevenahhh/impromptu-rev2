@@ -3,6 +3,8 @@ import {
   createProjectionGatewayStore,
   PreparedEvidenceProjectionGateway,
   type PublicDeckArtifact,
+  restoreProjectionGatewayStore,
+  snapshotProjectionGatewayStore,
 } from "../src/prepared-evidence.ts";
 
 const deck: PublicDeckArtifact = {
@@ -211,5 +213,54 @@ describe("prepared evidence projection gateway", () => {
     expect(snapshot?.tombstones.map((event) => event.status)).toEqual(["RETRACTED"]);
     expect(snapshot?.tombstoneWatermark).toBe("pcr_1");
     expect(snapshot?.tombstoneRetentionMs).toBe(60_000);
+  });
+
+  test("restores the durable projection database and rejects forged revisions", () => {
+    const store = createProjectionGatewayStore();
+    const gateway = new PreparedEvidenceProjectionGateway(store);
+    const join = gateway.createDisplayJoin(
+      {
+        displayId: "display_durable",
+        deckVersion: deck.deckVersion,
+        displayFingerprint: "fingerprint-stage-durable",
+      },
+      1_000,
+    );
+    const bound = gateway.bindDisplay(
+      {
+        displayJoinId: join.displayJoinId,
+        presentationSessionId: "ps_durable",
+        presentationSessionEpoch: "pse_1",
+        expectedDisplayBindingEpoch: "dbe_0",
+        expectedDeckVersion: deck.deckVersion,
+        approvedDisplayId: join.displayId,
+        approvedDisplayFingerprint: join.displayFingerprint,
+        deck,
+      },
+      1_001,
+    );
+    if (bound.outcome !== "BOUND") throw new Error("binding fixture failed");
+    const snapshot = snapshotProjectionGatewayStore(store);
+    const restored = restoreProjectionGatewayStore(snapshot);
+    expect(restored.outcome).toBe("RESTORED");
+    if (restored.outcome !== "RESTORED") throw new Error("snapshot restore failed");
+    expect(
+      new PreparedEvidenceProjectionGateway(restored.store).claimDisplaySession(
+        {
+          displayJoinId: join.displayJoinId,
+          displayId: join.displayId,
+          displayFingerprint: join.displayFingerprint,
+        },
+        1_002,
+      ),
+    ).not.toBeNull();
+
+    const forged = structuredClone(snapshot) as {
+      projections: Array<{ publicCardRevision: string }>;
+    };
+    const projection = forged.projections[0];
+    if (projection === undefined) throw new Error("snapshot fixture missing projection");
+    projection.publicCardRevision = "pcr_9007199254740992";
+    expect(restoreProjectionGatewayStore(forged)).toEqual({ outcome: "INVALID_SNAPSHOT" });
   });
 });

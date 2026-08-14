@@ -16,6 +16,7 @@ export interface PrivateBackendHttpDependencies {
   readonly identityVerifier: AccountIdentityVerifier;
   readonly internalAuthToken: string;
   readonly now: () => number;
+  readonly persist?: () => Promise<void>;
 }
 
 function json(body: unknown, status: number, headers?: Headers): Response {
@@ -41,11 +42,6 @@ function browserOriginHeaders(request: Request, allowedOrigin: ExactOrigin): Hea
   headers.set("access-control-allow-credentials", "true");
   headers.set("vary", "Origin");
   return headers;
-}
-
-function opaqueHex(byteLength: number): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(byteLength));
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function accountCookie(request: Request): string | null {
@@ -81,12 +77,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function csrfToken(internalAuthToken: string, accountSessionId: string): string {
+  return new Bun.CryptoHasher("sha256")
+    .update(`account-csrf:${internalAuthToken}:${accountSessionId}`)
+    .digest("hex");
+}
+
 export function createPrivateBackendHandler(
   config: PrivateBackendConfig,
   dependencies?: PrivateBackendHttpDependencies,
 ): PrivateBackendHandler {
-  const csrfByAccountSession = new Map<string, string>();
-
   return async (request) => {
     const origin = browserOriginHeaders(request, config.allowedOrigin);
     if (origin instanceof Response) return origin;
@@ -108,6 +108,7 @@ export function createPrivateBackendHandler(
         commandId: String(body.commandId ?? ""),
         displayBindingEpoch: String(body.displayBindingEpoch ?? ""),
       });
+      if (result.outcome === "APPLIED") await dependencies.persist?.();
       return json(
         result.outcome === "APPLIED" ? result.value : { error: result.reason },
         result.outcome === "APPLIED" ? 200 : 409,
@@ -128,8 +129,8 @@ export function createPrivateBackendHandler(
       );
       if (identity === null) return json({ error: "authentication_failed" }, 401, origin);
       const session = dependencies.coordinator.createAccountSession(identity, dependencies.now());
-      const csrfToken = opaqueHex(24);
-      csrfByAccountSession.set(session.accountSessionId, csrfToken);
+      const sessionCsrfToken = csrfToken(dependencies.internalAuthToken, session.accountSessionId);
+      await dependencies.persist?.();
       origin.append(
         "set-cookie",
         `__Host-account=${session.accountSessionId}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${Math.max(0, Math.floor((session.expiresAtMs - dependencies.now()) / 1_000))}`,
@@ -138,7 +139,7 @@ export function createPrivateBackendHandler(
         {
           account: { accountId: session.accountId, actorId: session.actorId },
           expiresAtMs: session.expiresAtMs,
-          csrfToken,
+          csrfToken: sessionCsrfToken,
         },
         201,
         origin,
@@ -155,8 +156,8 @@ export function createPrivateBackendHandler(
       return json({ error: account.reason }, 401, origin);
     }
     if (request.method !== "GET") {
-      const expectedCsrf = csrfByAccountSession.get(accountSessionId);
-      if (expectedCsrf === undefined || request.headers.get("x-csrf-token") !== expectedCsrf) {
+      const expectedCsrf = csrfToken(dependencies.internalAuthToken, accountSessionId);
+      if (request.headers.get("x-csrf-token") !== expectedCsrf) {
         return json({ error: "csrf_rejected" }, 403, origin);
       }
     }
@@ -166,7 +167,7 @@ export function createPrivateBackendHandler(
         {
           account: { accountId: account.value.accountId, actorId: account.value.actorId },
           expiresAtMs: account.value.expiresAtMs,
-          csrfToken: csrfByAccountSession.get(accountSessionId) ?? null,
+          csrfToken: csrfToken(dependencies.internalAuthToken, accountSessionId),
         },
         200,
         origin,
@@ -177,7 +178,7 @@ export function createPrivateBackendHandler(
         accountSessionId,
         dependencies.now(),
       );
-      csrfByAccountSession.delete(accountSessionId);
+      if (result.outcome === "APPLIED") await dependencies.persist?.();
       origin.append(
         "set-cookie",
         "__Host-account=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0",
@@ -214,6 +215,7 @@ export function createPrivateBackendHandler(
         { privateDeck: body.privateDeck, publicDeck: body.publicDeck },
         dependencies.now(),
       );
+      if (result.outcome === "APPLIED") await dependencies.persist?.();
       return json(
         result.outcome === "APPLIED" ? result.value : { error: result.reason },
         result.outcome === "APPLIED" ? 201 : 409,
@@ -226,6 +228,7 @@ export function createPrivateBackendHandler(
         body,
         dependencies.now(),
       );
+      if (result.outcome === "APPLIED") await dependencies.persist?.();
       return json(
         result.outcome === "APPLIED" ? result.value : { error: result.reason },
         result.outcome === "APPLIED" ? 201 : 409,
@@ -244,6 +247,7 @@ export function createPrivateBackendHandler(
         },
         dependencies.now(),
       );
+      if (result.outcome === "APPLIED") await dependencies.persist?.();
       return json(
         result.outcome === "APPLIED" ? result.value : { error: result.reason },
         result.outcome === "APPLIED" ? 202 : 409,
@@ -256,6 +260,7 @@ export function createPrivateBackendHandler(
         body,
         dependencies.now(),
       );
+      if (result.outcome === "APPLIED") await dependencies.persist?.();
       return json(
         result.outcome === "APPLIED" ? result.value : { error: result.reason },
         result.outcome === "APPLIED" ? 201 : 409,
@@ -275,6 +280,7 @@ export function createPrivateBackendHandler(
         },
         dependencies.now(),
       );
+      if (result.outcome === "APPLIED") await dependencies.persist?.();
       return json(
         result.outcome === "APPLIED" ? result.value : { error: result.reason },
         result.outcome === "APPLIED" ? 201 : 409,
@@ -297,6 +303,7 @@ export function createPrivateBackendHandler(
         },
         dependencies.now(),
       );
+      if (result.outcome === "APPLIED") await dependencies.persist?.();
       return json(
         result.outcome === "APPLIED" ? result.value : { error: result.reason },
         result.outcome === "APPLIED" ? 200 : 409,

@@ -312,8 +312,13 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
   const processes: ServiceProcess[] = [];
   let browser: Browser | null = null;
   let context: BrowserContext | null = null;
-  const profilePath = join(process.env.TEMP ?? process.cwd(), "impromptu-r2-wp3-clean-stage");
+  const temporaryRoot = process.env.TEMP ?? process.cwd();
+  const profilePath = join(temporaryRoot, "impromptu-r2-wp3-clean-stage");
+  const privateSnapshotPath = join(temporaryRoot, "impromptu-r2-wp3-private-snapshot.json");
+  const projectionDatabasePath = join(temporaryRoot, "impromptu-r2-wp3-projection-database.json");
   rmSync(profilePath, { force: true, recursive: true });
+  rmSync(privateSnapshotPath, { force: true });
+  rmSync(projectionDatabasePath, { force: true });
   try {
     processes.push(
       await startProcess(
@@ -322,6 +327,7 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
           PRIVATE_BACKEND_ORIGIN: privateOrigin,
           PROJECTION_GATEWAY_HOST: "127.0.0.1",
           PROJECTION_GATEWAY_PORT: "44202",
+          PROJECTION_DATABASE_PATH: projectionDatabasePath,
           SERVICE_AUTH_TOKEN: serviceToken,
           STAGE_ORIGIN: stageOrigin,
         },
@@ -338,6 +344,7 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
           CONTROLLER_AUTHORIZATION_CODE: "e2e-code",
           PRIVATE_BACKEND_HOST: "127.0.0.1",
           PRIVATE_BACKEND_PORT: "44201",
+          PRIVATE_SNAPSHOT_PATH: privateSnapshotPath,
           PROJECTION_GATEWAY_ORIGIN: projectionOrigin,
           SERVICE_AUTH_TOKEN: serviceToken,
         },
@@ -633,5 +640,7 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
     await browser?.close();
     for (const process of processes.toReversed()) await stopProcess(process);
     rmSync(profilePath, { force: true, recursive: true });
+    rmSync(privateSnapshotPath, { force: true });
+    rmSync(projectionDatabasePath, { force: true });
   }
 }

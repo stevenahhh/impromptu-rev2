@@ -1,3 +1,11 @@
+import {
+  AudienceDisplaySessionSchema,
+  DisplayJoinSchema,
+  PublicationTombstoneSchema,
+  PublishedAudienceCardSchema,
+  PublishedDeckArtifactSchema,
+} from "@impromptu/contracts/public";
+
 export interface PublicDeckArtifact {
   readonly deckVersion: string;
   readonly manifestHash: string;
@@ -110,6 +118,184 @@ export interface ProjectionGatewayStore {
 
 export function createProjectionGatewayStore(): ProjectionGatewayStore {
   return { joins: new Map(), projections: new Map() };
+}
+
+export class ProjectionGatewaySnapshotError extends Error {
+  readonly code = "INVALID_PROJECTION_DATABASE_SNAPSHOT";
+}
+
+export type ProjectionGatewayStoreRestoreResult =
+  | Readonly<{ outcome: "RESTORED"; store: ProjectionGatewayStore }>
+  | Readonly<{ outcome: "INVALID_SNAPSHOT" }>;
+
+function snapshotRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function exactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  const keys = Object.keys(value).sort();
+  const sortedExpected = [...expected].sort();
+  return (
+    keys.length === sortedExpected.length &&
+    keys.every((key, index) => key === sortedExpected[index])
+  );
+}
+
+export function snapshotProjectionGatewayStore(store: ProjectionGatewayStore): unknown {
+  return {
+    stateKind: "PREPARED_EVIDENCE_PROJECTION_DATABASE_SNAPSHOT",
+    joins: [...store.joins.values()],
+    projections: [...store.projections.values()].map((projection) => ({
+      binding: projection.binding,
+      displaySession: projection.displaySession,
+      deck: projection.deck,
+      publicPlaybackRevision: projection.publicPlaybackRevision,
+      publicCardRevision: projection.publicCardRevision,
+      occurrence: projection.occurrence,
+      blackout: projection.blackout,
+      cards: [...projection.cards.values()],
+      tombstones: [...projection.tombstones.values()],
+    })),
+  };
+}
+
+export function restoreProjectionGatewayStore(input: unknown): ProjectionGatewayStoreRestoreResult {
+  if (
+    !snapshotRecord(input) ||
+    !exactKeys(input, ["stateKind", "joins", "projections"]) ||
+    input.stateKind !== "PREPARED_EVIDENCE_PROJECTION_DATABASE_SNAPSHOT" ||
+    !Array.isArray(input.joins) ||
+    !Array.isArray(input.projections)
+  ) {
+    return { outcome: "INVALID_SNAPSHOT" };
+  }
+  const store = createProjectionGatewayStore();
+  for (const joinInput of input.joins) {
+    if (
+      !snapshotRecord(joinInput) ||
+      !exactKeys(joinInput, ["locator", "consumed", "claimed", "audienceDisplaySessionId"]) ||
+      typeof joinInput.consumed !== "boolean" ||
+      typeof joinInput.claimed !== "boolean" ||
+      (joinInput.audienceDisplaySessionId !== null &&
+        typeof joinInput.audienceDisplaySessionId !== "string")
+    ) {
+      return { outcome: "INVALID_SNAPSHOT" };
+    }
+    const locator = DisplayJoinSchema.safeParse(joinInput.locator);
+    if (
+      !locator.success ||
+      store.joins.has(locator.data.displayJoinId) ||
+      (joinInput.claimed && !joinInput.consumed) ||
+      joinInput.consumed !== (joinInput.audienceDisplaySessionId !== null)
+    ) {
+      return { outcome: "INVALID_SNAPSHOT" };
+    }
+    store.joins.set(locator.data.displayJoinId, {
+      locator: locator.data,
+      consumed: joinInput.consumed,
+      claimed: joinInput.claimed,
+      audienceDisplaySessionId: joinInput.audienceDisplaySessionId,
+    });
+  }
+  for (const projectionInput of input.projections) {
+    if (
+      !snapshotRecord(projectionInput) ||
+      !exactKeys(projectionInput, [
+        "binding",
+        "displaySession",
+        "deck",
+        "publicPlaybackRevision",
+        "publicCardRevision",
+        "occurrence",
+        "blackout",
+        "cards",
+        "tombstones",
+      ]) ||
+      typeof projectionInput.publicPlaybackRevision !== "string" ||
+      typeof projectionInput.publicCardRevision !== "string" ||
+      typeof projectionInput.blackout !== "boolean" ||
+      !snapshotRecord(projectionInput.occurrence) ||
+      typeof projectionInput.occurrence.publicSlideKey !== "string" ||
+      typeof projectionInput.occurrence.occurrenceSeq !== "number" ||
+      !Array.isArray(projectionInput.cards) ||
+      !Array.isArray(projectionInput.tombstones)
+    ) {
+      return { outcome: "INVALID_SNAPSHOT" };
+    }
+    const displaySession = AudienceDisplaySessionSchema.safeParse(projectionInput.displaySession);
+    const deck = PublishedDeckArtifactSchema.safeParse(projectionInput.deck);
+    const occurrence = {
+      publicSlideKey: projectionInput.occurrence.publicSlideKey,
+      occurrenceSeq: projectionInput.occurrence.occurrenceSeq,
+    };
+    const playbackRevision = revisionValue(projectionInput.publicPlaybackRevision, "pbr_");
+    const cardRevision = revisionValue(projectionInput.publicCardRevision, "pcr_");
+    if (
+      !displaySession.success ||
+      !deck.success ||
+      playbackRevision === null ||
+      cardRevision === null ||
+      JSON.stringify(displaySession.data.binding) !== JSON.stringify(projectionInput.binding) ||
+      displaySession.data.binding.deckVersion !== deck.data.deckVersion ||
+      displaySession.data.binding.manifestHash !== deck.data.manifestHash ||
+      !deck.data.slides.some((slide) => slide.publicSlideKey === occurrence.publicSlideKey) ||
+      store.projections.has(displaySession.data.binding.presentationSessionId)
+    ) {
+      return { outcome: "INVALID_SNAPSHOT" };
+    }
+    const cards = new Map<string, PublicCardUpsert>();
+    for (const cardInput of projectionInput.cards) {
+      const card = PublishedAudienceCardSchema.safeParse(cardInput);
+      if (!card.success) return { outcome: "INVALID_SNAPSHOT" };
+      const eventRevision = revisionValue(card.data.publicCardRevision, "pcr_");
+      if (
+        eventRevision === null ||
+        eventRevision > cardRevision ||
+        cards.has(card.data.projectionId)
+      ) {
+        return { outcome: "INVALID_SNAPSHOT" };
+      }
+      cards.set(card.data.projectionId, card.data);
+    }
+    const tombstones = new Map<string, PublicCardTombstone>();
+    for (const tombstoneInput of projectionInput.tombstones) {
+      const tombstone = PublicationTombstoneSchema.safeParse(tombstoneInput);
+      if (!tombstone.success) return { outcome: "INVALID_SNAPSHOT" };
+      const eventRevision = revisionValue(tombstone.data.publicCardRevision, "pcr_");
+      if (
+        eventRevision === null ||
+        eventRevision > cardRevision ||
+        cards.has(tombstone.data.projectionId) ||
+        tombstones.has(tombstone.data.projectionId)
+      ) {
+        return { outcome: "INVALID_SNAPSHOT" };
+      }
+      tombstones.set(tombstone.data.projectionId, tombstone.data);
+    }
+    store.projections.set(displaySession.data.binding.presentationSessionId, {
+      binding: displaySession.data.binding,
+      displaySession: displaySession.data,
+      deck: deck.data,
+      publicPlaybackRevision: projectionInput.publicPlaybackRevision,
+      publicCardRevision: projectionInput.publicCardRevision,
+      occurrence,
+      blackout: projectionInput.blackout,
+      cards,
+      tombstones,
+    });
+  }
+  for (const join of store.joins.values()) {
+    if (
+      join.audienceDisplaySessionId !== null &&
+      ![...store.projections.values()].some(
+        (projection) =>
+          projection.displaySession.audienceDisplaySessionId === join.audienceDisplaySessionId,
+      )
+    ) {
+      return { outcome: "INVALID_SNAPSHOT" };
+    }
+  }
+  return { outcome: "RESTORED", store };
 }
 
 export type BindDisplayResult =

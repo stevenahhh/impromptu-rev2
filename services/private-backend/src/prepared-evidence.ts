@@ -41,6 +41,7 @@ import {
   type PublicCardStreamState,
   reduceCandidateLifecycle,
   reducePlaybackCommand,
+  restoreCandidateLifecycle,
   restorePlaybackAuthority,
   restorePublicCardStream,
   rotatePlaybackDisplayBinding,
@@ -109,6 +110,144 @@ export interface PreparedEvidenceStore {
 
 export function createPreparedEvidenceStore(): PreparedEvidenceStore {
   return { accountSessions: new Map(), presentations: new Map() };
+}
+
+export class PreparedEvidenceSnapshotError extends Error {
+  readonly code = "INVALID_PREPARED_EVIDENCE_SNAPSHOT";
+}
+
+export type PreparedEvidenceStoreRestoreResult =
+  | Readonly<{ outcome: "RESTORED"; store: PreparedEvidenceStore }>
+  | Readonly<{ outcome: "INVALID_SNAPSHOT" }>;
+
+function snapshotRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  const actual = Object.keys(value).sort();
+  return (
+    actual.length === keys.length && actual.every((key, index) => key === [...keys].sort()[index])
+  );
+}
+
+export function snapshotPreparedEvidenceStore(store: PreparedEvidenceStore): unknown {
+  return {
+    stateKind: "PREPARED_EVIDENCE_COORDINATOR_SNAPSHOT",
+    accountSessions: [...store.accountSessions.values()],
+    presentations: [...store.presentations.values()].map((presentation) => ({
+      lifecycle: presentation.lifecycle,
+      privateDeck: presentation.privateDeck,
+      publicDeck: presentation.publicDeck,
+      playback: presentation.playback,
+      cards: presentation.cards,
+      candidates: [...presentation.candidates.values()],
+      audienceDisplaySession: presentation.audienceDisplaySession,
+    })),
+  };
+}
+
+export function restorePreparedEvidenceStore(input: unknown): PreparedEvidenceStoreRestoreResult {
+  if (
+    !snapshotRecord(input) ||
+    !hasExactKeys(input, ["stateKind", "accountSessions", "presentations"]) ||
+    input.stateKind !== "PREPARED_EVIDENCE_COORDINATOR_SNAPSHOT" ||
+    !Array.isArray(input.accountSessions) ||
+    !Array.isArray(input.presentations)
+  ) {
+    return { outcome: "INVALID_SNAPSHOT" };
+  }
+  const store = createPreparedEvidenceStore();
+  for (const accountInput of input.accountSessions) {
+    const account = AccountSessionSchema.safeParse(accountInput);
+    if (!account.success || store.accountSessions.has(account.data.accountSessionId)) {
+      return { outcome: "INVALID_SNAPSHOT" };
+    }
+    store.accountSessions.set(account.data.accountSessionId, account.data);
+  }
+  for (const presentationInput of input.presentations) {
+    if (
+      !snapshotRecord(presentationInput) ||
+      !hasExactKeys(presentationInput, [
+        "lifecycle",
+        "privateDeck",
+        "publicDeck",
+        "playback",
+        "cards",
+        "candidates",
+        "audienceDisplaySession",
+      ]) ||
+      !Array.isArray(presentationInput.candidates)
+    ) {
+      return { outcome: "INVALID_SNAPSHOT" };
+    }
+    const lifecycle = PresentationSessionLifecycleSchema.safeParse(presentationInput.lifecycle);
+    const privateDeck = PrivateDeckContextSchema.safeParse(presentationInput.privateDeck);
+    const publicDeck = PublishedDeckArtifactSchema.safeParse(presentationInput.publicDeck);
+    const playback = restorePlaybackAuthority(presentationInput.playback);
+    const cards = restorePublicCardStream(presentationInput.cards);
+    const audienceDisplaySession =
+      presentationInput.audienceDisplaySession === null
+        ? { success: true as const, data: null }
+        : AudienceDisplaySessionSchema.safeParse(presentationInput.audienceDisplaySession);
+    if (
+      !lifecycle.success ||
+      !privateDeck.success ||
+      !publicDeck.success ||
+      playback.outcome !== "RESTORED" ||
+      cards.outcome !== "RESTORED" ||
+      !audienceDisplaySession.success ||
+      lifecycle.data.presentationSessionId !== playback.state.presentationSessionId ||
+      lifecycle.data.presentationSessionId !== cards.state.presentationSessionId ||
+      lifecycle.data.presentationSessionEpoch !== playback.state.presentationSessionEpoch ||
+      lifecycle.data.presentationSessionEpoch !== cards.state.presentationSessionEpoch ||
+      lifecycle.data.deckVersion !== publicDeck.data.deckVersion ||
+      privateDeck.data.deckVersion !== publicDeck.data.deckVersion ||
+      privateDeck.data.manifestHash !== publicDeck.data.manifestHash ||
+      (audienceDisplaySession.data !== null &&
+        (audienceDisplaySession.data.binding.presentationSessionId !==
+          lifecycle.data.presentationSessionId ||
+          audienceDisplaySession.data.binding.displayBindingEpoch !==
+            playback.state.displayBindingEpoch)) ||
+      store.presentations.has(lifecycle.data.presentationSessionId)
+    ) {
+      return { outcome: "INVALID_SNAPSHOT" };
+    }
+    const candidates = new Map<string, CandidateRecord>();
+    for (const candidateInput of presentationInput.candidates) {
+      if (
+        !snapshotRecord(candidateInput) ||
+        !hasExactKeys(candidateInput, ["candidate", "lifecycle"])
+      ) {
+        return { outcome: "INVALID_SNAPSHOT" };
+      }
+      const candidate = EvidenceCandidateSchema.safeParse(candidateInput.candidate);
+      const candidateLifecycle = restoreCandidateLifecycle(candidateInput.lifecycle);
+      if (
+        !candidate.success ||
+        candidateLifecycle.outcome !== "RESTORED" ||
+        candidate.data.candidateId !== candidateLifecycle.state.candidateId ||
+        candidate.data.causal.presentationSessionId !== lifecycle.data.presentationSessionId ||
+        candidates.has(candidate.data.candidateId)
+      ) {
+        return { outcome: "INVALID_SNAPSHOT" };
+      }
+      candidates.set(candidate.data.candidateId, {
+        candidate: candidate.data,
+        lifecycle: candidateLifecycle.state,
+      });
+    }
+    store.presentations.set(lifecycle.data.presentationSessionId, {
+      lifecycle: lifecycle.data,
+      privateDeck: privateDeck.data,
+      publicDeck: publicDeck.data,
+      playback: playback.state,
+      cards: cards.state,
+      candidates,
+      audienceDisplaySession: audienceDisplaySession.data,
+    });
+  }
+  return { outcome: "RESTORED", store };
 }
 
 export type SessionRejection =

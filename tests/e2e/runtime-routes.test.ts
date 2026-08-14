@@ -1,14 +1,20 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { rmSync } from "node:fs";
+import { join } from "node:path";
 
 type ServiceProcess = ReturnType<typeof Bun.spawn<"ignore", "pipe", "pipe">>;
 
 const processes: ServiceProcess[] = [];
+const privateSnapshotPath = join(import.meta.dir, ".runtime-private-snapshot.json");
+const projectionDatabasePath = join(import.meta.dir, ".runtime-projection-database.json");
 
 afterEach(async () => {
   for (const process of processes.splice(0).toReversed()) {
     process.kill();
     await process.exited;
   }
+  rmSync(privateSnapshotPath, { force: true });
+  rmSync(projectionDatabasePath, { force: true });
 });
 
 async function waitForOutput(
@@ -73,11 +79,14 @@ function browserHeaders(origin: string, csrfToken?: string, cookie?: string): He
 
 describe("runnable WP3 service composition", () => {
   test("service mains compose dependencies for every WP3 route", async () => {
+    rmSync(privateSnapshotPath, { force: true });
+    rmSync(projectionDatabasePath, { force: true });
     await startService(
       "services/projection-gateway/src/main.ts",
       {
         PROJECTION_GATEWAY_HOST: "127.0.0.1",
         PROJECTION_GATEWAY_PORT: "44102",
+        PROJECTION_DATABASE_PATH: projectionDatabasePath,
         PRIVATE_BACKEND_ORIGIN: "http://127.0.0.1:44101",
         SERVICE_AUTH_TOKEN: serviceToken,
         STAGE_ORIGIN: stageOrigin,
@@ -93,6 +102,7 @@ describe("runnable WP3 service composition", () => {
         CONTROLLER_AUTHORIZATION_CODE: "runtime-code",
         PRIVATE_BACKEND_HOST: "127.0.0.1",
         PRIVATE_BACKEND_PORT: "44101",
+        PRIVATE_SNAPSHOT_PATH: privateSnapshotPath,
         PROJECTION_GATEWAY_ORIGIN: "http://127.0.0.1:44102",
         SERVICE_AUTH_TOKEN: serviceToken,
       },

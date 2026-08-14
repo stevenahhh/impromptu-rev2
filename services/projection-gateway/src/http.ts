@@ -22,6 +22,7 @@ export interface ProjectionGatewayHttpDependencies {
   readonly internalAuthToken: string;
   readonly now: () => number;
   readonly stageReceiptWriter: StageReceiptWriter;
+  readonly persist?: () => Promise<void>;
 }
 
 function json(body: unknown, status: number, headers?: Headers): Response {
@@ -278,6 +279,7 @@ export function createProjectionGatewayHandler(
           },
           body.nowMs,
         );
+        if (result.outcome === "BOUND") await dependencies.persist?.();
         return json(result, result.outcome === "BOUND" ? 200 : 409);
       }
       if (url.pathname === "/internal/playback") {
@@ -286,6 +288,7 @@ export function createProjectionGatewayHandler(
           return json({ error: "invalid_request" }, 400);
         }
         const applied = dependencies.gateway.projectPlayback(body.presentationSessionId, event);
+        if (applied) await dependencies.persist?.();
         return json({ applied }, applied ? 200 : 409);
       }
       if (url.pathname === "/internal/playback-applied") {
@@ -301,6 +304,7 @@ export function createProjectionGatewayHandler(
           body.displayBindingEpoch,
           body.publicPlaybackRevision,
         );
+        if (applied) await dependencies.persist?.();
         return json({ applied }, applied ? 200 : 409);
       }
       if (url.pathname === "/internal/cards") {
@@ -309,6 +313,7 @@ export function createProjectionGatewayHandler(
           return json({ error: "invalid_request" }, 400);
         }
         const applied = dependencies.gateway.projectCard(body.presentationSessionId, event);
+        if (applied) await dependencies.persist?.();
         return json({ applied }, applied ? 200 : 409);
       }
       return json({ error: "not_found" }, 404);
@@ -328,18 +333,16 @@ export function createProjectionGatewayHandler(
       ) {
         return json({ error: "invalid_request" }, 400, origin);
       }
-      return json(
-        dependencies.gateway.createDisplayJoin(
-          {
-            displayId: body.displayId,
-            deckVersion: body.deckVersion,
-            displayFingerprint: body.displayFingerprint,
-          },
-          dependencies.now(),
-        ),
-        201,
-        origin,
+      const join = dependencies.gateway.createDisplayJoin(
+        {
+          displayId: body.displayId,
+          deckVersion: body.deckVersion,
+          displayFingerprint: body.displayFingerprint,
+        },
+        dependencies.now(),
       );
+      await dependencies.persist?.();
+      return json(join, 201, origin);
     }
     if (request.method === "POST" && url.pathname === "/v1/display-session") {
       const body = await requestBody(request);
@@ -360,6 +363,7 @@ export function createProjectionGatewayHandler(
         dependencies.now(),
       );
       if (session === null) return json({ error: "display_not_approved" }, 409, origin);
+      await dependencies.persist?.();
       origin.append(
         "set-cookie",
         `__Host-display=${session.audienceDisplaySessionId}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${Math.max(0, Math.floor((session.expiresAtMs - dependencies.now()) / 1_000))}`,

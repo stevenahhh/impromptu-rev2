@@ -3,6 +3,8 @@ import { PreparedEvidenceProjectionGateway } from "@impromptu/projection-gateway
 import {
   createPreparedEvidenceStore,
   PreparedEvidenceCoordinator,
+  restorePreparedEvidenceStore,
+  snapshotPreparedEvidenceStore,
 } from "../src/prepared-evidence.ts";
 
 const manifestHash = "a".repeat(64);
@@ -131,6 +133,26 @@ describe("prepared evidence private coordinator", () => {
       outcome: "REJECTED",
       reason: "ACCOUNT_SESSION_REVOKED",
     });
+  });
+
+  test("restores durable sessions and rejects forged unsafe counters", async () => {
+    const flow = await createBoundFlow();
+    const snapshot = snapshotPreparedEvidenceStore(flow.store);
+    const restored = restorePreparedEvidenceStore(snapshot);
+    expect(restored.outcome).toBe("RESTORED");
+    if (restored.outcome !== "RESTORED") throw new Error("snapshot restore failed");
+    const restarted = new PreparedEvidenceCoordinator(flow.gateway, restored.store);
+    expect(restarted.readAccountSession(flow.account.accountSessionId, 1_002).outcome).toBe(
+      "APPLIED",
+    );
+
+    const forged = structuredClone(snapshot) as {
+      presentations: Array<{ playback: { controlRevision: string } }>;
+    };
+    const presentation = forged.presentations[0];
+    if (presentation === undefined) throw new Error("snapshot fixture missing presentation");
+    presentation.playback.controlRevision = "cr_9007199254740992";
+    expect(restorePreparedEvidenceStore(forged)).toEqual({ outcome: "INVALID_SNAPSHOT" });
   });
 
   test("accepts absolute slide.set and records only the ordered Stage prefix after restart", async () => {

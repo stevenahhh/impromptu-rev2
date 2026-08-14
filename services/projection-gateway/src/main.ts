@@ -1,6 +1,12 @@
 import { parseProjectionGatewayConfig } from "./config.ts";
 import { createProjectionGatewayHandler } from "./http.ts";
-import { PreparedEvidenceProjectionGateway } from "./prepared-evidence.ts";
+import {
+  createProjectionGatewayStore,
+  PreparedEvidenceProjectionGateway,
+  ProjectionGatewaySnapshotError,
+  restoreProjectionGatewayStore,
+  snapshotProjectionGatewayStore,
+} from "./prepared-evidence.ts";
 
 const internalAuthToken = Bun.env.SERVICE_AUTH_TOKEN;
 if (internalAuthToken === undefined || internalAuthToken.length < 16) {
@@ -14,7 +20,29 @@ if (
   throw new Error("PRIVATE_BACKEND_ORIGIN must be an exact origin");
 }
 const config = parseProjectionGatewayConfig(Bun.env);
-const gateway = new PreparedEvidenceProjectionGateway();
+const databasePath = Bun.env.PROJECTION_DATABASE_PATH;
+if (databasePath === undefined || databasePath.length === 0) {
+  throw new Error("PROJECTION_DATABASE_PATH is required");
+}
+const databaseFile = Bun.file(databasePath);
+let store = createProjectionGatewayStore();
+if (await databaseFile.exists()) {
+  let input: unknown;
+  try {
+    input = await databaseFile.json();
+  } catch {
+    throw new ProjectionGatewaySnapshotError("projection database snapshot is not valid JSON");
+  }
+  const restored = restoreProjectionGatewayStore(input);
+  if (restored.outcome !== "RESTORED") {
+    throw new ProjectionGatewaySnapshotError("projection database snapshot failed validation");
+  }
+  store = restored.store;
+}
+const gateway = new PreparedEvidenceProjectionGateway(store);
+const persist = async () => {
+  await Bun.write(databasePath, JSON.stringify(snapshotProjectionGatewayStore(store)));
+};
 const server = Bun.serve({
   hostname: config.host,
   port: config.port,
@@ -22,6 +50,7 @@ const server = Bun.serve({
     gateway,
     internalAuthToken,
     now: Date.now,
+    persist,
     stageReceiptWriter: {
       async recordApplied(input) {
         try {
