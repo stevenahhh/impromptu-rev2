@@ -104,7 +104,40 @@ const PlaybackAuthoritySnapshotSchema = z
     blackout: z.boolean(),
     acceptedCommands: z.record(z.string(), AcceptedCommandRecordSchema),
   })
-  .strict();
+  .strict()
+  .superRefine((snapshot, context) => {
+    if (
+      snapshot.activeLease.presentationSessionId !== snapshot.presentationSessionId ||
+      snapshot.activeLease.presentationSessionEpoch !== snapshot.presentationSessionEpoch
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["activeLease"],
+        message: "lease belongs to another session",
+      });
+    }
+    if (
+      new Set(snapshot.slideOrder).size !== snapshot.slideOrder.length ||
+      !snapshot.slideOrder.includes(snapshot.occurrence.publicSlideKey)
+    ) {
+      context.addIssue({ code: "custom", path: ["slideOrder"], message: "invalid slide registry" });
+    }
+    const controlHead = controlRevisionValue(snapshot.controlRevision);
+    for (const [key, record] of Object.entries(snapshot.acceptedCommands)) {
+      if (
+        record.requestHash !== record.receipt.requestHash ||
+        record.effect.commandId !== record.receipt.commandId ||
+        record.effect.acceptedControlRevision !== record.receipt.acceptedControlRevision ||
+        controlRevisionValue(record.receipt.acceptedControlRevision) > controlHead
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["acceptedCommands", key],
+          message: "invalid accepted command record",
+        });
+      }
+    }
+  });
 
 export type CreatePlaybackAuthorityState = Readonly<{
   presentationSessionId: PresentationSessionId;

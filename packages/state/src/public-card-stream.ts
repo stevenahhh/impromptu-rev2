@@ -33,7 +33,70 @@ const PublicCardStreamSnapshotSchema = z
     tombstones: z.record(z.string(), PublicationTombstoneSchema),
     eventsByRevision: z.record(z.string(), PublicCardEventSchema),
   })
-  .strict();
+  .strict()
+  .superRefine((snapshot, context) => {
+    const head = publicCardRevisionValue(snapshot.publicCardRevision);
+    const watermark = publicCardRevisionValue(snapshot.tombstoneWatermark);
+    if (watermark > head) {
+      context.addIssue({
+        code: "custom",
+        path: ["tombstoneWatermark"],
+        message: "watermark exceeds stream head",
+      });
+    }
+    if (
+      snapshot.authority !== null &&
+      (snapshot.authority.presentationSessionId !== snapshot.presentationSessionId ||
+        snapshot.authority.presentationSessionEpoch !== snapshot.presentationSessionEpoch)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["authority"],
+        message: "authority belongs to another session",
+      });
+    }
+    for (const [key, card] of Object.entries(snapshot.cards)) {
+      const revision = publicCardRevisionValue(card.publicCardRevision);
+      if (key !== card.projectionId || revision > head || revision <= watermark) {
+        context.addIssue({
+          code: "custom",
+          path: ["cards", key],
+          message: "invalid active card snapshot entry",
+        });
+      }
+      if (snapshot.tombstones[card.projectionId] !== undefined) {
+        context.addIssue({
+          code: "custom",
+          path: ["cards", key],
+          message: "terminal projection cannot be active",
+        });
+      }
+    }
+    for (const [key, tombstone] of Object.entries(snapshot.tombstones)) {
+      if (
+        key !== tombstone.projectionId ||
+        publicCardRevisionValue(tombstone.publicCardRevision) > head
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["tombstones", key],
+          message: "invalid tombstone snapshot entry",
+        });
+      }
+    }
+    for (const [key, event] of Object.entries(snapshot.eventsByRevision)) {
+      if (
+        key !== event.publicCardRevision ||
+        publicCardRevisionValue(event.publicCardRevision) > head
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["eventsByRevision", key],
+          message: "invalid event history entry",
+        });
+      }
+    }
+  });
 
 export type PublicCardStreamState = Readonly<{
   presentationSessionId: PresentationSessionId;

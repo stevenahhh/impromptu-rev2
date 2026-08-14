@@ -243,6 +243,12 @@ describe("candidate and public card stream separation", () => {
     const retracted = applyPublicCardEvent(upserted.state, tombstone(2));
     expect(retracted.outcome).toBe("APPLIED");
     const restored = restorePublicCardStream(structuredClone(retracted.state));
+    expect(() =>
+      restorePublicCardStream({
+        ...retracted.state,
+        cards: { [card(3).projectionId]: card(3) },
+      }),
+    ).toThrow();
     const resurrection = applyPublicCardEvent(restored, card(3));
     expect(resurrection).toMatchObject({ outcome: "TERMINAL_PROJECTION" });
     expect(resurrection.state).toEqual(restored);
