@@ -18,6 +18,7 @@ import {
   applyAudiencePlaybackSnapshot,
   applyPublicPlaybackEvent,
   applyPublicPlaybackSnapshot,
+  canonicalPlaybackRequestHash,
   createPlaybackAuthorityState,
   initialPublicPlaybackState,
   markStageApplied,
@@ -204,6 +205,27 @@ describe("playback authority reducer", () => {
         },
       }),
     ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+    const offlineCommand = { ...record.command, delivery: "OFFLINE_REPLAY" as const };
+    const offlineHash = canonicalPlaybackRequestHash(offlineCommand);
+    expect(
+      restorePlaybackAuthority({
+        ...snapshot,
+        acceptedCommands: {
+          [key]: {
+            ...record,
+            command: offlineCommand,
+            requestHash: offlineHash,
+            receipt: { ...record.receipt, requestHash: offlineHash },
+          },
+        },
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+    expect(
+      restorePlaybackAuthority({
+        ...snapshot,
+        stageStatus: "DISCONNECTED",
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
     expect(
       restorePlaybackAuthority({
         ...snapshot,
@@ -305,6 +327,70 @@ describe("playback authority reducer", () => {
     );
     expect(duplicate.outcome).toBe("DUPLICATE");
     expect(duplicate.receipt).toEqual(appliedOne.receipt);
+  });
+
+  test("rejects swapped or skipped Stage-applied acceptance prefixes", () => {
+    const acceptedOne = reducePlaybackCommand(authority(), command({ type: "SLIDE_NEXT" }), nowMs);
+    const acceptedTwo = reducePlaybackCommand(
+      acceptedOne.state,
+      command({ type: "BLACKOUT_SET", commandId: "cmd_2", baseRevision: 1 }),
+      nowMs,
+    );
+    const appliedOne = markStageApplied(
+      acceptedTwo.state,
+      command({ type: "SLIDE_NEXT" }).commandId,
+      displayBindingEpoch(2),
+    );
+    const appliedTwo = markStageApplied(
+      appliedOne.state,
+      command({ type: "SLIDE_NEXT", commandId: "cmd_2" }).commandId,
+      displayBindingEpoch(2),
+    );
+    const snapshot = snapshotPlaybackAuthority(appliedTwo.state);
+    const records = Object.entries(snapshot.acceptedCommands).sort((left, right) =>
+      left[1].receipt.acceptedControlRevision.localeCompare(
+        right[1].receipt.acceptedControlRevision,
+      ),
+    );
+    const first = records[0];
+    const second = records[1];
+    if (first === undefined || second === undefined)
+      throw new Error("two receipts were not persisted");
+    const firstApplied = first[1].appliedReceipt;
+    const secondApplied = second[1].appliedReceipt;
+    if (firstApplied === null || secondApplied === null)
+      throw new Error("receipts were not applied");
+
+    expect(
+      restorePlaybackAuthority({
+        ...snapshot,
+        acceptedCommands: {
+          ...snapshot.acceptedCommands,
+          [first[0]]: {
+            ...first[1],
+            appliedReceipt: { ...firstApplied, publicPlaybackRevision: "pbr_2" },
+          },
+          [second[0]]: {
+            ...second[1],
+            appliedReceipt: { ...secondApplied, publicPlaybackRevision: "pbr_1" },
+          },
+        },
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+    expect(
+      restorePlaybackAuthority({
+        ...snapshot,
+        publicPlaybackRevision: "pbr_1",
+        acceptedCommands: {
+          ...snapshot.acceptedCommands,
+          [first[0]]: { ...first[1], appliedReceipt: null },
+          [second[0]]: {
+            ...second[1],
+            appliedReceipt: { ...secondApplied, publicPlaybackRevision: "pbr_1" },
+          },
+        },
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
   });
 
   test("restores all authoritative and idempotency state after restart", () => {

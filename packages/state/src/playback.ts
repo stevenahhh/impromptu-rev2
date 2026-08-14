@@ -172,11 +172,14 @@ const PlaybackAuthoritySnapshotSchema = z
           applied.commandId === receipt.commandId &&
           applied.requestHash === receipt.requestHash &&
           applied.acceptedControlRevision === receipt.acceptedControlRevision &&
+          applied.displayBindingEpoch === snapshot.displayBindingEpoch &&
           appliedRevision !== null &&
-          appliedRevision >= 1 &&
+          appliedRevision === acceptedRevision &&
           appliedRevision <= playbackHead &&
           !appliedRevisions.has(appliedRevision ?? -1);
         if (appliedRevision !== null) appliedRevisions.add(appliedRevision);
+      } else {
+        valid = valid && acceptedRevision !== null && acceptedRevision > playbackHead;
       }
       if (acceptedRevision !== null) recordsByRevision.set(acceptedRevision, record);
       if (!valid) {
@@ -235,9 +238,22 @@ const PlaybackAuthoritySnapshotSchema = z
         });
         return;
       }
+      const relative = command.type === "SLIDE_NEXT" || command.type === "SLIDE_PREVIOUS";
+      if (
+        (relative && command.delivery === "OFFLINE_REPLAY") ||
+        (relative && snapshot.stageStatus !== "READY") ||
+        (command.type === "SLIDE_SET" && !snapshot.slideOrder.includes(command.publicSlideKey))
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["acceptedCommands"],
+          message: "persisted command violates live acceptance predicates",
+        });
+        return;
+      }
       let target = occurrence.publicSlideKey;
       if (command.type === "SLIDE_SET") target = command.publicSlideKey;
-      if (command.type === "SLIDE_NEXT" || command.type === "SLIDE_PREVIOUS") {
+      if (relative) {
         const currentIndex = snapshot.slideOrder.indexOf(occurrence.publicSlideKey);
         const offset = command.type === "SLIDE_NEXT" ? 1 : -1;
         const relativeTarget = snapshot.slideOrder[currentIndex + offset];
@@ -531,12 +547,7 @@ export function markStageApplied(
   }
 
   const firstPendingRevision = Object.values(state.acceptedCommands)
-    .filter(
-      (candidate) =>
-        candidate.appliedReceipt === null &&
-        candidate.receipt.leaseId === lease.leaseId &&
-        candidate.receipt.controllerEpoch === lease.controllerEpoch,
-    )
+    .filter((candidate) => candidate.appliedReceipt === null)
     .reduce(
       (minimum, candidate) =>
         Math.min(minimum, controlRevisionValue(candidate.receipt.acceptedControlRevision)),
