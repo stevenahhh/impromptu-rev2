@@ -1,0 +1,64 @@
+# Dependencies and build output
+node_modules/
+dist/
+build/
+coverage/
+.turbo/
+.vite/
+.cache/
+playwright-report/
+test-results/
+
+# Environment, credentials, and provider state
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+secrets/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.basedpyright/
+
+# User and runtime state
+.senpi/
+.omo/senpi-task/
+.omo/boulder.json
+NUL
+
+# Local presentation data and model artifacts
+uploads/
+decks/
+artifacts/
+models/
+*.onnx
+*.gguf
+*.safetensors
+*.pt
+*.pth
+
+# Generated research render checks
+docs/report-desktop.png
+docs/report-mobile.png
+docs/report-print.pdf
+
+# OS and editor noise
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Logs
+*.log
+npm-debug.log*
+bun-error.log
