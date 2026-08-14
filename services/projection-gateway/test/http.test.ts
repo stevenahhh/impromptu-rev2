@@ -50,7 +50,11 @@ describe("projection gateway HTTP boundary", () => {
     const response = await handler(
       new Request("http://service.test/v1/projections/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          Origin: "https://stage.example.test",
+          Referer: "https://stage.example.test/",
+        },
         body: JSON.stringify({ title: "direct private write" }),
       }),
     );
