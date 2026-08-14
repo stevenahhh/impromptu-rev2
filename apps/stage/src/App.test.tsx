@@ -363,6 +363,15 @@ describe("public Stage boundary", () => {
       status: "PUBLISHED",
       mode: "LIVE",
       leaseExpiresAtMs: Date.now() + 2_000,
+      publicationPolicyVersion: "publication-policy-1",
+      cardVersion: "card-version-1",
+      liveBinding: {
+        presentationSessionEpoch: "pse_1",
+        displayBindingEpoch: "dbe_1",
+        publicSlideOccurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+        publicationPolicyVersion: "publication-policy-1",
+        cardVersion: "card-version-1",
+      },
       claim: "Fresh live claim",
       supportSummary: "Visible support",
       sourceLabel: "Public source",
@@ -422,6 +431,105 @@ describe("public Stage boundary", () => {
     await act(async () => installedObserver.onCard({ ...liveCard, publicCardRevision: "pcr_1" }));
     expect(await staleHidden.promise).toEqual({ reason: "STALE_EVENT" });
     await act(async () => waitHidden);
+  });
+
+  test("explicitly hides delayed live ingress from stale binding, occurrence, and policy", async () => {
+    let observer: StageEventObserver | null = null;
+    const snapshotApplied = nextStageEvent("impromptu:snapshot-applied");
+    const snapshot: StageSnapshotView = {
+      role: "PUBLIC_STAGE",
+      stateHash: "a".repeat(64),
+      presentationSessionId: "ps_alpha",
+      presentationSessionEpoch: "pse_1",
+      displayBindingEpoch: "dbe_2",
+      deckVersion: "deck_alpha",
+      manifestHash: "b".repeat(64),
+      deckSlides: [],
+      publicPlaybackRevision: "pbr_1",
+      publicationPolicyVersion: "publication-policy-2",
+      blackout: false,
+      occurrence: { publicSlideKey: "slide_two", occurrenceSeq: 2 },
+      cards: [],
+      publicCardRevision: "pcr_0",
+      tombstoneWatermark: "pcr_0",
+      tombstoneRetentionMs: 60_000,
+    };
+    const client: StageSessionClient = {
+      async createJoin() {
+        throw new Error("not used");
+      },
+      async claim() {},
+      async snapshot() {
+        return snapshot;
+      },
+      async subscribe(nextObserver) {
+        observer = nextObserver;
+        return { close() {} };
+      },
+      async recordApplied() {
+        return null;
+      },
+    };
+    render(
+      <MemoryRouter initialEntries={["/display/display_alpha"]}>
+        <StageRoutes client={client} />
+      </MemoryRouter>,
+    );
+    await act(async () => snapshotApplied);
+    const installedObserver = observer as StageEventObserver | null;
+    if (installedObserver === null) throw new Error("Stage observer was not installed");
+    const baseEvent = {
+      projectionId: "projection_delayed",
+      status: "PUBLISHED",
+      mode: "LIVE",
+      leaseExpiresAtMs: Date.now() + 2_000,
+      publicationPolicyVersion: "publication-policy-2",
+      cardVersion: "card-version-2",
+      liveBinding: {
+        presentationSessionEpoch: "pse_1",
+        displayBindingEpoch: "dbe_2",
+        publicSlideOccurrence: { publicSlideKey: "slide_two", occurrenceSeq: 2 },
+        publicationPolicyVersion: "publication-policy-2",
+        cardVersion: "card-version-2",
+      },
+      claim: "Delayed stale ingress",
+      supportSummary: "Must never become visible",
+      sourceLabel: "Public source",
+      publicCardRevision: "pcr_1",
+    } as const;
+    const staleEvents = [
+      {
+        ...baseEvent,
+        projectionId: "projection_delayed_rebind",
+        liveBinding: { ...baseEvent.liveBinding, displayBindingEpoch: "dbe_1" },
+      },
+      {
+        ...baseEvent,
+        projectionId: "projection_delayed_occurrence",
+        liveBinding: {
+          ...baseEvent.liveBinding,
+          publicSlideOccurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+        },
+      },
+      {
+        ...baseEvent,
+        projectionId: "projection_delayed_policy",
+        publicationPolicyVersion: "publication-policy-1",
+        liveBinding: {
+          ...baseEvent.liveBinding,
+          publicationPolicyVersion: "publication-policy-1",
+        },
+      },
+    ] as const;
+    for (const event of staleEvents) {
+      const hidden = nextStageEvent("impromptu:card-hidden");
+      await act(async () => installedObserver.onCard(event));
+      expect(await hidden).toEqual({
+        projectionId: event.projectionId,
+        reason: "STALE_LIVE_BINDING",
+      });
+      expect(document.body.textContent).not.toContain(event.claim);
+    }
   });
 
   test("hides a verified curated card at local expiry while partitioned", async () => {

@@ -805,6 +805,7 @@ describe("prepared evidence private coordinator", () => {
       expiresAtMs: 4_004,
       liveBinding: {
         presentationSessionEpoch: "pse_1",
+        displayBindingEpoch: "dbe_1",
         publicSlideOccurrence: candidate.causal.occurrence,
         publicationPolicyVersion: "publication-policy-1",
       },

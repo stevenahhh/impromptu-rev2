@@ -18,6 +18,7 @@ export interface StageCardView {
   readonly cardVersion?: string;
   readonly liveBinding?: Readonly<{
     presentationSessionEpoch: string;
+    displayBindingEpoch: string;
     publicSlideOccurrence: Readonly<{ publicSlideKey: string; occurrenceSeq: number }>;
     publicationPolicyVersion: string;
     cardVersion: string;
@@ -149,12 +150,14 @@ function liveBinding(value: unknown): NonNullable<StageCardView["liveBinding"]> 
   return candidate !== null &&
     occurrence !== null &&
     typeof candidate.presentationSessionEpoch === "string" &&
+    typeof candidate.displayBindingEpoch === "string" &&
     typeof occurrence.publicSlideKey === "string" &&
     typeof occurrence.occurrenceSeq === "number" &&
     typeof candidate.publicationPolicyVersion === "string" &&
     typeof candidate.cardVersion === "string"
     ? {
         presentationSessionEpoch: candidate.presentationSessionEpoch,
+        displayBindingEpoch: candidate.displayBindingEpoch,
         publicSlideOccurrence: {
           publicSlideKey: occurrence.publicSlideKey,
           occurrenceSeq: occurrence.occurrenceSeq,
@@ -265,6 +268,7 @@ function snapshot(value: unknown): StageSnapshotView | null {
       (leaseExpiresAtMs === null ||
         binding === null ||
         binding.presentationSessionEpoch !== candidate.presentationSessionEpoch ||
+        binding.displayBindingEpoch !== candidate.displayBindingEpoch ||
         binding.publicSlideOccurrence.publicSlideKey !== occurrence.publicSlideKey ||
         binding.publicSlideOccurrence.occurrenceSeq !== occurrence.occurrenceSeq ||
         card.publicationPolicyVersion !== candidate.publicationPolicyVersion ||

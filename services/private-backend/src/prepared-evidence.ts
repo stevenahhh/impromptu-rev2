@@ -61,6 +61,7 @@ export interface PreparedEvidenceProjectionPort {
       readonly displayJoinId: string;
       readonly presentationSessionId: string;
       readonly presentationSessionEpoch: string;
+      readonly publicationPolicyVersion: string;
       readonly expectedDisplayBindingEpoch: string;
       readonly expectedDeckVersion: string;
       readonly approvedDisplayId: string;
@@ -605,6 +606,7 @@ export class PreparedEvidenceCoordinator {
         displayJoinId: approval.data.displayJoinId,
         presentationSessionId: authorized.value.lifecycle.presentationSessionId,
         presentationSessionEpoch: authorized.value.lifecycle.presentationSessionEpoch,
+        publicationPolicyVersion: authorized.value.cards.authority?.policyVersion ?? "unavailable",
         expectedDisplayBindingEpoch: approval.data.expectedDisplayBindingEpoch,
         expectedDeckVersion: approval.data.expectedDeckVersion,
         approvedDisplayId: approval.data.approvedDisplayId,
@@ -1079,6 +1081,7 @@ export class PreparedEvidenceCoordinator {
             cardVersion,
             liveBinding: {
               presentationSessionEpoch: record.candidate.causal.presentationSessionEpoch,
+              displayBindingEpoch: record.candidate.causal.displayBindingEpoch,
               publicSlideOccurrence: record.candidate.causal.occurrence,
               publicationPolicyVersion: record.candidate.causal.decisions.publicationPolicy,
               cardVersion,

@@ -25,6 +25,7 @@ export interface PublicCardUpsert {
   readonly liveBinding?:
     | Readonly<{
         presentationSessionEpoch: string;
+        displayBindingEpoch: string;
         publicSlideOccurrence: Readonly<{
           publicSlideKey: string;
           occurrenceSeq: number;
@@ -314,11 +315,13 @@ function parseLiveBinding(value: unknown): NonNullable<PublicCardUpsert["liveBin
     !snapshotRecord(value) ||
     !exactKeys(value, [
       "presentationSessionEpoch",
+      "displayBindingEpoch",
       "publicSlideOccurrence",
       "publicationPolicyVersion",
       "cardVersion",
     ]) ||
     revisionValue(value.presentationSessionEpoch, "pse_") === null ||
+    revisionValue(value.displayBindingEpoch, "dbe_") === null ||
     !snapshotRecord(value.publicSlideOccurrence) ||
     !exactKeys(value.publicSlideOccurrence, ["publicSlideKey", "occurrenceSeq"]) ||
     !validId(value.publicSlideOccurrence.publicSlideKey, "slide_") ||
@@ -654,6 +657,18 @@ export type ReconcileSnapshotResult =
   | Readonly<{ outcome: "RECONCILE_REQUIRED" }>
   | Readonly<{ outcome: "SESSION_EXPIRED" }>;
 
+export type ProjectCardResult =
+  | Readonly<{ outcome: "APPLIED" }>
+  | Readonly<{
+      outcome: "REJECTED";
+      reason:
+        | "SESSION_NOT_FOUND"
+        | "STALE_LIVE_BINDING"
+        | "REVISION_CONFLICT"
+        | "TERMINAL_PROJECTION"
+        | "DUPLICATE_PROJECTION";
+    }>;
+
 export type StageSocketCloseReason = "REBOUND" | "SESSION_EXPIRED" | "CLIENT_CLOSED";
 
 export interface StageSocket {
@@ -735,6 +750,7 @@ export class PreparedEvidenceProjectionGateway {
       readonly displayJoinId: string;
       readonly presentationSessionId: string;
       readonly presentationSessionEpoch: string;
+      readonly publicationPolicyVersion?: string;
       readonly expectedDisplayBindingEpoch: string;
       readonly expectedDeckVersion: string;
       readonly approvedDisplayId: string;
@@ -801,7 +817,8 @@ export class PreparedEvidenceProjectionGateway {
       cards: current?.cards ?? new Map(),
       tombstones: current?.tombstones ?? new Map(),
       liveDisplayBindingEpochs: current?.liveDisplayBindingEpochs ?? new Map(),
-      publicationPolicyVersion: current?.publicationPolicyVersion ?? null,
+      publicationPolicyVersion:
+        input.publicationPolicyVersion ?? current?.publicationPolicyVersion ?? null,
     });
     return { outcome: "BOUND", session };
   }
@@ -915,40 +932,54 @@ export class PreparedEvidenceProjectionGateway {
     return true;
   }
 
-  projectCard(presentationSessionId: string, event: PublicCardEvent): boolean {
+  projectCardResult(presentationSessionId: string, event: PublicCardEvent): ProjectCardResult {
     const projection = this.#store.projections.get(presentationSessionId);
-    if (projection === undefined) return false;
-    if (
-      event.status === "PUBLISHED" &&
-      event.mode === "LIVE" &&
-      (event.leaseExpiresAtMs === undefined ||
+    if (projection === undefined) return { outcome: "REJECTED", reason: "SESSION_NOT_FOUND" };
+    let acceptedLiveBinding: NonNullable<PublicCardUpsert["liveBinding"]> | null = null;
+    if (event.status === "PUBLISHED" && event.mode === "LIVE") {
+      const binding = event.liveBinding;
+      if (
+        event.leaseExpiresAtMs === undefined ||
         event.leaseExpiresAtMs === null ||
         event.leaseExpiresAtMs <= event.publishedAtMs ||
         event.leaseExpiresAtMs - event.publishedAtMs > 3_000 ||
-        event.liveBinding === undefined ||
-        event.publicationPolicyVersion !== event.liveBinding.publicationPolicyVersion ||
-        event.cardVersion !== event.liveBinding.cardVersion ||
-        event.liveBinding.presentationSessionEpoch !==
-          projection.binding.presentationSessionEpoch ||
-        event.liveBinding.publicSlideOccurrence.publicSlideKey !==
-          event.occurrence.publicSlideKey ||
-        event.liveBinding.publicSlideOccurrence.occurrenceSeq !== event.occurrence.occurrenceSeq)
-    ) {
-      return false;
+        binding === undefined ||
+        binding.displayBindingEpoch !== projection.binding.displayBindingEpoch ||
+        binding.presentationSessionEpoch !== projection.binding.presentationSessionEpoch ||
+        binding.publicSlideOccurrence.publicSlideKey !== projection.occurrence.publicSlideKey ||
+        binding.publicSlideOccurrence.occurrenceSeq !== projection.occurrence.occurrenceSeq ||
+        (projection.publicationPolicyVersion !== null &&
+          binding.publicationPolicyVersion !== projection.publicationPolicyVersion) ||
+        event.publicationPolicyVersion !== binding.publicationPolicyVersion ||
+        event.cardVersion !== binding.cardVersion ||
+        binding.publicSlideOccurrence.publicSlideKey !== event.occurrence.publicSlideKey ||
+        binding.publicSlideOccurrence.occurrenceSeq !== event.occurrence.occurrenceSeq
+      ) {
+        return { outcome: "REJECTED", reason: "STALE_LIVE_BINDING" };
+      }
+      acceptedLiveBinding = binding;
     }
     const current = revisionValue(projection.publicCardRevision, "pcr_");
     const next = revisionValue(event.publicCardRevision, "pcr_");
-    if (current === null || next !== current + 1) return false;
-    if (projection.tombstones.has(event.projectionId)) return false;
+    if (current === null || next !== current + 1) {
+      return { outcome: "REJECTED", reason: "REVISION_CONFLICT" };
+    }
+    if (projection.tombstones.has(event.projectionId)) {
+      return { outcome: "REJECTED", reason: "TERMINAL_PROJECTION" };
+    }
     if (event.status === "PUBLISHED") {
-      if (projection.cards.has(event.projectionId)) return false;
+      if (projection.cards.has(event.projectionId)) {
+        return { outcome: "REJECTED", reason: "DUPLICATE_PROJECTION" };
+      }
       projection.cards.set(event.projectionId, event);
-      if (event.mode === "LIVE") {
+      if (event.mode === "LIVE" && acceptedLiveBinding !== null) {
         projection.liveDisplayBindingEpochs.set(
           event.projectionId,
-          projection.binding.displayBindingEpoch,
+          acceptedLiveBinding.displayBindingEpoch,
         );
-        projection.publicationPolicyVersion = event.publicationPolicyVersion ?? null;
+        if (projection.publicationPolicyVersion === null) {
+          projection.publicationPolicyVersion = event.publicationPolicyVersion ?? null;
+        }
       }
     } else {
       projection.cards.delete(event.projectionId);
@@ -959,7 +990,11 @@ export class PreparedEvidenceProjectionGateway {
     for (const socket of this.#sockets.get(presentationSessionId) ?? []) {
       if (!socket.closed) socket.observer.onCard(event);
     }
-    return true;
+    return { outcome: "APPLIED" };
+  }
+
+  projectCard(presentationSessionId: string, event: PublicCardEvent): boolean {
+    return this.projectCardResult(presentationSessionId, event).outcome === "APPLIED";
   }
 
   snapshot(audienceDisplaySessionId: string, nowMs: number): AudienceProjectionSnapshot | null {
@@ -996,6 +1031,7 @@ export class PreparedEvidenceProjectionGateway {
               projection.binding.displayBindingEpoch &&
             card.liveBinding.presentationSessionEpoch ===
               projection.binding.presentationSessionEpoch &&
+            card.liveBinding.displayBindingEpoch === projection.binding.displayBindingEpoch &&
             card.publicationPolicyVersion === projection.publicationPolicyVersion &&
             card.cardVersion === card.liveBinding.cardVersion &&
             card.liveBinding.publicSlideOccurrence.publicSlideKey ===

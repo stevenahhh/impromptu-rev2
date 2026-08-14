@@ -154,6 +154,7 @@ function cardEvent(value: unknown): PublicCardEvent | null {
         ...(typeof value.cardVersion === "string" ? { cardVersion: value.cardVersion } : {}),
         ...(isRecord(value.liveBinding) &&
         typeof value.liveBinding.presentationSessionEpoch === "string" &&
+        typeof value.liveBinding.displayBindingEpoch === "string" &&
         isRecord(value.liveBinding.publicSlideOccurrence) &&
         typeof value.liveBinding.publicSlideOccurrence.publicSlideKey === "string" &&
         typeof value.liveBinding.publicSlideOccurrence.occurrenceSeq === "number" &&
@@ -162,6 +163,7 @@ function cardEvent(value: unknown): PublicCardEvent | null {
           ? {
               liveBinding: {
                 presentationSessionEpoch: value.liveBinding.presentationSessionEpoch,
+                displayBindingEpoch: value.liveBinding.displayBindingEpoch,
                 publicSlideOccurrence: {
                   publicSlideKey: value.liveBinding.publicSlideOccurrence.publicSlideKey,
                   occurrenceSeq: value.liveBinding.publicSlideOccurrence.occurrenceSeq,
@@ -302,6 +304,7 @@ export function createProjectionGatewayHandler(
           typeof body.displayJoinId !== "string" ||
           typeof body.presentationSessionId !== "string" ||
           typeof body.presentationSessionEpoch !== "string" ||
+          typeof body.publicationPolicyVersion !== "string" ||
           typeof body.expectedDisplayBindingEpoch !== "string" ||
           typeof body.expectedDeckVersion !== "string" ||
           typeof body.approvedDisplayId !== "string" ||
@@ -315,6 +318,7 @@ export function createProjectionGatewayHandler(
             displayJoinId: body.displayJoinId,
             presentationSessionId: body.presentationSessionId,
             presentationSessionEpoch: body.presentationSessionEpoch,
+            publicationPolicyVersion: body.publicationPolicyVersion,
             expectedDisplayBindingEpoch: body.expectedDisplayBindingEpoch,
             expectedDeckVersion: body.expectedDeckVersion,
             approvedDisplayId: body.approvedDisplayId,
@@ -356,9 +360,11 @@ export function createProjectionGatewayHandler(
         if (typeof body.presentationSessionId !== "string" || event === null) {
           return json({ error: "invalid_request" }, 400);
         }
-        const applied = dependencies.gateway.projectCard(body.presentationSessionId, event);
-        if (applied) await dependencies.persist?.();
-        return json({ applied }, applied ? 200 : 409);
+        const result = dependencies.gateway.projectCardResult(body.presentationSessionId, event);
+        if (result.outcome === "APPLIED") await dependencies.persist?.();
+        return result.outcome === "APPLIED"
+          ? json({ applied: true, outcome: "APPLIED" }, 200)
+          : json({ applied: false, outcome: "REJECTED", reason: result.reason }, 409);
       }
       return json({ error: "not_found" }, 404);
     }

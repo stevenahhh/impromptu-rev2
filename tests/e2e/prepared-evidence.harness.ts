@@ -657,6 +657,7 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
             cardVersion: `card-version-browser-${index}`,
             liveBinding: {
               presentationSessionEpoch: "pse_1",
+              displayBindingEpoch: "dbe_1",
               publicSlideOccurrence: { publicSlideKey, occurrenceSeq: 1 },
               publicationPolicyVersion: "publication-policy-1",
               cardVersion: `card-version-browser-${index}`,

@@ -166,6 +166,7 @@ describe("prepared evidence projection gateway", () => {
         cardVersion: "card-version-1",
         liveBinding: {
           presentationSessionEpoch: "pse_1",
+          displayBindingEpoch: "dbe_1",
           publicSlideOccurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
           publicationPolicyVersion: "publication-policy-1",
           cardVersion: "card-version-1",
@@ -229,6 +230,7 @@ describe("prepared evidence projection gateway", () => {
         cardVersion: "card-version-1",
         liveBinding: {
           presentationSessionEpoch: sessionEpoch,
+          displayBindingEpoch: "dbe_1",
           publicSlideOccurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
           publicationPolicyVersion: "publication-policy-1",
           cardVersion: "card-version-1",
@@ -273,6 +275,35 @@ describe("prepared evidence projection gateway", () => {
     expect(rebindGateway.snapshot(rebound.session.audienceDisplaySessionId, 1_101)?.cards).toEqual(
       [],
     );
+    expect(
+      rebindGateway.projectCardResult("ps_alpha", {
+        projectionId: "projection_delayed_rebind",
+        status: "PUBLISHED",
+        mode: "LIVE",
+        leaseExpiresAtMs: 4_100,
+        publicationPolicyVersion: "publication-policy-1",
+        cardVersion: "card-version-delayed-rebind",
+        liveBinding: {
+          presentationSessionEpoch: "pse_1",
+          displayBindingEpoch: "dbe_1",
+          publicSlideOccurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+          publicationPolicyVersion: "publication-policy-1",
+          cardVersion: "card-version-delayed-rebind",
+        },
+        claim: "Delayed pre-rebind claim",
+        supportSummary: "Must remain hidden",
+        sourceLabel: "Public source",
+        publishedAtMs: 1_100,
+        expiresAtMs: 4_100,
+        publicCardRevision: "pcr_2",
+        deckVersion: deck.deckVersion,
+        manifestHash: deck.manifestHash,
+        occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+      }),
+    ).toEqual({ outcome: "REJECTED", reason: "STALE_LIVE_BINDING" });
+    expect(rebindGateway.snapshot(rebound.session.audienceDisplaySessionId, 1_101)?.cards).toEqual(
+      [],
+    );
 
     const sessionGateway = new PreparedEvidenceProjectionGateway();
     const sessionFirst = approval(sessionGateway).bind();
@@ -304,6 +335,49 @@ describe("prepared evidence projection gateway", () => {
       sessionGateway.snapshot(newSession.session.audienceDisplaySessionId, 1_101)?.cards,
     ).toEqual([]);
 
+    const occurrenceGateway = new PreparedEvidenceProjectionGateway();
+    const occurrenceBound = approval(occurrenceGateway).bind();
+    if (occurrenceBound.outcome !== "BOUND") throw new Error("fixture failed to bind");
+    expect(publishLive(occurrenceGateway)).toBe(true);
+    expect(
+      occurrenceGateway.projectPlayback("ps_alpha", {
+        commandId: "cmd_occurrence_change",
+        displayBindingEpoch: "dbe_1",
+        acceptedControlRevision: "cr_1",
+        occurrence: { publicSlideKey: "slide_two", occurrenceSeq: 2 },
+        blackout: false,
+      }),
+    ).toBe(true);
+    expect(
+      occurrenceGateway.projectCardResult("ps_alpha", {
+        projectionId: "projection_delayed_occurrence",
+        status: "PUBLISHED",
+        mode: "LIVE",
+        leaseExpiresAtMs: 4_100,
+        publicationPolicyVersion: "publication-policy-1",
+        cardVersion: "card-version-delayed-occurrence",
+        liveBinding: {
+          presentationSessionEpoch: "pse_1",
+          displayBindingEpoch: "dbe_1",
+          publicSlideOccurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+          publicationPolicyVersion: "publication-policy-1",
+          cardVersion: "card-version-delayed-occurrence",
+        },
+        claim: "Delayed old-occurrence claim",
+        supportSummary: "Must remain hidden",
+        sourceLabel: "Public source",
+        publishedAtMs: 1_100,
+        expiresAtMs: 4_100,
+        publicCardRevision: "pcr_2",
+        deckVersion: deck.deckVersion,
+        manifestHash: deck.manifestHash,
+        occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+      }),
+    ).toEqual({ outcome: "REJECTED", reason: "STALE_LIVE_BINDING" });
+    expect(
+      occurrenceGateway.snapshot(occurrenceBound.session.audienceDisplaySessionId, 1_101)?.cards,
+    ).toEqual([]);
+
     const policyGateway = new PreparedEvidenceProjectionGateway();
     const policyBound = approval(policyGateway).bind();
     if (policyBound.outcome !== "BOUND") throw new Error("fixture failed to bind");
@@ -314,6 +388,35 @@ describe("prepared evidence projection gateway", () => {
     expect(
       policyGateway.snapshot(policyBound.session.audienceDisplaySessionId, 1_101)?.cards,
     ).toEqual([]);
+    expect(
+      policyGateway.projectCardResult("ps_alpha", {
+        projectionId: "projection_delayed_policy",
+        status: "PUBLISHED",
+        mode: "LIVE",
+        leaseExpiresAtMs: 4_100,
+        publicationPolicyVersion: "publication-policy-1",
+        cardVersion: "card-version-delayed-policy",
+        liveBinding: {
+          presentationSessionEpoch: "pse_1",
+          displayBindingEpoch: "dbe_1",
+          publicSlideOccurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+          publicationPolicyVersion: "publication-policy-1",
+          cardVersion: "card-version-delayed-policy",
+        },
+        claim: "Delayed old-policy claim",
+        supportSummary: "Must remain hidden",
+        sourceLabel: "Public source",
+        publishedAtMs: 1_100,
+        expiresAtMs: 4_100,
+        publicCardRevision: "pcr_2",
+        deckVersion: deck.deckVersion,
+        manifestHash: deck.manifestHash,
+        occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+      }),
+    ).toEqual({ outcome: "REJECTED", reason: "STALE_LIVE_BINDING" });
+    expect(
+      policyGateway.snapshot(policyBound.session.audienceDisplaySessionId, 1_101),
+    ).toMatchObject({ publicationPolicyVersion: "publication-policy-2", cards: [] });
 
     const cardVersionGateway = new PreparedEvidenceProjectionGateway();
     expect(approval(cardVersionGateway).bind().outcome).toBe("BOUND");
@@ -327,6 +430,7 @@ describe("prepared evidence projection gateway", () => {
         cardVersion: "card-version-2",
         liveBinding: {
           presentationSessionEpoch: "pse_1",
+          displayBindingEpoch: "dbe_1",
           publicSlideOccurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
           publicationPolicyVersion: "publication-policy-1",
           cardVersion: "card-version-1",

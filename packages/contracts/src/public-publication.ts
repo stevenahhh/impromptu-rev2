@@ -7,6 +7,7 @@ import {
 } from "./common.ts";
 import {
   DeckVersionIdSchema,
+  DisplayBindingEpochSchema,
   ProjectionIdSchema,
   PublicCardRevisionSchema,
 } from "./public-identifiers.ts";
@@ -23,6 +24,7 @@ export const PublishedAudienceCardSchema = z
     liveBinding: z
       .object({
         presentationSessionEpoch: PresentationSessionEpochSchema,
+        displayBindingEpoch: DisplayBindingEpochSchema,
         publicSlideOccurrence: PublicSlideOccurrenceSchema,
         publicationPolicyVersion: VersionIdSchema,
         cardVersion: VersionIdSchema,

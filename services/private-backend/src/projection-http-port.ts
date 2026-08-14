@@ -46,6 +46,7 @@ export class ProjectionHttpPort implements PreparedEvidenceProjectionPort {
       readonly displayJoinId: string;
       readonly presentationSessionId: string;
       readonly presentationSessionEpoch: string;
+      readonly publicationPolicyVersion: string;
       readonly expectedDisplayBindingEpoch: string;
       readonly expectedDeckVersion: string;
       readonly approvedDisplayId: string;

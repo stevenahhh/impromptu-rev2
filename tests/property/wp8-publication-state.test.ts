@@ -75,12 +75,19 @@ describe("WP8 independent candidate state", () => {
       occurrence: { publicSlideKey: "slide_wp8", occurrenceSeq: 2 },
       liveBinding: {
         presentationSessionEpoch: "pse_1",
+        displayBindingEpoch: "dbe_1",
         publicSlideOccurrence: { publicSlideKey: "slide_wp8", occurrenceSeq: 2 },
         publicationPolicyVersion: "publication-policy-1",
         cardVersion: "card-version-1",
       },
     } as const;
     expect(PublishedAudienceCardSchema.safeParse(base).success).toBe(true);
+    expect(
+      PublishedAudienceCardSchema.safeParse({
+        ...base,
+        liveBinding: { ...base.liveBinding, displayBindingEpoch: undefined },
+      }).success,
+    ).toBe(false);
     expect(
       PublishedAudienceCardSchema.safeParse({ ...base, leaseExpiresAtMs: 4_001 }).success,
     ).toBe(false);

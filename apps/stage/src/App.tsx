@@ -175,6 +175,25 @@ function cardRevisionValue(revision: string): number {
   return Number.isSafeInteger(value) && value >= 0 ? value : -1;
 }
 
+function liveCardMatchesSnapshot(
+  snapshot: StageSnapshotView | null,
+  event: StageCardEvent,
+): boolean {
+  if (event.status !== "PUBLISHED" || event.mode !== "LIVE") return true;
+  const binding = event.liveBinding;
+  return (
+    snapshot !== null &&
+    binding !== undefined &&
+    binding.presentationSessionEpoch === snapshot.presentationSessionEpoch &&
+    binding.displayBindingEpoch === snapshot.displayBindingEpoch &&
+    binding.publicSlideOccurrence.publicSlideKey === snapshot.occurrence.publicSlideKey &&
+    binding.publicSlideOccurrence.occurrenceSeq === snapshot.occurrence.occurrenceSeq &&
+    event.publicationPolicyVersion === snapshot.publicationPolicyVersion &&
+    event.publicationPolicyVersion === binding.publicationPolicyVersion &&
+    event.cardVersion === binding.cardVersion
+  );
+}
+
 function applyCardEvent(
   snapshot: StageSnapshotView | null,
   event: StageCardEvent,
@@ -186,15 +205,7 @@ function applyCardEvent(
     return snapshot;
   }
   if (event.status === "PUBLISHED" && event.mode === "LIVE") {
-    const binding = event.liveBinding;
-    if (
-      binding === undefined ||
-      binding.presentationSessionEpoch !== snapshot.presentationSessionEpoch ||
-      binding.publicSlideOccurrence.publicSlideKey !== snapshot.occurrence.publicSlideKey ||
-      binding.publicSlideOccurrence.occurrenceSeq !== snapshot.occurrence.occurrenceSeq ||
-      event.publicationPolicyVersion !== binding.publicationPolicyVersion ||
-      event.cardVersion !== binding.cardVersion
-    ) {
+    if (!liveCardMatchesSnapshot(snapshot, event)) {
       return {
         ...snapshot,
         publicCardRevision: event.publicCardRevision,
@@ -204,7 +215,6 @@ function applyCardEvent(
     return {
       ...snapshot,
       publicCardRevision: event.publicCardRevision,
-      publicationPolicyVersion: event.publicationPolicyVersion ?? null,
       cards: [
         ...snapshot.cards.filter(
           (card) =>
@@ -398,6 +408,7 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
                     card.mode !== "LIVE" ||
                     (card.liveBinding?.presentationSessionEpoch ===
                       event.presentationSessionEpoch &&
+                      card.liveBinding.displayBindingEpoch === event.displayBindingEpoch &&
                       card.liveBinding.publicSlideOccurrence.publicSlideKey ===
                         event.occurrence.publicSlideKey &&
                       card.liveBinding.publicSlideOccurrence.occurrenceSeq ===
@@ -449,6 +460,30 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
           },
           onCard(event) {
             if (!active) return;
+            if (!liveCardMatchesSnapshot(latestSnapshot, event)) {
+              const hidden = transition({
+                type: "EXPLICIT_HIDE",
+                projectionId: event.projectionId,
+                reason: "STALE_EVENT",
+              });
+              setSnapshot((current) => {
+                if (current === null || hidden === null) return current;
+                const next = visibleCards(
+                  {
+                    ...current,
+                    cards: current.cards.filter((card) => card.projectionId !== event.projectionId),
+                  },
+                  hidden.state,
+                );
+                latestSnapshot = next;
+                return next;
+              });
+              publishStageEvent("impromptu:card-hidden", {
+                projectionId: event.projectionId,
+                reason: "STALE_LIVE_BINDING",
+              });
+              return;
+            }
             const cardResult =
               event.status === "PUBLISHED"
                 ? transition({

@@ -80,6 +80,7 @@ describe("Stage network client", () => {
   test("filters live cards whose session, occurrence, policy, or card version is stale", async () => {
     const binding = {
       presentationSessionEpoch: "pse_1",
+      displayBindingEpoch: "dbe_1",
       publicSlideOccurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
       publicationPolicyVersion: "publication-policy-1",
       cardVersion: "card-version-1",
