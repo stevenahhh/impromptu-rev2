@@ -533,7 +533,7 @@ export class PreparedEvidenceCoordinator {
       status: "PUBLISHED",
       claim: record.candidate.claimText,
       supportSummary: record.candidate.evidenceExcerpt,
-      sourceLabel: record.candidate.causal.source.sourceId,
+      sourceLabel: `Prepared source ${projectionId.slice(-8)}`,
       publishedAtMs: nowMs,
       expiresAtMs: input.expiresAtMs,
       publicCardRevision: nextRevision,

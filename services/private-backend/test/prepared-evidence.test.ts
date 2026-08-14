@@ -259,7 +259,14 @@ describe("prepared evidence private coordinator", () => {
     );
     if (published.outcome !== "APPLIED") throw new Error("fixture failed to publish");
     expect(published.value.projectionId).not.toContain(candidate.candidateId);
-    expect(JSON.stringify(published.value)).not.toContain("private://");
+    expect(published.value.sourceLabel).toBe(
+      `Prepared source ${published.value.projectionId.slice(-8)}`,
+    );
+    const publicProjection = JSON.stringify(published.value);
+    expect(publicProjection).not.toContain("private://");
+    expect(publicProjection).not.toContain(candidate.candidateId);
+    expect(publicProjection).not.toContain(candidate.causal.source.sourceId);
+    expect(publicProjection).not.toContain(candidate.causal.source.contentHash);
     const stale = await flow.coordinator.terminateCard(
       flow.account.accountSessionId,
       {

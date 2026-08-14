@@ -7,6 +7,7 @@ if (evidence.tombstoneP95Ms > 500) {
 if (
   evidence.reconnectActiveCardCount !== 0 ||
   evidence.browserStorageEntries !== 0 ||
+  evidence.publicCorrelationMatches !== 0 ||
   JSON.stringify(evidence.acceptedCommandIds) !== JSON.stringify(evidence.appliedCommandIds)
 ) {
   throw new Error("WP3 real-browser E2E terminal invariants failed");
@@ -23,6 +24,7 @@ console.log(
     reconnectTombstoneStatuses: evidence.reconnectTombstoneStatuses,
     browserStorageEntries: evidence.browserStorageEntries,
     samples: evidence.latencySamples,
+    publicCorrelationMatches: evidence.publicCorrelationMatches,
     surface: "real-service-mains+clean-chrome-stage",
   }),
 );

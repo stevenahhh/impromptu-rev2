@@ -16,6 +16,7 @@ export interface PreparedEvidenceEvidence {
   readonly browserStorageEntries: number;
   readonly tombstoneP95Ms: number;
   readonly latencySamples: number;
+  readonly publicCorrelationMatches: number;
 }
 
 type ServiceProcess = ChildProcessByStdio<null, Readable, Readable>;
@@ -471,6 +472,7 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
 
     const cardEvents: string[] = [];
     const tombstoneLatencies: number[] = [];
+    let publicCorrelationMatches = 0;
     const tombstoneStatuses: string[] = [];
     for (let index = 0; index < 20; index += 1) {
       trace(`card-${index}-start`);
@@ -531,10 +533,24 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
         csrfToken,
         cookie,
       );
-      await waitPublished();
+      const publishedEvent = await waitPublished();
       await waitVisible?.();
       cardEvents.push(`${publishedRevision}:PUBLISHED`);
       const projectionId = requireString(published, "projectionId");
+      if (!isRecord(publishedEvent)) throw new Error("published browser event invalid");
+      const publicPayload = JSON.stringify(publishedEvent);
+      const privateCorrelators = [
+        candidateId,
+        `source_private_${index}`,
+        `private://curated/${candidateId}`,
+        sourceHash,
+      ];
+      publicCorrelationMatches += privateCorrelators.filter((value) =>
+        publicPayload.includes(value),
+      ).length;
+      if (publishedEvent.sourceLabel !== `Prepared source ${projectionId.slice(-8)}`) {
+        publicCorrelationMatches += 1;
+      }
       const status = index === 19 ? "EXPIRED" : "RETRACTED";
       const waitTombstone = await prepareBrowserEvent(page, {
         name: "impromptu:card-event",
@@ -609,6 +625,7 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
       browserStorageEntries,
       tombstoneP95Ms: p95,
       latencySamples: tombstoneLatencies.length,
+      publicCorrelationMatches,
     };
   } finally {
     trace("cleanup-start");

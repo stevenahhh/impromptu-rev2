@@ -10,6 +10,7 @@ interface VerifierEvidence {
   readonly reconnectTombstoneStatuses: readonly string[];
   readonly browserStorageEntries: number;
   readonly samples: number;
+  readonly publicCorrelationMatches: number;
   readonly surface: string;
 }
 
@@ -26,6 +27,7 @@ function isEvidence(value: unknown): value is VerifierEvidence {
     Array.isArray(candidate.reconnectTombstoneStatuses) &&
     typeof candidate.browserStorageEntries === "number" &&
     typeof candidate.samples === "number" &&
+    typeof candidate.publicCorrelationMatches === "number" &&
     typeof candidate.surface === "string"
   );
 }
@@ -71,6 +73,7 @@ describe("WP3 prepared evidence real-browser E2E", () => {
     expect(parsed.reconnectTombstoneStatuses).toContain("EXPIRED");
     expect(parsed.browserStorageEntries).toBe(0);
     expect(parsed.samples).toBe(20);
+    expect(parsed.publicCorrelationMatches).toBe(0);
     expect(parsed.connectedTombstoneP95Ms).toBeLessThanOrEqual(500);
     expect(parsed.surface).toBe("real-service-mains+clean-chrome-stage");
   }, 60_000);
