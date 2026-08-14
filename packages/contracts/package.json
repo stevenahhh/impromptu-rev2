@@ -8,7 +8,6 @@
     "./public": "./src/public.ts",
     "./control": "./src/control.ts",
     "./private": "./src/private.ts",
-    "./prepared-evidence": "./src/prepared-evidence.ts",
     "./shared": "./src/shared.ts"
   },
   "dependencies": {

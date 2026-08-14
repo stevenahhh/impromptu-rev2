@@ -4,12 +4,33 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register();
 afterAll(() => GlobalRegistrator.unregister());
 
-const { cleanup, fireEvent, render, waitFor, within } = await import("@testing-library/react");
+const { act, cleanup, fireEvent, render, within } = await import("@testing-library/react");
 const { MemoryRouter } = await import("react-router-dom");
 
 const { StageRoutes } = await import("./App");
 
-import type { StageSessionClient } from "./stage-client";
+import type {
+  DisplayIdentity,
+  DisplayJoinView,
+  StageSessionClient,
+  StageSnapshotView,
+} from "./stage-client";
+
+function deferred<Value>() {
+  let resolve: ((value: Value) => void) | null = null;
+  const promise = new Promise<Value>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return {
+    promise,
+    resolve(value: Value) {
+      if (resolve === null) throw new Error("signal already resolved");
+      const current = resolve;
+      resolve = null;
+      current(value);
+    },
+  };
+}
 
 afterEach(() => {
   cleanup();
@@ -45,28 +66,25 @@ describe("public Stage boundary", () => {
 
   test("uses exact join and approval actions without granting controller authority", async () => {
     const actions: string[] = [];
+    const joinSignal = deferred<DisplayJoinView>();
+    const claimSignal = deferred<void>();
+    const snapshotSignal = deferred<StageSnapshotView>();
+    let identity: DisplayIdentity = { displayId: "", displayFingerprint: "" };
+    let requestedDeckVersion = "";
     const client: StageSessionClient = {
-      async createJoin(identity, deckVersion) {
+      createJoin(nextIdentity, deckVersion) {
         actions.push("join-created");
-        return {
-          ...identity,
-          deckVersion,
-          displayJoinId: `join_${"a".repeat(32)}`,
-          expiresAtMs: 90_000,
-        };
+        identity = nextIdentity;
+        requestedDeckVersion = deckVersion;
+        return joinSignal.promise;
       },
-      async claim() {
+      claim() {
         actions.push("display-claimed");
+        return claimSignal.promise;
       },
-      async snapshot() {
+      snapshot() {
         actions.push("snapshot-read");
-        return {
-          occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
-          cards: [],
-          publicCardRevision: "pcr_0",
-          tombstoneWatermark: "pcr_0",
-          tombstoneRetentionMs: 60_000,
-        };
+        return snapshotSignal.promise;
       },
     };
     render(
@@ -74,16 +92,37 @@ describe("public Stage boundary", () => {
         <StageRoutes client={client} />
       </MemoryRouter>,
     );
-    await waitFor(() => {
-      expect(within(document.body).getByText("AAAAAAAA")).toBeTruthy();
+    if (actions[0] !== "join-created")
+      throw new Error("join subscription was not installed by render");
+    await act(async () => {
+      joinSignal.resolve({
+        ...identity,
+        deckVersion: requestedDeckVersion,
+        displayJoinId: `join_${"a".repeat(32)}`,
+        expiresAtMs: 90_000,
+      });
+      await joinSignal.promise;
     });
+    expect(within(document.body).getByText("AAAAAAAA")).toBeTruthy();
     expect(within(document.body).queryByText("Private workspace")).toBeNull();
     fireEvent.click(within(document.body).getByRole("button", { name: "Continue after approval" }));
-    await waitFor(() => {
-      expect(
-        within(document.body).getByRole("heading", { name: "Evidence, without the detour" }),
-      ).toBeTruthy();
+    await act(async () => {
+      claimSignal.resolve(undefined);
+      await claimSignal.promise;
     });
+    await act(async () => {
+      snapshotSignal.resolve({
+        occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+        cards: [],
+        publicCardRevision: "pcr_0",
+        tombstoneWatermark: "pcr_0",
+        tombstoneRetentionMs: 60_000,
+      });
+      await snapshotSignal.promise;
+    });
+    expect(
+      within(document.body).getByRole("heading", { name: "Evidence, without the detour" }),
+    ).toBeTruthy();
     expect(actions).toEqual(["join-created", "display-claimed", "snapshot-read"]);
   });
 

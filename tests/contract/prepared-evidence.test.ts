@@ -4,7 +4,7 @@ import {
   DisplayApprovalSchema,
   DisplayJoinSchema,
   PresentationSessionLifecycleSchema,
-} from "@impromptu/contracts/prepared-evidence";
+} from "@impromptu/contracts/private";
 
 describe("prepared evidence session contracts", () => {
   test("keeps account and presentation sessions distinct and closed", () => {

@@ -4,12 +4,12 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register();
 afterAll(() => GlobalRegistrator.unregister());
 
-const { cleanup, fireEvent, render, waitFor, within } = await import("@testing-library/react");
+const { act, cleanup, fireEvent, render, within } = await import("@testing-library/react");
 const { MemoryRouter } = await import("react-router-dom");
 
 const { AuthProvider, ConsoleRoutes } = await import("./App");
 
-import type { ConsoleSessionClient } from "./session-client";
+import type { AccountSessionView, ConsoleSessionClient } from "./session-client";
 
 afterEach(cleanup);
 
@@ -53,14 +53,16 @@ describe("Console route boundary", () => {
 
   test("exchanges the entered code through the typed session client without storage", async () => {
     const receivedCodes: string[] = [];
+    let resolveSignIn: (session: AccountSessionView) => void = () => {
+      throw new Error("sign-in signal was not installed");
+    };
+    const signInCompleted = new Promise<AccountSessionView>((resolve) => {
+      resolveSignIn = resolve;
+    });
     const client: ConsoleSessionClient = {
-      async signIn(code) {
+      signIn(code) {
         receivedCodes.push(code);
-        return {
-          account: { accountId: "account_alpha", actorId: "actor_alpha" },
-          expiresAtMs: 10_000,
-          csrfToken: "csrf-alpha",
-        };
+        return signInCompleted;
       },
       async readSession() {
         return null;
@@ -83,11 +85,15 @@ describe("Console route boundary", () => {
     });
     fireEvent.click(within(document.body).getByRole("button", { name: "Enter private workspace" }));
 
-    await waitFor(() => {
-      expect(
-        within(document.body).getByRole("heading", { name: "Ready for the room" }),
-      ).toBeTruthy();
+    await act(async () => {
+      resolveSignIn({
+        account: { accountId: "account_alpha", actorId: "actor_alpha" },
+        expiresAtMs: 10_000,
+        csrfToken: "csrf-alpha",
+      });
+      await signInCompleted;
     });
+    expect(within(document.body).getByRole("heading", { name: "Ready for the room" })).toBeTruthy();
     expect(receivedCodes).toEqual(["transient-code"]);
     expect(window.localStorage.length).toBe(0);
     expect(window.sessionStorage.length).toBe(0);
