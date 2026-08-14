@@ -95,6 +95,16 @@ for (const app of browserApps) {
   if (worker.includes("caches.match(")) {
     throw new Error(`${app} service worker may not search global caches`);
   }
+  const installBlock = worker.slice(
+    worker.indexOf('self.addEventListener("install"'),
+    worker.indexOf('self.addEventListener("activate"'),
+  );
+  if (installBlock.includes("skipWaiting") || worker.includes("clients.claim")) {
+    throw new Error(`${app} service worker may not take over clients during installation`);
+  }
+  if (!worker.includes('type !== "IMPROMPTU_ACTIVATE_UPDATE"')) {
+    throw new Error(`${app} service worker has no explicit activation handshake`);
+  }
   const networkIndex = worker.indexOf("await fetch(request)");
   const fallbackIndex = worker.indexOf('shellCache.match("/index.html"');
   if (networkIndex === -1 || fallbackIndex === -1 || networkIndex > fallbackIndex) {

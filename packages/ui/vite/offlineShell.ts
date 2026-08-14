@@ -51,10 +51,7 @@ const PRECACHE_URLS = ${JSON.stringify(assets, null, 2)};
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(async (cache) => {
-      await cache.addAll(PRECACHE_URLS);
-      await self.skipWaiting();
-    }),
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS)),
   );
 });
 
@@ -66,7 +63,25 @@ self.addEventListener("activate", (event) => {
           .filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
           .map((key) => caches.delete(key)),
       );
-      await self.clients.claim();
+    }),
+  );
+});
+
+self.addEventListener("message", (event) => {
+  const { type, reason } = event.data ?? {};
+  if (
+    type !== "IMPROMPTU_ACTIVATE_UPDATE" ||
+    (reason !== "SESSION_ENDED" && reason !== "OPERATOR_CONFIRMED")
+  ) {
+    return;
+  }
+
+  event.waitUntil(
+    self.skipWaiting().then(() => {
+      event.ports[0]?.postMessage({
+        type: "IMPROMPTU_UPDATE_ACTIVATION_ACCEPTED",
+        reason,
+      });
     }),
   );
 });

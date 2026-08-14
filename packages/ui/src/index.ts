@@ -5,3 +5,10 @@ export { Panel, type PanelProps } from "./Panel";
 export { Shell, type ShellProps } from "./Shell";
 export { SkipLink } from "./SkipLink";
 export { StatusDot, type StatusDotProps } from "./StatusDot";
+export {
+  ACTIVATION_MESSAGE,
+  type ActivationReason,
+  bindUpdateCoordinator,
+  UPDATE_EVENTS,
+  UpdateCoordinator,
+} from "./UpdateCoordinator";

@@ -27,6 +27,27 @@ describe("versioned offline shell", () => {
     expect(worker).toContain("key.startsWith(CACHE_PREFIX)");
   });
 
+  test("waits for an explicit session-safe activation handshake", () => {
+    const worker = createServiceWorkerSource({
+      appId: "console",
+      assets,
+      buildId: "release123",
+    });
+    const installBlock = worker.slice(
+      worker.indexOf('self.addEventListener("install"'),
+      worker.indexOf('self.addEventListener("activate"'),
+    );
+
+    expect(installBlock).not.toContain("skipWaiting");
+    expect(worker).not.toContain("clients.claim");
+    expect(worker).toContain('type !== "IMPROMPTU_ACTIVATE_UPDATE"');
+    expect(worker).toContain('reason !== "SESSION_ENDED"');
+    expect(worker).toContain('reason !== "OPERATOR_CONFIRMED"');
+    expect(worker.indexOf("self.skipWaiting()")).toBeGreaterThan(
+      worker.indexOf('self.addEventListener("message"'),
+    );
+  });
+
   test("uses network-first documents and never searches foreign caches", () => {
     const worker = createServiceWorkerSource({
       appId: "stage",
