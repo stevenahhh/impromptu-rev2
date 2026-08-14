@@ -480,17 +480,23 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
         (slide) => slide.publicSlideKey === current.occurrence.publicSlideKey,
       );
       const target = slides[index + offset];
-      return target === undefined
-        ? current
-        : {
-            ...current,
-            occurrence: {
-              publicSlideKey: target.publicSlideKey,
-              occurrenceSeq: current.occurrence.occurrenceSeq + 1,
-            },
-          };
+      if (target === undefined) return current;
+      const occurrence = {
+        publicSlideKey: target.publicSlideKey,
+        occurrenceSeq: current.occurrence.occurrenceSeq + 1,
+      };
+      publishStageEvent("impromptu:local-slide", occurrence);
+      return { ...current, occurrence };
     });
   };
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "ArrowLeft") navigateCachedSlide(-1);
+      if (event.key === "ArrowRight") navigateCachedSlide(1);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
   const card = snapshot?.cards[0];
 
   return (
@@ -498,12 +504,6 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
       <header className="stage-display__bar">
         <Brand eyebrow="Public Stage" />
         <div className="stage-display__actions">
-          <Button variant="quiet" onClick={() => navigateCachedSlide(-1)}>
-            Previous slide
-          </Button>
-          <Button variant="quiet" onClick={() => navigateCachedSlide(1)}>
-            Next slide
-          </Button>
           <Badge tone="success">
             <StatusDot label="Preview content visible" />
             Preview
