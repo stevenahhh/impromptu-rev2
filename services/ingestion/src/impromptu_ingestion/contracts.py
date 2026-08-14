@@ -36,6 +36,13 @@ class IngestionJob(ContractModel):
         return self
 
 
+class ValidatedInput(ContractModel):
+    path: Path
+    kind: InputKind
+    size_bytes: Annotated[int, Field(gt=0)]
+    source_sha256: Sha256
+
+
 class RenderBoundary(ContractModel):
     status: Literal["not_performed"] = "not_performed"
     renderer: None = None
