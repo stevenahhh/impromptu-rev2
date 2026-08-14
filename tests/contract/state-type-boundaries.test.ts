@@ -38,7 +38,7 @@ describe("nominal card-state boundaries", () => {
     "tests/contract/fixtures/compact-as-authoritative.ts.txt",
     "tests/contract/fixtures/forged-compact-brand.ts.txt",
   ]) {
-    test(`rejects ${fixture}`, { timeout: 30_000 }, () => {
+    test(`rejects ${fixture}`, () => {
       const diagnostics = compileFixture(fixture);
       expect(diagnostics.map(({ code }) => code)).toEqual([2322]);
     });
