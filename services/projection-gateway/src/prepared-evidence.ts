@@ -18,13 +18,26 @@ export interface PublicDeckArtifact {
 export interface PublicCardUpsert {
   readonly projectionId: string;
   readonly status: "PUBLISHED";
-  readonly mode?: "CURATED" | "LIVE";
-  readonly leaseExpiresAtMs?: number | null;
-  readonly offlinePackage?: Readonly<{
-    readonly offlineDisplayAllowed: boolean;
-    readonly localExpiresAtMs: number;
-    readonly signature: string;
-  }>;
+  readonly mode?: "CURATED" | "LIVE" | undefined;
+  readonly leaseExpiresAtMs?: number | null | undefined;
+  readonly liveBinding?:
+    | Readonly<{
+        presentationSessionEpoch: string;
+        publicSlideOccurrence: Readonly<{
+          publicSlideKey: string;
+          occurrenceSeq: number;
+        }>;
+        publicationPolicyVersion: string;
+        cardVersion: string;
+      }>
+    | undefined;
+  readonly offlinePackage?:
+    | Readonly<{
+        readonly offlineDisplayAllowed: boolean;
+        readonly localExpiresAtMs: number;
+        readonly signature: string;
+      }>
+    | undefined;
   readonly claim: string;
   readonly supportSummary: string;
   readonly sourceLabel: string;

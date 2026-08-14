@@ -23,6 +23,11 @@ import {
 } from "@impromptu/contracts/shared";
 import { z } from "zod";
 
+export type CandidateVerdictState = "PENDING" | "SUPPORTED";
+export type CandidatePublicationState = "PRIVATE" | "PUBLISHED";
+export type CandidateFreshnessState = "FRESH" | "STALE" | "SUPERSEDED";
+
+/** Compatibility summary only. Verdict, publication, and freshness are authoritative separately. */
 export type CandidateLifecycleStatus =
   | "PRIVATE"
   | "ELIGIBLE"
@@ -68,6 +73,9 @@ export type CandidateLifecycleState = Readonly<{
   candidateVersion: string;
   contentHash: string;
   candidateRevision: CandidateRevision;
+  verdict: CandidateVerdictState;
+  publicationState: CandidatePublicationState;
+  freshness: CandidateFreshnessState;
   status: CandidateLifecycleStatus;
   publication: CandidatePublication | null;
   eventsByRevision: Readonly<Record<string, CandidateLifecycleOperation>>;
@@ -95,6 +103,9 @@ export function createCandidateLifecycle(input: CreateCandidateLifecycle): Candi
   return {
     ...parsed,
     candidateRevision: candidateRevision(0),
+    verdict: "PENDING",
+    publicationState: "PRIVATE",
+    freshness: "FRESH",
     status: "PRIVATE",
     publication: null,
     eventsByRevision: {},
@@ -146,30 +157,52 @@ export function reduceCandidateLifecycle(
   if (operation.expectedRevision !== state.candidateRevision) {
     return rejected(state, "CAS_MISMATCH");
   }
-  if (state.status === "STALE" || state.status === "SUPERSEDED" || state.status === "PUBLISHED") {
-    return rejected(state, "TERMINAL_VERDICT");
-  }
   if (
-    (operation.type === "QUALIFY" && state.status !== "PRIVATE") ||
-    (operation.type === "PUBLISH" && state.status !== "ELIGIBLE")
+    (operation.type === "QUALIFY" &&
+      (state.verdict !== "PENDING" || state.freshness !== "FRESH")) ||
+    (operation.type === "PUBLISH" &&
+      (state.verdict !== "SUPPORTED" ||
+        state.publicationState !== "PRIVATE" ||
+        state.freshness !== "FRESH")) ||
+    ((operation.type === "MARK_STALE" || operation.type === "SUPERSEDE") &&
+      state.freshness !== "FRESH")
   ) {
-    return rejected(state, "ILLEGAL_TRANSITION");
+    return rejected(
+      state,
+      state.freshness !== "FRESH" || state.publicationState === "PUBLISHED"
+        ? "TERMINAL_VERDICT"
+        : "ILLEGAL_TRANSITION",
+    );
   }
 
   const nextRevision = candidateRevision(candidateRevisionValue(state.candidateRevision) + 1);
+  const verdict: CandidateVerdictState = operation.type === "QUALIFY" ? "SUPPORTED" : state.verdict;
+  const publicationState: CandidatePublicationState =
+    operation.type === "PUBLISH" ? "PUBLISHED" : state.publicationState;
+  const freshness: CandidateFreshnessState =
+    operation.type === "MARK_STALE"
+      ? "STALE"
+      : operation.type === "SUPERSEDE"
+        ? "SUPERSEDED"
+        : state.freshness;
   const status: CandidateLifecycleStatus =
-    operation.type === "QUALIFY"
-      ? "ELIGIBLE"
-      : operation.type === "MARK_STALE"
+    publicationState === "PUBLISHED"
+      ? "PUBLISHED"
+      : freshness === "STALE"
         ? "STALE"
-        : operation.type === "SUPERSEDE"
+        : freshness === "SUPERSEDED"
           ? "SUPERSEDED"
-          : "PUBLISHED";
+          : verdict === "SUPPORTED"
+            ? "ELIGIBLE"
+            : "PRIVATE";
   return {
     outcome: "APPLIED",
     state: {
       ...state,
       candidateRevision: nextRevision,
+      verdict,
+      publicationState,
+      freshness,
       status,
       publication:
         operation.type === "PUBLISH"
@@ -177,7 +210,7 @@ export function reduceCandidateLifecycle(
               projectionId: operation.projectionId,
               publicCardRevision: operation.publicCardRevision,
             }
-          : null,
+          : state.publication,
       eventsByRevision: { ...state.eventsByRevision, [nextRevision]: operation },
     },
   };
@@ -191,6 +224,9 @@ export const CandidateLifecycleSnapshotSchema = z
     candidateVersion: VersionIdSchema,
     contentHash: Sha256Schema,
     candidateRevision: CandidateRevisionSchema,
+    verdict: z.enum(["PENDING", "SUPPORTED"]),
+    publicationState: z.enum(["PRIVATE", "PUBLISHED"]),
+    freshness: z.enum(["FRESH", "STALE", "SUPERSEDED"]),
     status: z.enum(["PRIVATE", "ELIGIBLE", "STALE", "SUPERSEDED", "PUBLISHED"]),
     publication: z
       .object({

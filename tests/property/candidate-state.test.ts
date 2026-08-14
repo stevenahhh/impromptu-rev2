@@ -94,9 +94,12 @@ describe("candidate lifecycle persistence", () => {
     });
     if (published.outcome !== "APPLIED") throw new Error("candidate was not published");
     expect(reduceCandidateLifecycle(published.state, operation("MARK_STALE", 2))).toMatchObject({
-      outcome: "REJECTED",
-      reason: "TERMINAL_VERDICT",
-      state: published.state,
+      outcome: "APPLIED",
+      state: {
+        verdict: "SUPPORTED",
+        publicationState: "PUBLISHED",
+        freshness: "STALE",
+      },
     });
   });
 

@@ -286,7 +286,12 @@ export function applyAuthorizedPublicCardEvent(
   if (event.expectedRevision !== state.publicCardRevision) {
     return { state, outcome: "REJECTED", reason: "CAS_CONFLICT" };
   }
-  if (event.payload.status === "PUBLISHED" && candidate?.status !== "ELIGIBLE") {
+  if (
+    event.payload.status === "PUBLISHED" &&
+    (candidate?.verdict !== "SUPPORTED" ||
+      candidate.publicationState !== "PRIVATE" ||
+      candidate.freshness !== "FRESH")
+  ) {
     return { state, outcome: "REJECTED", reason: "CANDIDATE_NOT_ELIGIBLE" };
   }
   const applied = applyPublicCardEvent(state, event.payload);
