@@ -192,7 +192,8 @@ function applyCardEvent(
 function DisplayPage({ client }: { readonly client: StageSessionClient }) {
   const titleId = useId();
   const fullscreen = useStageFullscreen();
-  const mode = windowsDisplayMode(new URL(window.location.href).searchParams.get("mode"));
+  const requestedMode = windowsDisplayMode(new URL(window.location.href).searchParams.get("mode"));
+  const [mode, setMode] = useState(requestedMode);
   const [snapshot, setSnapshot] = useState<StageSnapshotView | null>(null);
   const [connection, setConnection] = useState<"ready" | "recovering">("recovering");
   const [screenCount, setScreenCount] = useState(1);
@@ -206,16 +207,38 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
         : next,
     );
     setConnection("ready");
-    publishStageEvent("impromptu:stage-ready", { mode });
-  }, [client, mode]);
+    publishStageEvent("impromptu:stage-ready", { requestedMode, observedMode: mode });
+  }, [client, mode, requestedMode]);
 
   useEffect(() => {
     let active = true;
     let details: Awaited<ReturnType<typeof observeWindowsTopology>>["details"] = null;
+    const apply = (observedMode: ReturnType<typeof windowsDisplayMode>, count: number) => {
+      setMode(observedMode);
+      setScreenCount(Math.max(1, count));
+      publishStageEvent("impromptu:topology-change", {
+        requestedMode,
+        observedMode,
+        screenCount: count,
+      });
+    };
     const sync = () => {
       const count = details?.screens.length ?? 1;
-      setScreenCount(Math.max(1, count));
-      publishStageEvent("impromptu:topology-change", { mode, screenCount: count });
+      apply(count > 1 ? "extend" : requestedMode === "single" ? "single" : "duplicate", count);
+    };
+    const onPlatformTopology = (event: Event) => {
+      if (
+        !(event instanceof CustomEvent) ||
+        typeof event.detail !== "object" ||
+        event.detail === null
+      )
+        return;
+      const detail = event.detail as Record<string, unknown>;
+      const observedMode = windowsDisplayMode(
+        typeof detail.observedMode === "string" ? detail.observedMode : null,
+      );
+      const count = typeof detail.screenCount === "number" ? detail.screenCount : 1;
+      apply(observedMode, count);
     };
     const windowManager = window as unknown as Parameters<typeof observeWindowsTopology>[0];
     const extendedScreen = window.screen as Screen & { readonly isExtended?: boolean };
@@ -223,17 +246,19 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
       (result) => {
         if (!active) return;
         details = result.details;
-        setScreenCount(result.observation.screenCount);
+        apply(requestedMode, result.observation.screenCount);
         details?.addEventListener("screenschange", sync);
       },
     );
     window.addEventListener("resize", sync);
+    window.addEventListener("impromptu:platform-topology-change", onPlatformTopology);
     return () => {
       active = false;
       details?.removeEventListener("screenschange", sync);
       window.removeEventListener("resize", sync);
+      window.removeEventListener("impromptu:platform-topology-change", onPlatformTopology);
     };
-  }, [mode]);
+  }, [requestedMode]);
 
   useEffect(() => {
     if (mode !== "single" || snapshot === null) return;

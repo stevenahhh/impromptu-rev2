@@ -10,6 +10,8 @@ interface TopologyVerifierEvidence {
       readonly simulatedFaults: number;
       readonly privatePixelCount: number;
       readonly maxRecoveryMs: number;
+      readonly requestedTransitions: readonly string[];
+      readonly observedTransitions: readonly string[];
     }
   >;
   readonly unrecoverableFailureCount: number;
@@ -45,12 +47,15 @@ describe("WP4 Windows topology real-browser E2E", () => {
     expect(exitCode, stderr).toBe(0);
     const result = evidence(JSON.parse(stdout.trim()));
     for (const mode of ["extend", "duplicate", "single"]) {
-      expect(result.modes[mode]?.rehearsals).toBe(3);
-      expect(result.modes[mode]?.faultRecoveries).toBe(21);
-      expect(result.modes[mode]?.realFaults).toBe(12);
-      expect(result.modes[mode]?.simulatedFaults).toBe(9);
-      expect(result.modes[mode]?.privatePixelCount).toBe(0);
-      expect(result.modes[mode]?.maxRecoveryMs).toBeLessThanOrEqual(30_000);
+      const modeEvidence = result.modes[mode];
+      if (modeEvidence === undefined) throw new Error(`missing ${mode} evidence`);
+      expect(modeEvidence.rehearsals).toBe(3);
+      expect(modeEvidence.faultRecoveries).toBe(21);
+      expect(modeEvidence.realFaults).toBe(12);
+      expect(modeEvidence.simulatedFaults).toBe(9);
+      expect(modeEvidence.privatePixelCount).toBe(0);
+      expect(modeEvidence.maxRecoveryMs).toBeLessThanOrEqual(30_000);
+      expect(modeEvidence.observedTransitions).toEqual(modeEvidence.requestedTransitions);
     }
     expect(result.unrecoverableFailureCount).toBe(0);
     expect(result.privatePixelCount).toBe(0);

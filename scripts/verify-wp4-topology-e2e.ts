@@ -15,7 +15,12 @@ if (
 }
 for (const mode of ["extend", "duplicate", "single"] as const) {
   const modeRuns = evidence.rehearsals.filter((rehearsal) => rehearsal.mode === mode);
-  if (modeRuns.length !== 3 || modeRuns.some((run) => run.faults.length !== 7)) {
+  if (
+    modeRuns.length !== 3 ||
+    modeRuns.some(
+      (run) => run.faults.length !== 7 || run.observedTransition !== run.requestedTransition,
+    )
+  ) {
     throw new Error(`${mode} did not complete three full fault rehearsals`);
   }
 }
@@ -46,7 +51,9 @@ console.log(
               ).toFixed(3),
             ),
             privatePixelCount: runs.reduce((sum, run) => sum + run.privatePixelCount, 0),
-            topologyTransitions: runs.map((run) => run.topologyTransition),
+            requestedTransitions: runs.map((run) => run.requestedTransition),
+            observedTransitions: runs.map((run) => run.observedTransition),
+            observedModes: runs.map((run) => run.observedMode),
             windowManagement: runs.map((run) => run.windowManagement),
             changeScreen: runs.map((run) => run.changeScreen),
           },

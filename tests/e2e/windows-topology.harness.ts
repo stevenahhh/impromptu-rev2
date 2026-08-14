@@ -18,11 +18,13 @@ interface FaultEvidence {
 
 export interface ModeRehearsalEvidence {
   readonly mode: WindowsDisplayMode;
+  readonly observedMode: WindowsDisplayMode;
   readonly rehearsal: number;
   readonly audienceReadyMs: number;
   readonly faults: readonly FaultEvidence[];
   readonly privatePixelCount: number;
-  readonly topologyTransition: string;
+  readonly requestedTransition: string;
+  readonly observedTransition: string;
   readonly windowManagement: "available" | "fallback";
   readonly changeScreen: "available" | "fallback";
 }
@@ -286,6 +288,35 @@ async function rehearse(
       };
     });
     const faults: FaultEvidence[] = [];
+    const requestedTopologyMode =
+      mode === "extend" ? "duplicate" : mode === "duplicate" ? "extend" : "single";
+    const requestedTransition = `${mode}->${requestedTopologyMode}`;
+    let observedMode: WindowsDisplayMode = mode;
+    let observedTransition = `${mode}->${mode}`;
+
+    const observeTopology = async (nextMode: WindowsDisplayMode, screenCount: number) => {
+      await clearBufferedEvent(page, "impromptu:topology-change");
+      const changed = await prepareEvent(page, "impromptu:topology-change");
+      await page.evaluate(
+        ({ observedMode: next, count }) => {
+          window.dispatchEvent(
+            new CustomEvent("impromptu:platform-topology-change", {
+              detail: { observedMode: next, screenCount: count },
+            }),
+          );
+        },
+        { observedMode: nextMode, count: screenCount },
+      );
+      const detail = await changed();
+      if (typeof detail !== "object" || detail === null) throw new Error("topology detail missing");
+      const candidate = detail as Record<string, unknown>;
+      if (candidate.requestedMode !== mode || candidate.observedMode !== nextMode) {
+        throw new Error(
+          `topology mismatch requested=${mode} target=${nextMode} detail=${JSON.stringify(detail)}`,
+        );
+      }
+      return nextMode;
+    };
 
     const recordFault = async (
       fault: WindowsTopologyFault,
@@ -328,26 +359,33 @@ async function rehearse(
       await exitFullscreen(page);
     });
 
-    await recordFault("monitor-unplug", "SIMULATED", "resize-event", async () => {
-      await clearBufferedEvent(page, "impromptu:topology-change");
-      const changed = await prepareEvent(page, "impromptu:topology-change");
-      await page.evaluate(() => window.dispatchEvent(new Event("resize")));
-      await changed();
-    });
+    await recordFault(
+      "monitor-unplug",
+      "SIMULATED",
+      "platform-topology-handler:single->restore",
+      async () => {
+        await observeTopology("single", 1);
+        await observeTopology(mode, mode === "extend" ? 2 : 1);
+      },
+    );
 
-    await recordFault("topology-switch", "SIMULATED", "topology-event-adapter", async () => {
-      await clearBufferedEvent(page, "impromptu:topology-change");
-      const changed = await prepareEvent(page, "impromptu:topology-change");
-      await page.evaluate(async () => {
+    await recordFault("topology-switch", "SIMULATED", "platform-topology-handler", async () => {
+      await page.evaluate(() => {
         const recording = Reflect.get(window, "__wp4ProjectorRecording") as MediaRecorder | true;
         if (recording !== true && recording.state !== "recording") {
           throw new Error("projector recording stopped before topology switch");
         }
-        const candidate = window as typeof window & { changeScreen?: () => Promise<void> };
-        if (candidate.changeScreen) await candidate.changeScreen();
-        else window.dispatchEvent(new Event("resize"));
       });
-      await changed();
+      observedMode = await observeTopology(
+        requestedTopologyMode,
+        requestedTopologyMode === "extend" ? 2 : 1,
+      );
+      observedTransition = `${mode}->${observedMode}`;
+      if (observedTransition !== requestedTransition) {
+        throw new Error(
+          `observed topology transition ${observedTransition} did not match ${requestedTransition}`,
+        );
+      }
     });
 
     await recordFault("browser-refresh", "REAL", "page.reload", async () => {
@@ -391,16 +429,13 @@ async function rehearse(
 
     return {
       mode,
+      observedMode,
       rehearsal,
       audienceReadyMs,
       faults,
       privatePixelCount,
-      topologyTransition:
-        mode === "extend"
-          ? "extend->duplicate"
-          : mode === "duplicate"
-            ? "duplicate->extend"
-            : "single-stage-only",
+      requestedTransition,
+      observedTransition,
       windowManagement: capabilities.windowManagement ? "available" : "fallback",
       changeScreen: capabilities.changeScreen ? "available" : "fallback",
     };
