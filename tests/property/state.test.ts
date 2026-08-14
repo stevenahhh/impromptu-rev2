@@ -374,6 +374,64 @@ describe("playback authority reducer", () => {
     });
   });
 
+  test("rejects equal or decreasing distinct controller epochs in reducer and restore", () => {
+    const leaseA = PlaybackControlLeaseSchema.parse({
+      ...authority().activeLease,
+      controllerEpoch: "ce_1",
+    });
+    const atA = { ...authority(), activeLease: leaseA };
+    const acceptedA = reducePlaybackCommand(
+      atA,
+      command({ type: "SLIDE_NEXT", controllerEpoch: "ce_1" }),
+      nowMs,
+    );
+    for (const controllerEpoch of ["ce_0", "ce_1"] as const) {
+      const invalidReplacement = PlaybackControlLeaseSchema.parse({
+        ...leaseA,
+        leaseId: `lease_invalid-${controllerEpoch}`,
+        actorId: "actor_controller-b",
+        controllerEpoch,
+      });
+      expect(() => replacePlaybackLease(acceptedA.state, invalidReplacement)).toThrow();
+    }
+
+    const leaseB = PlaybackControlLeaseSchema.parse({
+      ...leaseA,
+      leaseId: "lease_b",
+      actorId: "actor_controller-b",
+      controllerEpoch: "ce_2",
+    });
+    const valid = replacePlaybackLease(acceptedA.state, leaseB);
+    const edge = valid.leaseTakeovers[0];
+    const entry = Object.entries(valid.acceptedCommands)[0];
+    if (edge === undefined || entry === undefined || entry[1].supersededReceipt === null) {
+      throw new Error("valid takeover history was not persisted");
+    }
+    for (const controllerEpoch of ["ce_0", "ce_1", "ce_bad", "ce_9007199254740992"] as const) {
+      const forged = {
+        ...valid,
+        activeLease: { ...edge.replacementLease, controllerEpoch },
+        leaseTakeovers: [
+          {
+            ...edge,
+            replacementLease: { ...edge.replacementLease, controllerEpoch },
+          },
+        ],
+        acceptedCommands: {
+          [entry[0]]: {
+            ...entry[1],
+            supersededReceipt: {
+              ...entry[1].supersededReceipt,
+              supersededByControllerEpoch: controllerEpoch,
+            },
+          },
+        },
+      };
+      expect(() => restorePlaybackAuthority(forged)).not.toThrow();
+      expect(restorePlaybackAuthority(forged)).toEqual({ outcome: "INVALID_SNAPSHOT" });
+    }
+  });
+
   test("restores the exact A to B to C supersession chain", () => {
     const acceptedA = reducePlaybackCommand(authority(), command({ type: "SLIDE_NEXT" }), nowMs);
     const leaseB = PlaybackControlLeaseSchema.parse({

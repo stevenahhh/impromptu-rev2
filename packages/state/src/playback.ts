@@ -198,12 +198,21 @@ const PlaybackAuthoritySnapshotSchema = z
       const previousKey = leaseEpochKey(takeover.previousLease);
       const replacementKey = leaseEpochKey(takeover.replacementLease);
       const takeoverRevision = safeEncodedCounterValue(takeover.atControlRevision);
+      const previousControllerEpoch = safeEncodedCounterValue(
+        takeover.previousLease.controllerEpoch,
+      );
+      const replacementControllerEpoch = safeEncodedCounterValue(
+        takeover.replacementLease.controllerEpoch,
+      );
       const valid =
         takeover.previousLease.presentationSessionId === snapshot.presentationSessionId &&
         takeover.previousLease.presentationSessionEpoch === snapshot.presentationSessionEpoch &&
         takeover.replacementLease.presentationSessionId === snapshot.presentationSessionId &&
         takeover.replacementLease.presentationSessionEpoch === snapshot.presentationSessionEpoch &&
         previousKey !== replacementKey &&
+        previousControllerEpoch !== null &&
+        replacementControllerEpoch !== null &&
+        replacementControllerEpoch > previousControllerEpoch &&
         takeoverRevision !== null &&
         takeoverRevision >= priorTakeoverRevision &&
         takeoverRevision <= controlHead &&
@@ -831,6 +840,15 @@ export function replacePlaybackLease(
     activeLease.controllerEpoch === state.activeLease.controllerEpoch
   ) {
     return state;
+  }
+  const currentControllerEpoch = safeEncodedCounterValue(state.activeLease.controllerEpoch);
+  const replacementControllerEpoch = safeEncodedCounterValue(activeLease.controllerEpoch);
+  if (
+    currentControllerEpoch === null ||
+    replacementControllerEpoch === null ||
+    replacementControllerEpoch <= currentControllerEpoch
+  ) {
+    throw new Error("replacement controller epoch must increase strictly");
   }
   const acceptedCommands = Object.fromEntries(
     Object.entries(state.acceptedCommands).map(([key, record]) => {

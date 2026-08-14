@@ -13,7 +13,13 @@ import {
   presentationSessionEpoch,
   publicPlaybackRevision,
 } from "@impromptu/contracts/public";
-import { initialPublicPlaybackState, type PublicPlaybackEvent } from "@impromptu/state";
+import {
+  initialPublicPlaybackState,
+  type PublicPlaybackEvent,
+  replacePlaybackLease,
+  restorePlaybackAuthority,
+  snapshotPlaybackAuthority,
+} from "@impromptu/state";
 import {
   fastCheckParameters,
   type PlaybackFaultAction,
@@ -228,6 +234,45 @@ describe("generated playback fault schedules", () => {
               .every(({ supersededReceipt }) => supersededReceipt?.status === "SUPERSEDED"),
           ).toBe(true);
           expect(result.trace.at(-2)).toMatchObject({ type: "STAGE_APPLY", outcome: "APPLIED" });
+        },
+      ),
+      propertyOptions,
+    );
+  });
+
+  test("only appends generated strictly increasing controller-epoch chains", () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.integer({ min: 0, max: 50 }), { minLength: 1, maxLength: 20 }),
+        (controllerEpochs) => {
+          let state = playbackAuthorityFixture();
+          let currentEpoch = 1;
+          let acceptedEdges = 0;
+          for (const [index, epoch] of controllerEpochs.entries()) {
+            const replacement = PlaybackControlLeaseSchema.parse({
+              ...state.activeLease,
+              leaseId: `lease_epoch-${index}-${epoch}`,
+              actorId: `actor_epoch-${index}-${epoch}`,
+              controllerEpoch: `ce_${epoch}`,
+            });
+            if (epoch <= currentEpoch) {
+              expect(() => replacePlaybackLease(state, replacement)).toThrow();
+              continue;
+            }
+            state = replacePlaybackLease(state, replacement);
+            currentEpoch = epoch;
+            acceptedEdges += 1;
+          }
+          expect(state.leaseTakeovers).toHaveLength(acceptedEdges);
+          expect(restorePlaybackAuthority(snapshotPlaybackAuthority(state))).toEqual({
+            outcome: "RESTORED",
+            state,
+          });
+          for (const edge of state.leaseTakeovers) {
+            const previous = Number(edge.previousLease.controllerEpoch.slice("ce_".length));
+            const replacement = Number(edge.replacementLease.controllerEpoch.slice("ce_".length));
+            expect(replacement).toBeGreaterThan(previous);
+          }
         },
       ),
       propertyOptions,
