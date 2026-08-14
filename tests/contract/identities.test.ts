@@ -106,6 +106,7 @@ describe("domain identities", () => {
       actorId: "actor_capture",
       captureDeviceId: "device_microphone",
       consentRecordId: "consent_record",
+      issuedAtMs: 1_000,
       expiresAtMs: expiry,
     });
     const binding = DisplayBindingSchema.parse({

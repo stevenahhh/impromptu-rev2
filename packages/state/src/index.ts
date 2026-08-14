@@ -1,3 +1,4 @@
+export * from "./audio-fusion.ts";
 export * from "./audience-card-state.ts";
 export * from "./candidate-lifecycle.ts";
 export * from "./playback.ts";

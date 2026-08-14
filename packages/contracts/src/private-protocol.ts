@@ -38,9 +38,13 @@ export const CaptureGrantSchema = z
     actorId: ActorIdSchema,
     captureDeviceId: CaptureDeviceIdSchema,
     consentRecordId: ConsentRecordIdSchema,
+    issuedAtMs: TimestampMsSchema,
     expiresAtMs: TimestampMsSchema,
   })
-  .strict();
+  .strict()
+  .refine((grant) => grant.expiresAtMs > grant.issuedAtMs, {
+    message: "capture grant must expire after it is issued",
+  });
 
 export const PublisherSessionSchema = z
   .object({
