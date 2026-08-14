@@ -5,6 +5,8 @@ import { extname, join, resolve } from "node:path";
 import { type BrowserContext, chromium, type Page } from "playwright-core";
 import { createServer as createViteServer, preview } from "vite";
 
+import { waitForFirstServiceWorkerActivation } from "./service-worker-activation.ts";
+
 const chromeExecutable = "C:/Program Files/Google/Chrome/Application/chrome.exe";
 const chromeHeadless = process.env.BROWSER_HEADED !== "true";
 const runtimeRoot = join(process.env.TEMP ?? process.cwd(), "impromptu-r2-browser-runtime");
@@ -196,31 +198,15 @@ async function installOfflineShell(context: BrowserContext, surface: AppSurface)
   console.log(`Installing ${surface.app} offline shell...`);
   const page = await context.newPage();
   const response = await page.goto(address(surface), { waitUntil: "domcontentloaded" });
+  await page.evaluate(waitForFirstServiceWorkerActivation, {
+    scriptUrl: "/sw.js",
+    timeoutMs: 10_000,
+  });
   await page.getByText(surface.expectedText, { exact: true }).waitFor({ state: "visible" });
   const policy = await response?.headerValue("content-security-policy");
   if (!policy?.includes("frame-ancestors 'none'")) {
     throw new Error(`${surface.app} preview response is missing frame-ancestors denial`);
   }
-  await page.evaluate(async () => {
-    let timeoutHandle: number | undefined;
-    const timeout = new Promise<never>((_, reject) => {
-      timeoutHandle = window.setTimeout(
-        () => reject(new Error("Service worker readiness timed out")),
-        10_000,
-      );
-    });
-    try {
-      const registration = await Promise.race([navigator.serviceWorker.ready, timeout]);
-      if (!registration.active) {
-        throw new Error("Service worker did not activate");
-      }
-    } finally {
-      if (timeoutHandle) {
-        window.clearTimeout(timeoutHandle);
-      }
-    }
-  });
-
   const shell = await page.evaluate(async (cachePrefix) => {
     const cacheName = (await caches.keys()).find((key) => key.startsWith(cachePrefix));
     if (!cacheName) {
@@ -376,17 +362,15 @@ async function verifyUpdateLifecycle(surface: AppSurface, index: number) {
 
     const page = await context.newPage();
     await page.goto(`${origin.url}${surface.route}`, { waitUntil: "domcontentloaded" });
+    await page.evaluate(waitForFirstServiceWorkerActivation, {
+      scriptUrl: "/sw.js",
+      timeoutMs: 10_000,
+    });
     await page.getByText(surface.expectedText, { exact: true }).waitFor({ state: "visible" });
     const firstInstall = await page.evaluate(async () => {
-      const timeout = new Promise<never>((_, reject) => {
-        window.setTimeout(
-          () => reject(new Error("First service worker install timed out")),
-          10_000,
-        );
-      });
-      const registration = await Promise.race([navigator.serviceWorker.ready, timeout]);
+      const registration = await navigator.serviceWorker.getRegistration();
       return {
-        active: registration.active?.state,
+        active: registration?.active?.state,
         controlled: navigator.serviceWorker.controller !== null,
         controllerChanges: (window as unknown as { __controllerChanges: number })
           .__controllerChanges,
