@@ -71,6 +71,8 @@
   --size-page: 90rem;
   --size-full: 100%;
   --size-viewport: 100dvh;
+  --size-sign-in-offset: 12vh;
+  --fraction-full: 1fr;
 
   --radius-sm: 0.375rem;
   --radius-md: 0.75rem;

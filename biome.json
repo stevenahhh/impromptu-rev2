@@ -5,6 +5,7 @@
       "**",
       "!.git",
       "!node_modules",
+      "!**/dist",
       "!docs/*.html",
       "!docs/*.pdf",
       "!.omo/boulder.json",

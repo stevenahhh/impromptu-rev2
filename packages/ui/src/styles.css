@@ -252,7 +252,10 @@ a {
 
 .ui-shell__body {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(var(--size-full), var(--size-rail)), 1fr));
+  grid-template-columns: repeat(
+      auto-fit,
+      minmax(min(var(--size-full), var(--size-rail)), var(--fraction-full))
+    );
   gap: var(--space-6);
   align-items: start;
 }

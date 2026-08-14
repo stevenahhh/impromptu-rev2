@@ -1,0 +1,104 @@
+.console-rail {
+  position: sticky;
+  inset-block-start: var(--space-4);
+  display: grid;
+  gap: var(--space-6);
+  padding: var(--space-6);
+  border: var(--size-hairline) solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-inset);
+}
+
+.console-nav {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.console-nav a {
+  padding: var(--space-3) var(--space-4);
+  border: var(--size-hairline) solid var(--color-transparent);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+.console-nav a:hover,
+.console-nav a[aria-current="page"] {
+  color: var(--text-primary);
+  border-color: var(--border-emphasis);
+  background: var(--surface-panel);
+}
+
+.console-content,
+.console-stack {
+  display: grid;
+  gap: var(--space-8);
+}
+
+.console-hero {
+  max-width: var(--size-copy);
+  padding-block: var(--space-8) var(--space-12);
+}
+
+.console-hero h1,
+.console-sign-in h1,
+.console-stack h1 {
+  max-width: var(--size-copy);
+  margin: var(--space-2) var(--space-0) var(--space-5);
+  font-family: var(--font-display);
+  font-size: var(--text-display);
+  font-weight: var(--weight-regular);
+  line-height: var(--line-tight);
+  letter-spacing: var(--tracking-tight);
+}
+
+.console-sign-in h1,
+.console-stack h1 {
+  font-size: var(--text-title);
+}
+
+.console-lead {
+  max-width: var(--size-copy);
+  color: var(--text-secondary);
+  font-size: var(--text-lead);
+}
+
+.console-caption {
+  margin-block: var(--space-5) var(--space-0);
+  color: var(--text-secondary);
+  font-size: var(--text-caption);
+}
+
+.console-action {
+  width: fit-content;
+  margin-block-start: var(--space-4);
+}
+
+.console-grid {
+  display: grid;
+  grid-template-columns: repeat(
+      auto-fit,
+      minmax(min(var(--size-full), var(--size-card-min)), var(--fraction-full))
+    );
+  gap: var(--space-4);
+}
+
+.console-grid p {
+  color: var(--text-secondary);
+}
+
+.console-grid .console-metric {
+  margin: var(--space-0);
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: var(--text-title);
+  line-height: var(--line-title);
+}
+
+.console-sign-in {
+  margin-block-start: clamp(var(--space-4), var(--size-sign-in-offset), var(--space-20));
+}
