@@ -7,6 +7,7 @@
       "!node_modules",
       "!docs/*.html",
       "!docs/*.pdf",
+      "!.omo/boulder.json",
       "!.omo/senpi-task",
       "!.senpi"
     ]
