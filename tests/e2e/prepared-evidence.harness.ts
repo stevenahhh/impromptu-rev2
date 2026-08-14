@@ -512,7 +512,6 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
     const cardEvents: string[] = [];
     const tombstoneLatencies: number[] = [];
     let publicCorrelationMatches = 0;
-    const tombstoneStatuses: string[] = [];
     for (let index = 0; index < 20; index += 1) {
       trace(`card-${index}-start`);
       const candidateId = `candidate_e2e_${index}`;
@@ -613,7 +612,6 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
       await waitTombstone();
       await waitHidden?.();
       tombstoneLatencies.push(performance.now() - startedAt);
-      tombstoneStatuses.push(status);
       cardEvents.push(`${tombstoneRevision}:${status}`);
       trace(`card-${index}-done`);
     }
@@ -643,11 +641,28 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
     await page.reload({ waitUntil: "domcontentloaded" });
     await restoredEventChannel;
     const restoredSnapshotBody = await (await restoredSnapshot).json();
-    if (!isRecord(restoredSnapshotBody) || !Array.isArray(restoredSnapshotBody.cards)) {
+    if (
+      !isRecord(restoredSnapshotBody) ||
+      !Array.isArray(restoredSnapshotBody.cards) ||
+      !Array.isArray(restoredSnapshotBody.tombstones)
+    ) {
       throw new Error("restart snapshot invalid");
     }
     if (restoredSnapshotBody.cards.length !== 0) {
       throw new Error("restart snapshot resurrected revoked content");
+    }
+    const restoredTombstoneStatuses = restoredSnapshotBody.tombstones.map((value) =>
+      isRecord(value) && (value.status === "RETRACTED" || value.status === "EXPIRED")
+        ? value.status
+        : "INVALID",
+    );
+    if (
+      restoredTombstoneStatuses.length !== 20 ||
+      !restoredTombstoneStatuses.includes("RETRACTED") ||
+      !restoredTombstoneStatuses.includes("EXPIRED") ||
+      restoredTombstoneStatuses.includes("INVALID")
+    ) {
+      throw new Error("restart snapshot omitted persisted tombstones");
     }
 
     const waitRestartApplied = await prepareBrowserEvent(page, {
@@ -785,6 +800,7 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
         "ordered-retract-tombstone",
         "ordered-expiry-tombstone",
         "both-mains-restarted",
+        "restart-tombstones-restored",
         "restart-prefix-applied",
         "controller-takeover",
         "old-controller-superseded",
@@ -796,7 +812,7 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
       cardEvents,
       connectedTombstoneLatencyMs: tombstoneLatencies[0] ?? p95,
       reconnectActiveCardCount: snapshotBody.cards.length,
-      reconnectTombstoneStatuses: tombstoneStatuses,
+      reconnectTombstoneStatuses: restoredTombstoneStatuses,
       browserStorageEntries,
       tombstoneP95Ms: p95,
       latencySamples: tombstoneLatencies.length,

@@ -65,6 +65,7 @@ describe("WP3 prepared evidence real-browser E2E", () => {
       "ordered-retract-tombstone",
       "ordered-expiry-tombstone",
       "both-mains-restarted",
+      "restart-tombstones-restored",
       "restart-prefix-applied",
       "controller-takeover",
       "old-controller-superseded",
@@ -79,8 +80,13 @@ describe("WP3 prepared evidence real-browser E2E", () => {
     expect(parsed.appliedCommandPrefix).toEqual(parsed.acceptedCommandPrefix);
     expect(parsed.cardEventCount).toBe(40);
     expect(parsed.reconnectActiveCardCount).toBe(0);
-    expect(parsed.reconnectTombstoneStatuses).toContain("RETRACTED");
-    expect(parsed.reconnectTombstoneStatuses).toContain("EXPIRED");
+    expect(parsed.reconnectTombstoneStatuses).toHaveLength(20);
+    expect(
+      parsed.reconnectTombstoneStatuses.filter((status) => status === "RETRACTED"),
+    ).toHaveLength(19);
+    expect(parsed.reconnectTombstoneStatuses.filter((status) => status === "EXPIRED")).toHaveLength(
+      1,
+    );
     expect(parsed.browserStorageEntries).toBe(0);
     expect(parsed.samples).toBe(20);
     expect(parsed.publicCorrelationMatches).toBe(0);
