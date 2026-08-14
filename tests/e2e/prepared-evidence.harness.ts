@@ -24,10 +24,15 @@ export interface PreparedEvidenceEvidence {
 type ServiceProcess = ChildProcessByStdio<null, Readable, Readable>;
 type JsonRecord = Record<string, unknown>;
 
-const privateOrigin = "http://127.0.0.1:44201";
-const projectionOrigin = "http://127.0.0.1:44202";
-const consoleOrigin = "http://127.0.0.1:44273";
-const stageOrigin = "http://127.0.0.1:44274";
+const portBase = 40_000 + (process.pid % 500) * 10;
+const privatePort = portBase;
+const projectionPort = portBase + 1;
+const stagePort = portBase + 2;
+const chromeDebugPort = portBase + 3;
+const privateOrigin = `http://127.0.0.1:${privatePort}`;
+const projectionOrigin = `http://127.0.0.1:${projectionPort}`;
+const consoleOrigin = `http://127.0.0.1:${portBase + 4}`;
+const stageOrigin = `http://127.0.0.1:${stagePort}`;
 const serviceToken = "prepared-evidence-real-e2e-token";
 const chromeExecutable = "C:/Program Files/Google/Chrome/Application/chrome.exe";
 
@@ -349,16 +354,22 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
   let chromeProcess: ServiceProcess | null = null;
   let chromeExited: Promise<unknown[]> | null = null;
   const temporaryRoot = process.env.TEMP ?? process.cwd();
-  const profilePath = join(temporaryRoot, "impromptu-r2-wp3-clean-stage");
-  const privateSnapshotPath = join(temporaryRoot, "impromptu-r2-wp3-private-snapshot.json");
-  const projectionDatabasePath = join(temporaryRoot, "impromptu-r2-wp3-projection-database.json");
+  const profilePath = join(temporaryRoot, `impromptu-r2-wp3-clean-stage-${process.pid}`);
+  const privateSnapshotPath = join(
+    temporaryRoot,
+    `impromptu-r2-wp3-private-snapshot-${process.pid}.json`,
+  );
+  const projectionDatabasePath = join(
+    temporaryRoot,
+    `impromptu-r2-wp3-projection-database-${process.pid}.json`,
+  );
   rmSync(profilePath, { force: true, recursive: true });
   rmSync(privateSnapshotPath, { force: true });
   rmSync(projectionDatabasePath, { force: true });
   const projectionEnvironment = {
     PRIVATE_BACKEND_ORIGIN: privateOrigin,
     PROJECTION_GATEWAY_HOST: "127.0.0.1",
-    PROJECTION_GATEWAY_PORT: "44202",
+    PROJECTION_GATEWAY_PORT: String(projectionPort),
     PROJECTION_DATABASE_PATH: projectionDatabasePath,
     SERVICE_AUTH_TOKEN: serviceToken,
     STAGE_ORIGIN: stageOrigin,
@@ -371,7 +382,7 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
     TAKEOVER_ACTOR_ID: "actor_e2e_takeover",
     TAKEOVER_AUTHORIZATION_CODE: "e2e-takeover-code",
     PRIVATE_BACKEND_HOST: "127.0.0.1",
-    PRIVATE_BACKEND_PORT: "44201",
+    PRIVATE_BACKEND_PORT: String(privatePort),
     PRIVATE_SNAPSHOT_PATH: privateSnapshotPath,
     PROJECTION_GATEWAY_ORIGIN: projectionOrigin,
     SERVICE_AUTH_TOKEN: serviceToken,
@@ -393,7 +404,10 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
     processes.push(
       await startProcess(
         ["bun", "run", "tests/e2e/stage-origin.ts"],
-        { PROJECTION_GATEWAY_ORIGIN: projectionOrigin },
+        {
+          PROJECTION_GATEWAY_ORIGIN: projectionOrigin,
+          TOPOLOGY_STAGE_PORT: String(stagePort),
+        },
         "stage-origin listening",
       ),
     );
@@ -445,7 +459,7 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
         chromeExecutable,
         "--headless=new",
         "--no-first-run",
-        "--remote-debugging-port=44275",
+        `--remote-debugging-port=${chromeDebugPort}`,
         "--remote-allow-origins=*",
         `--user-data-dir=${profilePath}`,
         "about:blank",
@@ -457,7 +471,7 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
     );
     chromeExited = once(chromeProcess, "exit");
     processes.push(chromeProcess);
-    browser = await chromium.connectOverCDP("http://127.0.0.1:44275");
+    browser = await chromium.connectOverCDP(`http://127.0.0.1:${chromeDebugPort}`);
     context = browser.contexts()[0] ?? null;
     if (context === null) throw new Error("Chrome did not expose its clean profile context");
     trace("chrome-ready");
