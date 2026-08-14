@@ -295,6 +295,24 @@ async function readServiceWorkerReleasePin(page: Page) {
       ...pin,
       scriptCohort: new URL(worker.scriptURL).searchParams.get("cohort"),
     };
+
+
+async function waitForUpdateCoordinator(page: Page) {
+  return page.evaluate(async () => {
+    if (Reflect.get(window, "__impromptuUpdateCoordinatorReady") === true) return;
+    await new Promise<void>((resolve, reject) => {
+      const signal = AbortSignal.timeout(10_000);
+      const ready = () => {
+        signal.removeEventListener("abort", aborted);
+        resolve();
+      };
+      const aborted = () => {
+        window.removeEventListener("impromptu:update-coordinator-ready", ready);
+        reject(new Error("Update coordinator readiness timed out"));
+      };
+      window.addEventListener("impromptu:update-coordinator-ready", ready, { once: true });
+      signal.addEventListener("abort", aborted, { once: true });
+    });
   });
 }
 
@@ -402,6 +420,7 @@ async function verifyUpdateLifecycle(surface: AppSurface, index: number) {
     ) {
       throw new Error(`${surface.app} first worker did not retain its cohort after refresh`);
     }
+    await waitForUpdateCoordinator(page);
 
     await page.evaluate(() => {
       window.dispatchEvent(new CustomEvent("impromptu:presentation-session-started"));

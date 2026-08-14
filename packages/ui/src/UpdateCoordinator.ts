@@ -3,6 +3,7 @@ const ACTIVATION_ACCEPTED_MESSAGE = "IMPROMPTU_UPDATE_ACTIVATION_ACCEPTED" as co
 
 export const UPDATE_EVENTS = {
   activationFailed: "impromptu:update-activation-failed",
+  coordinatorReady: "impromptu:update-coordinator-ready",
   operatorConfirmed: "impromptu:update-operator-confirmed",
   sessionEnded: "impromptu:presentation-session-ended",
   sessionStarted: "impromptu:presentation-session-started",

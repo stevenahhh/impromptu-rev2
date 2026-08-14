@@ -29,7 +29,7 @@
     "test:db": "bash tests/database/run.sh",
     "test:db:harness": "bash tests/database/harness-behavior.sh && bash tests/database/signal-cleanup.sh",
     "test:db:concurrent": "bash tests/database/concurrent-projects.sh",
-    "check": "bun run check:repo && bun run check:boundaries && bun run check:browser && bun run check:browser-boundary && bun run lint && bun run typecheck && bun run test && bun run build && bun run check:browser-runtime",
+    "check": "bun run check:repo && bun run check:boundaries && bun run build && bun run check:browser && bun run check:browser-boundary && bun run lint && bun run typecheck && bun run test && bun run check:browser-runtime",
     "test:retrieval": "bun test services/private-backend/test/internal-retrieval.test.ts services/private-backend/test/external-fetch.test.ts services/private-backend/test/recommendation-pipeline.test.ts services/private-backend/test/private-recommendation-http.test.ts",
     "test:security": "bun test tests/security",
     "test:private-latency": "bun test services/private-backend/test/private-recommendation-http.test.ts",

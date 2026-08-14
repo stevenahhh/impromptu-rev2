@@ -16,5 +16,15 @@ export function registerStageServiceWorker() {
   void updateCoordinator.register(`/sw.js?cohort=${cohort}`).catch((error: unknown) => {
     window.dispatchEvent(new CustomEvent(UPDATE_EVENTS.activationFailed, { detail: error }));
   });
+
+  void updateCoordinator
+    .register("/sw.js")
+    .then(() => {
+      Reflect.set(window, "__impromptuUpdateCoordinatorReady", true);
+      window.dispatchEvent(new CustomEvent(UPDATE_EVENTS.coordinatorReady));
+    })
+    .catch((error: unknown) => {
+      window.dispatchEvent(new CustomEvent(UPDATE_EVENTS.activationFailed, { detail: error }));
+    });
   return updateCoordinator;
 }
