@@ -107,9 +107,16 @@ for (let run = 1; run <= runs; run += 1) {
 
 const result = evidence(records);
 if (runs === 10) {
-  await Bun.write(
-    "tests/evidence/wp10-aggregate-runs.json",
-    `${JSON.stringify(result, null, 2)}\n`,
-  );
+  const evidencePath = "tests/evidence/wp10-aggregate-runs.json";
+  await Bun.write(evidencePath, `${JSON.stringify(result, null, 2)}\n`);
+  const formatter = Bun.spawn({
+    cmd: ["bunx", "biome", "format", "--write", evidencePath],
+    cwd: process.cwd(),
+    stdin: "ignore",
+    stdout: "ignore",
+    stderr: "inherit",
+  });
+  const formatterExitCode = await formatter.exited;
+  if (formatterExitCode !== 0) throw new Error("aggregate evidence formatting failed");
 }
 console.log(JSON.stringify(result));

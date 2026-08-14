@@ -10,20 +10,10 @@
         "completed": 4,
         "total": 4,
         "percent": 100,
-        "tasks": [
-          "setup",
-          "publish",
-          "retract",
-          "recovery"
-        ]
+        "tasks": ["setup", "publish", "retract", "recovery"]
       },
       "privacyCriticalMistakes": 0,
-      "suites": [
-        "full-check",
-        "e2e",
-        "topology",
-        "soak"
-      ]
+      "suites": ["full-check", "e2e", "topology", "soak"]
     },
     {
       "run": 2,
@@ -32,20 +22,10 @@
         "completed": 4,
         "total": 4,
         "percent": 100,
-        "tasks": [
-          "setup",
-          "publish",
-          "retract",
-          "recovery"
-        ]
+        "tasks": ["setup", "publish", "retract", "recovery"]
       },
       "privacyCriticalMistakes": 0,
-      "suites": [
-        "full-check",
-        "e2e",
-        "topology",
-        "soak"
-      ]
+      "suites": ["full-check", "e2e", "topology", "soak"]
     },
     {
       "run": 3,
@@ -54,20 +34,10 @@
         "completed": 4,
         "total": 4,
         "percent": 100,
-        "tasks": [
-          "setup",
-          "publish",
-          "retract",
-          "recovery"
-        ]
+        "tasks": ["setup", "publish", "retract", "recovery"]
       },
       "privacyCriticalMistakes": 0,
-      "suites": [
-        "full-check",
-        "e2e",
-        "topology",
-        "soak"
-      ]
+      "suites": ["full-check", "e2e", "topology", "soak"]
     },
     {
       "run": 4,
@@ -76,20 +46,10 @@
         "completed": 4,
         "total": 4,
         "percent": 100,
-        "tasks": [
-          "setup",
-          "publish",
-          "retract",
-          "recovery"
-        ]
+        "tasks": ["setup", "publish", "retract", "recovery"]
       },
       "privacyCriticalMistakes": 0,
-      "suites": [
-        "full-check",
-        "e2e",
-        "topology",
-        "soak"
-      ]
+      "suites": ["full-check", "e2e", "topology", "soak"]
     },
     {
       "run": 5,
@@ -98,20 +58,10 @@
         "completed": 4,
         "total": 4,
         "percent": 100,
-        "tasks": [
-          "setup",
-          "publish",
-          "retract",
-          "recovery"
-        ]
+        "tasks": ["setup", "publish", "retract", "recovery"]
       },
       "privacyCriticalMistakes": 0,
-      "suites": [
-        "full-check",
-        "e2e",
-        "topology",
-        "soak"
-      ]
+      "suites": ["full-check", "e2e", "topology", "soak"]
     },
     {
       "run": 6,
@@ -120,20 +70,10 @@
         "completed": 4,
         "total": 4,
         "percent": 100,
-        "tasks": [
-          "setup",
-          "publish",
-          "retract",
-          "recovery"
-        ]
+        "tasks": ["setup", "publish", "retract", "recovery"]
       },
       "privacyCriticalMistakes": 0,
-      "suites": [
-        "full-check",
-        "e2e",
-        "topology",
-        "soak"
-      ]
+      "suites": ["full-check", "e2e", "topology", "soak"]
     },
     {
       "run": 7,
@@ -142,20 +82,10 @@
         "completed": 4,
         "total": 4,
         "percent": 100,
-        "tasks": [
-          "setup",
-          "publish",
-          "retract",
-          "recovery"
-        ]
+        "tasks": ["setup", "publish", "retract", "recovery"]
       },
       "privacyCriticalMistakes": 0,
-      "suites": [
-        "full-check",
-        "e2e",
-        "topology",
-        "soak"
-      ]
+      "suites": ["full-check", "e2e", "topology", "soak"]
     },
     {
       "run": 8,
@@ -164,20 +94,10 @@
         "completed": 4,
         "total": 4,
         "percent": 100,
-        "tasks": [
-          "setup",
-          "publish",
-          "retract",
-          "recovery"
-        ]
+        "tasks": ["setup", "publish", "retract", "recovery"]
       },
       "privacyCriticalMistakes": 0,
-      "suites": [
-        "full-check",
-        "e2e",
-        "topology",
-        "soak"
-      ]
+      "suites": ["full-check", "e2e", "topology", "soak"]
     },
     {
       "run": 9,
@@ -186,20 +106,10 @@
         "completed": 4,
         "total": 4,
         "percent": 100,
-        "tasks": [
-          "setup",
-          "publish",
-          "retract",
-          "recovery"
-        ]
+        "tasks": ["setup", "publish", "retract", "recovery"]
       },
       "privacyCriticalMistakes": 0,
-      "suites": [
-        "full-check",
-        "e2e",
-        "topology",
-        "soak"
-      ]
+      "suites": ["full-check", "e2e", "topology", "soak"]
     },
     {
       "run": 10,
@@ -208,20 +118,10 @@
         "completed": 4,
         "total": 4,
         "percent": 100,
-        "tasks": [
-          "setup",
-          "publish",
-          "retract",
-          "recovery"
-        ]
+        "tasks": ["setup", "publish", "retract", "recovery"]
       },
       "privacyCriticalMistakes": 0,
-      "suites": [
-        "full-check",
-        "e2e",
-        "topology",
-        "soak"
-      ]
+      "suites": ["full-check", "e2e", "topology", "soak"]
     }
   ],
   "totals": {
