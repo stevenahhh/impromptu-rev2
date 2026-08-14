@@ -1,0 +1,75 @@
+[
+  {
+    "tenantId": "10000000-0000-4000-8000-000000000001",
+    "dispatchKey": "30000000-0000-4000-8000-000000000001",
+    "projectionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "eventKind": "upsert_projection",
+    "publicPayload": {
+      "presentationSessionEpoch": 7,
+      "displayBindingEpoch": 3,
+      "deckVersion": 4,
+      "manifestHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "currentSlideKey": null,
+      "occurrenceSeq": null,
+      "state": "bound",
+      "revision": 1
+    }
+  },
+  {
+    "tenantId": "10000000-0000-4000-8000-000000000001",
+    "dispatchKey": "30000000-0000-4000-8000-000000000002",
+    "projectionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "eventKind": "upsert_projection",
+    "publicPayload": {
+      "presentationSessionEpoch": 7,
+      "displayBindingEpoch": 3,
+      "deckVersion": 4,
+      "manifestHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "currentSlideKey": "slide-public-2",
+      "occurrenceSeq": 1,
+      "state": "active",
+      "revision": 2
+    }
+  },
+  {
+    "tenantId": "10000000-0000-4000-8000-000000000001",
+    "dispatchKey": "30000000-0000-4000-8000-000000000003",
+    "projectionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "eventKind": "publish_card",
+    "publicPayload": {
+      "cardId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "cardVersion": 1,
+      "publicSlideKey": "slide-public-2",
+      "occurrenceSeq": 1,
+      "title": "Public evidence",
+      "body": "Audience-safe body",
+      "sourceLabel": "Public source",
+      "canonicalUrl": "https://example.test/evidence",
+      "publishedAt": "2026-08-14T08:00:00Z",
+      "expiresAt": "2026-08-14T09:00:00Z",
+      "revision": 3
+    }
+  },
+  {
+    "tenantId": "10000000-0000-4000-8000-000000000001",
+    "dispatchKey": "30000000-0000-4000-8000-000000000004",
+    "projectionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "eventKind": "retract_card",
+    "publicPayload": {
+      "cardId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "cardVersion": 1,
+      "retractedAt": "2026-08-14T08:15:00Z",
+      "revision": 4
+    }
+  },
+  {
+    "tenantId": "10000000-0000-4000-8000-000000000001",
+    "dispatchKey": "30000000-0000-4000-8000-000000000005",
+    "projectionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "eventKind": "end_projection",
+    "publicPayload": {
+      "endedAt": "2026-08-14T08:30:00Z",
+      "revision": 5
+    }
+  }
+]
