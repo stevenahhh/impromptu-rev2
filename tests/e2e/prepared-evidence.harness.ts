@@ -89,8 +89,9 @@ async function startProcess(
     await waitForOutput(output === "stdout" ? process.stdout : process.stderr, expectedOutput);
     return process;
   } catch (error) {
+    const exited = once(process, "exit", { signal: AbortSignal.timeout(5_000) });
     process.kill();
-    await once(process, "exit", { signal: AbortSignal.timeout(5_000) });
+    await exited;
     throw error;
   }
 }
@@ -110,9 +111,10 @@ async function runCommand(command: readonly string[], cwd?: string): Promise<voi
 }
 
 async function stopProcess(process: ServiceProcess): Promise<void> {
-  if (process.exitCode !== null) return;
+  if (process.exitCode !== null || process.signalCode !== null) return;
+  const exited = once(process, "exit", { signal: AbortSignal.timeout(5_000) });
   process.kill();
-  await once(process, "exit", { signal: AbortSignal.timeout(5_000) });
+  await exited;
 }
 
 async function jsonRecord(response: Response): Promise<JsonRecord> {
@@ -170,6 +172,7 @@ interface BrowserEventCriteria {
   readonly name: string;
   readonly status?: string;
   readonly revision?: string;
+  readonly commandId?: string;
 }
 
 async function prepareBrowserEvent(
@@ -182,12 +185,17 @@ async function prepareBrowserEvent(
     ({ criteria: expected, timeout, waiterId: id }) => {
       const matches = (detail: unknown) => {
         if (typeof detail !== "object" || detail === null) {
-          return expected.status === undefined && expected.revision === undefined;
+          return (
+            expected.status === undefined &&
+            expected.revision === undefined &&
+            expected.commandId === undefined
+          );
         }
         const candidate = detail as Record<string, unknown>;
         return (
           (expected.status === undefined || candidate.status === expected.status) &&
-          (expected.revision === undefined || candidate.publicCardRevision === expected.revision)
+          (expected.revision === undefined || candidate.publicCardRevision === expected.revision) &&
+          (expected.commandId === undefined || candidate.commandId === expected.commandId)
         );
       };
       const buffered = Reflect.get(window, "__impromptuEventBuffer") as Array<{
@@ -301,6 +309,23 @@ function requireString(record: JsonRecord, key: string): string {
   return value;
 }
 
+async function readStreamChunk(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  timeoutMs = 5_000,
+): Promise<string> {
+  const signal = AbortSignal.timeout(timeoutMs);
+  const next = await Promise.race([
+    reader.read(),
+    new Promise<never>((_resolve, reject) => {
+      signal.addEventListener("abort", () => reject(new Error("stream event timeout")), {
+        once: true,
+      });
+    }),
+  ]);
+  if (next.done) throw new Error("stream closed before expected event");
+  return new TextDecoder().decode(next.value);
+}
+
 function percentile95(samples: readonly number[]): number {
   const ordered = [...samples].sort((left, right) => left - right);
   const value = ordered[Math.max(0, Math.ceil(ordered.length * 0.95) - 1)];
@@ -319,38 +344,40 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
   rmSync(profilePath, { force: true, recursive: true });
   rmSync(privateSnapshotPath, { force: true });
   rmSync(projectionDatabasePath, { force: true });
+  const projectionEnvironment = {
+    PRIVATE_BACKEND_ORIGIN: privateOrigin,
+    PROJECTION_GATEWAY_HOST: "127.0.0.1",
+    PROJECTION_GATEWAY_PORT: "44202",
+    PROJECTION_DATABASE_PATH: projectionDatabasePath,
+    SERVICE_AUTH_TOKEN: serviceToken,
+    STAGE_ORIGIN: stageOrigin,
+  };
+  const privateEnvironment = {
+    CONSOLE_ORIGIN: consoleOrigin,
+    CONTROLLER_ACCOUNT_ID: "account_e2e",
+    CONTROLLER_ACTOR_ID: "actor_e2e",
+    CONTROLLER_AUTHORIZATION_CODE: "e2e-code",
+    TAKEOVER_ACTOR_ID: "actor_e2e_takeover",
+    TAKEOVER_AUTHORIZATION_CODE: "e2e-takeover-code",
+    PRIVATE_BACKEND_HOST: "127.0.0.1",
+    PRIVATE_BACKEND_PORT: "44201",
+    PRIVATE_SNAPSHOT_PATH: privateSnapshotPath,
+    PROJECTION_GATEWAY_ORIGIN: projectionOrigin,
+    SERVICE_AUTH_TOKEN: serviceToken,
+  };
   try {
-    processes.push(
-      await startProcess(
-        ["bun", "run", "services/projection-gateway/src/main.ts"],
-        {
-          PRIVATE_BACKEND_ORIGIN: privateOrigin,
-          PROJECTION_GATEWAY_HOST: "127.0.0.1",
-          PROJECTION_GATEWAY_PORT: "44202",
-          PROJECTION_DATABASE_PATH: projectionDatabasePath,
-          SERVICE_AUTH_TOKEN: serviceToken,
-          STAGE_ORIGIN: stageOrigin,
-        },
-        "projection-gateway listening",
-      ),
+    let projectionProcess = await startProcess(
+      ["bun", "run", "services/projection-gateway/src/main.ts"],
+      projectionEnvironment,
+      "projection-gateway listening",
     );
-    processes.push(
-      await startProcess(
-        ["bun", "run", "services/private-backend/src/main.ts"],
-        {
-          CONSOLE_ORIGIN: consoleOrigin,
-          CONTROLLER_ACCOUNT_ID: "account_e2e",
-          CONTROLLER_ACTOR_ID: "actor_e2e",
-          CONTROLLER_AUTHORIZATION_CODE: "e2e-code",
-          PRIVATE_BACKEND_HOST: "127.0.0.1",
-          PRIVATE_BACKEND_PORT: "44201",
-          PRIVATE_SNAPSHOT_PATH: privateSnapshotPath,
-          PROJECTION_GATEWAY_ORIGIN: projectionOrigin,
-          SERVICE_AUTH_TOKEN: serviceToken,
-        },
-        "private-backend listening",
-      ),
+    processes.push(projectionProcess);
+    let privateProcess = await startProcess(
+      ["bun", "run", "services/private-backend/src/main.ts"],
+      privateEnvironment,
+      "private-backend listening",
     );
+    processes.push(privateProcess);
     await runCommand(["bun", "run", "build"], "apps/stage");
     processes.push(
       await startProcess(
@@ -460,7 +487,10 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
     await page.getByRole("button", { name: "Continue after approval" }).click();
     await eventChannel;
     trace("event-channel-ready");
-    const waitApplied = await prepareBrowserEvent(page, { name: "impromptu:playback-applied" });
+    const waitApplied = await prepareBrowserEvent(page, {
+      name: "impromptu:playback-applied",
+      commandId: "cmd_e2e_absolute",
+    });
     const slideSet = await privateMutation(
       "/v1/playback/slide-set",
       {
@@ -476,6 +506,8 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
     const appliedReceipt = await waitApplied();
     trace("playback-applied");
     if (!isRecord(appliedReceipt)) throw new Error("browser applied receipt invalid");
+    const acceptedCommandIds = [requireString(slideSet, "commandId")];
+    const appliedCommandIds = [requireString(appliedReceipt, "commandId")];
 
     const cardEvents: string[] = [];
     const tombstoneLatencies: number[] = [];
@@ -586,6 +618,139 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
       trace(`card-${index}-done`);
     }
 
+    await stopProcess(privateProcess);
+    await stopProcess(projectionProcess);
+    projectionProcess = await startProcess(
+      ["bun", "run", "services/projection-gateway/src/main.ts"],
+      projectionEnvironment,
+      "projection-gateway listening",
+    );
+    processes.push(projectionProcess);
+    privateProcess = await startProcess(
+      ["bun", "run", "services/private-backend/src/main.ts"],
+      privateEnvironment,
+      "private-backend listening",
+    );
+    processes.push(privateProcess);
+    const restoredEventChannel = page.waitForResponse(
+      (response) => response.url().endsWith("/v1/events") && response.status() === 200,
+      { timeout: 5_000 },
+    );
+    const restoredSnapshot = page.waitForResponse(
+      (response) => response.url().endsWith("/v1/snapshot") && response.status() === 200,
+      { timeout: 5_000 },
+    );
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await restoredEventChannel;
+    const restoredSnapshotBody = await (await restoredSnapshot).json();
+    if (!isRecord(restoredSnapshotBody) || !Array.isArray(restoredSnapshotBody.cards)) {
+      throw new Error("restart snapshot invalid");
+    }
+    if (restoredSnapshotBody.cards.length !== 0) {
+      throw new Error("restart snapshot resurrected revoked content");
+    }
+
+    const waitRestartApplied = await prepareBrowserEvent(page, {
+      name: "impromptu:playback-applied",
+      commandId: "cmd_after_restart",
+    });
+    const restartCommand = await privateMutation(
+      "/v1/playback/slide-set",
+      {
+        presentationSessionId,
+        commandId: "cmd_after_restart",
+        publicSlideKey,
+        displayBindingEpoch: "dbe_1",
+        baseRevision: "cr_1",
+      },
+      csrfToken,
+      cookie,
+    );
+    const restartApplied = await waitRestartApplied();
+    if (!isRecord(restartApplied)) throw new Error("restart receipt invalid");
+    acceptedCommandIds.push(requireString(restartCommand, "commandId"));
+    appliedCommandIds.push(requireString(restartApplied, "commandId"));
+
+    const oldControllerEvents = await fetch(
+      `${privateOrigin}/v1/playback/controller-events?presentationSessionId=${encodeURIComponent(presentationSessionId)}`,
+      { headers: { cookie, origin: consoleOrigin } },
+    );
+    if (!oldControllerEvents.ok || oldControllerEvents.body === null) {
+      throw new Error("old controller event channel failed");
+    }
+    const oldControllerReader = oldControllerEvents.body.getReader();
+    const readyFrame = await readStreamChunk(oldControllerReader);
+    if (!readyFrame.includes(": ready")) throw new Error("controller channel did not become ready");
+
+    const takeoverSignIn = await fetch(`${privateOrigin}/v1/account-sessions`, {
+      method: "POST",
+      headers: browserHeaders(),
+      body: JSON.stringify({ authorizationCode: "e2e-takeover-code" }),
+    });
+    const takeoverSignInBody = await jsonRecord(takeoverSignIn);
+    const takeoverCookie = takeoverSignIn.headers.get("set-cookie")?.split(";", 1)[0];
+    const takeoverCsrf = requireString(takeoverSignInBody, "csrfToken");
+    if (!takeoverSignIn.ok || takeoverCookie === undefined) {
+      throw new Error("takeover controller sign-in failed");
+    }
+    const wrongEpochTakeover = await fetch(`${privateOrigin}/v1/playback/lease-takeover`, {
+      method: "POST",
+      headers: browserHeaders(takeoverCsrf, takeoverCookie),
+      body: JSON.stringify({
+        presentationSessionId,
+        expectedDisplayBindingEpoch: "dbe_0",
+      }),
+    });
+    if (wrongEpochTakeover.status !== 409) throw new Error("wrong binding epoch was accepted");
+
+    const waitOldControllerClose = readStreamChunk(oldControllerReader);
+    const takeover = await privateMutation(
+      "/v1/playback/lease-takeover",
+      { presentationSessionId, expectedDisplayBindingEpoch: "dbe_1" },
+      takeoverCsrf,
+      takeoverCookie,
+    );
+    const closeFrame = await waitOldControllerClose;
+    if (!closeFrame.includes('"reason":"SUPERSEDED"')) {
+      throw new Error("old controller channel did not close as superseded");
+    }
+    if (!isRecord(takeover.lease) || takeover.lease.controllerEpoch !== "ce_2") {
+      throw new Error("takeover did not advance the controller epoch");
+    }
+    const oldControllerCommand = await fetch(`${privateOrigin}/v1/playback/slide-set`, {
+      method: "POST",
+      headers: browserHeaders(csrfToken, cookie),
+      body: JSON.stringify({
+        presentationSessionId,
+        commandId: "cmd_rejected_old_controller",
+        publicSlideKey,
+        displayBindingEpoch: "dbe_1",
+        baseRevision: "cr_2",
+      }),
+    });
+    if (oldControllerCommand.status !== 409) throw new Error("old controller retained authority");
+
+    const waitTakeoverApplied = await prepareBrowserEvent(page, {
+      name: "impromptu:playback-applied",
+      commandId: "cmd_after_takeover",
+    });
+    const takeoverCommand = await privateMutation(
+      "/v1/playback/slide-set",
+      {
+        presentationSessionId,
+        commandId: "cmd_after_takeover",
+        publicSlideKey,
+        displayBindingEpoch: "dbe_1",
+        baseRevision: "cr_2",
+      },
+      takeoverCsrf,
+      takeoverCookie,
+    );
+    const takeoverApplied = await waitTakeoverApplied();
+    if (!isRecord(takeoverApplied)) throw new Error("takeover receipt invalid");
+    acceptedCommandIds.push(requireString(takeoverCommand, "commandId"));
+    appliedCommandIds.push(requireString(takeoverApplied, "commandId"));
+
     const reconnectSnapshot = page.waitForResponse(
       (response) => response.url().endsWith("/v1/snapshot") && response.status() === 200,
       { timeout: 5_000 },
@@ -603,8 +768,6 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
     const browserStorageEntries = await page.evaluate(
       () => window.localStorage.length + window.sessionStorage.length,
     );
-    const acceptedCommandId = requireString(slideSet, "commandId");
-    const appliedCommandId = requireString(appliedReceipt, "commandId");
     const p95 = percentile95(tombstoneLatencies);
     return {
       milestones: [
@@ -621,10 +784,15 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
         "published-card-visible",
         "ordered-retract-tombstone",
         "ordered-expiry-tombstone",
+        "both-mains-restarted",
+        "restart-prefix-applied",
+        "controller-takeover",
+        "old-controller-superseded",
+        "takeover-prefix-applied",
         "reconnect-snapshot",
       ],
-      acceptedCommandIds: [acceptedCommandId],
-      appliedCommandIds: [appliedCommandId],
+      acceptedCommandIds,
+      appliedCommandIds,
       cardEvents,
       connectedTombstoneLatencyMs: tombstoneLatencies[0] ?? p95,
       reconnectActiveCardCount: snapshotBody.cards.length,

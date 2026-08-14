@@ -64,7 +64,17 @@ describe("WP3 prepared evidence real-browser E2E", () => {
       "published-card-visible",
       "ordered-retract-tombstone",
       "ordered-expiry-tombstone",
+      "both-mains-restarted",
+      "restart-prefix-applied",
+      "controller-takeover",
+      "old-controller-superseded",
+      "takeover-prefix-applied",
       "reconnect-snapshot",
+    ]);
+    expect(parsed.acceptedCommandPrefix).toEqual([
+      "cmd_e2e_absolute",
+      "cmd_after_restart",
+      "cmd_after_takeover",
     ]);
     expect(parsed.appliedCommandPrefix).toEqual(parsed.acceptedCommandPrefix);
     expect(parsed.cardEventCount).toBe(40);
