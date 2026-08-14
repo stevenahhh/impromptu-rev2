@@ -388,6 +388,7 @@ export class PreparedEvidenceCoordinator {
           reduction.receipt.status === "REJECTED" ? reduction.receipt.reason : "COMMAND_REJECTED",
       };
     }
+    authorized.value.playback = reduction.state;
     if (
       !this.#projection.projectPlayback(input.presentationSessionId, {
         commandId: reduction.effect.commandId,
@@ -397,9 +398,9 @@ export class PreparedEvidenceCoordinator {
         blackout: reduction.effect.blackout,
       })
     ) {
+      authorized.value.playback = playback;
       return { outcome: "REJECTED", reason: "PROJECTION_REJECTED" };
     }
-    authorized.value.playback = reduction.state;
     return { outcome: "APPLIED", value: reduction.receipt };
   }
 

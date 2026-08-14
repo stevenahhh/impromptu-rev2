@@ -8,6 +8,8 @@
         "@biomejs/biome": "2.2.0",
         "@happy-dom/global-registrator": "18.0.1",
         "@impromptu/contracts": "workspace:*",
+        "@impromptu/private-backend": "workspace:*",
+        "@impromptu/projection-gateway": "workspace:*",
         "@impromptu/state": "workspace:*",
         "@impromptu/test-harness": "workspace:*",
         "@testing-library/dom": "10.4.1",
