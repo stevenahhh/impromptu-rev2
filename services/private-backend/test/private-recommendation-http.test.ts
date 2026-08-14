@@ -179,60 +179,69 @@ async function httpHarness(pendingEmbedding = false) {
       recommendations: pipeline,
     },
   );
-  const signIn = await handler(
-    new Request("https://private.example.test/v1/account-sessions", {
-      method: "POST",
-      headers: { origin, referer: `${origin}/`, "content-type": "application/json" },
-      body: JSON.stringify({ authorizationCode: "code" }),
-    }),
-  );
+  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: handler });
+  const serviceOrigin = server.url.origin;
+  const signIn = await fetch(`${serviceOrigin}/v1/account-sessions`, {
+    method: "POST",
+    headers: { origin, referer: `${origin}/`, "content-type": "application/json" },
+    body: JSON.stringify({ authorizationCode: "code" }),
+  });
   const cookie = signIn.headers.get("set-cookie")?.split(";", 1)[0];
   const session = await signIn.json();
   if (cookie === undefined || typeof session.csrfToken !== "string")
     throw new Error("sign-in failed");
   const recommend = () =>
-    handler(
-      new Request("https://private.example.test/v1/recommendations", {
-        method: "POST",
-        headers: {
-          origin,
-          referer: `${origin}/`,
-          cookie,
-          "content-type": "application/json",
-          "x-csrf-token": session.csrfToken,
-        },
-        body: JSON.stringify(recommendationRequest),
-      }),
-    );
-  return { recommend };
+    fetch(`${serviceOrigin}/v1/recommendations`, {
+      method: "POST",
+      headers: {
+        origin,
+        referer: `${origin}/`,
+        cookie,
+        "content-type": "application/json",
+        "x-csrf-token": session.csrfToken,
+      },
+      body: JSON.stringify(recommendationRequest),
+    });
+  return {
+    recommend,
+    async close() {
+      await server.stop(true);
+    },
+  };
 }
 
-test("real private HTTP recommendation chain meets p95 and wall-clock terminal deadline", async () => {
+test("real loopback TCP recommendation chain meets p95 and wall-clock terminal deadline", async () => {
   const harness = await httpHarness();
-  const latencies: number[] = [];
-  for (let index = 0; index < 100; index += 1) {
-    const startedAtMs = performance.now();
-    const response = await harness.recommend();
-    latencies.push(performance.now() - startedAtMs);
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ outcome: "RECOMMEND" });
-  }
-  latencies.sort((left, right) => left - right);
-  const p95 = latencies[94];
-  if (p95 === undefined) throw new Error("missing p95 sample");
-  console.log(JSON.stringify({ privateRecommendationHttpP95Ms: Number(p95.toFixed(3)) }));
-  expect(p95).toBeLessThanOrEqual(5_000);
+  let pending: Awaited<ReturnType<typeof httpHarness>> | undefined;
+  try {
+    const latencies: number[] = [];
+    for (let index = 0; index < 100; index += 1) {
+      const startedAtMs = performance.now();
+      const response = await harness.recommend();
+      latencies.push(performance.now() - startedAtMs);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ outcome: "RECOMMEND" });
+    }
+    latencies.sort((left, right) => left - right);
+    const p95 = latencies[94];
+    if (p95 === undefined) throw new Error("missing p95 sample");
+    console.log(JSON.stringify({ privateRecommendationTcpP95Ms: Number(p95.toFixed(3)) }));
+    expect(p95).toBeLessThanOrEqual(5_000);
 
-  const pending = await httpHarness(true);
-  const deadlineStartedAtMs = performance.now();
-  const terminal = await pending.recommend();
-  const deadlineWallMs = performance.now() - deadlineStartedAtMs;
-  expect(await terminal.json()).toMatchObject({
-    outcome: "ABSTAIN",
-    reason: "DEADLINE_EXCEEDED",
-  });
-  console.log(
-    JSON.stringify({ privateRecommendationDeadlineWallMs: Number(deadlineWallMs.toFixed(3)) }),
-  );
-  expect(deadlineWallMs).toBeLessThan(5_000);
+    pending = await httpHarness(true);
+    const deadlineStartedAtMs = performance.now();
+    const terminal = await pending.recommend();
+    const deadlineWallMs = performance.now() - deadlineStartedAtMs;
+    expect(await terminal.json()).toMatchObject({
+      outcome: "ABSTAIN",
+      reason: "DEADLINE_EXCEEDED",
+    });
+    console.log(
+      JSON.stringify({ privateRecommendationTcpDeadlineWallMs: Number(deadlineWallMs.toFixed(3)) }),
+    );
+    expect(deadlineWallMs).toBeLessThan(5_000);
+  } finally {
+    await pending?.close();
+    await harness.close();
+  }
 }, 7_000);
