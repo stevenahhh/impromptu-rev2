@@ -125,13 +125,27 @@ SELECT pg_temp.assert_true(
   'publication_dispatcher must write only through the idempotent function'
 );
 SELECT pg_temp.assert_true(
+  has_function_privilege(
+    'retention_worker',
+    'public_projection.apply_retention(uuid,timestamptz)',
+    'EXECUTE'
+  )
+    AND NOT has_table_privilege(
+      'retention_worker',
+      'public_projection.projection_sessions',
+      'SELECT,INSERT,UPDATE,DELETE'
+    ),
+  'retention worker must use only the tenant-scoped retention function'
+);
+SELECT pg_temp.assert_true(
   (
-    SELECT count(*) = 3
+    SELECT count(*) = 4
     FROM _migrations.applied_migrations
     WHERE migration_name IN (
       '0001_projection_foundation.sql',
       '0002_publication_inbox.sql',
-      '0003_dispatcher_only_writes.sql'
+      '0003_dispatcher_only_writes.sql',
+      '0004_retention_cascade.sql'
     )
       AND checksum ~ '^[0-9a-f]{64}$'
   ),

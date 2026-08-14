@@ -13,7 +13,7 @@ $$;
 
 SELECT pg_temp.assert_true(
   (
-    SELECT count(*) = 5
+    SELECT count(*) = 6
       AND bool_and(NOT rolsuper)
       AND bool_and(NOT rolcreatedb)
       AND bool_and(NOT rolcreaterole)
@@ -25,7 +25,8 @@ SELECT pg_temp.assert_true(
       'migration',
       'private_app',
       'projection_app',
-      'publication_dispatcher'
+      'publication_dispatcher',
+      'retention_worker'
     )
   ),
   'application roles must not have administrative capabilities'
@@ -71,24 +72,36 @@ SELECT pg_temp.assert_true(
   'publication_dispatcher must connect only to application databases'
 );
 SELECT pg_temp.assert_true(
+  (
+    SELECT array_agg(datname ORDER BY datname)
+    FROM pg_database
+    WHERE datallowconn
+      AND has_database_privilege('retention_worker', datname, 'CONNECT')
+  ) = ARRAY['impromptu_private', 'impromptu_projection']::name[],
+  'retention worker must connect only to application databases'
+);
+SELECT pg_temp.assert_true(
   NOT has_database_privilege('projection_app', 'impromptu_projection', 'TEMPORARY')
     AND NOT has_database_privilege('private_app', 'impromptu_private', 'TEMPORARY')
     AND NOT has_database_privilege('private_app', 'impromptu_projection', 'TEMPORARY')
     AND NOT has_database_privilege('migration', 'impromptu_private', 'TEMPORARY')
     AND NOT has_database_privilege('migration', 'impromptu_projection', 'TEMPORARY')
     AND NOT has_database_privilege('publication_dispatcher', 'impromptu_private', 'TEMPORARY')
-    AND NOT has_database_privilege('publication_dispatcher', 'impromptu_projection', 'TEMPORARY'),
+    AND NOT has_database_privilege('publication_dispatcher', 'impromptu_projection', 'TEMPORARY')
+    AND NOT has_database_privilege('retention_worker', 'impromptu_private', 'TEMPORARY')
+    AND NOT has_database_privilege('retention_worker', 'impromptu_projection', 'TEMPORARY'),
   'application roles must not create temporary objects'
 );
 SELECT pg_temp.assert_true(
   (
-    SELECT count(*) = 4
+    SELECT count(*) = 5
     FROM _migrations.applied_migrations
     WHERE migration_name IN (
       '0001_cluster.sql',
       '0002_restrict_template_databases.sql',
       '0003_publication_dispatcher.sql',
-      '0004_block_private_projection.sql'
+      '0004_block_private_projection.sql',
+      '0005_retention_worker.sql'
     )
       AND checksum ~ '^[0-9a-f]{64}$'
   ),

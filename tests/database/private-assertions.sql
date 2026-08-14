@@ -67,16 +67,30 @@ SELECT pg_temp.assert_true(
   'publication_dispatcher must have only claim and delivery access to the outbox'
 );
 SELECT pg_temp.assert_true(
+  has_function_privilege(
+    'retention_worker',
+    'private_app.apply_retention(uuid,timestamptz)',
+    'EXECUTE'
+  )
+    AND NOT has_table_privilege(
+      'retention_worker',
+      'private_app.presentation_sessions',
+      'SELECT,INSERT,UPDATE,DELETE'
+    ),
+  'retention worker must use only the tenant-scoped retention function'
+);
+SELECT pg_temp.assert_true(
   NOT has_schema_privilege('projection_app', 'private_app', 'USAGE'),
   'projection_app must not have private schema usage'
 );
 SELECT pg_temp.assert_true(
   (
-    SELECT count(*) = 2
+    SELECT count(*) = 3
     FROM _migrations.applied_migrations
     WHERE migration_name IN (
       '0001_private_foundation.sql',
-      '0002_publication_dispatcher.sql'
+      '0002_publication_dispatcher.sql',
+      '0003_retention_cascade.sql'
     )
       AND checksum ~ '^[0-9a-f]{64}$'
   ),

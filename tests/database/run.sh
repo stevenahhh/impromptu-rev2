@@ -14,6 +14,7 @@ readonly BOOTSTRAP_ROLE="impromptu_bootstrap"
 readonly PRIVATE_ROLE="private_app"
 readonly PROJECTION_ROLE="projection_app"
 readonly DISPATCHER_ROLE="publication_dispatcher"
+readonly RETENTION_ROLE="retention_worker"
 readonly DEFAULT_DATABASE="postgres"
 readonly PRIVATE_DATABASE="impromptu_private"
 readonly PROJECTION_DATABASE="impromptu_projection"
@@ -218,9 +219,11 @@ run_migrations
 rerun_output="$(run_migrations)"
 if [[ "$rerun_output" != *"SKIP private/0001_private_foundation.sql"* \
   || "$rerun_output" != *"SKIP private/0002_publication_dispatcher.sql"* \
+  || "$rerun_output" != *"SKIP private/0003_retention_cascade.sql"* \
   || "$rerun_output" != *"SKIP projection/0001_projection_foundation.sql"* \
   || "$rerun_output" != *"SKIP projection/0002_publication_inbox.sql"* \
-  || "$rerun_output" != *"SKIP projection/0003_dispatcher_only_writes.sql"* ]]; then
+  || "$rerun_output" != *"SKIP projection/0003_dispatcher_only_writes.sql"* \
+  || "$rerun_output" != *"SKIP projection/0004_retention_cascade.sql"* ]]; then
   echo "migration assertion failed: rerun did not skip applied migrations" >&2
   echo "$rerun_output" >&2
   exit 1
@@ -424,6 +427,28 @@ if [[ "$inbox_count" != "1" || "$applied_count" != "1" ]]; then
   exit 1
 fi
 echo "Concurrent projection dispatch deduplication verified."
+
+psql_file "$RETENTION_ROLE" "$PRIVATE_DATABASE" "$REPO_ROOT/tests/database/private-retention.sql"
+psql_file "$RETENTION_ROLE" "$PROJECTION_DATABASE" "$REPO_ROOT/tests/database/projection-retention.sql"
+retention_shape="$(psql_value "$BOOTSTRAP_ROLE" "$PRIVATE_DATABASE" \
+  "SELECT (SELECT count(*) FROM private_app.presentation_sessions WHERE tenant_id = '10000000-0000-4000-8000-000000000001') || ':' || (SELECT count(*) FROM private_app.evidence_candidates WHERE tenant_id = '10000000-0000-4000-8000-000000000001') || ':' || (SELECT count(*) FROM private_app.publication_outbox WHERE tenant_id = '10000000-0000-4000-8000-000000000001') || ':' || (SELECT count(*) FROM private_app.presentation_sessions WHERE tenant_id = '20000000-0000-4000-8000-000000000002')")"
+projection_retention_shape="$(psql_value "$BOOTSTRAP_ROLE" "$PROJECTION_DATABASE" \
+  "SELECT (SELECT count(*) FROM public_projection.projection_sessions WHERE tenant_id = '10000000-0000-4000-8000-000000000001') || ':' || (SELECT count(*) FROM public_projection.publication_inbox WHERE tenant_id = '10000000-0000-4000-8000-000000000001') || ':' || (SELECT count(*) FROM public_projection.projection_sessions WHERE tenant_id = '20000000-0000-4000-8000-000000000002')")"
+if [[ "$retention_shape" != "0:0:0:1" || "$projection_retention_shape" != "0:0:1" ]]; then
+  echo "retention isolation assertion failed: private=$retention_shape projection=$projection_retention_shape" >&2
+  exit 1
+fi
+expect_denied \
+  "$RETENTION_ROLE" "$PRIVATE_DATABASE" \
+  "read private rows directly" \
+  "SELECT count(*) FROM private_app.presentation_sessions" \
+  "permission denied for table presentation_sessions"
+expect_denied \
+  "$RETENTION_ROLE" "$PROJECTION_DATABASE" \
+  "read projection rows directly" \
+  "SELECT count(*) FROM public_projection.projection_sessions" \
+  "permission denied for table projection_sessions"
+echo "Tenant-scoped cross-database retention cascade verified."
 
 readonly DRIFT_ROOT="/tmp/migrations-drift-$$"
 compose exec --no-TTY postgres sh -eu -c \

@@ -2,6 +2,7 @@
 
 INSERT INTO public_projection.projection_sessions (
   projection_id,
+  tenant_id,
   presentation_session_epoch,
   display_binding_epoch,
   deck_version,
@@ -11,8 +12,10 @@ INSERT INTO public_projection.projection_sessions (
   state,
   revision
 )
-VALUES (
+VALUES
+(
   'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  '10000000-0000-4000-8000-000000000001',
   7,
   3,
   4,
@@ -21,6 +24,18 @@ VALUES (
   1,
   'active',
   9
+),
+(
+  'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+  '20000000-0000-4000-8000-000000000002',
+  3,
+  1,
+  1,
+  repeat('d', 64),
+  NULL,
+  NULL,
+  'bound',
+  1
 );
 
 INSERT INTO public_projection.audience_cards (
