@@ -31,11 +31,7 @@ export type RealtimeSnapshot = RealtimeIdentity &
     cards: readonly RealtimeCard[];
   }>;
 
-export type RealtimeConnection =
-  | "CONNECTED"
-  | "PARTITIONED"
-  | "RECONCILING"
-  | "RECONCILE_REQUIRED";
+export type RealtimeConnection = "CONNECTED" | "PARTITIONED" | "RECONCILING" | "RECONCILE_REQUIRED";
 
 export type RealtimeStageState = RealtimeIdentity &
   Readonly<{
@@ -69,8 +65,16 @@ export type RealtimeTransition =
   | Readonly<{ type: "PARTITION"; reason: "NETWORK_ERROR" | "SERVER_ERROR"; nowMs?: number }>
   | Readonly<{ type: "RECONNECT" }>
   | Readonly<{ type: "CLOCK"; nowMs: number }>
-  | Readonly<{ type: "EXPLICIT_HIDE"; reason: "EXPLICIT_ERROR" | "TOMBSTONE" | "STALE_EVENT"; projectionId?: string }>
-  | Readonly<{ type: "EPOCH_CHANGED"; presentationSessionEpoch: string; displayBindingEpoch: string }>
+  | Readonly<{
+      type: "EXPLICIT_HIDE";
+      reason: "EXPLICIT_ERROR" | "TOMBSTONE" | "STALE_EVENT";
+      projectionId?: string;
+    }>
+  | Readonly<{
+      type: "EPOCH_CHANGED";
+      presentationSessionEpoch: string;
+      displayBindingEpoch: string;
+    }>
   | Readonly<{ type: "CONTROLLER_EPOCH_CHANGED"; controllerEpoch: string }>
   | Readonly<{ type: "CARD_UPSERT"; card: RealtimeCard; nowMs: number }>
   | Readonly<{ type: "CARD_TOMBSTONE"; projectionId: string }>
@@ -196,14 +200,20 @@ export function applyRealtimeTransition(
     return {
       state: { ...state, connection: "PARTITIONED", visibleCardIds },
       outcome: "APPLIED",
-      effects: hidden.map((projectionId) => ({ type: "HIDE_CARD", projectionId, reason: "PARTITION" })),
+      effects: hidden.map((projectionId) => ({
+        type: "HIDE_CARD",
+        projectionId,
+        reason: "PARTITION",
+      })),
     };
   }
   if (transition.type === "CLOCK") {
     return hideCards(
       state,
       (card) =>
-        (card.mode === "LIVE" && card.leaseExpiresAtMs !== null && transition.nowMs >= card.leaseExpiresAtMs) ||
+        (card.mode === "LIVE" &&
+          card.leaseExpiresAtMs !== null &&
+          transition.nowMs >= card.leaseExpiresAtMs) ||
         (state.connection !== "CONNECTED" &&
           card.mode === "CURATED" &&
           !canPersistOffline(card, transition.nowMs)),
@@ -213,7 +223,8 @@ export function applyRealtimeTransition(
   if (transition.type === "EXPLICIT_HIDE") {
     return hideCards(
       state,
-      (card) => transition.projectionId === undefined || card.projectionId === transition.projectionId,
+      (card) =>
+        transition.projectionId === undefined || card.projectionId === transition.projectionId,
       transition.reason,
     );
   }
@@ -268,7 +279,10 @@ export function applyRealtimeTransition(
     if (state.appliedCommandIds.includes(transition.commandId)) {
       return { state, outcome: "DUPLICATE", effects: [] };
     }
-    if (revision(transition.publicPlaybackRevision, "pbr_") !== revision(state.publicPlaybackRevision, "pbr_") + 1) {
+    if (
+      revision(transition.publicPlaybackRevision, "pbr_") !==
+      revision(state.publicPlaybackRevision, "pbr_") + 1
+    ) {
       return { state, outcome: "STALE_EVENT", effects: [] };
     }
     return {
@@ -289,13 +303,19 @@ export function applyRealtimeTransition(
     incoming.role !== "PUBLIC_STAGE" ||
     incoming.stateHash !== transition.verifiedStateHash ||
     !sameIdentity(state, incoming) ||
-    revision(incoming.publicPlaybackRevision, "pbr_") < revision(state.publicPlaybackRevision, "pbr_") ||
+    revision(incoming.publicPlaybackRevision, "pbr_") <
+      revision(state.publicPlaybackRevision, "pbr_") ||
     revision(incoming.publicCardRevision, "pcr_") < revision(state.publicCardRevision, "pcr_");
   if (invalid) {
     return {
       state: { ...state, connection: "RECONCILE_REQUIRED", visibleCardIds: [] },
       outcome: "RECONCILE_REQUIRED",
-      effects: [{ type: "HIDE_DYNAMIC_CARDS", reason: sameIdentity(state, incoming) ? "STALE_SNAPSHOT" : "RECONCILE_REQUIRED" }],
+      effects: [
+        {
+          type: "HIDE_DYNAMIC_CARDS",
+          reason: sameIdentity(state, incoming) ? "STALE_SNAPSHOT" : "RECONCILE_REQUIRED",
+        },
+      ],
     };
   }
   const cards = Object.fromEntries(incoming.cards.map((card) => [card.projectionId, card]));

@@ -94,7 +94,9 @@ describe("deterministic realtime reconcile state", () => {
 
     const expired = applyRealtimeTransition(state, { type: "CLOCK", nowMs: 4_000 });
     expect(expired.state.visibleCardIds).toEqual([]);
-    expect(expired.effects).toEqual([{ type: "HIDE_CARD", projectionId: "projection_live", reason: "LEASE_EXPIRED" }]);
+    expect(expired.effects).toEqual([
+      { type: "HIDE_CARD", projectionId: "projection_live", reason: "LEASE_EXPIRED" },
+    ]);
   });
 
   test("allows curated offline persistence only for a verified signed package with local expiry", () => {
@@ -154,10 +156,19 @@ describe("deterministic realtime reconcile state", () => {
     expect(first.outcome).toBe("APPLIED");
     expect(applyRealtimeTransition(state, command).outcome).toBe("DUPLICATE");
     expect(
-      applyRealtimeTransition(state, { ...command, commandId: "cmd_stale", displayBindingEpoch: "dbe_0", publicPlaybackRevision: "pbr_2" }).outcome,
+      applyRealtimeTransition(state, {
+        ...command,
+        commandId: "cmd_stale",
+        displayBindingEpoch: "dbe_0",
+        publicPlaybackRevision: "pbr_2",
+      }).outcome,
     ).toBe("STALE_EPOCH");
     expect(
-      applyRealtimeTransition(state, { type: "RELATIVE_REPLAY", commandId: "cmd_relative", offset: 1 }).outcome,
+      applyRealtimeTransition(state, {
+        type: "RELATIVE_REPLAY",
+        commandId: "cmd_relative",
+        offset: 1,
+      }).outcome,
     ).toBe("REJECTED_RELATIVE_REPLAY");
   });
 });
