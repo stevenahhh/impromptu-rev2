@@ -413,6 +413,7 @@ export class ServerModelRouter {
     let lease: RevocableTransportLease | undefined;
     let iterator: AsyncIterator<SttStreamEvent> | undefined;
     let innerDone = false;
+    const transcriptEvents: SttStreamEvent[] = [];
     let terminalResult: ModelResult<SttTranscript> | undefined;
     try {
       lease = await this.#prepareDispatch(
@@ -461,7 +462,7 @@ export class ServerModelRouter {
           );
         }
         if (event.kind === "final") finalTranscript = event.transcript;
-        yield { kind: "transcript", event };
+        transcriptEvents.push(event);
       }
       if (finalTranscript === undefined) {
         throw new ModelRouterError(
@@ -513,10 +514,11 @@ export class ServerModelRouter {
       }
     }
 
-    yield {
-      kind: "complete",
-      result: this.#validatedSttResult(terminalResult, context, startedAtMs),
-    };
+    const validatedTerminal = this.#validatedSttResult(terminalResult, context, startedAtMs);
+    if (validatedTerminal.ok) {
+      for (const event of transcriptEvents) yield { kind: "transcript", event };
+    }
+    yield { kind: "complete", result: validatedTerminal };
   }
 
   async #prepareDispatch(

@@ -106,6 +106,7 @@ export interface ScriptedSttAdapterOptions {
   readonly requirement?: AdapterRequirement;
   readonly acceptUnvalidatedEvents?: boolean;
   readonly pendingAfterEvents?: boolean;
+  readonly onEvent?: (event: Readonly<SttStreamEvent>) => void;
 }
 
 export interface ScriptedSttAdapter extends UnarySttAdapter, StreamingSttAdapter {
@@ -146,10 +147,16 @@ export function createScriptedSttAdapter(options: ScriptedSttAdapterOptions): Sc
       for await (const _chunk of chunks) throwIfAborted(context.signal);
       for (const event of events) {
         throwIfAborted(context.signal);
+        options.onEvent?.(event);
         yield cloneAndFreeze(event);
       }
       if (options.pendingAfterEvents === true) {
-        await new Promise<never>(() => undefined);
+        if (!context.signal.aborted) {
+          await new Promise<void>((resolve) => {
+            context.signal.addEventListener("abort", () => resolve(), { once: true });
+          });
+        }
+        throwIfAborted(context.signal);
       }
     } finally {
       streamReturnCount += 1;

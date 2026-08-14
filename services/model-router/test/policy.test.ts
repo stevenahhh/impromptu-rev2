@@ -422,6 +422,7 @@ describe("dispatch policy gates", () => {
     }
     const completions = routed.filter((item) => item.kind === "complete");
 
+    expect(routed.filter((item) => item.kind === "transcript")).toEqual([]);
     expect(completions).toHaveLength(1);
     expect(completions[0]?.result.ok).toBe(false);
     if (completions[0] !== undefined && !completions[0].result.ok) {

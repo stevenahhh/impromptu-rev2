@@ -673,23 +673,34 @@ describe("server model router", () => {
     }
   });
 
-  test("aborts the internal scope and returns the inner iterator when its consumer returns", async () => {
+  test("keeps partial output private and cleans the adapter when cancellation wins", async () => {
     const time = new ManualTime();
+    const cancellation = new AbortController();
     const registry = new ModelRoutingRegistry();
     const transcript = { text: "partial", language: "ko", durationMs: 50 };
+    let signalPartialProduced: () => void = () => undefined;
+    const partialProduced = new Promise<void>((resolve) => {
+      signalPartialProduced = resolve;
+    });
     const adapter = createScriptedSttAdapter({
       adapterId: "cleanup-stt",
       transcript,
       events: [{ kind: "partial", sequence: 0, transcript }],
       pendingAfterEvents: true,
+      onEvent: signalPartialProduced,
     });
     registry.registerDeterministicFakeStreamingStt(adapter);
-    const router = createRouter(registry, time);
-    const outer = router.streamStt(emptyAudio(), context(2_000))[Symbol.asyncIterator]();
+    const routedPromise = routerStream(
+      createRouter(registry, time),
+      emptyAudio(),
+      context(2_000, cancellation.signal),
+    );
 
-    expect((await outer.next()).value?.kind).toBe("transcript");
-    await outer.return?.();
+    await partialProduced;
+    cancellation.abort();
+    const routed = await routedPromise;
 
+    expect(routed.map((item) => item.kind)).toEqual(["complete"]);
     expect(adapter.streamReturnCount).toBe(1);
     expect(adapter.signalAbortedAtReturn).toBe(true);
   });
@@ -742,7 +753,7 @@ describe("server model router", () => {
     expect(returnCount).toBe(1);
   });
 
-  test("cancels a streaming STT iterator before another event is requested", async () => {
+  test("keeps the reconciled terminal stable once transcript publication begins", async () => {
     const time = new ManualTime();
     const cancellation = new AbortController();
     const registry = new ModelRoutingRegistry();
@@ -763,13 +774,11 @@ describe("server model router", () => {
 
     expect((await stream.next()).value?.kind).toBe("transcript");
     cancellation.abort();
+    expect((await stream.next()).value?.kind).toBe("transcript");
     const completion = (await stream.next()).value;
 
     expect(completion?.kind).toBe("complete");
-    if (completion?.kind === "complete") {
-      expect(completion.result.ok).toBe(false);
-      if (!completion.result.ok) expect(completion.result.error.code).toBe("cancelled");
-    }
+    if (completion?.kind === "complete") expect(completion.result.ok).toBe(true);
     expect((await stream.next()).done).toBe(true);
   });
 });
