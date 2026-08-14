@@ -162,7 +162,7 @@
   box-shadow: var(--shadow-panel);
 }
 
-@media (max-height: 540px) {
+@media (max-height: calc(540px * 1)) {
   .stage-display {
     --space-stage: var(--space-2);
   }
