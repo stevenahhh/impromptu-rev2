@@ -626,6 +626,10 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
       <header className="stage-display__bar">
         <Brand eyebrow="Public Stage" />
         <div className="stage-display__actions">
+          <Badge tone={snapshot !== null ? "success" : "accent"}>
+            <StatusDot label={snapshot !== null ? "Public Stage ready" : "Recovering Stage"} />
+            {snapshot !== null ? "Public only" : "Recovering"}
+          </Badge>
           <Badge tone="success">
             <StatusDot label="Preview content visible" />
             Preview
