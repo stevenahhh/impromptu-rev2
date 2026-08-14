@@ -54,11 +54,29 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function hasOnlyKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+  const allowedKeys = new Set(allowed);
+  return Object.keys(value).every((key) => allowedKeys.has(key));
+}
+
 function publicDeck(value: unknown): PublicDeckArtifact | null {
-  if (!isRecord(value) || !Array.isArray(value.slides)) return null;
+  if (
+    !isRecord(value) ||
+    !hasOnlyKeys(value, ["deckVersion", "manifestHash", "title", "slides"]) ||
+    !Array.isArray(value.slides)
+  ) {
+    return null;
+  }
   const slides: PublicDeckArtifact["slides"][number][] = [];
   for (const candidate of value.slides) {
-    if (!isRecord(candidate) || !isRecord(candidate.image)) return null;
+    if (
+      !isRecord(candidate) ||
+      !hasOnlyKeys(candidate, ["publicSlideKey", "ordinal", "accessibilityLabel", "image"]) ||
+      !isRecord(candidate.image) ||
+      !hasOnlyKeys(candidate.image, ["url", "contentHash", "width", "height"])
+    ) {
+      return null;
+    }
     if (
       typeof candidate.publicSlideKey !== "string" ||
       typeof candidate.ordinal !== "number" ||
@@ -96,7 +114,20 @@ function publicDeck(value: unknown): PublicDeckArtifact | null {
 }
 
 function playbackEvent(value: unknown): PlaybackProjectionInput | null {
-  if (!isRecord(value) || !isRecord(value.occurrence)) return null;
+  if (
+    !isRecord(value) ||
+    !hasOnlyKeys(value, [
+      "commandId",
+      "displayBindingEpoch",
+      "acceptedControlRevision",
+      "occurrence",
+      "blackout",
+    ]) ||
+    !isRecord(value.occurrence) ||
+    !hasOnlyKeys(value.occurrence, ["publicSlideKey", "occurrenceSeq"])
+  ) {
+    return null;
+  }
   return typeof value.commandId === "string" &&
     typeof value.displayBindingEpoch === "string" &&
     typeof value.acceptedControlRevision === "string" &&
@@ -120,6 +151,7 @@ function cardEvent(value: unknown): PublicCardEvent | null {
   if (!isRecord(value) || typeof value.projectionId !== "string") return null;
   if (
     (value.status === "RETRACTED" || value.status === "EXPIRED") &&
+    hasOnlyKeys(value, ["projectionId", "status", "publicCardRevision", "occurredAtMs"]) &&
     typeof value.publicCardRevision === "string" &&
     typeof value.occurredAtMs === "number"
   ) {
@@ -130,7 +162,51 @@ function cardEvent(value: unknown): PublicCardEvent | null {
       occurredAtMs: value.occurredAtMs,
     };
   }
-  if (value.status !== "PUBLISHED" || !isRecord(value.occurrence)) return null;
+  if (
+    value.status !== "PUBLISHED" ||
+    !hasOnlyKeys(value, [
+      "projectionId",
+      "status",
+      "mode",
+      "leaseExpiresAtMs",
+      "publicationPolicyVersion",
+      "cardVersion",
+      "liveBinding",
+      "offlinePackage",
+      "claim",
+      "supportSummary",
+      "sourceLabel",
+      "publishedAtMs",
+      "expiresAtMs",
+      "publicCardRevision",
+      "deckVersion",
+      "manifestHash",
+      "occurrence",
+    ]) ||
+    !isRecord(value.occurrence) ||
+    !hasOnlyKeys(value.occurrence, ["publicSlideKey", "occurrenceSeq"]) ||
+    (isRecord(value.liveBinding) &&
+      (!hasOnlyKeys(value.liveBinding, [
+        "presentationSessionEpoch",
+        "displayBindingEpoch",
+        "publicSlideOccurrence",
+        "publicationPolicyVersion",
+        "cardVersion",
+      ]) ||
+        !isRecord(value.liveBinding.publicSlideOccurrence) ||
+        !hasOnlyKeys(value.liveBinding.publicSlideOccurrence, [
+          "publicSlideKey",
+          "occurrenceSeq",
+        ]))) ||
+    (isRecord(value.offlinePackage) &&
+      !hasOnlyKeys(value.offlinePackage, [
+        "offlineDisplayAllowed",
+        "localExpiresAtMs",
+        "signature",
+      ]))
+  ) {
+    return null;
+  }
   return typeof value.claim === "string" &&
     typeof value.supportSummary === "string" &&
     typeof value.sourceLabel === "string" &&
@@ -298,6 +374,22 @@ export function createProjectionGatewayHandler(
       const body = await requestBody(request);
       if (body === null) return json({ error: "invalid_request" }, 400);
       if (url.pathname === "/internal/display-bindings") {
+        if (
+          !hasOnlyKeys(body, [
+            "displayJoinId",
+            "presentationSessionId",
+            "presentationSessionEpoch",
+            "publicationPolicyVersion",
+            "expectedDisplayBindingEpoch",
+            "expectedDeckVersion",
+            "approvedDisplayId",
+            "approvedDisplayFingerprint",
+            "deck",
+            "nowMs",
+          ])
+        ) {
+          return json({ error: "invalid_request" }, 400);
+        }
         const deck = publicDeck(body.deck);
         if (
           deck === null ||
@@ -331,6 +423,9 @@ export function createProjectionGatewayHandler(
         return json(result, result.outcome === "BOUND" ? 200 : 409);
       }
       if (url.pathname === "/internal/playback") {
+        if (!hasOnlyKeys(body, ["presentationSessionId", "event"])) {
+          return json({ error: "invalid_request" }, 400);
+        }
         const event = playbackEvent(body.event);
         if (typeof body.presentationSessionId !== "string" || event === null) {
           return json({ error: "invalid_request" }, 400);
@@ -341,6 +436,11 @@ export function createProjectionGatewayHandler(
       }
       if (url.pathname === "/internal/playback-applied") {
         if (
+          !hasOnlyKeys(body, [
+            "presentationSessionId",
+            "displayBindingEpoch",
+            "publicPlaybackRevision",
+          ]) ||
           typeof body.presentationSessionId !== "string" ||
           typeof body.displayBindingEpoch !== "string" ||
           typeof body.publicPlaybackRevision !== "string"
@@ -356,6 +456,9 @@ export function createProjectionGatewayHandler(
         return json({ applied }, applied ? 200 : 409);
       }
       if (url.pathname === "/internal/cards") {
+        if (!hasOnlyKeys(body, ["presentationSessionId", "event"])) {
+          return json({ error: "invalid_request" }, 400);
+        }
         const event = cardEvent(body.event);
         if (typeof body.presentationSessionId !== "string" || event === null) {
           return json({ error: "invalid_request" }, 400);
@@ -377,6 +480,7 @@ export function createProjectionGatewayHandler(
       const body = await requestBody(request);
       if (
         body === null ||
+        !hasOnlyKeys(body, ["displayId", "deckVersion", "displayFingerprint"]) ||
         typeof body.displayId !== "string" ||
         typeof body.deckVersion !== "string" ||
         typeof body.displayFingerprint !== "string"
@@ -398,6 +502,13 @@ export function createProjectionGatewayHandler(
       const body = await requestBody(request);
       if (
         body === null ||
+        !hasOnlyKeys(body, [
+          "displayJoinId",
+          "displayId",
+          "deckVersion",
+          "displayFingerprint",
+          "expiresAtMs",
+        ]) ||
         typeof body.displayJoinId !== "string" ||
         typeof body.displayId !== "string" ||
         typeof body.displayFingerprint !== "string"
@@ -435,6 +546,7 @@ export function createProjectionGatewayHandler(
       const body = await requestBody(request);
       if (
         body === null ||
+        !hasOnlyKeys(body, ["commandId", "displayBindingEpoch"]) ||
         typeof body.commandId !== "string" ||
         typeof body.displayBindingEpoch !== "string"
       ) {

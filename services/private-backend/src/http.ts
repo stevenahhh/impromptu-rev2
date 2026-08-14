@@ -169,7 +169,11 @@ export function createPrivateBackendHandler(
 
     if (request.method === "POST" && url.pathname === "/v1/account-sessions") {
       const body = await requestBody(request);
-      if (!isRecord(body) || typeof body.authorizationCode !== "string") {
+      if (
+        !isRecord(body) ||
+        Object.keys(body).length !== 1 ||
+        typeof body.authorizationCode !== "string"
+      ) {
         return json({ error: "invalid_request" }, 400, origin);
       }
       const identity = await dependencies.identityVerifier.exchangeAuthorizationCode(
