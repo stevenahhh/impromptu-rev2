@@ -173,7 +173,7 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
   );
   milestones.push("display-join");
   const bound = requireApplied(
-    coordinator.approveDisplay(
+    await coordinator.approveDisplay(
       account.accountSessionId,
       {
         presentationSessionId: created.lifecycle.presentationSessionId,
@@ -210,9 +210,9 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
   const socket = gateway.connectStage(
     displaySession.audienceDisplaySessionId,
     {
-      onPlayback: (event) => {
+      onPlayback: async (event) => {
         const receipt = requireApplied(
-          coordinator.recordStageApplied({
+          await coordinator.recordStageApplied({
             audienceDisplaySessionId: displaySession.audienceDisplaySessionId,
             commandId: event.commandId,
             displayBindingEpoch: event.displayBindingEpoch,
@@ -238,7 +238,7 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
   if (socket === null) throw new Error("Stage socket did not connect");
 
   const accepted = requireApplied(
-    coordinator.setSlide(
+    await coordinator.setSlide(
       account.accountSessionId,
       {
         presentationSessionId: created.lifecycle.presentationSessionId,
@@ -268,7 +268,7 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
     "curated candidate",
   );
   const published = requireApplied(
-    coordinator.approveCandidate(
+    await coordinator.approveCandidate(
       account.accountSessionId,
       {
         presentationSessionId: created.lifecycle.presentationSessionId,
@@ -294,7 +294,7 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
 
   const retractStartedAt = performance.now();
   requireApplied(
-    coordinator.terminateCard(
+    await coordinator.terminateCard(
       account.accountSessionId,
       {
         presentationSessionId: created.lifecycle.presentationSessionId,
@@ -338,7 +338,7 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
   );
   if (secondSocket === null) throw new Error("second exact-event subscriber failed");
   const expiringPublished = requireApplied(
-    coordinator.approveCandidate(
+    await coordinator.approveCandidate(
       account.accountSessionId,
       {
         presentationSessionId: created.lifecycle.presentationSessionId,
@@ -354,7 +354,7 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
   );
   await expirePublishedSignal.wait();
   requireApplied(
-    coordinator.terminateCard(
+    await coordinator.terminateCard(
       account.accountSessionId,
       {
         presentationSessionId: created.lifecycle.presentationSessionId,

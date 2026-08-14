@@ -39,7 +39,11 @@ describe("Stage display session HTTP boundary", () => {
     const gateway = new PreparedEvidenceProjectionGateway();
     const handler = createProjectionGatewayHandler(
       parseProjectionGatewayConfig({ STAGE_ORIGIN: stageOrigin }),
-      { gateway, now: () => 1_000 },
+      {
+        gateway,
+        internalAuthToken: "internal-test-token-alpha",
+        now: () => 1_000,
+      },
     );
     const joinResponse = await handler(
       stageRequest("/v1/display-joins", {

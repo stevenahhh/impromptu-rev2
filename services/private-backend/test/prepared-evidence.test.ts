@@ -65,7 +65,7 @@ const publicDeck = {
   ],
 };
 
-function createBoundFlow(nowMs = 1_000) {
+async function createBoundFlow(nowMs = 1_000) {
   const gateway = new PreparedEvidenceProjectionGateway();
   const store = createPreparedEvidenceStore();
   const coordinator = new PreparedEvidenceCoordinator(gateway, store, {
@@ -90,7 +90,7 @@ function createBoundFlow(nowMs = 1_000) {
     },
     nowMs,
   );
-  const bound = coordinator.approveDisplay(
+  const bound = await coordinator.approveDisplay(
     account.accountSessionId,
     {
       presentationSessionId: created.value.lifecycle.presentationSessionId,
@@ -133,8 +133,8 @@ describe("prepared evidence private coordinator", () => {
     });
   });
 
-  test("accepts absolute slide.set and records only the ordered Stage prefix after restart", () => {
-    const flow = createBoundFlow();
+  test("accepts absolute slide.set and records only the ordered Stage prefix after restart", async () => {
+    const flow = await createBoundFlow();
     const playbackEvents: string[] = [];
     flow.gateway.connectStage(
       flow.bound.audienceDisplaySessionId,
@@ -145,7 +145,7 @@ describe("prepared evidence private coordinator", () => {
       },
       1_001,
     );
-    const first = flow.coordinator.setSlide(
+    const first = await flow.coordinator.setSlide(
       flow.account.accountSessionId,
       {
         presentationSessionId: flow.created.lifecycle.presentationSessionId,
@@ -156,7 +156,7 @@ describe("prepared evidence private coordinator", () => {
       },
       1_002,
     );
-    const second = flow.coordinator.setSlide(
+    const second = await flow.coordinator.setSlide(
       flow.account.accountSessionId,
       {
         presentationSessionId: flow.created.lifecycle.presentationSessionId,
@@ -173,18 +173,18 @@ describe("prepared evidence private coordinator", () => {
 
     const restarted = new PreparedEvidenceCoordinator(flow.gateway, flow.store);
     expect(
-      restarted.recordStageApplied({
+      await restarted.recordStageApplied({
         audienceDisplaySessionId: flow.bound.audienceDisplaySessionId,
         commandId: "cmd_two",
         displayBindingEpoch: "dbe_1",
       }),
     ).toEqual({ outcome: "REJECTED", reason: "OUT_OF_ORDER" });
-    const appliedFirst = restarted.recordStageApplied({
+    const appliedFirst = await restarted.recordStageApplied({
       audienceDisplaySessionId: flow.bound.audienceDisplaySessionId,
       commandId: "cmd_one",
       displayBindingEpoch: "dbe_1",
     });
-    const appliedSecond = restarted.recordStageApplied({
+    const appliedSecond = await restarted.recordStageApplied({
       audienceDisplaySessionId: flow.bound.audienceDisplaySessionId,
       commandId: "cmd_two",
       displayBindingEpoch: "dbe_1",
@@ -198,8 +198,8 @@ describe("prepared evidence private coordinator", () => {
     expect(String(appliedSecond.value.publicPlaybackRevision)).toBe("pbr_2");
   });
 
-  test("publishes curated evidence with an uncorrelatable ID and terminal CAS tombstone", () => {
-    const flow = createBoundFlow();
+  test("publishes curated evidence with an uncorrelatable ID and terminal CAS tombstone", async () => {
+    const flow = await createBoundFlow();
     const cardEvents: string[] = [];
     flow.gateway.connectStage(
       flow.bound.audienceDisplaySessionId,
@@ -245,7 +245,7 @@ describe("prepared evidence private coordinator", () => {
       1_002,
     );
     expect(added.outcome).toBe("APPLIED");
-    const published = flow.coordinator.approveCandidate(
+    const published = await flow.coordinator.approveCandidate(
       flow.account.accountSessionId,
       {
         presentationSessionId: flow.created.lifecycle.presentationSessionId,
@@ -260,7 +260,7 @@ describe("prepared evidence private coordinator", () => {
     if (published.outcome !== "APPLIED") throw new Error("fixture failed to publish");
     expect(published.value.projectionId).not.toContain(candidate.candidateId);
     expect(JSON.stringify(published.value)).not.toContain("private://");
-    const stale = flow.coordinator.terminateCard(
+    const stale = await flow.coordinator.terminateCard(
       flow.account.accountSessionId,
       {
         presentationSessionId: flow.created.lifecycle.presentationSessionId,
@@ -272,7 +272,7 @@ describe("prepared evidence private coordinator", () => {
       1_004,
     );
     expect(stale).toEqual({ outcome: "REJECTED", reason: "CAS_CONFLICT" });
-    const retracted = flow.coordinator.terminateCard(
+    const retracted = await flow.coordinator.terminateCard(
       flow.account.accountSessionId,
       {
         presentationSessionId: flow.created.lifecycle.presentationSessionId,

@@ -13,6 +13,7 @@ export interface AccountIdentityVerifier {
 export interface PrivateBackendHttpDependencies {
   readonly coordinator: PreparedEvidenceCoordinator;
   readonly identityVerifier: AccountIdentityVerifier;
+  readonly internalAuthToken: string;
   readonly now: () => number;
 }
 
@@ -94,6 +95,23 @@ export function createPrivateBackendHandler(
       return json({ service: "private-backend", status: "ok" }, 200, origin);
     }
     if (dependencies === undefined) return json({ error: "not_found" }, 404, origin);
+
+    if (request.method === "POST" && url.pathname === "/internal/stage-applied") {
+      if (request.headers.get("authorization") !== `Bearer ${dependencies.internalAuthToken}`) {
+        return json({ error: "internal_unauthorized" }, 401);
+      }
+      const body = await requestBody(request);
+      if (!isRecord(body)) return json({ error: "invalid_request" }, 400);
+      const result = await dependencies.coordinator.recordStageApplied({
+        audienceDisplaySessionId: String(body.audienceDisplaySessionId ?? ""),
+        commandId: String(body.commandId ?? ""),
+        displayBindingEpoch: String(body.displayBindingEpoch ?? ""),
+      });
+      return json(
+        result.outcome === "APPLIED" ? result.value : { error: result.reason },
+        result.outcome === "APPLIED" ? 200 : 409,
+      );
+    }
 
     if (request.method !== "GET" && !mutationAllowed(request, config.allowedOrigin)) {
       return json({ error: "mutation_origin_forbidden" }, 403, origin);
@@ -185,7 +203,7 @@ export function createPrivateBackendHandler(
       );
     }
     if (request.method === "POST" && url.pathname === "/v1/display-bindings") {
-      const result = dependencies.coordinator.approveDisplay(
+      const result = await dependencies.coordinator.approveDisplay(
         accountSessionId,
         body,
         dependencies.now(),
@@ -197,7 +215,7 @@ export function createPrivateBackendHandler(
       );
     }
     if (request.method === "POST" && url.pathname === "/v1/playback/slide-set") {
-      const result = dependencies.coordinator.setSlide(
+      const result = await dependencies.coordinator.setSlide(
         accountSessionId,
         {
           presentationSessionId: String(body.presentationSessionId ?? ""),
@@ -227,7 +245,7 @@ export function createPrivateBackendHandler(
       );
     }
     if (request.method === "POST" && url.pathname === "/v1/publications/approve") {
-      const result = dependencies.coordinator.approveCandidate(
+      const result = await dependencies.coordinator.approveCandidate(
         accountSessionId,
         {
           presentationSessionId: String(body.presentationSessionId ?? ""),
@@ -250,7 +268,7 @@ export function createPrivateBackendHandler(
       if (status !== "RETRACTED" && status !== "EXPIRED") {
         return json({ error: "invalid_request" }, 400, origin);
       }
-      const result = dependencies.coordinator.terminateCard(
+      const result = await dependencies.coordinator.terminateCard(
         accountSessionId,
         {
           presentationSessionId: String(body.presentationSessionId ?? ""),

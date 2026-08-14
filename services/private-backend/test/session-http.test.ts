@@ -29,6 +29,7 @@ describe("account session HTTP boundary", () => {
           return { accountId: "account_alpha", actorId: "actor_alpha" };
         },
       },
+      internalAuthToken: "internal-test-token-alpha",
       now: () => 1_000,
     });
     const response = await handler(
@@ -55,6 +56,7 @@ describe("account session HTTP boundary", () => {
           return { accountId: "account_alpha", actorId: "actor_alpha" };
         },
       },
+      internalAuthToken: "internal-test-token-alpha",
       now: () => 1_000,
     });
     const missingReferer = await handler(

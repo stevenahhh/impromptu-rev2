@@ -47,6 +47,8 @@ import {
   setPlaybackStageStatus,
 } from "@impromptu/state";
 
+type MaybePromise<Value> = Value | Promise<Value>;
+
 export interface PreparedEvidenceProjectionPort {
   bindDisplay(
     input: {
@@ -60,9 +62,10 @@ export interface PreparedEvidenceProjectionPort {
       readonly deck: PublishedDeckArtifact;
     },
     nowMs: number,
-  ):
+  ): MaybePromise<
     | Readonly<{ outcome: "BOUND"; session: unknown }>
-    | Readonly<{ outcome: "REJECTED"; reason: string }>;
+    | Readonly<{ outcome: "REJECTED"; reason: string }>
+  >;
   projectPlayback(
     presentationSessionId: string,
     event: {
@@ -72,16 +75,16 @@ export interface PreparedEvidenceProjectionPort {
       readonly occurrence: { readonly publicSlideKey: string; readonly occurrenceSeq: number };
       readonly blackout: boolean;
     },
-  ): boolean;
+  ): MaybePromise<boolean>;
   recordPlaybackApplied(
     presentationSessionId: string,
     displayBindingEpoch: string,
     publicPlaybackRevision: string,
-  ): boolean;
+  ): MaybePromise<boolean>;
   projectCard(
     presentationSessionId: string,
     event: PublishedAudienceCard | PublicationTombstone,
-  ): boolean;
+  ): MaybePromise<boolean>;
 }
 
 type CandidateRecord = {
@@ -294,11 +297,11 @@ export class PreparedEvidenceCoordinator {
     return { outcome: "APPLIED", value: authorized.value.lifecycle };
   }
 
-  approveDisplay(
+  async approveDisplay(
     accountSessionId: string,
     input: unknown,
     nowMs: number,
-  ): OperationResult<AudienceDisplaySession> {
+  ): Promise<OperationResult<AudienceDisplaySession>> {
     const approval = DisplayApprovalSchema.safeParse(input);
     if (!approval.success) return { outcome: "REJECTED", reason: "INVALID_DISPLAY_APPROVAL" };
     const authorized = this.#authorizedPresentation(
@@ -310,7 +313,7 @@ export class PreparedEvidenceCoordinator {
     if (approval.data.expectedDeckVersion !== authorized.value.publicDeck.deckVersion) {
       return { outcome: "REJECTED", reason: "WRONG_DECK" };
     }
-    const result = this.#projection.bindDisplay(
+    const result = await this.#projection.bindDisplay(
       {
         displayJoinId: approval.data.displayJoinId,
         presentationSessionId: authorized.value.lifecycle.presentationSessionId,
@@ -337,7 +340,7 @@ export class PreparedEvidenceCoordinator {
     return { outcome: "APPLIED", value: session.data };
   }
 
-  setSlide(
+  async setSlide(
     accountSessionId: string,
     input: {
       readonly presentationSessionId: string;
@@ -347,7 +350,7 @@ export class PreparedEvidenceCoordinator {
       readonly baseRevision: string;
     },
     nowMs: number,
-  ): OperationResult<ReturnType<typeof reducePlaybackCommand>["receipt"]> {
+  ): Promise<OperationResult<ReturnType<typeof reducePlaybackCommand>["receipt"]>> {
     const authorized = this.#authorizedPresentation(
       accountSessionId,
       input.presentationSessionId,
@@ -390,13 +393,13 @@ export class PreparedEvidenceCoordinator {
     }
     authorized.value.playback = reduction.state;
     if (
-      !this.#projection.projectPlayback(input.presentationSessionId, {
+      !(await this.#projection.projectPlayback(input.presentationSessionId, {
         commandId: reduction.effect.commandId,
         displayBindingEpoch: reduction.receipt.displayBindingEpoch,
         acceptedControlRevision: reduction.effect.acceptedControlRevision,
         occurrence: reduction.effect.occurrence,
         blackout: reduction.effect.blackout,
-      })
+      }))
     ) {
       authorized.value.playback = playback;
       return { outcome: "REJECTED", reason: "PROJECTION_REJECTED" };
@@ -404,11 +407,11 @@ export class PreparedEvidenceCoordinator {
     return { outcome: "APPLIED", value: reduction.receipt };
   }
 
-  recordStageApplied(input: {
+  async recordStageApplied(input: {
     readonly audienceDisplaySessionId: string;
     readonly commandId: string;
     readonly displayBindingEpoch: string;
-  }): OperationResult<StageAppliedReceipt> {
+  }): Promise<OperationResult<StageAppliedReceipt>> {
     const presentation = Array.from(this.#store.presentations.values()).find(
       (candidate) =>
         candidate.audienceDisplaySession?.audienceDisplaySessionId ===
@@ -424,11 +427,11 @@ export class PreparedEvidenceCoordinator {
     const result = markStageApplied(presentation.playback, commandId.data, epoch.data);
     if (result.receipt === null) return { outcome: "REJECTED", reason: result.outcome };
     if (
-      !this.#projection.recordPlaybackApplied(
+      !(await this.#projection.recordPlaybackApplied(
         presentation.lifecycle.presentationSessionId,
         input.displayBindingEpoch,
         result.receipt.publicPlaybackRevision,
-      )
+      ))
     ) {
       return { outcome: "REJECTED", reason: "PROJECTION_RECEIPT_REJECTED" };
     }
@@ -484,7 +487,7 @@ export class PreparedEvidenceCoordinator {
     return { outcome: "APPLIED", value: lifecycle };
   }
 
-  approveCandidate(
+  async approveCandidate(
     accountSessionId: string,
     input: {
       readonly presentationSessionId: string;
@@ -495,7 +498,7 @@ export class PreparedEvidenceCoordinator {
       readonly expiresAtMs: number | null;
     },
     nowMs: number,
-  ): OperationResult<PublishedAudienceCard> {
+  ): Promise<OperationResult<PublishedAudienceCard>> {
     const authorized = this.#authorizedPresentation(
       accountSessionId,
       input.presentationSessionId,
@@ -552,7 +555,7 @@ export class PreparedEvidenceCoordinator {
       publicCardRevision: nextRevision,
     });
     if (published.outcome !== "APPLIED") throw new Error("publication lifecycle invariant failed");
-    if (!this.#projection.projectCard(input.presentationSessionId, event)) {
+    if (!(await this.#projection.projectCard(input.presentationSessionId, event))) {
       return { outcome: "REJECTED", reason: "PROJECTION_REJECTED" };
     }
     authorized.value.cards = applied.state;
@@ -560,7 +563,7 @@ export class PreparedEvidenceCoordinator {
     return { outcome: "APPLIED", value: event };
   }
 
-  terminateCard(
+  async terminateCard(
     accountSessionId: string,
     input: {
       readonly presentationSessionId: string;
@@ -570,7 +573,7 @@ export class PreparedEvidenceCoordinator {
       readonly status: "RETRACTED" | "EXPIRED";
     },
     nowMs: number,
-  ): OperationResult<PublicationTombstone> {
+  ): Promise<OperationResult<PublicationTombstone>> {
     const authorized = this.#authorizedPresentation(
       accountSessionId,
       input.presentationSessionId,
@@ -605,7 +608,7 @@ export class PreparedEvidenceCoordinator {
       nowMs,
     );
     if (applied.outcome !== "APPLIED") return { outcome: "REJECTED", reason: applied.reason };
-    if (!this.#projection.projectCard(input.presentationSessionId, event)) {
+    if (!(await this.#projection.projectCard(input.presentationSessionId, event))) {
       return { outcome: "REJECTED", reason: "PROJECTION_REJECTED" };
     }
     authorized.value.cards = applied.state;

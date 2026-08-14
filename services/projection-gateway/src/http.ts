@@ -1,10 +1,16 @@
 import type { ExactOrigin, ProjectionGatewayConfig } from "./config.ts";
-import type { PreparedEvidenceProjectionGateway } from "./prepared-evidence.ts";
+import type {
+  PlaybackProjection,
+  PreparedEvidenceProjectionGateway,
+  PublicCardEvent,
+  PublicDeckArtifact,
+} from "./prepared-evidence.ts";
 
 export type ProjectionGatewayHandler = (request: Request) => Response | Promise<Response>;
 
 export interface ProjectionGatewayHttpDependencies {
   readonly gateway: PreparedEvidenceProjectionGateway;
+  readonly internalAuthToken: string;
   readonly now: () => number;
 }
 
@@ -35,6 +41,112 @@ function browserOriginHeaders(request: Request, allowedOrigin: ExactOrigin): Hea
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function publicDeck(value: unknown): PublicDeckArtifact | null {
+  if (!isRecord(value) || !Array.isArray(value.slides)) return null;
+  const slides: PublicDeckArtifact["slides"][number][] = [];
+  for (const candidate of value.slides) {
+    if (!isRecord(candidate) || !isRecord(candidate.image)) return null;
+    if (
+      typeof candidate.publicSlideKey !== "string" ||
+      typeof candidate.ordinal !== "number" ||
+      typeof candidate.accessibilityLabel !== "string" ||
+      typeof candidate.image.url !== "string" ||
+      typeof candidate.image.contentHash !== "string" ||
+      typeof candidate.image.width !== "number" ||
+      typeof candidate.image.height !== "number"
+    ) {
+      return null;
+    }
+    slides.push({
+      publicSlideKey: candidate.publicSlideKey,
+      ordinal: candidate.ordinal,
+      accessibilityLabel: candidate.accessibilityLabel,
+      image: {
+        url: candidate.image.url,
+        contentHash: candidate.image.contentHash,
+        width: candidate.image.width,
+        height: candidate.image.height,
+      },
+    });
+  }
+  return typeof value.deckVersion === "string" &&
+    typeof value.manifestHash === "string" &&
+    typeof value.title === "string" &&
+    slides.length > 0
+    ? {
+        deckVersion: value.deckVersion,
+        manifestHash: value.manifestHash,
+        title: value.title,
+        slides,
+      }
+    : null;
+}
+
+function playbackEvent(value: unknown): PlaybackProjection | null {
+  if (!isRecord(value) || !isRecord(value.occurrence)) return null;
+  return typeof value.commandId === "string" &&
+    typeof value.displayBindingEpoch === "string" &&
+    typeof value.acceptedControlRevision === "string" &&
+    typeof value.occurrence.publicSlideKey === "string" &&
+    typeof value.occurrence.occurrenceSeq === "number" &&
+    typeof value.blackout === "boolean"
+    ? {
+        commandId: value.commandId,
+        displayBindingEpoch: value.displayBindingEpoch,
+        acceptedControlRevision: value.acceptedControlRevision,
+        occurrence: {
+          publicSlideKey: value.occurrence.publicSlideKey,
+          occurrenceSeq: value.occurrence.occurrenceSeq,
+        },
+        blackout: value.blackout,
+      }
+    : null;
+}
+
+function cardEvent(value: unknown): PublicCardEvent | null {
+  if (!isRecord(value) || typeof value.projectionId !== "string") return null;
+  if (
+    (value.status === "RETRACTED" || value.status === "EXPIRED") &&
+    typeof value.publicCardRevision === "string" &&
+    typeof value.occurredAtMs === "number"
+  ) {
+    return {
+      projectionId: value.projectionId,
+      status: value.status,
+      publicCardRevision: value.publicCardRevision,
+      occurredAtMs: value.occurredAtMs,
+    };
+  }
+  if (value.status !== "PUBLISHED" || !isRecord(value.occurrence)) return null;
+  return typeof value.claim === "string" &&
+    typeof value.supportSummary === "string" &&
+    typeof value.sourceLabel === "string" &&
+    typeof value.publishedAtMs === "number" &&
+    (typeof value.expiresAtMs === "number" || value.expiresAtMs === null) &&
+    typeof value.publicCardRevision === "string" &&
+    typeof value.deckVersion === "string" &&
+    typeof value.manifestHash === "string" &&
+    typeof value.occurrence.publicSlideKey === "string" &&
+    typeof value.occurrence.occurrenceSeq === "number"
+    ? {
+        projectionId: value.projectionId,
+        status: value.status,
+        claim: value.claim,
+        supportSummary: value.supportSummary,
+        sourceLabel: value.sourceLabel,
+        publishedAtMs: value.publishedAtMs,
+        expiresAtMs: value.expiresAtMs,
+        publicCardRevision: value.publicCardRevision,
+        deckVersion: value.deckVersion,
+        manifestHash: value.manifestHash,
+        occurrence: {
+          publicSlideKey: value.occurrence.publicSlideKey,
+          occurrenceSeq: value.occurrence.occurrenceSeq,
+        },
+      }
+    : null;
 }
 
 async function requestBody(request: Request): Promise<Record<string, unknown> | null> {
@@ -80,6 +192,77 @@ export function createProjectionGatewayHandler(
       return json({ service: "projection-gateway", status: "ok" }, 200, origin);
     }
     if (dependencies === undefined) return json({ error: "not_found" }, 404, origin);
+
+    if (request.method === "POST" && url.pathname.startsWith("/internal/")) {
+      if (request.headers.get("authorization") !== `Bearer ${dependencies.internalAuthToken}`) {
+        return json({ error: "internal_unauthorized" }, 401);
+      }
+      const body = await requestBody(request);
+      if (body === null) return json({ error: "invalid_request" }, 400);
+      if (url.pathname === "/internal/display-bindings") {
+        const deck = publicDeck(body.deck);
+        if (
+          deck === null ||
+          typeof body.displayJoinId !== "string" ||
+          typeof body.presentationSessionId !== "string" ||
+          typeof body.presentationSessionEpoch !== "string" ||
+          typeof body.expectedDisplayBindingEpoch !== "string" ||
+          typeof body.expectedDeckVersion !== "string" ||
+          typeof body.approvedDisplayId !== "string" ||
+          typeof body.approvedDisplayFingerprint !== "string" ||
+          typeof body.nowMs !== "number"
+        ) {
+          return json({ error: "invalid_request" }, 400);
+        }
+        const result = dependencies.gateway.bindDisplay(
+          {
+            displayJoinId: body.displayJoinId,
+            presentationSessionId: body.presentationSessionId,
+            presentationSessionEpoch: body.presentationSessionEpoch,
+            expectedDisplayBindingEpoch: body.expectedDisplayBindingEpoch,
+            expectedDeckVersion: body.expectedDeckVersion,
+            approvedDisplayId: body.approvedDisplayId,
+            approvedDisplayFingerprint: body.approvedDisplayFingerprint,
+            deck,
+          },
+          body.nowMs,
+        );
+        return json(result, result.outcome === "BOUND" ? 200 : 409);
+      }
+      if (url.pathname === "/internal/playback") {
+        const event = playbackEvent(body.event);
+        if (typeof body.presentationSessionId !== "string" || event === null) {
+          return json({ error: "invalid_request" }, 400);
+        }
+        const applied = dependencies.gateway.projectPlayback(body.presentationSessionId, event);
+        return json({ applied }, applied ? 200 : 409);
+      }
+      if (url.pathname === "/internal/playback-applied") {
+        if (
+          typeof body.presentationSessionId !== "string" ||
+          typeof body.displayBindingEpoch !== "string" ||
+          typeof body.publicPlaybackRevision !== "string"
+        ) {
+          return json({ error: "invalid_request" }, 400);
+        }
+        const applied = dependencies.gateway.recordPlaybackApplied(
+          body.presentationSessionId,
+          body.displayBindingEpoch,
+          body.publicPlaybackRevision,
+        );
+        return json({ applied }, applied ? 200 : 409);
+      }
+      if (url.pathname === "/internal/cards") {
+        const event = cardEvent(body.event);
+        if (typeof body.presentationSessionId !== "string" || event === null) {
+          return json({ error: "invalid_request" }, 400);
+        }
+        const applied = dependencies.gateway.projectCard(body.presentationSessionId, event);
+        return json({ applied }, applied ? 200 : 409);
+      }
+      return json({ error: "not_found" }, 404);
+    }
+
     if (request.method !== "GET" && !validMutationOrigin(request, config.allowedOrigin)) {
       return json({ error: "mutation_origin_forbidden" }, 403, origin);
     }
