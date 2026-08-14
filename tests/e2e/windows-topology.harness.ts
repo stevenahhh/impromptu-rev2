@@ -167,6 +167,22 @@ async function stop(child: ServiceProcess): Promise<void> {
   await exited;
 }
 
+async function closeProjectionChannels(channelClosed: () => Promise<unknown>): Promise<void> {
+  const response = await fetch(`${projectionOrigin}/__test/close-channels`, { method: "POST" });
+  if (!response.ok) throw new Error("projection fixture rejected channel close");
+  const body: unknown = await response.json();
+  if (
+    typeof body !== "object" ||
+    body === null ||
+    Array.isArray(body) ||
+    typeof (body as Record<string, unknown>).closedChannels !== "number" ||
+    (body as { closedChannels: number }).closedChannels < 1
+  ) {
+    throw new Error("projection fixture had no Stage channel to close");
+  }
+  await channelClosed();
+}
+
 async function stopProjectionFixture(child: ServiceProcess): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) return;
   const exited = once(child, "exit", { signal: AbortSignal.timeout(5_000) });
@@ -702,8 +718,8 @@ export async function runWindowsTopologyE2E(): Promise<WindowsTopologyEvidence> 
       channelClosed: () => Promise<unknown>,
       signalRecovery: () => Promise<void>,
     ) => {
+      await closeProjectionChannels(channelClosed);
       await stopProjectionFixture(projection);
-      await channelClosed();
       projectionPort += 1;
       projectionOrigin = `http://127.0.0.1:${projectionPort}`;
       projection = await start(

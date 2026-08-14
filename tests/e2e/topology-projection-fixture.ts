@@ -2,6 +2,7 @@ const host = "127.0.0.1";
 const port = Number(process.env.TOPOLOGY_PROJECTION_PORT ?? "44402");
 const publicSlides = ["slide_public_1", "slide_public_2", "slide_public_3"];
 let joinSequence = 0;
+const sockets = new Set<Bun.ServerWebSocket<Record<never, never>>>();
 
 function json(value: unknown, status = 200): Response {
   return Response.json(value, { status, headers: { "cache-control": "no-store" } });
@@ -12,6 +13,12 @@ const server = Bun.serve<Record<never, never>, Record<never, never>>({
   port,
   async fetch(request, bunServer) {
     const url = new URL(request.url);
+    if (request.method === "POST" && url.pathname === "/__test/close-channels") {
+      for (const socket of sockets) {
+        socket.send(JSON.stringify({ kind: "CLOSE", payload: { reason: "SERVER_RESTART" } }));
+      }
+      return json({ closedChannels: sockets.size });
+    }
     if (request.method === "POST" && url.pathname === "/__test/shutdown") {
       queueMicrotask(() => void server.stop(true));
       return json({ status: "stopping" }, 202);
@@ -106,9 +113,13 @@ const server = Bun.serve<Record<never, never>, Record<never, never>>({
     return json({ error: "not_found" }, 404);
   },
   websocket: {
-    open() {},
+    open(socket) {
+      sockets.add(socket);
+    },
     message() {},
-    close() {},
+    close(socket) {
+      sockets.delete(socket);
+    },
   },
 });
 
