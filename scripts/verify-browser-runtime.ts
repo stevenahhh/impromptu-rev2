@@ -12,11 +12,20 @@ import {
 
 const chromeExecutable = "C:/Program Files/Google/Chrome/Application/chrome.exe";
 const chromeHeadless = process.env.BROWSER_HEADED !== "true";
-const runtimeRoot = join(process.env.TEMP ?? process.cwd(), "impromptu-r2-browser-runtime");
+const portBase = 30_000 + (process.pid % 500) * 10;
+const consolePort = portBase;
+const stagePort = portBase + 1;
+const embedPort = portBase + 2;
+const devPortBase = portBase + 3;
+const lifecyclePortBase = portBase + 5;
+const runtimeRoot = join(
+  process.env.TEMP ?? process.cwd(),
+  `impromptu-r2-browser-runtime-${process.pid}`,
+);
 const profilePath = join(runtimeRoot, "offline-profile");
 export const artifactPath = join(
   process.env.TEMP ?? process.cwd(),
-  "impromptu-r2-browser-artifacts",
+  `impromptu-r2-browser-artifacts-${process.pid}`,
 );
 
 interface AppSurface {
@@ -68,14 +77,14 @@ const surfaces: AppSurface[] = [
     app: "console",
     cachePrefix: "impromptu-console-shell-",
     expectedText: "Private presentation control",
-    port: 43173,
+    port: consolePort,
     route: "/session",
   },
   {
     app: "stage",
     cachePrefix: "impromptu-stage-shell-",
     expectedText: "Evidence, without the detour",
-    port: 43174,
+    port: stagePort,
     route: "/display/rehearsal",
   },
 ];
@@ -86,7 +95,7 @@ function address(surface: AppSurface) {
 
 async function verifyDevResponseHeaders() {
   for (const [index, surface] of surfaces.entries()) {
-    const port = 43176 + index;
+    const port = devPortBase + index;
     const server = await createViteServer({
       optimizeDeps: { noDiscovery: true },
       root: `apps/${surface.app}`,
@@ -110,12 +119,12 @@ async function startEmbedOrigin(): Promise<Server> {
   const server = createHttpServer((_request, response) => {
     response.writeHead(200, { "Content-Type": "text/html" });
     response.end(
-      '<!doctype html><title>Embed verifier</title><iframe src="http://127.0.0.1:43174/"></iframe>',
+      `<!doctype html><title>Embed verifier</title><iframe src="http://127.0.0.1:${stagePort}/"></iframe>`,
     );
   });
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
-    server.listen(43175, "127.0.0.1", resolve);
+    server.listen(embedPort, "127.0.0.1", resolve);
   });
   return server;
 }
@@ -368,7 +377,7 @@ async function verifyUpdateLifecycle(surface: AppSurface, index: number) {
   const lifecycleProfile = join(runtimeRoot, `${surface.app}-lifecycle-profile`);
 
   try {
-    const origin = await startLifecycleOrigin(surface, 43178 + index);
+    const origin = await startLifecycleOrigin(surface, lifecyclePortBase + index);
     cleanup.add(origin.close);
     origin.setWorkerVersion("v1");
     const context = await chromium.launchPersistentContext(lifecycleProfile, {
@@ -608,7 +617,9 @@ async function verifyStageLayouts(context: BrowserContext) {
     for (const route of routes) {
       const page = await context.newPage();
       await page.setViewportSize({ height: viewport.height, width: viewport.width });
-      await page.goto(`http://127.0.0.1:43174${route.path}`, { waitUntil: "domcontentloaded" });
+      await page.goto(`http://127.0.0.1:${stagePort}${route.path}`, {
+        waitUntil: "domcontentloaded",
+      });
       await page.locator("#root").waitFor({ state: "visible" });
       await assertStageFitsViewport(page, `${route.name}-${viewport.label}`, [...route.critical]);
       await page.screenshot({
@@ -620,7 +631,7 @@ async function verifyStageLayouts(context: BrowserContext) {
 
   const fullscreenPage = await context.newPage();
   await fullscreenPage.setViewportSize({ height: 900, width: 1440 });
-  await fullscreenPage.goto("http://127.0.0.1:43174/display/rehearsal", {
+  await fullscreenPage.goto(`http://127.0.0.1:${stagePort}/display/rehearsal`, {
     waitUntil: "domcontentloaded",
   });
   await fullscreenPage
@@ -975,9 +986,9 @@ async function verifyCrossOriginFrameRejection(context: BrowserContext) {
   const violation = page.waitForEvent("console", {
     predicate: (message) => message.text().includes("frame-ancestors 'none'"),
   });
-  await page.goto("http://127.0.0.1:43175/", { waitUntil: "domcontentloaded" });
+  await page.goto(`http://127.0.0.1:${embedPort}/`, { waitUntil: "domcontentloaded" });
   await violation;
-  if (page.frames().some((frame) => frame.url().startsWith("http://127.0.0.1:43174"))) {
+  if (page.frames().some((frame) => frame.url().startsWith(`http://127.0.0.1:${stagePort}`))) {
     throw new Error("Cross-origin parent rendered the Stage frame despite its CSP");
   }
   await page.screenshot({ path: join(artifactPath, "cross-origin-frame-rejected.png") });
