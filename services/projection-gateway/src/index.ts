@@ -9,3 +9,4 @@ export type {
   PublishedAudienceCard,
   StageAppliedReceipt,
 } from "./ports/public-projection.ts";
+export * from "./prepared-evidence.ts";
