@@ -29,33 +29,45 @@ SELECT pg_temp.assert_true(
   'object owner must not log in'
 );
 SELECT pg_temp.assert_true(
-  NOT has_database_privilege('projection_app', 'postgres', 'CONNECT,TEMPORARY')
-    AND NOT has_database_privilege('projection_app', 'impromptu_private', 'CONNECT,TEMPORARY')
-    AND has_database_privilege('projection_app', 'impromptu_projection', 'CONNECT')
-    AND NOT has_database_privilege('projection_app', 'impromptu_projection', 'TEMPORARY'),
-  'projection_app must connect only to projection without temporary-object access'
-);
-SELECT pg_temp.assert_true(
-  NOT has_database_privilege('private_app', 'postgres', 'CONNECT,TEMPORARY')
-    AND has_database_privilege('private_app', 'impromptu_private', 'CONNECT')
-    AND NOT has_database_privilege('private_app', 'impromptu_private', 'TEMPORARY')
-    AND has_database_privilege('private_app', 'impromptu_projection', 'CONNECT')
-    AND NOT has_database_privilege('private_app', 'impromptu_projection', 'TEMPORARY'),
-  'private_app must connect only to private and projection databases'
-);
-SELECT pg_temp.assert_true(
-  NOT has_database_privilege('migration', 'postgres', 'CONNECT,TEMPORARY')
-    AND has_database_privilege('migration', 'impromptu_private', 'CONNECT')
-    AND has_database_privilege('migration', 'impromptu_projection', 'CONNECT')
-    AND NOT has_database_privilege('migration', 'impromptu_private', 'TEMPORARY')
-    AND NOT has_database_privilege('migration', 'impromptu_projection', 'TEMPORARY'),
-  'migration must connect only to application databases'
+  (
+    SELECT array_agg(datname ORDER BY datname)
+    FROM pg_database
+    WHERE datallowconn
+      AND has_database_privilege('projection_app', datname, 'CONNECT')
+  ) = ARRAY['impromptu_projection']::name[],
+  'projection_app must connect only to the projection database'
 );
 SELECT pg_temp.assert_true(
   (
-    SELECT count(*) = 1
+    SELECT array_agg(datname ORDER BY datname)
+    FROM pg_database
+    WHERE datallowconn
+      AND has_database_privilege('private_app', datname, 'CONNECT')
+  ) = ARRAY['impromptu_private', 'impromptu_projection']::name[],
+  'private_app must connect only to private and projection databases'
+);
+SELECT pg_temp.assert_true(
+  (
+    SELECT array_agg(datname ORDER BY datname)
+    FROM pg_database
+    WHERE datallowconn
+      AND has_database_privilege('migration', datname, 'CONNECT')
+  ) = ARRAY['impromptu_private', 'impromptu_projection']::name[],
+  'migration must connect only to application databases'
+);
+SELECT pg_temp.assert_true(
+  NOT has_database_privilege('projection_app', 'impromptu_projection', 'TEMPORARY')
+    AND NOT has_database_privilege('private_app', 'impromptu_private', 'TEMPORARY')
+    AND NOT has_database_privilege('private_app', 'impromptu_projection', 'TEMPORARY')
+    AND NOT has_database_privilege('migration', 'impromptu_private', 'TEMPORARY')
+    AND NOT has_database_privilege('migration', 'impromptu_projection', 'TEMPORARY'),
+  'application roles must not create temporary objects'
+);
+SELECT pg_temp.assert_true(
+  (
+    SELECT count(*) = 2
     FROM _migrations.applied_migrations
-    WHERE migration_name = '0001_cluster.sql'
+    WHERE migration_name IN ('0001_cluster.sql', '0002_restrict_template_databases.sql')
       AND checksum ~ '^[0-9a-f]{64}$'
   ),
   'cluster migration must be recorded with a checksum'

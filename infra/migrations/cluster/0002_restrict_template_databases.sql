@@ -1,0 +1,6 @@
+\set ON_ERROR_STOP 1
+
+REVOKE ALL PRIVILEGES ON DATABASE template0 FROM PUBLIC;
+REVOKE ALL PRIVILEGES ON DATABASE template0 FROM migration, private_app, projection_app;
+REVOKE ALL PRIVILEGES ON DATABASE template1 FROM PUBLIC;
+REVOKE ALL PRIVILEGES ON DATABASE template1 FROM migration, private_app, projection_app;

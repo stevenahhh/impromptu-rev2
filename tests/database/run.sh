@@ -213,8 +213,11 @@ psql_file "$PROJECTION_ROLE" "$PROJECTION_DATABASE" "$REPO_ROOT/tests/database/p
 
 expect_connection_denied "$PROJECTION_ROLE" "$PRIVATE_DATABASE"
 expect_connection_denied "$PROJECTION_ROLE" "$DEFAULT_DATABASE"
+expect_connection_denied "$PROJECTION_ROLE" "template1"
 expect_connection_denied "$PRIVATE_ROLE" "$DEFAULT_DATABASE"
+expect_connection_denied "$PRIVATE_ROLE" "template1"
 expect_connection_denied "migration" "$DEFAULT_DATABASE"
+expect_connection_denied "migration" "template1"
 expect_denied \
   "$PROJECTION_ROLE" "$PROJECTION_DATABASE" \
   "measure the private database" \
