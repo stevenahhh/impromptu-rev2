@@ -186,6 +186,32 @@ describe("candidate and public card stream separation", () => {
     expect(rejected.outcome).toBe("REJECTED");
     if (rejected.outcome !== "REJECTED") throw new Error("stale candidate was published");
     expect(rejected.reason).toBe("CANDIDATE_NOT_ELIGIBLE");
+    expect(stale).toMatchObject({
+      candidateId: eligible.candidateId,
+      candidateVersion: eligible.candidateVersion,
+      contentHash: eligible.contentHash,
+    });
+
+    const superseded = reduceCandidateLifecycle(eligible, {
+      type: "SUPERSEDE",
+      candidateVersion: "candidate-v1",
+    }).state;
+    const supersededResult = applyAuthorizedPublicCardEvent(
+      stream(),
+      superseded,
+      {
+        presentationSessionId: "ps_session-1",
+        presentationSessionEpoch: "pse_3",
+        authorityId: "pubauth_primary",
+        expectedRevision: "pcr_0",
+        payload: card(1),
+      },
+      nowMs,
+    );
+    expect(supersededResult).toMatchObject({
+      outcome: "REJECTED",
+      reason: "CANDIDATE_NOT_ELIGIBLE",
+    });
   });
 
   test("validates publication authority and presentation epoch before stream CAS", () => {

@@ -1,19 +1,19 @@
 {
-  "deckId": "private-deck-1",
+  "deckId": "private_deck_1",
   "deckVersion": "deck_v7",
   "manifestHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "title": "Guarded pilot briefing",
-  "ownerAccountId": "account-1",
+  "ownerAccountId": "account_1",
   "aclPolicyVersion": "acl-v3",
-  "privateObjectPrefix": "private-decks/account-1/deck-1/",
+  "privateObjectPrefix": "private-decks/account_1/deck-1/",
   "slides": [
     {
-      "privateSlideId": "private-slide-1",
+      "privateSlideId": "private_slide_1",
       "publicSlideKey": "slide_public-1",
       "ordinal": 1,
       "speakerNotes": "Do not display this note.",
       "extractedText": "Internal retrieval text.",
-      "sourceAssetIds": ["private-asset-1"]
+      "sourceAssetIds": ["asset_1"]
     }
   ]
 }

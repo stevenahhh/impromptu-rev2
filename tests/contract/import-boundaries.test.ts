@@ -35,7 +35,7 @@ describe("role-scoped contract exports", () => {
 
   test("blocks unexported implementation subpaths from TypeScript consumers", () => {
     const resolution = ts.resolveModuleName(
-      "@impromptu/contracts/src/deck.ts",
+      "@impromptu/contracts/src/private-evidence.ts",
       "tests/contract/stage-consumer.ts",
       {
         module: ts.ModuleKind.Preserve,

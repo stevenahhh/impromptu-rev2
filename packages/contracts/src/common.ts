@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { PublicSlideKeySchema } from "./public-identifiers.ts";
 
-export const OpaqueIdSchema = z.string().min(1).max(200);
 export const VersionIdSchema = z.string().min(1).max(200);
 export const Sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
 export const TimestampMsSchema = z.number().int().nonnegative();

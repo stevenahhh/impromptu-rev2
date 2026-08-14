@@ -8,8 +8,11 @@ import {
   PlaybackControlLeaseSchema,
 } from "@impromptu/contracts/control";
 import {
+  AccountIdSchema,
   CaptureGrantIdSchema,
   CaptureGrantSchema,
+  PrivateDeckIdSchema,
+  PrivateSlideIdSchema,
   PublicationAuthorityIdSchema,
   PublicationAuthoritySchema,
 } from "@impromptu/contracts/private";
@@ -107,7 +110,14 @@ describe("domain identities", () => {
     expect(audience.binding).toEqual(binding);
   });
 
-  test("brands actor and command identifiers independently", () => {
+  test("brands deck, slide, account, actor, and command identifiers independently", () => {
+    const deck = PrivateDeckIdSchema.parse("private_deck_1");
+    const slide = PrivateSlideIdSchema.parse("private_slide_1");
+    const account = AccountIdSchema.parse("account_owner");
+    expect(PrivateSlideIdSchema.safeParse(deck).success).toBe(false);
+    expect(AccountIdSchema.safeParse(slide).success).toBe(false);
+    expect(PrivateDeckIdSchema.safeParse(account).success).toBe(false);
+
     const actor = ActorIdSchema.parse("actor_controller");
     const command = CommandIdSchema.parse("cmd_next");
     expect(CommandIdSchema.safeParse(actor).success).toBe(false);

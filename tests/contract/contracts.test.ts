@@ -36,6 +36,16 @@ describe("protocol contract fixtures", () => {
     expect(Array.isArray(commands)).toBe(true);
     if (!Array.isArray(commands)) throw new Error("playback-commands fixture must be an array");
     for (const command of commands) PlaybackCommandSchema.parse(command);
+    const firstCommand = commands[0];
+    if (typeof firstCommand !== "object" || firstCommand === null) {
+      throw new Error("playback-commands fixture must contain a command object");
+    }
+    expect(
+      PlaybackCommandSchema.safeParse({
+        ...firstCommand,
+        requestHash: "f".repeat(64),
+      }).success,
+    ).toBe(false);
   });
 
   test("parse evidence causal envelopes, published cards, tombstones, and audience snapshots", () => {
