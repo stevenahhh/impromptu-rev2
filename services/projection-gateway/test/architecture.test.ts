@@ -1,16 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, resolve } from "node:path";
 import {
   type ArchitectureViolationCode,
+  scanPackageEntrypoints,
   scanPackageManifest,
   scanProjectionArchitecture,
+  scanSourceDirectory,
   scanSourceText,
 } from "./support/architecture-scanner.ts";
 
 const serviceRoot = resolve(import.meta.dir, "..");
 const sourceRoot = resolve(serviceRoot, "src");
 const fixtureRoot = resolve(import.meta.dir, "fixtures/architecture");
+const sourceExtensionFixtureRoot = resolve(fixtureRoot, "source-extension-bypass");
 
 function fixture(name: string): string {
   return readFileSync(resolve(fixtureRoot, `${name}.fixture`), "utf8");
@@ -153,5 +157,110 @@ describe("projection gateway architecture", () => {
 
   test("accepts unrelated package controls", () => {
     expect(packageFixtureViolations("package-controls-safe")).toEqual([]);
+  });
+
+  test("scans every Bun and TypeScript executable source extension", () => {
+    const directory = mkdtempSync(resolve(tmpdir(), "projection-source-extensions-"));
+    const extensions = [
+      ".ts",
+      ".tsx",
+      ".mts",
+      ".cts",
+      ".js",
+      ".jsx",
+      ".mjs",
+      ".cjs",
+      ".d.ts",
+      ".d.mts",
+      ".d.cts",
+    ] as const;
+
+    try {
+      const nestedDirectory = resolve(directory, "nested/loaders");
+      mkdirSync(nestedDirectory, { recursive: true });
+      for (const [index, extension] of extensions.entries()) {
+        writeFileSync(
+          resolve(
+            index % 2 === 0 ? directory : nestedDirectory,
+            `private-bridge-${index}${extension}`,
+          ),
+          `export { escaped } from "${index % 2 === 0 ? "../outside.js" : "../../../outside.js"}";\n`,
+        );
+      }
+
+      const violations = scanSourceDirectory(directory, { sourceRoot: directory, aliases: [] });
+      const rejectedFiles = new Set(
+        violations
+          .filter((violation) => violation.code === "BOUNDARY_ESCAPE")
+          .map((violation) => basename(violation.file)),
+      );
+
+      for (const [index, extension] of extensions.entries()) {
+        expect(rejectedFiles.has(`private-bridge-${index}${extension}`)).toBe(true);
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("finds a runtime JavaScript bridge hidden by a declaration and re-export", async () => {
+    const violations = scanSourceDirectory(sourceExtensionFixtureRoot, {
+      sourceRoot: sourceExtensionFixtureRoot,
+      aliases: [],
+    });
+    const entrypointViolations = scanPackageEntrypoints(
+      resolve(sourceExtensionFixtureRoot, "package.json"),
+      readFileSync(resolve(sourceExtensionFixtureRoot, "package.fixture"), "utf8"),
+      sourceExtensionFixtureRoot,
+    );
+    const runtimeBridge = await import("./fixtures/architecture/source-extension-bypass/index.ts");
+
+    expect(
+      violations.some(
+        (violation) =>
+          violation.code === "BOUNDARY_ESCAPE" && violation.file.endsWith("private-bridge.js"),
+      ),
+    ).toBe(true);
+    expect(entrypointViolations).toEqual([]);
+    expect(runtimeBridge.loadPrivateConfig().port).toBe(4102);
+  });
+
+  test("rejects package entrypoints outside the source boundary", () => {
+    const violations = scanPackageEntrypoints(
+      resolve(serviceRoot, "package.json"),
+      JSON.stringify({
+        exports: {
+          ".": {
+            types: "./src/index.ts",
+            import: "../private-backend/src/index.ts",
+          },
+        },
+        main: "../private-backend/src/index.ts",
+      }),
+      sourceRoot,
+    );
+
+    expect(violations.map((violation) => violation.code)).toEqual([
+      "PACKAGE_ENTRYPOINT_ESCAPE",
+      "PACKAGE_ENTRYPOINT_ESCAPE",
+    ]);
+  });
+
+  test("rejects symlinks before following source paths", () => {
+    const directory = mkdtempSync(resolve(tmpdir(), "projection-source-symlink-"));
+    const source = resolve(directory, "src");
+    const outside = resolve(directory, "outside");
+    mkdirSync(source);
+    mkdirSync(outside);
+    writeFileSync(resolve(outside, "private-bridge.js"), "export const escaped = true;\n");
+
+    try {
+      symlinkSync(outside, resolve(source, "linked"), "junction");
+      const violations = scanSourceDirectory(source, { sourceRoot: source, aliases: [] });
+
+      expect(violations.map((violation) => violation.code)).toContain("SYMLINK_ESCAPE");
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 });

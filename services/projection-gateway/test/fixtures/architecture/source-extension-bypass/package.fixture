@@ -1,0 +1,10 @@
+{
+  "exports": {
+    ".": {
+      "types": "./private-bridge.d.ts",
+      "import": "./index.ts"
+    }
+  },
+  "main": "./index.ts",
+  "types": "./private-bridge.d.ts"
+}

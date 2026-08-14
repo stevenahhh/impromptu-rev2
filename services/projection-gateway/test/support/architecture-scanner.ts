@@ -13,7 +13,9 @@ export type ArchitectureViolationCode =
   | "MALFORMED_DEPENDENCY_GROUP"
   | "MALFORMED_PACKAGE_MANIFEST"
   | "NON_LITERAL_DYNAMIC_IMPORT"
-  | "NON_LITERAL_IMPORT_TYPE";
+  | "NON_LITERAL_IMPORT_TYPE"
+  | "PACKAGE_ENTRYPOINT_ESCAPE"
+  | "SYMLINK_ESCAPE";
 
 export interface ArchitectureViolation {
   readonly code: ArchitectureViolationCode;
@@ -98,12 +100,26 @@ function isRequireCall(node: ts.CallExpression): boolean {
   return ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === "require";
 }
 
+function scriptKind(file: string): ts.ScriptKind {
+  const lowerFile = file.toLowerCase();
+  if (lowerFile.endsWith(".tsx")) {
+    return ts.ScriptKind.TSX;
+  }
+  if (lowerFile.endsWith(".jsx")) {
+    return ts.ScriptKind.JSX;
+  }
+  if (lowerFile.endsWith(".js") || lowerFile.endsWith(".mjs") || lowerFile.endsWith(".cjs")) {
+    return ts.ScriptKind.JS;
+  }
+  return ts.ScriptKind.TS;
+}
+
 export function scanSourceText(
   file: string,
   text: string,
   policy: SourceBoundaryPolicy,
 ): readonly ArchitectureViolation[] {
-  const source = ts.createSourceFile(file, text, ts.ScriptTarget.ESNext, true, ts.ScriptKind.TS);
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.ESNext, true, scriptKind(file));
   const violations: ArchitectureViolation[] = [];
 
   function visit(node: ts.Node): void {
@@ -154,11 +170,55 @@ function filesNamed(directory: string, name: string): readonly string[] {
   });
 }
 
-function sourceFiles(directory: string): readonly string[] {
-  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+const EXECUTABLE_SOURCE_EXTENSIONS = [
+  ".ts",
+  ".tsx",
+  ".mts",
+  ".cts",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+] as const;
+
+function isExecutableSource(file: string): boolean {
+  const lowerFile = file.toLowerCase();
+  return EXECUTABLE_SOURCE_EXTENSIONS.some((extension) => lowerFile.endsWith(extension));
+}
+
+function sourceFiles(directory: string): {
+  readonly files: readonly string[];
+  readonly violations: readonly ArchitectureViolation[];
+} {
+  const files: string[] = [];
+  const violations: ArchitectureViolation[] = [];
+
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const path = resolve(directory, entry.name);
-    return entry.isDirectory() ? sourceFiles(path) : path.endsWith(".ts") ? [path] : [];
-  });
+    if (entry.isSymbolicLink()) {
+      violations.push({ code: "SYMLINK_ESCAPE", file: path });
+    } else if (entry.isDirectory()) {
+      const nested = sourceFiles(path);
+      files.push(...nested.files);
+      violations.push(...nested.violations);
+    } else if (isExecutableSource(path)) {
+      files.push(path);
+    }
+  }
+
+  return { files, violations };
+}
+
+export function scanSourceDirectory(
+  directory: string,
+  policy: SourceBoundaryPolicy,
+): readonly ArchitectureViolation[] {
+  const discovered = sourceFiles(directory);
+  const importViolations = discovered.files.flatMap((file) =>
+    scanSourceText(file, readFileSync(file, "utf8"), policy),
+  );
+
+  return [...discovered.violations, ...importViolations];
 }
 
 const FORBIDDEN_PRIVATE_PACKAGE = "@impromptu/private-backend";
@@ -292,6 +352,81 @@ export function scanPackageManifest(file: string, text: string): readonly Archit
   return violations;
 }
 
+const PACKAGE_ENTRYPOINT_FIELDS = [
+  "exports",
+  "imports",
+  "main",
+  "module",
+  "browser",
+  "types",
+  "typings",
+  "typesVersions",
+  "bin",
+  "loader",
+  "react-native",
+] as const;
+
+function scanEntrypointValue(
+  file: string,
+  value: unknown,
+  sourceRoot: string,
+  violations: ArchitectureViolation[],
+): void {
+  if (value === null || value === false) {
+    return;
+  }
+
+  if (typeof value === "string") {
+    const target = resolve(dirname(file), value);
+    if (!value.startsWith("./") || !isInside(sourceRoot, target) || !isExecutableSource(target)) {
+      violations.push({ code: "PACKAGE_ENTRYPOINT_ESCAPE", file, specifier: value });
+    }
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    for (const candidate of value) {
+      scanEntrypointValue(file, candidate, sourceRoot, violations);
+    }
+    return;
+  }
+
+  if (isRecord(value)) {
+    for (const candidate of Object.values(value)) {
+      scanEntrypointValue(file, candidate, sourceRoot, violations);
+    }
+    return;
+  }
+
+  violations.push({ code: "PACKAGE_ENTRYPOINT_ESCAPE", file });
+}
+
+export function scanPackageEntrypoints(
+  file: string,
+  text: string,
+  sourceRoot: string,
+): readonly ArchitectureViolation[] {
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(text);
+  } catch {
+    return [{ code: "MALFORMED_PACKAGE_MANIFEST", file }];
+  }
+
+  if (!isRecord(manifest)) {
+    return [{ code: "MALFORMED_PACKAGE_MANIFEST", file }];
+  }
+
+  const violations: ArchitectureViolation[] = [];
+  for (const field of PACKAGE_ENTRYPOINT_FIELDS) {
+    if (field in manifest) {
+      scanEntrypointValue(file, manifest[field], sourceRoot, violations);
+    }
+  }
+
+  return violations;
+}
+
 function loadAliases(configPath: string): {
   readonly aliases: readonly PathAlias[];
   readonly violations: readonly ArchitectureViolation[];
@@ -330,12 +465,11 @@ export function scanProjectionArchitecture(serviceRoot: string): readonly Archit
     sourceRoot,
     aliases: aliasResult.aliases,
   };
-  const sourceViolations = sourceFiles(sourceRoot).flatMap((file) =>
-    scanSourceText(file, readFileSync(file, "utf8"), policy),
-  );
-  const manifestViolations = filesNamed(serviceRoot, "package.json").flatMap((file) =>
-    scanPackageManifest(file, readFileSync(file, "utf8")),
-  );
+  const sourceViolations = scanSourceDirectory(sourceRoot, policy);
+  const manifestViolations = filesNamed(serviceRoot, "package.json").flatMap((file) => {
+    const text = readFileSync(file, "utf8");
+    return [...scanPackageManifest(file, text), ...scanPackageEntrypoints(file, text, sourceRoot)];
+  });
 
   return [...aliasResult.violations, ...sourceViolations, ...manifestViolations];
 }
