@@ -14,6 +14,8 @@ export interface StageCardView {
   readonly status: "PUBLISHED";
   readonly mode: "CURATED" | "LIVE";
   readonly leaseExpiresAtMs: number | null;
+  readonly publicationPolicyVersion?: string;
+  readonly cardVersion?: string;
   readonly liveBinding?: Readonly<{
     presentationSessionEpoch: string;
     publicSlideOccurrence: Readonly<{ publicSlideKey: string; occurrenceSeq: number }>;
@@ -67,6 +69,7 @@ export interface StageSnapshotView {
     accessibilityLabel: string;
   }>[];
   readonly publicPlaybackRevision: string;
+  readonly publicationPolicyVersion: string | null;
   readonly blackout: boolean;
   readonly occurrence: { readonly publicSlideKey: string; readonly occurrenceSeq: number };
   readonly cards: readonly StageCardView[];
@@ -198,6 +201,8 @@ function snapshot(value: unknown): StageSnapshotView | null {
     typeof candidate.presentationSessionEpoch !== "string" ||
     typeof candidate.displayBindingEpoch !== "string" ||
     typeof candidate.publicPlaybackRevision !== "string" ||
+    (candidate.publicationPolicyVersion !== null &&
+      typeof candidate.publicationPolicyVersion !== "string") ||
     typeof candidate.blackout !== "boolean" ||
     deck === null ||
     typeof deck.deckVersion !== "string" ||
@@ -255,13 +260,29 @@ function snapshot(value: unknown): StageSnapshotView | null {
           ? card.expiresAtMs
           : null;
     const binding = liveBinding(card.liveBinding);
-    if (mode === "LIVE" && (leaseExpiresAtMs === null || binding === null)) return null;
+    if (
+      mode === "LIVE" &&
+      (leaseExpiresAtMs === null ||
+        binding === null ||
+        binding.presentationSessionEpoch !== candidate.presentationSessionEpoch ||
+        binding.publicSlideOccurrence.publicSlideKey !== occurrence.publicSlideKey ||
+        binding.publicSlideOccurrence.occurrenceSeq !== occurrence.occurrenceSeq ||
+        card.publicationPolicyVersion !== candidate.publicationPolicyVersion ||
+        card.publicationPolicyVersion !== binding.publicationPolicyVersion ||
+        card.cardVersion !== binding.cardVersion)
+    ) {
+      continue;
+    }
     const offlinePackage = record(card.offlinePackage);
     cards.push({
       projectionId: card.projectionId,
       status: card.status,
       mode,
       leaseExpiresAtMs,
+      ...(typeof card.publicationPolicyVersion === "string"
+        ? { publicationPolicyVersion: card.publicationPolicyVersion }
+        : {}),
+      ...(typeof card.cardVersion === "string" ? { cardVersion: card.cardVersion } : {}),
       ...(binding === null ? {} : { liveBinding: binding }),
       ...(offlinePackage !== null &&
       typeof offlinePackage.offlineDisplayAllowed === "boolean" &&
@@ -292,6 +313,7 @@ function snapshot(value: unknown): StageSnapshotView | null {
     manifestHash: deck.manifestHash,
     deckSlides,
     publicPlaybackRevision: candidate.publicPlaybackRevision,
+    publicationPolicyVersion: candidate.publicationPolicyVersion,
     blackout: candidate.blackout,
     occurrence: {
       publicSlideKey: occurrence.publicSlideKey,
@@ -365,13 +387,25 @@ function cardEvent(value: unknown): StageCardEvent | null {
           ? candidate.expiresAtMs
           : null;
     const binding = liveBinding(candidate.liveBinding);
-    if (mode === "LIVE" && (leaseExpiresAtMs === null || binding === null)) return null;
+    if (
+      mode === "LIVE" &&
+      (leaseExpiresAtMs === null ||
+        binding === null ||
+        candidate.publicationPolicyVersion !== binding.publicationPolicyVersion ||
+        candidate.cardVersion !== binding.cardVersion)
+    ) {
+      return null;
+    }
     const offlinePackage = record(candidate.offlinePackage);
     return {
       projectionId: candidate.projectionId,
       status: candidate.status,
       mode,
       leaseExpiresAtMs,
+      ...(typeof candidate.publicationPolicyVersion === "string"
+        ? { publicationPolicyVersion: candidate.publicationPolicyVersion }
+        : {}),
+      ...(typeof candidate.cardVersion === "string" ? { cardVersion: candidate.cardVersion } : {}),
       ...(binding === null ? {} : { liveBinding: binding }),
       ...(offlinePackage !== null &&
       typeof offlinePackage.offlineDisplayAllowed === "boolean" &&

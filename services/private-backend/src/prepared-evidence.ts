@@ -1054,6 +1054,7 @@ export class PreparedEvidenceCoordinator {
     const projectionId = `projection_${opaqueHex(24)}` as PublishedAudienceCard["projectionId"];
     const isLive = record.candidate.provenance === "LIVE_VERIFIED";
     const leaseExpiresAtMs = isLive ? nowMs + 3_000 : input.expiresAtMs;
+    const cardVersion = `card-${opaqueHex(12)}`;
     const event: PublishedAudienceCard = {
       projectionId,
       status: "PUBLISHED",
@@ -1061,11 +1062,13 @@ export class PreparedEvidenceCoordinator {
         ? {
             mode: "LIVE" as const,
             leaseExpiresAtMs,
+            publicationPolicyVersion: record.candidate.causal.decisions.publicationPolicy,
+            cardVersion,
             liveBinding: {
               presentationSessionEpoch: record.candidate.causal.presentationSessionEpoch,
               publicSlideOccurrence: record.candidate.causal.occurrence,
               publicationPolicyVersion: record.candidate.causal.decisions.publicationPolicy,
-              cardVersion: `card-${opaqueHex(12)}`,
+              cardVersion,
             },
           }
         : {}),

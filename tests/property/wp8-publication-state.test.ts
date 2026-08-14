@@ -67,6 +67,8 @@ describe("WP8 independent candidate state", () => {
       publishedAtMs: 1_000,
       expiresAtMs: 4_000,
       leaseExpiresAtMs: 4_000,
+      publicationPolicyVersion: "publication-policy-1",
+      cardVersion: "card-version-1",
       publicCardRevision: "pcr_1",
       deckVersion: "deck_wp8",
       manifestHash: "b".repeat(64),

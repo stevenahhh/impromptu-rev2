@@ -185,6 +185,37 @@ function applyCardEvent(
   ) {
     return snapshot;
   }
+  if (event.status === "PUBLISHED" && event.mode === "LIVE") {
+    const binding = event.liveBinding;
+    if (
+      binding === undefined ||
+      binding.presentationSessionEpoch !== snapshot.presentationSessionEpoch ||
+      binding.publicSlideOccurrence.publicSlideKey !== snapshot.occurrence.publicSlideKey ||
+      binding.publicSlideOccurrence.occurrenceSeq !== snapshot.occurrence.occurrenceSeq ||
+      event.publicationPolicyVersion !== binding.publicationPolicyVersion ||
+      event.cardVersion !== binding.cardVersion
+    ) {
+      return {
+        ...snapshot,
+        publicCardRevision: event.publicCardRevision,
+        cards: snapshot.cards.filter((card) => card.projectionId !== event.projectionId),
+      };
+    }
+    return {
+      ...snapshot,
+      publicCardRevision: event.publicCardRevision,
+      publicationPolicyVersion: event.publicationPolicyVersion ?? null,
+      cards: [
+        ...snapshot.cards.filter(
+          (card) =>
+            card.projectionId !== event.projectionId &&
+            (card.mode !== "LIVE" ||
+              card.publicationPolicyVersion === event.publicationPolicyVersion),
+        ),
+        event,
+      ],
+    };
+  }
   return {
     ...snapshot,
     publicCardRevision: event.publicCardRevision,
@@ -365,10 +396,15 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
                 const cards = current.cards.filter(
                   (card) =>
                     card.mode !== "LIVE" ||
-                    (card.liveBinding?.publicSlideOccurrence.publicSlideKey ===
-                      event.occurrence.publicSlideKey &&
+                    (card.liveBinding?.presentationSessionEpoch ===
+                      event.presentationSessionEpoch &&
+                      card.liveBinding.publicSlideOccurrence.publicSlideKey ===
+                        event.occurrence.publicSlideKey &&
                       card.liveBinding.publicSlideOccurrence.occurrenceSeq ===
-                        event.occurrence.occurrenceSeq),
+                        event.occurrence.occurrenceSeq &&
+                      card.publicationPolicyVersion === current.publicationPolicyVersion &&
+                      card.publicationPolicyVersion === card.liveBinding.publicationPolicyVersion &&
+                      card.cardVersion === card.liveBinding.cardVersion),
                 );
                 for (const card of current.cards) {
                   if (!cards.includes(card)) {

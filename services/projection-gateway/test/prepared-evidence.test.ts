@@ -162,6 +162,8 @@ describe("prepared evidence projection gateway", () => {
         status: "PUBLISHED",
         mode: "LIVE",
         leaseExpiresAtMs: 4_000,
+        publicationPolicyVersion: "publication-policy-1",
+        cardVersion: "card-version-1",
         liveBinding: {
           presentationSessionEpoch: "pse_1",
           publicSlideOccurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
@@ -214,6 +216,132 @@ describe("prepared evidence projection gateway", () => {
     );
     if (rebound.outcome !== "BOUND") throw new Error("fixture failed to rebind");
     expect(gateway.snapshot(rebound.session.audienceDisplaySessionId, 1_004)?.cards).toEqual([]);
+  });
+
+  test("invalidates live bindings on display, session, policy, and card-version changes", () => {
+    const publishLive = (gateway: PreparedEvidenceProjectionGateway, sessionEpoch = "pse_1") =>
+      gateway.projectCard("ps_alpha", {
+        projectionId: "projection_live_invalidation",
+        status: "PUBLISHED",
+        mode: "LIVE",
+        leaseExpiresAtMs: 4_000,
+        publicationPolicyVersion: "publication-policy-1",
+        cardVersion: "card-version-1",
+        liveBinding: {
+          presentationSessionEpoch: sessionEpoch,
+          publicSlideOccurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+          publicationPolicyVersion: "publication-policy-1",
+          cardVersion: "card-version-1",
+        },
+        claim: "Bound live claim",
+        supportSummary: "Bound support",
+        sourceLabel: "Public source",
+        publishedAtMs: 1_000,
+        expiresAtMs: 4_000,
+        publicCardRevision: "pcr_1",
+        deckVersion: deck.deckVersion,
+        manifestHash: deck.manifestHash,
+        occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+      });
+
+    const rebindGateway = new PreparedEvidenceProjectionGateway();
+    const first = approval(rebindGateway).bind();
+    if (first.outcome !== "BOUND") throw new Error("fixture failed to bind");
+    expect(publishLive(rebindGateway)).toBe(true);
+    const nextJoin = rebindGateway.createDisplayJoin(
+      {
+        displayId: "display_live_rebind",
+        deckVersion: deck.deckVersion,
+        displayFingerprint: "fingerprint-live-rebind",
+      },
+      1_100,
+    );
+    const rebound = rebindGateway.bindDisplay(
+      {
+        displayJoinId: nextJoin.displayJoinId,
+        presentationSessionId: "ps_alpha",
+        presentationSessionEpoch: "pse_1",
+        expectedDisplayBindingEpoch: "dbe_1",
+        expectedDeckVersion: deck.deckVersion,
+        approvedDisplayId: nextJoin.displayId,
+        approvedDisplayFingerprint: nextJoin.displayFingerprint,
+        deck,
+      },
+      1_100,
+    );
+    if (rebound.outcome !== "BOUND") throw new Error("fixture failed to rebind");
+    expect(rebindGateway.snapshot(rebound.session.audienceDisplaySessionId, 1_101)?.cards).toEqual(
+      [],
+    );
+
+    const sessionGateway = new PreparedEvidenceProjectionGateway();
+    const sessionFirst = approval(sessionGateway).bind();
+    if (sessionFirst.outcome !== "BOUND") throw new Error("fixture failed to bind");
+    expect(publishLive(sessionGateway)).toBe(true);
+    const sessionJoin = sessionGateway.createDisplayJoin(
+      {
+        displayId: "display_new_session",
+        deckVersion: deck.deckVersion,
+        displayFingerprint: "fingerprint-new-session",
+      },
+      1_100,
+    );
+    const newSession = sessionGateway.bindDisplay(
+      {
+        displayJoinId: sessionJoin.displayJoinId,
+        presentationSessionId: "ps_alpha",
+        presentationSessionEpoch: "pse_2",
+        expectedDisplayBindingEpoch: "dbe_1",
+        expectedDeckVersion: deck.deckVersion,
+        approvedDisplayId: sessionJoin.displayId,
+        approvedDisplayFingerprint: sessionJoin.displayFingerprint,
+        deck,
+      },
+      1_100,
+    );
+    if (newSession.outcome !== "BOUND") throw new Error("fixture failed to rebind session");
+    expect(
+      sessionGateway.snapshot(newSession.session.audienceDisplaySessionId, 1_101)?.cards,
+    ).toEqual([]);
+
+    const policyGateway = new PreparedEvidenceProjectionGateway();
+    const policyBound = approval(policyGateway).bind();
+    if (policyBound.outcome !== "BOUND") throw new Error("fixture failed to bind");
+    expect(publishLive(policyGateway)).toBe(true);
+    expect(policyGateway.setPublicationPolicyVersion("ps_alpha", "publication-policy-2")).toBe(
+      true,
+    );
+    expect(
+      policyGateway.snapshot(policyBound.session.audienceDisplaySessionId, 1_101)?.cards,
+    ).toEqual([]);
+
+    const cardVersionGateway = new PreparedEvidenceProjectionGateway();
+    expect(approval(cardVersionGateway).bind().outcome).toBe("BOUND");
+    expect(
+      cardVersionGateway.projectCard("ps_alpha", {
+        projectionId: "projection_wrong_card_version",
+        status: "PUBLISHED",
+        mode: "LIVE",
+        leaseExpiresAtMs: 4_000,
+        publicationPolicyVersion: "publication-policy-1",
+        cardVersion: "card-version-2",
+        liveBinding: {
+          presentationSessionEpoch: "pse_1",
+          publicSlideOccurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+          publicationPolicyVersion: "publication-policy-1",
+          cardVersion: "card-version-1",
+        },
+        claim: "Wrong card version",
+        supportSummary: "Must be rejected",
+        sourceLabel: "Public source",
+        publishedAtMs: 1_000,
+        expiresAtMs: 4_000,
+        publicCardRevision: "pcr_1",
+        deckVersion: deck.deckVersion,
+        manifestHash: deck.manifestHash,
+        occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+      }),
+    ).toBe(false);
   });
 
   test("persists ordered playback and terminal card snapshots across restart", () => {

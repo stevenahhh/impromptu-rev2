@@ -148,6 +148,10 @@ function cardEvent(value: unknown): PublicCardEvent | null {
         ...(typeof value.leaseExpiresAtMs === "number" || value.leaseExpiresAtMs === null
           ? { leaseExpiresAtMs: value.leaseExpiresAtMs }
           : {}),
+        ...(typeof value.publicationPolicyVersion === "string"
+          ? { publicationPolicyVersion: value.publicationPolicyVersion }
+          : {}),
+        ...(typeof value.cardVersion === "string" ? { cardVersion: value.cardVersion } : {}),
         ...(isRecord(value.liveBinding) &&
         typeof value.liveBinding.presentationSessionEpoch === "string" &&
         isRecord(value.liveBinding.publicSlideOccurrence) &&

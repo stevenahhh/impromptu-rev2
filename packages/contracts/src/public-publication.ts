@@ -18,6 +18,8 @@ export const PublishedAudienceCardSchema = z
     status: z.literal("PUBLISHED"),
     mode: z.enum(["CURATED", "LIVE"]).optional(),
     leaseExpiresAtMs: TimestampMsSchema.nullable().optional(),
+    publicationPolicyVersion: VersionIdSchema.optional(),
+    cardVersion: VersionIdSchema.optional(),
     liveBinding: z
       .object({
         presentationSessionEpoch: PresentationSessionEpochSchema,
@@ -40,7 +42,12 @@ export const PublishedAudienceCardSchema = z
   .strict()
   .superRefine((card, context) => {
     if (card.mode !== "LIVE") {
-      if (card.liveBinding !== undefined || card.leaseExpiresAtMs !== undefined) {
+      if (
+        card.liveBinding !== undefined ||
+        card.leaseExpiresAtMs !== undefined ||
+        card.publicationPolicyVersion !== undefined ||
+        card.cardVersion !== undefined
+      ) {
         context.addIssue({ code: "custom", message: "curated cards cannot carry a live lease" });
       }
       return;
@@ -52,6 +59,8 @@ export const PublishedAudienceCardSchema = z
       card.leaseExpiresAtMs <= card.publishedAtMs ||
       card.leaseExpiresAtMs - card.publishedAtMs > 3_000 ||
       card.expiresAtMs !== card.leaseExpiresAtMs ||
+      card.publicationPolicyVersion !== card.liveBinding.publicationPolicyVersion ||
+      card.cardVersion !== card.liveBinding.cardVersion ||
       card.liveBinding.publicSlideOccurrence.publicSlideKey !== card.occurrence.publicSlideKey ||
       card.liveBinding.publicSlideOccurrence.occurrenceSeq !== card.occurrence.occurrenceSeq
     ) {

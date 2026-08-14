@@ -20,6 +20,8 @@ export interface PublicCardUpsert {
   readonly status: "PUBLISHED";
   readonly mode?: "CURATED" | "LIVE" | undefined;
   readonly leaseExpiresAtMs?: number | null | undefined;
+  readonly publicationPolicyVersion?: string | undefined;
+  readonly cardVersion?: string | undefined;
   readonly liveBinding?:
     | Readonly<{
         presentationSessionEpoch: string;
@@ -103,6 +105,7 @@ export interface AudienceProjectionSnapshot {
   readonly displayBindingEpoch: string;
   readonly publicPlaybackRevision: string;
   readonly publicCardRevision: string;
+  readonly publicationPolicyVersion: string | null;
   readonly deck: PublicDeckArtifact;
   readonly occurrence: { readonly publicSlideKey: string; readonly occurrenceSeq: number };
   readonly blackout: boolean;
@@ -128,6 +131,8 @@ type ProjectionState = {
   blackout: boolean;
   cards: Map<string, PublicCardUpsert>;
   tombstones: Map<string, PublicCardTombstone>;
+  liveDisplayBindingEpochs: Map<string, string>;
+  publicationPolicyVersion: string | null;
 };
 
 export interface ProjectionGatewayStore {
@@ -304,7 +309,7 @@ function parseDisplaySession(value: unknown): AudienceDisplaySessionRecord | nul
   };
 }
 
-function parseLiveBinding(value: unknown): PublicCardUpsert["liveBinding"] | null {
+function parseLiveBinding(value: unknown): NonNullable<PublicCardUpsert["liveBinding"]> | null {
   if (
     !snapshotRecord(value) ||
     !exactKeys(value, [
@@ -327,7 +332,7 @@ function parseLiveBinding(value: unknown): PublicCardUpsert["liveBinding"] | nul
   ) {
     return null;
   }
-  return value as PublicCardUpsert["liveBinding"];
+  return value as NonNullable<PublicCardUpsert["liveBinding"]>;
 }
 
 function parseStoredCard(value: unknown): PublicCardUpsert | null {
@@ -339,6 +344,8 @@ function parseStoredCard(value: unknown): PublicCardUpsert | null {
         "status",
         "mode",
         "leaseExpiresAtMs",
+        "publicationPolicyVersion",
+        "cardVersion",
         "liveBinding",
         "offlinePackage",
         "claim",
@@ -371,6 +378,9 @@ function parseStoredCard(value: unknown): PublicCardUpsert | null {
     (value.leaseExpiresAtMs !== undefined &&
       value.leaseExpiresAtMs !== null &&
       !validTimestamp(value.leaseExpiresAtMs)) ||
+    (value.publicationPolicyVersion !== undefined &&
+      typeof value.publicationPolicyVersion !== "string") ||
+    (value.cardVersion !== undefined && typeof value.cardVersion !== "string") ||
     (value.liveBinding !== undefined && parseLiveBinding(value.liveBinding) === null) ||
     (value.offlinePackage !== undefined &&
       (!snapshotRecord(value.offlinePackage) ||
@@ -405,6 +415,15 @@ function parseStoredCard(value: unknown): PublicCardUpsert | null {
   ) {
     return null;
   }
+  const binding = parseLiveBinding(value.liveBinding);
+  if (
+    value.mode === "LIVE" &&
+    (binding === null ||
+      value.publicationPolicyVersion !== binding.publicationPolicyVersion ||
+      value.cardVersion !== binding.cardVersion)
+  ) {
+    return null;
+  }
   return value as unknown as PublicCardUpsert;
 }
 
@@ -433,6 +452,8 @@ export function snapshotProjectionGatewayStore(store: ProjectionGatewayStore): u
       blackout: projection.blackout,
       cards: [...projection.cards.values()],
       tombstones: [...projection.tombstones.values()],
+      liveDisplayBindingEpochs: [...projection.liveDisplayBindingEpochs.entries()],
+      publicationPolicyVersion: projection.publicationPolicyVersion,
     })),
   };
 }
@@ -488,6 +509,8 @@ export function restoreProjectionGatewayStore(input: unknown): ProjectionGateway
         "blackout",
         "cards",
         "tombstones",
+        "liveDisplayBindingEpochs",
+        "publicationPolicyVersion",
       ]) ||
       typeof projectionInput.publicPlaybackRevision !== "string" ||
       typeof projectionInput.publicCardRevision !== "string" ||
@@ -498,7 +521,10 @@ export function restoreProjectionGatewayStore(input: unknown): ProjectionGateway
       !Number.isSafeInteger(projectionInput.occurrence.occurrenceSeq) ||
       projectionInput.occurrence.occurrenceSeq <= 0 ||
       !Array.isArray(projectionInput.cards) ||
-      !Array.isArray(projectionInput.tombstones)
+      !Array.isArray(projectionInput.tombstones) ||
+      !Array.isArray(projectionInput.liveDisplayBindingEpochs) ||
+      (projectionInput.publicationPolicyVersion !== null &&
+        typeof projectionInput.publicationPolicyVersion !== "string")
     ) {
       return { outcome: "INVALID_SNAPSHOT" };
     }
@@ -559,6 +585,20 @@ export function restoreProjectionGatewayStore(input: unknown): ProjectionGateway
     ) {
       return { outcome: "INVALID_SNAPSHOT" };
     }
+    const liveDisplayBindingEpochs = new Map<string, string>();
+    for (const entry of projectionInput.liveDisplayBindingEpochs) {
+      if (
+        !Array.isArray(entry) ||
+        entry.length !== 2 ||
+        typeof entry[0] !== "string" ||
+        typeof entry[1] !== "string" ||
+        !cards.has(entry[0]) ||
+        liveDisplayBindingEpochs.has(entry[0])
+      ) {
+        return { outcome: "INVALID_SNAPSHOT" };
+      }
+      liveDisplayBindingEpochs.set(entry[0], entry[1]);
+    }
     store.projections.set(displaySession.binding.presentationSessionId, {
       binding: displaySession.binding,
       displaySession,
@@ -569,6 +609,8 @@ export function restoreProjectionGatewayStore(input: unknown): ProjectionGateway
       blackout: projectionInput.blackout,
       cards,
       tombstones,
+      liveDisplayBindingEpochs,
+      publicationPolicyVersion: projectionInput.publicationPolicyVersion,
     });
   }
   for (const join of store.joins.values()) {
@@ -758,6 +800,8 @@ export class PreparedEvidenceProjectionGateway {
       blackout: current?.blackout ?? false,
       cards: current?.cards ?? new Map(),
       tombstones: current?.tombstones ?? new Map(),
+      liveDisplayBindingEpochs: current?.liveDisplayBindingEpochs ?? new Map(),
+      publicationPolicyVersion: current?.publicationPolicyVersion ?? null,
     });
     return { outcome: "BOUND", session };
   }
@@ -819,6 +863,16 @@ export class PreparedEvidenceProjectionGateway {
     };
   }
 
+  setPublicationPolicyVersion(
+    presentationSessionId: string,
+    publicationPolicyVersion: string,
+  ): boolean {
+    const projection = this.#store.projections.get(presentationSessionId);
+    if (projection === undefined) return false;
+    projection.publicationPolicyVersion = publicationPolicyVersion;
+    return true;
+  }
+
   projectPlayback(presentationSessionId: string, event: PlaybackProjectionInput): boolean {
     const projection = this.#store.projections.get(presentationSessionId);
     if (
@@ -872,6 +926,8 @@ export class PreparedEvidenceProjectionGateway {
         event.leaseExpiresAtMs <= event.publishedAtMs ||
         event.leaseExpiresAtMs - event.publishedAtMs > 3_000 ||
         event.liveBinding === undefined ||
+        event.publicationPolicyVersion !== event.liveBinding.publicationPolicyVersion ||
+        event.cardVersion !== event.liveBinding.cardVersion ||
         event.liveBinding.presentationSessionEpoch !==
           projection.binding.presentationSessionEpoch ||
         event.liveBinding.publicSlideOccurrence.publicSlideKey !==
@@ -887,8 +943,16 @@ export class PreparedEvidenceProjectionGateway {
     if (event.status === "PUBLISHED") {
       if (projection.cards.has(event.projectionId)) return false;
       projection.cards.set(event.projectionId, event);
+      if (event.mode === "LIVE") {
+        projection.liveDisplayBindingEpochs.set(
+          event.projectionId,
+          projection.binding.displayBindingEpoch,
+        );
+        projection.publicationPolicyVersion = event.publicationPolicyVersion ?? null;
+      }
     } else {
       projection.cards.delete(event.projectionId);
+      projection.liveDisplayBindingEpochs.delete(event.projectionId);
       projection.tombstones.set(event.projectionId, event);
     }
     projection.publicCardRevision = event.publicCardRevision;
@@ -917,6 +981,7 @@ export class PreparedEvidenceProjectionGateway {
       displayBindingEpoch: projection.binding.displayBindingEpoch,
       publicPlaybackRevision: projection.publicPlaybackRevision,
       publicCardRevision: projection.publicCardRevision,
+      publicationPolicyVersion: projection.publicationPolicyVersion,
       deck: projection.deck,
       occurrence: projection.occurrence,
       blackout: projection.blackout,
@@ -927,6 +992,12 @@ export class PreparedEvidenceProjectionGateway {
             card.leaseExpiresAtMs !== null &&
             nowMs < card.leaseExpiresAtMs &&
             card.liveBinding !== undefined &&
+            projection.liveDisplayBindingEpochs.get(card.projectionId) ===
+              projection.binding.displayBindingEpoch &&
+            card.liveBinding.presentationSessionEpoch ===
+              projection.binding.presentationSessionEpoch &&
+            card.publicationPolicyVersion === projection.publicationPolicyVersion &&
+            card.cardVersion === card.liveBinding.cardVersion &&
             card.liveBinding.publicSlideOccurrence.publicSlideKey ===
               projection.occurrence.publicSlideKey &&
             card.liveBinding.publicSlideOccurrence.occurrenceSeq ===

@@ -52,6 +52,7 @@ const server = Bun.serve<Record<never, never>, Record<never, never>>({
         deckVersion: "deck_topology",
         manifestHash: "manifest_topology",
         publicPlaybackRevision: "pbr_0",
+        publicationPolicyVersion: null,
         publicCardRevision: "pcr_0",
         tombstoneWatermark: "pcr_0",
         tombstoneRetentionMs: 60_000,

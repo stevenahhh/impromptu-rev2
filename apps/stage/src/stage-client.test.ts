@@ -77,6 +77,107 @@ describe("Stage network client", () => {
     expect(card.offlinePackage?.signatureVerified).toBe(false);
   });
 
+  test("filters live cards whose session, occurrence, policy, or card version is stale", async () => {
+    const binding = {
+      presentationSessionEpoch: "pse_1",
+      publicSlideOccurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+      publicationPolicyVersion: "publication-policy-1",
+      cardVersion: "card-version-1",
+    };
+    const liveCard = {
+      projectionId: "projection_live",
+      status: "PUBLISHED",
+      mode: "LIVE",
+      leaseExpiresAtMs: Date.now() + 2_000,
+      publicationPolicyVersion: "publication-policy-1",
+      cardVersion: "card-version-1",
+      liveBinding: binding,
+      claim: "Stale live claim",
+      supportSummary: "Must remain hidden",
+      sourceLabel: "Public source",
+      publicCardRevision: "pcr_1",
+    };
+    const absoluteState = {
+      role: "PUBLIC_STAGE",
+      presentationSessionId: "ps_alpha",
+      presentationSessionEpoch: "pse_2",
+      displayBindingEpoch: "dbe_2",
+      publicPlaybackRevision: "pbr_0",
+      publicCardRevision: "pcr_4",
+      publicationPolicyVersion: "publication-policy-2",
+      deck: {
+        deckVersion: "deck_alpha",
+        manifestHash: "b".repeat(64),
+        title: "Deck",
+        slides: [
+          {
+            publicSlideKey: "slide_two",
+            ordinal: 1,
+            image: {
+              url: "https://public.test/two.png",
+              contentHash: "c".repeat(64),
+              width: 1920,
+              height: 1080,
+            },
+            accessibilityLabel: "Two",
+          },
+        ],
+      },
+      occurrence: { publicSlideKey: "slide_two", occurrenceSeq: 2 },
+      blackout: false,
+      cards: [
+        liveCard,
+        {
+          ...liveCard,
+          projectionId: "projection_occurrence",
+          liveBinding: { ...binding, presentationSessionEpoch: "pse_2" },
+        },
+        {
+          ...liveCard,
+          projectionId: "projection_policy",
+          liveBinding: {
+            ...binding,
+            presentationSessionEpoch: "pse_2",
+            publicSlideOccurrence: { publicSlideKey: "slide_two", occurrenceSeq: 2 },
+          },
+        },
+        {
+          ...liveCard,
+          projectionId: "projection_card_version",
+          publicationPolicyVersion: "publication-policy-2",
+          cardVersion: "card-version-2",
+          liveBinding: {
+            ...binding,
+            presentationSessionEpoch: "pse_2",
+            publicSlideOccurrence: { publicSlideKey: "slide_two", occurrenceSeq: 2 },
+            publicationPolicyVersion: "publication-policy-2",
+          },
+        },
+      ],
+      tombstones: [],
+      tombstoneWatermark: "pcr_0",
+      tombstoneRetentionMs: 60_000,
+    };
+    const digest = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(JSON.stringify(absoluteState)),
+    );
+    const stateHash = Array.from(new Uint8Array(digest), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("");
+    const fetchMock = mock(
+      async () =>
+        new Response(JSON.stringify({ ...absoluteState, stateHash }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    globalThis.fetch = Object.assign(fetchMock, { preconnect: originalFetch.preconnect });
+
+    const result = await createStageSessionClient("https://projection.example.test").snapshot();
+    expect(result.cards).toEqual([]);
+  });
+
   test("subscribes to exact playback/card events before sending an applied receipt", async () => {
     const source = new FakeEventSource();
     const factory: EventSourceFactory = () => source;

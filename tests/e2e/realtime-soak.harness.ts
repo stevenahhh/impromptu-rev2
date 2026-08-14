@@ -556,6 +556,8 @@ export async function runRealtimeSoak(): Promise<RealtimeSoakEvidence> {
           status: "PUBLISHED",
           mode: "LIVE",
           leaseExpiresAtMs: publishedAtMs + liveLeaseMs,
+          publicationPolicyVersion: "publication-policy-soak-1",
+          cardVersion: "card-version-soak-1",
           liveBinding: {
             presentationSessionEpoch: observed.presentationSessionEpoch,
             publicSlideOccurrence: observed.occurrence,
