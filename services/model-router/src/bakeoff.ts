@@ -12,7 +12,6 @@ export interface OfflineKoreanSttProvider {
   readonly name: "azure" | "deepgram" | "google" | "aws";
   readonly costPerMinuteUsd: number;
   readonly outputs: Readonly<Record<string, OfflineSttOutput>>;
-  readonly networkRequests: number;
   transcribe(caseId: string): Promise<OfflineSttOutput>;
 }
 
@@ -21,6 +20,14 @@ export interface KoreanSttBakeoffRow {
   readonly accuracyPercent: number;
   readonly latencyP95Ms: number;
   readonly costPerMinuteUsd: number;
+  readonly interceptedNetworkRequests: 0;
+}
+
+export class OfflineBakeoffNetworkError extends Error {
+  constructor(readonly interceptedNetworkRequests: number) {
+    super(`Offline STT bakeoff intercepted ${interceptedNetworkRequests} network request(s)`);
+    this.name = "OfflineBakeoffNetworkError";
+  }
 }
 
 export const KOREAN_STT_BAKEOFF_CASES: readonly KoreanSttBakeoffCase[] = deepFreeze([
@@ -70,29 +77,32 @@ export async function runKoreanSttBakeoff(
   cases: readonly KoreanSttBakeoffCase[],
   providers: readonly OfflineKoreanSttProvider[],
 ): Promise<readonly KoreanSttBakeoffRow[]> {
-  const rows: KoreanSttBakeoffRow[] = [];
-  for (const candidate of providers) {
-    let exact = 0;
-    const latencies: number[] = [];
-    for (const fixture of cases) {
-      const result = await candidate.transcribe(fixture.id);
-      if (normalize(result.transcript) === normalize(fixture.expectedTranscript)) exact += 1;
-      latencies.push(result.latencyMs);
+  return await withNetworkInterception(async () => {
+    const rows: KoreanSttBakeoffRow[] = [];
+    for (const candidate of providers) {
+      let exact = 0;
+      const latencies: number[] = [];
+      for (const fixture of cases) {
+        const result = await candidate.transcribe(fixture.id);
+        if (normalize(result.transcript) === normalize(fixture.expectedTranscript)) exact += 1;
+        latencies.push(result.latencyMs);
+      }
+      latencies.sort((left, right) => left - right);
+      const p95Index = Math.max(0, Math.ceil(latencies.length * 0.95) - 1);
+      rows.push({
+        provider: candidate.name,
+        accuracyPercent: cases.length === 0 ? 0 : (exact / cases.length) * 100,
+        latencyP95Ms: latencies[p95Index] ?? 0,
+        costPerMinuteUsd: candidate.costPerMinuteUsd,
+        interceptedNetworkRequests: 0,
+      });
     }
-    latencies.sort((left, right) => left - right);
-    const p95Index = Math.max(0, Math.ceil(latencies.length * 0.95) - 1);
-    rows.push({
-      provider: candidate.name,
-      accuracyPercent: cases.length === 0 ? 0 : (exact / cases.length) * 100,
-      latencyP95Ms: latencies[p95Index] ?? 0,
-      costPerMinuteUsd: candidate.costPerMinuteUsd,
-    });
-  }
-  rows.sort(
-    (left, right) =>
-      right.accuracyPercent - left.accuracyPercent || left.latencyP95Ms - right.latencyP95Ms,
-  );
-  return deepFreeze(rows);
+    rows.sort(
+      (left, right) =>
+        right.accuracyPercent - left.accuracyPercent || left.latencyP95Ms - right.latencyP95Ms,
+    );
+    return deepFreeze(rows);
+  });
 }
 
 function provider(
@@ -104,13 +114,37 @@ function provider(
     name,
     costPerMinuteUsd,
     outputs,
-    networkRequests: 0,
     async transcribe(caseId: string) {
       const result = outputs[caseId];
       if (result === undefined) throw new TypeError(`Unknown offline STT case: ${caseId}`);
       return result;
     },
   });
+}
+
+async function withNetworkInterception<Value>(operation: () => Promise<Value>): Promise<Value> {
+  const originalFetch = globalThis.fetch;
+  let interceptedNetworkRequests = 0;
+  const blockedFetch = async (
+    ..._arguments: Parameters<typeof globalThis.fetch>
+  ): Promise<Response> => {
+    interceptedNetworkRequests += 1;
+    throw new OfflineBakeoffNetworkError(interceptedNetworkRequests);
+  };
+  blockedFetch.preconnect = (..._arguments: Parameters<typeof originalFetch.preconnect>) => {
+    interceptedNetworkRequests += 1;
+    throw new OfflineBakeoffNetworkError(interceptedNetworkRequests);
+  };
+  globalThis.fetch = blockedFetch;
+  try {
+    const value = await operation();
+    if (interceptedNetworkRequests > 0) {
+      throw new OfflineBakeoffNetworkError(interceptedNetworkRequests);
+    }
+    return value;
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 }
 
 function output(transcript: string, latencyMs: number): OfflineSttOutput {
