@@ -18,7 +18,7 @@ bun run test:db:harness
 bun run test:db:concurrent
 ```
 
-The primary command tests fresh installation, migration-ledger reruns, checksum drift, transactional rollback after an interrupted migration, role escalation, catalog noninterference, tenant RLS, audience-card lifecycle filtering, and concurrent idempotent receipt writes.
+The primary command tests fresh installation, migration-ledger reruns, checksum drift, transactional rollback after an interrupted migration, role escalation, catalog noninterference, tenant and projection RLS, audience-card lifecycle filtering, concurrent idempotent receipt writes, and concurrent publication dispatch deduplication.
 
 The harness uses `docker compose up --wait`; it has no sleeps or timing-based polling. Every invocation generates a unique Compose project name. Teardown preserves the original test status, treats cleanup or resource-inspection failure as a failure when tests passed, and verifies that project-labeled containers, networks, and volumes are absent before printing success. The two additional commands exercise cleanup-failure handling and simultaneous worktree-safe projects.
 
@@ -30,16 +30,17 @@ The Compose password is local-test-only, no database port is published, and data
 | --- | --- | --- |
 | `impromptu_owner` | No | Owns application databases and objects. |
 | `migration` | Yes | Deployment-only access to both application databases; may assume the owner. |
-| `private_app` | Yes | Private database plus projection writes through a separate connection. |
+| `private_app` | Yes | Private database only; cannot connect to the projection database. |
+| `publication_dispatcher` | Yes | Claims the private outbox and calls the narrow projection dispatch function. |
 | `projection_app` | Yes | Projection database only; reads closed views and calls the receipt function. |
 
 `private_app` must set `app.tenant_id` with `SET LOCAL` inside each private transaction. Forced RLS returns no rows without a context and rejects rows for another tenant. This protects against missing or stale application query scoping; it does not make a compromised `private_app` credential untrusted, because that service role can choose its own transaction context.
 
 ## Cross-database publication consequence
 
-PostgreSQL cannot atomically commit ordinary transactions across these databases. A publish transaction therefore writes a durable `private_app.publication_outbox` row in `impromptu_private`; a future dispatcher must apply that public event idempotently through a separate `impromptu_projection` connection and then mark the outbox row delivered in another private transaction.
+PostgreSQL cannot atomically commit ordinary transactions across these databases. A publish transaction therefore writes a durable `private_app.publication_outbox` row in `impromptu_private`; `publication_dispatcher` claims a bounded batch, applies each closed public DTO through `public_projection.dispatch_publication`, and marks accepted rows delivered in the private transaction.
 
-That is an at-least-once handoff: a crash can delay delivery or repeat an already-applied event. Projection keys, revisions, and idempotent operations must absorb duplicates. This increment defines the storage boundary and outbox only; it does not implement the dispatcher or any application service.
+That is an at-least-once handoff: a private commit failure can repeat an already-applied event. The projection inbox atomically deduplicates the dispatch key and rejects key reuse with different content. `private_app` has neither projection database connectivity nor projection schema privileges; only the dispatcher function can accept publication writes.
 
 ## Migration runner
 

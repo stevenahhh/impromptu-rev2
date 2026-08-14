@@ -1,11 +1,6 @@
 export type { ExactOrigin, PrivateBackendConfig } from "./config.ts";
 export { parsePrivateBackendConfig } from "./config.ts";
 export { createPrivateBackendHandler } from "./http.ts";
-export type {
-  ProjectionTombstone,
-  PublicProjectionWriter,
-  PublishedProjection,
-} from "./ports/public-projection-writer.ts";
 export {
   type ModelExecution,
   type ModelOperation,

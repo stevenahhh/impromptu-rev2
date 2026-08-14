@@ -36,7 +36,10 @@ export function createProjectionGatewayHandler(
     }
 
     const url = new URL(request.url);
-    if (request.method === "GET" && url.pathname === "/health") {
+    if (request.method !== "GET") {
+      return json({ error: "dispatcher_required" }, 403, origin);
+    }
+    if (url.pathname === "/health") {
       return json({ service: "projection-gateway", status: "ok" }, 200, origin);
     }
 

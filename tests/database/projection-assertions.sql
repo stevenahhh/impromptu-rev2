@@ -32,6 +32,46 @@ SELECT pg_temp.assert_true(
 );
 SELECT pg_temp.assert_true(
   (
+    SELECT count(*) = 5 AND bool_and(relrowsecurity) AND bool_and(relforcerowsecurity)
+    FROM pg_class AS relation
+    JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+    WHERE namespace.nspname = 'public_projection'
+      AND relation.relname IN (
+        'projection_sessions',
+        'audience_cards',
+        'display_receipts',
+        'publication_inbox',
+        'applied_publications'
+      )
+  ),
+  'all projection base tables must force row-level security'
+);
+SELECT pg_temp.assert_true(
+  (
+    SELECT count(*) = 5
+    FROM pg_policies
+    WHERE schemaname = 'public_projection'
+      AND policyname = 'owner_internal'
+      AND roles = '{impromptu_owner}'
+  ),
+  'projection writes must be confined to owner-backed narrow functions'
+);
+SELECT pg_temp.assert_true(
+  NOT has_schema_privilege('private_app', 'public_projection', 'USAGE')
+    AND NOT has_table_privilege(
+      'private_app',
+      'public_projection.projection_sessions',
+      'SELECT,INSERT,UPDATE,DELETE'
+    )
+    AND NOT has_function_privilege(
+      'private_app',
+      'public_projection.dispatch_publication(uuid,uuid,uuid,text,jsonb)',
+      'EXECUTE'
+    ),
+  'private_app must have no direct projection database surface'
+);
+SELECT pg_temp.assert_true(
+  (
     SELECT count(*) = 2 AND bool_and(relrowsecurity) AND bool_and(relforcerowsecurity)
     FROM pg_class AS relation
     JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
@@ -86,11 +126,12 @@ SELECT pg_temp.assert_true(
 );
 SELECT pg_temp.assert_true(
   (
-    SELECT count(*) = 2
+    SELECT count(*) = 3
     FROM _migrations.applied_migrations
     WHERE migration_name IN (
       '0001_projection_foundation.sql',
-      '0002_publication_inbox.sql'
+      '0002_publication_inbox.sql',
+      '0003_dispatcher_only_writes.sql'
     )
       AND checksum ~ '^[0-9a-f]{64}$'
   ),

@@ -219,7 +219,8 @@ rerun_output="$(run_migrations)"
 if [[ "$rerun_output" != *"SKIP private/0001_private_foundation.sql"* \
   || "$rerun_output" != *"SKIP private/0002_publication_dispatcher.sql"* \
   || "$rerun_output" != *"SKIP projection/0001_projection_foundation.sql"* \
-  || "$rerun_output" != *"SKIP projection/0002_publication_inbox.sql"* ]]; then
+  || "$rerun_output" != *"SKIP projection/0002_publication_inbox.sql"* \
+  || "$rerun_output" != *"SKIP projection/0003_dispatcher_only_writes.sql"* ]]; then
   echo "migration assertion failed: rerun did not skip applied migrations" >&2
   echo "$rerun_output" >&2
   exit 1
@@ -233,7 +234,7 @@ if [[ "${DATABASE_TEST_MODE:-full}" == "smoke" ]]; then
 fi
 
 psql_file "$PRIVATE_ROLE" "$PRIVATE_DATABASE" "$REPO_ROOT/tests/database/private-seed.sql"
-psql_file "$PRIVATE_ROLE" "$PROJECTION_DATABASE" "$REPO_ROOT/tests/database/projection-seed.sql"
+psql_file "$BOOTSTRAP_ROLE" "$PROJECTION_DATABASE" "$REPO_ROOT/tests/database/projection-seed.sql"
 psql_file "$BOOTSTRAP_ROLE" "$PRIVATE_DATABASE" "$REPO_ROOT/tests/database/private-assertions.sql"
 psql_file "$BOOTSTRAP_ROLE" "$PROJECTION_DATABASE" "$REPO_ROOT/tests/database/projection-assertions.sql"
 psql_file "$PRIVATE_ROLE" "$PRIVATE_DATABASE" "$REPO_ROOT/tests/database/private-app.sql"
@@ -243,6 +244,7 @@ psql_file "$DISPATCHER_ROLE" "$PROJECTION_DATABASE" "$REPO_ROOT/tests/database/d
 expect_connection_denied "$PROJECTION_ROLE" "$PRIVATE_DATABASE"
 expect_connection_denied "$PROJECTION_ROLE" "$DEFAULT_DATABASE"
 expect_connection_denied "$PROJECTION_ROLE" "template1"
+expect_connection_denied "$PRIVATE_ROLE" "$PROJECTION_DATABASE"
 expect_connection_denied "$PRIVATE_ROLE" "$DEFAULT_DATABASE"
 expect_connection_denied "$PRIVATE_ROLE" "template1"
 expect_connection_denied "migration" "$DEFAULT_DATABASE"
@@ -309,12 +311,6 @@ expect_denied \
   "insert a tenant row without tenant context" \
   "INSERT INTO private_app.tenants (tenant_id, display_name) VALUES ('30000000-0000-4000-8000-000000000003', 'No context')" \
   "violates row-level security policy"
-expect_denied \
-  "$PRIVATE_ROLE" "$PROJECTION_DATABASE" \
-  "insert a published card without published_at" \
-  "INSERT INTO public_projection.audience_cards (projection_id, card_id, card_version, public_slide_key, occurrence_seq, lifecycle, title, body, source_label, canonical_url, expires_at, revision) VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 1, 'slide-public-2', 1, 'published', 'Invalid', 'Invalid lifecycle', 'Source', 'https://example.test/invalid', statement_timestamp() + interval '1 hour', 99)" \
-  "violates check constraint"
-
 compose exec --no-TTY postgres sh -eu -c '
   pids=""
   for worker in 1 2 3 4 5 6 7 8; do

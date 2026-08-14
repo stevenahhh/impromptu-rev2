@@ -49,8 +49,8 @@ SELECT pg_temp.assert_true(
     FROM pg_database
     WHERE datallowconn
       AND has_database_privilege('private_app', datname, 'CONNECT')
-  ) = ARRAY['impromptu_private', 'impromptu_projection']::name[],
-  'private_app must connect only to private and projection databases'
+  ) = ARRAY['impromptu_private']::name[],
+  'private_app must connect only to the private database'
 );
 SELECT pg_temp.assert_true(
   (
@@ -82,12 +82,13 @@ SELECT pg_temp.assert_true(
 );
 SELECT pg_temp.assert_true(
   (
-    SELECT count(*) = 3
+    SELECT count(*) = 4
     FROM _migrations.applied_migrations
     WHERE migration_name IN (
       '0001_cluster.sql',
       '0002_restrict_template_databases.sql',
-      '0003_publication_dispatcher.sql'
+      '0003_publication_dispatcher.sql',
+      '0004_block_private_projection.sql'
     )
       AND checksum ~ '^[0-9a-f]{64}$'
   ),

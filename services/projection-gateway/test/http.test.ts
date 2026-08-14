@@ -46,6 +46,19 @@ describe("projection gateway HTTP boundary", () => {
     }
   });
 
+  test("rejects direct projection writes outside the dispatcher boundary", async () => {
+    const response = await handler(
+      new Request("http://service.test/v1/projections/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "direct private write" }),
+      }),
+    );
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "dispatcher_required" });
+  });
+
   test("does not expose an accidental catch-all route", async () => {
     const response = await handler(new Request("http://service.test/v1/private"));
 
