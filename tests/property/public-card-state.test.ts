@@ -376,6 +376,22 @@ describe("runtime role snapshot restore", () => {
       restoreAudienceRoleStreams(playback, stream(), { role: "PUBLIC_STAGE" }, "PUBLIC_STAGE")
         .outcome,
     ).toBe("INVALID_SNAPSHOT");
+    expect(() =>
+      restoreAudienceRoleStreams(
+        playback,
+        stream(),
+        audienceSnapshot({ publicCardRevision: "pcr_9007199254740992" }),
+        "PUBLIC_STAGE",
+      ),
+    ).not.toThrow();
+    expect(
+      restoreAudienceRoleStreams(
+        playback,
+        stream(),
+        audienceSnapshot({ publicCardRevision: "pcr_9007199254740992" }),
+        "PUBLIC_STAGE",
+      ).outcome,
+    ).toBe("INVALID_SNAPSHOT");
   });
 
   test("rejects equal-revision different state and stale snapshots atomically", () => {

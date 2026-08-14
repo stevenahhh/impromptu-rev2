@@ -9,6 +9,7 @@ import {
 } from "@impromptu/contracts/control";
 import {
   AccountIdSchema,
+  CandidateRevisionSchema,
   CaptureGrantIdSchema,
   CaptureGrantSchema,
   PrivateDeckIdSchema,
@@ -71,6 +72,7 @@ describe("domain identities", () => {
       [ControlRevisionSchema, `cr_${oversized}`],
       [PublicPlaybackRevisionSchema, `pbr_${oversized}`],
       [PublicCardRevisionSchema, `pcr_${oversized}`],
+      [CandidateRevisionSchema, `candrev_${oversized}`],
     ] as const) {
       expect(() => schema.safeParse(value)).not.toThrow();
       expect(schema.safeParse(value).success).toBe(false);
