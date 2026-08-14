@@ -1,0 +1,13 @@
+{
+  "name": "@impromptu/model-router",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "browser": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "zod": "4.0.17"
+  }
+}
