@@ -409,6 +409,43 @@ export function createProjectionGatewayHandler(
       if (audienceDisplaySessionId === null) {
         return json({ error: "display_session_required" }, 401, origin);
       }
+      const presentationSessionEpoch = url.searchParams.get("presentationSessionEpoch");
+      const displayBindingEpoch = url.searchParams.get("displayBindingEpoch");
+      const deckVersion = url.searchParams.get("deckVersion");
+      const manifestHash = url.searchParams.get("manifestHash");
+      const hasPins =
+        presentationSessionEpoch !== null ||
+        displayBindingEpoch !== null ||
+        deckVersion !== null ||
+        manifestHash !== null;
+      if (hasPins) {
+        if (
+          presentationSessionEpoch === null ||
+          displayBindingEpoch === null ||
+          deckVersion === null ||
+          manifestHash === null
+        ) {
+          return json({ outcome: "RECONCILE_REQUIRED" }, 409, origin);
+        }
+        const stateHash = url.searchParams.get("stateHash");
+        const result = dependencies.gateway.reconcileSnapshot(
+          audienceDisplaySessionId,
+          {
+            role: url.searchParams.get("role") ?? "PUBLIC_STAGE",
+            presentationSessionEpoch,
+            displayBindingEpoch,
+            deckVersion,
+            manifestHash,
+            ...(stateHash === null ? {} : { stateHash }),
+          },
+          dependencies.now(),
+        );
+        if (result.outcome === "RECONCILE_REQUIRED") return json(result, 409, origin);
+        if (result.outcome === "SESSION_EXPIRED") {
+          return json({ error: "display_session_expired" }, 401, origin);
+        }
+        return json(result.snapshot, 200, origin);
+      }
       const snapshot = dependencies.gateway.snapshot(audienceDisplaySessionId, dependencies.now());
       return snapshot === null
         ? json({ error: "display_session_expired" }, 401, origin)

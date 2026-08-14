@@ -7,6 +7,7 @@ import {
   restoreProjectionGatewayStore,
   snapshotProjectionGatewayStore,
 } from "./prepared-evidence.ts";
+import { createProjectionRealtimeProtocol, type ProjectionRealtimeConnection } from "./realtime.ts";
 
 const internalAuthToken = Bun.env.SERVICE_AUTH_TOKEN;
 if (internalAuthToken === undefined || internalAuthToken.length < 16) {
@@ -43,32 +44,78 @@ const gateway = new PreparedEvidenceProjectionGateway(store);
 const persist = async () => {
   await Bun.write(databasePath, JSON.stringify(snapshotProjectionGatewayStore(store)));
 };
-const server = Bun.serve({
+const recordApplied = async (input: {
+  readonly audienceDisplaySessionId: string;
+  readonly commandId: string;
+  readonly displayBindingEpoch: string;
+}) => {
+  try {
+    const response = await fetch(`${privateBackendOrigin}/internal/stage-applied`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${internalAuthToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(input),
+    });
+    return response.ok ? await response.json() : null;
+  } catch {
+    return null;
+  }
+};
+const httpHandler = createProjectionGatewayHandler(config, {
+  gateway,
+  internalAuthToken,
+  now: Date.now,
+  persist,
+  stageReceiptWriter: { recordApplied },
+});
+const realtime = createProjectionRealtimeProtocol({
+  gateway,
+  allowedOrigin: config.allowedOrigin,
+  now: Date.now,
+  recordApplied,
+});
+type RealtimeSocketData = {
+  audienceDisplaySessionId: string;
+  connection: ProjectionRealtimeConnection | null;
+};
+const server = Bun.serve<RealtimeSocketData, Record<never, never>>({
   hostname: config.host,
   port: config.port,
-  fetch: createProjectionGatewayHandler(config, {
-    gateway,
-    internalAuthToken,
-    now: Date.now,
-    persist,
-    stageReceiptWriter: {
-      async recordApplied(input) {
-        try {
-          const response = await fetch(`${privateBackendOrigin}/internal/stage-applied`, {
-            method: "POST",
-            headers: {
-              authorization: `Bearer ${internalAuthToken}`,
-              "content-type": "application/json",
-            },
-            body: JSON.stringify(input),
-          });
-          return response.ok ? await response.json() : null;
-        } catch {
-          return null;
-        }
+  fetch(request, server) {
+    if (new URL(request.url).pathname !== "/v1/realtime") return httpHandler(request);
+    const authentication = realtime.authenticate(request);
+    if (authentication.outcome === "REJECTED") {
+      return new Response(JSON.stringify({ error: authentication.reason }), {
+        status: 403,
+        headers: { "content-type": "application/json", "cache-control": "no-store" },
+      });
+    }
+    return server.upgrade(request, {
+      data: {
+        audienceDisplaySessionId: authentication.audienceDisplaySessionId,
+        connection: null,
       },
+    })
+      ? undefined
+      : new Response(JSON.stringify({ error: "upgrade_required" }), { status: 426 });
+  },
+  websocket: {
+    open(socket) {
+      socket.data.connection = realtime.connect(socket.data.audienceDisplaySessionId, (message) =>
+        socket.send(JSON.stringify(message)),
+      );
+      if (socket.data.connection === null) socket.close(1008, "display session unavailable");
     },
-  }),
+    async message(socket, message) {
+      await socket.data.connection?.receive(message);
+    },
+    close(socket) {
+      socket.data.connection?.close();
+      socket.data.connection = null;
+    },
+  },
 });
 
 console.log(`projection-gateway listening on ${server.url}`);

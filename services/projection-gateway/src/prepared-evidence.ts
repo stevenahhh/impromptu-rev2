@@ -71,6 +71,8 @@ export interface PlaybackProjection {
 }
 
 export interface AudienceProjectionSnapshot {
+  readonly role: "PUBLIC_STAGE";
+  readonly stateHash: string;
   readonly presentationSessionId: string;
   readonly presentationSessionEpoch: string;
   readonly displayBindingEpoch: string;
@@ -511,6 +513,20 @@ export type BindDisplayResult =
         | "BINDING_CAS_CONFLICT";
     }>;
 
+export interface ReconnectSnapshotPins {
+  readonly role: string;
+  readonly presentationSessionEpoch: string;
+  readonly displayBindingEpoch: string;
+  readonly deckVersion: string;
+  readonly manifestHash: string;
+  readonly stateHash?: string;
+}
+
+export type ReconcileSnapshotResult =
+  | Readonly<{ outcome: "SNAPSHOT"; snapshot: AudienceProjectionSnapshot }>
+  | Readonly<{ outcome: "RECONCILE_REQUIRED" }>
+  | Readonly<{ outcome: "SESSION_EXPIRED" }>;
+
 export type StageSocketCloseReason = "REBOUND" | "SESSION_EXPIRED" | "CLIENT_CLOSED";
 
 export interface StageSocket {
@@ -785,7 +801,8 @@ export class PreparedEvidenceProjectionGateway {
       .map((event) => revisionValue(event.publicCardRevision, "pcr_") ?? 0)
       .reduce((minimum, revision) => Math.min(minimum, revision), Number.POSITIVE_INFINITY);
     const watermark = Number.isFinite(earliestRetained) ? Math.max(0, earliestRetained - 1) : 0;
-    return {
+    const absoluteState = {
+      role: "PUBLIC_STAGE" as const,
       presentationSessionId: projection.binding.presentationSessionId,
       presentationSessionEpoch: projection.binding.presentationSessionEpoch,
       displayBindingEpoch: projection.binding.displayBindingEpoch,
@@ -799,6 +816,30 @@ export class PreparedEvidenceProjectionGateway {
       tombstoneWatermark: `pcr_${watermark}`,
       tombstoneRetentionMs: this.#tombstoneRetentionMs,
     };
+    const stateHash = new Bun.CryptoHasher("sha256")
+      .update(JSON.stringify(absoluteState))
+      .digest("hex");
+    return { ...absoluteState, stateHash };
+  }
+
+  reconcileSnapshot(
+    audienceDisplaySessionId: string,
+    pins: ReconnectSnapshotPins,
+    nowMs: number,
+  ): ReconcileSnapshotResult {
+    const snapshot = this.snapshot(audienceDisplaySessionId, nowMs);
+    if (snapshot === null) return { outcome: "SESSION_EXPIRED" };
+    if (
+      pins.role !== "PUBLIC_STAGE" ||
+      pins.presentationSessionEpoch !== snapshot.presentationSessionEpoch ||
+      pins.displayBindingEpoch !== snapshot.displayBindingEpoch ||
+      pins.deckVersion !== snapshot.deck.deckVersion ||
+      pins.manifestHash !== snapshot.deck.manifestHash ||
+      (pins.stateHash !== undefined && pins.stateHash !== snapshot.stateHash)
+    ) {
+      return { outcome: "RECONCILE_REQUIRED" };
+    }
+    return { outcome: "SNAPSHOT", snapshot };
   }
 
   #closeSocket(
