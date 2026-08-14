@@ -12,6 +12,7 @@ const { StageRoutes } = await import("./App");
 import type {
   DisplayIdentity,
   DisplayJoinView,
+  StageEventObserver,
   StageSessionClient,
   StageSnapshotView,
 } from "./stage-client";
@@ -39,6 +40,28 @@ afterEach(() => {
     value: null,
   });
 });
+
+function textMutation(text: string, visible: boolean) {
+  const present = () => document.body.textContent?.includes(text) === true;
+  if (present() === visible) return Promise.resolve();
+  return new Promise<void>((resolve, reject) => {
+    const observer = new MutationObserver(() => {
+      if (present() === visible) {
+        observer.disconnect();
+        resolve();
+      }
+    });
+    observer.observe(document.body, { childList: true, characterData: true, subtree: true });
+    AbortSignal.timeout(2_000).addEventListener(
+      "abort",
+      () => {
+        observer.disconnect();
+        reject(new Error(`text mutation timeout: ${text}`));
+      },
+      { once: true },
+    );
+  });
+}
 
 function renderStage(path: string) {
   return render(
@@ -127,6 +150,15 @@ describe("public Stage boundary", () => {
         displayBindingEpoch: "dbe_1",
         deckVersion: "deck_alpha",
         manifestHash: "b".repeat(64),
+        deckSlides: [
+          {
+            publicSlideKey: "slide_one",
+            ordinal: 1,
+            imageUrl: "https://public.test/one.png",
+            imageContentHash: "c".repeat(64),
+            accessibilityLabel: "One",
+          },
+        ],
         publicPlaybackRevision: "pbr_0",
         blackout: false,
         occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
@@ -158,6 +190,134 @@ describe("public Stage boundary", () => {
     );
 
     expect(within(document.body).getByText("duplicate / 1 screen")).toBeTruthy();
+
+  test("observes one visible effect, keeps verified curated offline, and hides on session epoch change", async () => {
+    let observer: StageEventObserver | null = null;
+    const snapshotApplied = deferred<unknown>();
+    const visibleEffects: unknown[] = [];
+    window.addEventListener(
+      "impromptu:snapshot-applied",
+      (event) => snapshotApplied.resolve(event instanceof CustomEvent ? event.detail : null),
+      { once: true },
+    );
+    window.addEventListener("impromptu:visible-playback", (event) => {
+      visibleEffects.push(event instanceof CustomEvent ? event.detail : null);
+    });
+    const snapshot: StageSnapshotView = {
+      role: "PUBLIC_STAGE",
+      stateHash: "a".repeat(64),
+      presentationSessionId: "ps_alpha",
+      presentationSessionEpoch: "pse_1",
+      displayBindingEpoch: "dbe_1",
+      deckVersion: "deck_alpha",
+      manifestHash: "b".repeat(64),
+      deckSlides: [
+        {
+          publicSlideKey: "slide_one",
+          ordinal: 1,
+          imageUrl: "https://public.test/one.png",
+          imageContentHash: "c".repeat(64),
+          accessibilityLabel: "One",
+        },
+        {
+          publicSlideKey: "slide_two",
+          ordinal: 2,
+          imageUrl: "https://public.test/two.png",
+          imageContentHash: "d".repeat(64),
+          accessibilityLabel: "Two",
+        },
+      ],
+      publicPlaybackRevision: "pbr_0",
+      blackout: false,
+      occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+      cards: [
+        {
+          projectionId: "projection_curated",
+          status: "PUBLISHED",
+          mode: "CURATED",
+          leaseExpiresAtMs: null,
+          offlinePackage: {
+            offlineDisplayAllowed: true,
+            localExpiresAtMs: Date.now() + 60_000,
+            signature: "signed",
+            signatureVerified: true,
+          },
+          claim: "Verified offline claim",
+          supportSummary: "Signed package",
+          sourceLabel: "Public source",
+          publicCardRevision: "pcr_1",
+        },
+      ],
+      publicCardRevision: "pcr_1",
+      tombstoneWatermark: "pcr_0",
+      tombstoneRetentionMs: 60_000,
+    };
+    let snapshotReads = 0;
+    const client: StageSessionClient = {
+      async createJoin() {
+        throw new Error("not used");
+      },
+      async claim() {},
+      async snapshot() {
+        snapshotReads += 1;
+        return snapshotReads === 1
+          ? snapshot
+          : {
+              ...snapshot,
+              stateHash: "e".repeat(64),
+              publicPlaybackRevision: "pbr_1",
+              occurrence: { publicSlideKey: "slide_two", occurrenceSeq: 2 },
+            };
+      },
+      async subscribe(nextObserver) {
+        observer = nextObserver;
+        return { close() {} };
+      },
+      async recordApplied() {
+        return { status: "STAGE_APPLIED" };
+      },
+    };
+    const waitVisible = textMutation("Verified offline claim", true);
+    render(
+      <MemoryRouter initialEntries={["/display/display_alpha"]}>
+        <StageRoutes client={client} />
+      </MemoryRouter>,
+    );
+    const appliedSnapshot = await act(async () => snapshotApplied.promise);
+    expect(appliedSnapshot).toEqual({
+      stateHash: "a".repeat(64),
+      publicPlaybackRevision: "pbr_0",
+      publicCardRevision: "pcr_1",
+      visibleCardIds: ["projection_curated"],
+    });
+    await act(async () => waitVisible);
+    expect(within(document.body).getByText("Verified offline claim")).toBeTruthy();
+    if (observer === null) throw new Error("Stage observer was not installed");
+    const playback = {
+      commandId: "cmd_one",
+      presentationSessionEpoch: "pse_1",
+      displayBindingEpoch: "dbe_1",
+      acceptedControlRevision: "cr_1",
+      publicPlaybackRevision: "pbr_1",
+      occurrence: { publicSlideKey: "slide_two", occurrenceSeq: 2 },
+      blackout: false,
+    };
+    await act(async () => {
+      observer?.onPlayback(playback);
+      observer?.onPlayback(playback);
+    });
+    expect(visibleEffects).toHaveLength(1);
+    await act(async () => observer?.onClose("NETWORK_ERROR"));
+    expect(within(document.body).getByText("Verified offline claim")).toBeTruthy();
+    await act(async () =>
+      observer?.onPlayback({
+        ...playback,
+        commandId: "cmd_stale_epoch",
+        presentationSessionEpoch: "pse_2",
+        publicPlaybackRevision: "pbr_2",
+      }),
+    );
+    expect(within(document.body).queryByText("Verified offline claim")).toBeNull();
   });
 
   test("enters and exits fullscreen only from a Stage-local action", () => {

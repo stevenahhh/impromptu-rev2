@@ -77,7 +77,11 @@ export type RealtimeTransition =
     }>
   | Readonly<{ type: "CONTROLLER_EPOCH_CHANGED"; controllerEpoch: string }>
   | Readonly<{ type: "CARD_UPSERT"; card: RealtimeCard; nowMs: number }>
-  | Readonly<{ type: "CARD_TOMBSTONE"; projectionId: string }>
+  | Readonly<{
+      type: "CARD_TOMBSTONE";
+      projectionId: string;
+      publicCardRevision: string;
+    }>
   | Readonly<{
       type: "ABSOLUTE_PLAYBACK";
       commandId: string;
@@ -229,7 +233,21 @@ export function applyRealtimeTransition(
     );
   }
   if (transition.type === "CARD_TOMBSTONE") {
-    return hideCards(state, (card) => card.projectionId === transition.projectionId, "TOMBSTONE");
+    if (
+      revision(transition.publicCardRevision, "pcr_") <= revision(state.publicCardRevision, "pcr_")
+    ) {
+      return { state, outcome: "STALE_EVENT", effects: [] };
+    }
+    const hidden = hideCards(
+      state,
+      (card) => card.projectionId === transition.projectionId,
+      "TOMBSTONE",
+    );
+    return {
+      ...hidden,
+      state: { ...hidden.state, publicCardRevision: transition.publicCardRevision },
+      outcome: "APPLIED",
+    };
   }
   if (transition.type === "EPOCH_CHANGED") {
     const changed =

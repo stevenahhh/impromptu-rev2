@@ -100,6 +100,7 @@ describe("projection realtime WebSocket protocol", () => {
           presentationSessionEpoch: "pse_1",
           displayBindingEpoch: "dbe_1",
           acceptedControlRevision: "cr_1",
+          publicPlaybackRevision: "pbr_1",
           occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 2 },
           blackout: false,
         },

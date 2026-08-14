@@ -69,12 +69,17 @@ export interface AudienceDisplaySessionRecord {
   readonly expiresAtMs: number;
 }
 
-export interface PlaybackProjection {
+export interface PlaybackProjectionInput {
   readonly commandId: string;
   readonly displayBindingEpoch: string;
   readonly acceptedControlRevision: string;
   readonly occurrence: { readonly publicSlideKey: string; readonly occurrenceSeq: number };
   readonly blackout: boolean;
+}
+
+export interface PlaybackProjection extends PlaybackProjectionInput {
+  readonly presentationSessionEpoch: string;
+  readonly publicPlaybackRevision: string;
 }
 
 export interface AudienceProjectionSnapshot {
@@ -773,7 +778,7 @@ export class PreparedEvidenceProjectionGateway {
     };
   }
 
-  projectPlayback(presentationSessionId: string, event: PlaybackProjection): boolean {
+  projectPlayback(presentationSessionId: string, event: PlaybackProjectionInput): boolean {
     const projection = this.#store.projections.get(presentationSessionId);
     if (
       projection === undefined ||
@@ -781,10 +786,17 @@ export class PreparedEvidenceProjectionGateway {
     ) {
       return false;
     }
+    const currentRevision = revisionValue(projection.publicPlaybackRevision, "pbr_");
+    if (currentRevision === null) return false;
+    const delivered: PlaybackProjection = {
+      ...event,
+      presentationSessionEpoch: projection.binding.presentationSessionEpoch,
+      publicPlaybackRevision: `pbr_${currentRevision + 1}`,
+    };
     projection.occurrence = event.occurrence;
     projection.blackout = event.blackout;
     for (const socket of this.#sockets.get(presentationSessionId) ?? []) {
-      if (!socket.closed) socket.observer.onPlayback(event);
+      if (!socket.closed) socket.observer.onPlayback(delivered);
     }
     return true;
   }

@@ -1,6 +1,6 @@
 import type { ExactOrigin, ProjectionGatewayConfig } from "./config.ts";
 import type {
-  PlaybackProjection,
+  PlaybackProjectionInput,
   PreparedEvidenceProjectionGateway,
   PublicCardEvent,
   PublicDeckArtifact,
@@ -95,7 +95,7 @@ function publicDeck(value: unknown): PublicDeckArtifact | null {
     : null;
 }
 
-function playbackEvent(value: unknown): PlaybackProjection | null {
+function playbackEvent(value: unknown): PlaybackProjectionInput | null {
   if (!isRecord(value) || !isRecord(value.occurrence)) return null;
   return typeof value.commandId === "string" &&
     typeof value.displayBindingEpoch === "string" &&

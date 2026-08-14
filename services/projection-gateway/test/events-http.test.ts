@@ -111,8 +111,10 @@ describe("Stage network event and receipt channel", () => {
       kind: "PLAYBACK",
       payload: {
         commandId: "cmd_alpha",
+        presentationSessionEpoch: "pse_1",
         displayBindingEpoch: "dbe_1",
         acceptedControlRevision: "cr_1",
+        publicPlaybackRevision: "pbr_1",
         occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
         blackout: false,
       },

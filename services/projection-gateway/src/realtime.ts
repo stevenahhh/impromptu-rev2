@@ -21,6 +21,7 @@ export type ProjectionRealtimeMessage =
         presentationSessionEpoch: string;
         displayBindingEpoch: string;
         acceptedControlRevision: string;
+        publicPlaybackRevision: string;
         occurrence: Readonly<{ publicSlideKey: string; occurrenceSeq: number }>;
         blackout: boolean;
       }>;
@@ -144,10 +145,7 @@ export function createProjectionRealtimeProtocol(dependencies: ProjectionRealtim
           onPlayback(event) {
             send({
               kind: "COMMAND",
-              payload: {
-                ...event,
-                presentationSessionEpoch: initial.presentationSessionEpoch,
-              },
+              payload: event,
             });
           },
           onCard(event) {

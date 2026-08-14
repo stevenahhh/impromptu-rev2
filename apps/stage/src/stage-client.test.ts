@@ -78,8 +78,10 @@ describe("Stage network client", () => {
           kind: "PLAYBACK",
           payload: {
             commandId: "cmd_alpha",
+            presentationSessionEpoch: "pse_1",
             displayBindingEpoch: "dbe_1",
             acceptedControlRevision: "cr_1",
+            publicPlaybackRevision: "pbr_1",
             occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
             blackout: false,
           },
@@ -103,8 +105,10 @@ describe("Stage network client", () => {
     expect(cardEvents).toEqual(["pcr_2:RETRACTED"]);
     await client.recordApplied({
       commandId: "cmd_alpha",
+      presentationSessionEpoch: "pse_1",
       displayBindingEpoch: "dbe_1",
       acceptedControlRevision: "cr_1",
+      publicPlaybackRevision: "pbr_1",
       occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
       blackout: false,
     });
@@ -127,6 +131,7 @@ describe("Stage network client", () => {
     );
     const commands: string[] = [];
     const receipts: string[] = [];
+    const protocolErrors: string[] = [];
     const subscriptionPromise = client.subscribeRealtime?.({
       onPlayback(event) {
         commands.push(event.commandId);
@@ -134,6 +139,9 @@ describe("Stage network client", () => {
       onCard() {},
       onReceipt(receipt) {
         receipts.push(receipt.commandId);
+      },
+      onProtocolError(code) {
+        protocolErrors.push(code);
       },
       onClose() {},
     });
@@ -149,6 +157,7 @@ describe("Stage network client", () => {
             presentationSessionEpoch: "pse_1",
             displayBindingEpoch: "dbe_1",
             acceptedControlRevision: "cr_1",
+            publicPlaybackRevision: "pbr_1",
             occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 2 },
             blackout: false,
           },
@@ -158,8 +167,10 @@ describe("Stage network client", () => {
     expect(commands).toEqual(["cmd_realtime"]);
     subscription.recordApplied?.({
       commandId: "cmd_realtime",
+      presentationSessionEpoch: "pse_1",
       displayBindingEpoch: "dbe_1",
       acceptedControlRevision: "cr_1",
+      publicPlaybackRevision: "pbr_1",
       occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 2 },
       blackout: false,
     });
@@ -185,6 +196,15 @@ describe("Stage network client", () => {
       }),
     );
     expect(receipts).toEqual(["cmd_realtime"]);
+    source.dispatchEvent(
+      new MessageEvent("message", {
+        data: JSON.stringify({
+          kind: "ERROR",
+          payload: { code: "STALE_DISPLAY_BINDING" },
+        }),
+      }),
+    );
+    expect(protocolErrors).toEqual(["STALE_DISPLAY_BINDING"]);
     subscription.close();
   });
 });

@@ -1,3 +1,9 @@
+import {
+  applyRealtimeTransition,
+  createRealtimeStageState,
+  type RealtimeStageState,
+  type RealtimeTransition,
+} from "@impromptu/state";
 import { Badge, Brand, Button, Panel, Shell, StatusDot } from "@impromptu/ui";
 import { useEffect, useId, useMemo, useState } from "react";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
@@ -185,9 +191,21 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
     let subscription: StageSubscription | null = null;
     let sseSubscription: StageSubscription | null = null;
     let latestSnapshot: StageSnapshotView | null = null;
+    let realtimeState: RealtimeStageState | null = null;
     let realtimeReconnectAttempts = 0;
-    const appliedCommandIds = new Set<string>();
     const leaseTimers = new Map<string, number>();
+
+    const transition = (event: RealtimeTransition) => {
+      if (realtimeState === null) return null;
+      const result = applyRealtimeTransition(realtimeState, event);
+      realtimeState = result.state;
+      return result;
+    };
+
+    const visibleCards = (current: StageSnapshotView, state: RealtimeStageState) => ({
+      ...current,
+      cards: current.cards.filter((card) => state.visibleCardIds.includes(card.projectionId)),
+    });
 
     const scheduleLease = (card: StageSnapshotView["cards"][number]) => {
       const existing = leaseTimers.get(card.projectionId);
@@ -202,12 +220,9 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
               (candidate) => candidate.projectionId === card.projectionId,
             );
             if (present?.leaseExpiresAtMs !== card.leaseExpiresAtMs) return current;
-            const next = {
-              ...current,
-              cards: current.cards.filter(
-                (candidate) => candidate.projectionId !== card.projectionId,
-              ),
-            };
+            const result = transition({ type: "CLOCK", nowMs: Date.now() });
+            if (result === null || result.outcome !== "APPLIED") return current;
+            const next = visibleCards(current, result.state);
             latestSnapshot = next;
             publishStageEvent("impromptu:card-hidden", {
               projectionId: card.projectionId,
@@ -226,27 +241,49 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
         const observer: StageEventObserver = {
           onPlayback(event) {
             if (!active) return;
-            const staleBinding =
-              latestSnapshot !== null &&
-              event.displayBindingEpoch !== latestSnapshot.displayBindingEpoch;
-            const duplicate = appliedCommandIds.has(event.commandId);
-            if (staleBinding) {
+            if (
+              realtimeState !== null &&
+              (event.presentationSessionEpoch !== realtimeState.presentationSessionEpoch ||
+                event.displayBindingEpoch !== realtimeState.displayBindingEpoch)
+            ) {
+              const epochResult = transition({
+                type: "EPOCH_CHANGED",
+                presentationSessionEpoch: event.presentationSessionEpoch,
+                displayBindingEpoch: event.displayBindingEpoch,
+              });
               setSnapshot((current) => {
-                if (current === null) return null;
-                const next = { ...current, cards: [] };
+                if (current === null || epochResult === null) return current;
+                const next = visibleCards(current, epochResult.state);
                 latestSnapshot = next;
                 return next;
               });
-              publishStageEvent("impromptu:card-hidden", { reason: "STALE_EVENT" });
+              publishStageEvent("impromptu:card-hidden", { reason: "EPOCH_CHANGED" });
               return;
             }
-            if (!duplicate) {
-              appliedCommandIds.add(event.commandId);
+            const playbackResult = transition({
+              type: "ABSOLUTE_PLAYBACK",
+              commandId: event.commandId,
+              presentationSessionEpoch: event.presentationSessionEpoch,
+              displayBindingEpoch: event.displayBindingEpoch,
+              publicPlaybackRevision: event.publicPlaybackRevision,
+              occurrence: event.occurrence,
+              blackout: event.blackout,
+            });
+            if (playbackResult?.outcome === "APPLIED") {
               setSnapshot((current) => {
                 if (current === null) return null;
-                const next = { ...current, occurrence: event.occurrence };
+                const next = {
+                  ...current,
+                  publicPlaybackRevision: event.publicPlaybackRevision,
+                  occurrence: event.occurrence,
+                  blackout: event.blackout,
+                };
                 latestSnapshot = next;
                 return next;
+              });
+              publishStageEvent("impromptu:visible-playback", {
+                commandId: event.commandId,
+                occurrence: event.occurrence,
               });
             }
             const recordOverHttp = () =>
@@ -267,8 +304,36 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
           },
           onCard(event) {
             if (!active) return;
+            const cardResult =
+              event.status === "PUBLISHED"
+                ? transition({
+                    type: "CARD_UPSERT",
+                    nowMs: Date.now(),
+                    card: {
+                      projectionId: event.projectionId,
+                      mode: event.mode,
+                      leaseExpiresAtMs: event.leaseExpiresAtMs,
+                      publicCardRevision: event.publicCardRevision,
+                      ...(event.offlinePackage === undefined
+                        ? {}
+                        : {
+                            offlinePackage: {
+                              offlineDisplayAllowed: event.offlinePackage.offlineDisplayAllowed,
+                              localExpiresAtMs: event.offlinePackage.localExpiresAtMs,
+                              signatureVerified: event.offlinePackage.signatureVerified,
+                            },
+                          }),
+                    },
+                  })
+                : transition({
+                    type: "CARD_TOMBSTONE",
+                    projectionId: event.projectionId,
+                    publicCardRevision: event.publicCardRevision,
+                  });
             setSnapshot((current) => {
-              const next = applyCardEvent(current, event);
+              const streamed = applyCardEvent(current, event);
+              if (streamed === null || cardResult === null) return streamed;
+              const next = visibleCards(streamed, cardResult.state);
               latestSnapshot = next;
               return next;
             });
@@ -280,6 +345,16 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
             }
             publishStageEvent("impromptu:card-event", event);
           },
+          onProtocolError(code) {
+            const result = transition({ type: "EXPLICIT_HIDE", reason: "EXPLICIT_ERROR" });
+            setSnapshot((current) => {
+              if (current === null || result === null) return current;
+              const next = visibleCards(current, result.state);
+              latestSnapshot = next;
+              return next;
+            });
+            publishStageEvent("impromptu:card-hidden", { reason: code });
+          },
           onReceipt(receipt) {
             realtimeReconnectAttempts = 0;
             publishStageEvent("impromptu:playback-applied", receipt);
@@ -288,9 +363,14 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
             if (!active) return;
             publishStageEvent("impromptu:channel-close", { reason });
             subscription = null;
+            const partitioned = transition({
+              type: "PARTITION",
+              reason: "NETWORK_ERROR",
+              nowMs: Date.now(),
+            });
             setSnapshot((current) => {
-              if (current === null) return null;
-              const next = { ...current, cards: [] };
+              if (current === null || partitioned === null) return current;
+              const next = visibleCards(current, partitioned.state);
               latestSnapshot = next;
               return next;
             });
@@ -311,9 +391,65 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
         }
         const next = await client.snapshot(pins);
         if (!active) return;
-        latestSnapshot = next;
-        setSnapshot(next);
-        for (const card of next.cards) scheduleLease(card);
+        if (realtimeState === null) {
+          realtimeState = createRealtimeStageState(
+            {
+              presentationSessionId: next.presentationSessionId,
+              presentationSessionEpoch: next.presentationSessionEpoch,
+              displayBindingEpoch: next.displayBindingEpoch,
+              deckVersion: next.deckVersion,
+              manifestHash: next.manifestHash,
+            },
+            next.occurrence,
+          );
+        } else {
+          transition({ type: "RECONNECT" });
+        }
+        const restored = transition({
+          type: "SNAPSHOT",
+          verifiedStateHash: next.stateHash,
+          snapshot: {
+            role: next.role,
+            stateHash: next.stateHash,
+            presentationSessionId: next.presentationSessionId,
+            presentationSessionEpoch: next.presentationSessionEpoch,
+            displayBindingEpoch: next.displayBindingEpoch,
+            deckVersion: next.deckVersion,
+            manifestHash: next.manifestHash,
+            publicPlaybackRevision: next.publicPlaybackRevision,
+            publicCardRevision: next.publicCardRevision,
+            occurrence: next.occurrence,
+            blackout: next.blackout,
+            cards: next.cards.map((card) => ({
+              projectionId: card.projectionId,
+              mode: card.mode,
+              leaseExpiresAtMs: card.leaseExpiresAtMs,
+              publicCardRevision: card.publicCardRevision,
+              ...(card.offlinePackage === undefined
+                ? {}
+                : {
+                    offlinePackage: {
+                      offlineDisplayAllowed: card.offlinePackage.offlineDisplayAllowed,
+                      localExpiresAtMs: card.offlinePackage.localExpiresAtMs,
+                      signatureVerified: card.offlinePackage.signatureVerified,
+                    },
+                  }),
+            })),
+          },
+        });
+        if (restored === null || restored.outcome === "RECONCILE_REQUIRED") {
+          throw new Error("RECONCILE_REQUIRED");
+        }
+        const visible = visibleCards(next, restored.state);
+        latestSnapshot = visible;
+        setSnapshot(visible);
+        publishStageEvent("impromptu:snapshot-applied", {
+          stateHash: visible.stateHash,
+          publicPlaybackRevision: visible.publicPlaybackRevision,
+          publicCardRevision: visible.publicCardRevision,
+          visibleCardIds: visible.cards.map((card) => card.projectionId),
+        });
+        for (const card of visible.cards) scheduleLease(card);
         if (client.subscribeRealtime !== undefined) {
           subscription = await client.subscribeRealtime(observer);
           if (!active) subscription.close();
@@ -336,6 +472,25 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
     };
   }, [client]);
 
+  const navigateCachedSlide = (offset: -1 | 1) => {
+    setSnapshot((current) => {
+      if (current === null) return null;
+      const slides = [...current.deckSlides].sort((left, right) => left.ordinal - right.ordinal);
+      const index = slides.findIndex(
+        (slide) => slide.publicSlideKey === current.occurrence.publicSlideKey,
+      );
+      const target = slides[index + offset];
+      return target === undefined
+        ? current
+        : {
+            ...current,
+            occurrence: {
+              publicSlideKey: target.publicSlideKey,
+              occurrenceSeq: current.occurrence.occurrenceSeq + 1,
+            },
+          };
+    });
+  };
   const card = snapshot?.cards[0];
 
   return (
@@ -343,6 +498,12 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
       <header className="stage-display__bar">
         <Brand eyebrow="Public Stage" />
         <div className="stage-display__actions">
+          <Button variant="quiet" onClick={() => navigateCachedSlide(-1)}>
+            Previous slide
+          </Button>
+          <Button variant="quiet" onClick={() => navigateCachedSlide(1)}>
+            Next slide
+          </Button>
           <Badge tone="success">
             <StatusDot label="Preview content visible" />
             Preview
