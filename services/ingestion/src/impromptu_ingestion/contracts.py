@@ -136,3 +136,30 @@ class DeckManifest(ContractModel):
         if len(keys) != len(self.slides):
             raise ValueError("slide keys must be unique")
         return self
+
+
+class CompletedIngestion(ContractModel):
+    status: Literal["completed"] = "completed"
+    job_id: JobId
+    manifest_hash: Sha256
+    manifest: DeckManifest
+
+
+class PythonDoctorStatus(ContractModel):
+    current: str
+    required: Literal[">=3.14,<3.15"] = ">=3.14,<3.15"
+    supported: bool
+
+
+class RenderingDoctorStatus(ContractModel):
+    status: Literal["not_configured"] = "not_configured"
+    fidelity_verified: Literal[False] = False
+
+
+class DoctorReport(ContractModel):
+    ok: bool
+    python: PythonDoctorStatus
+    dependencies: dict[str, str]
+    structural_extractors: dict[InputKind, bool]
+    rendering: RenderingDoctorStatus
+    ai_enabled: Literal[False] = False
