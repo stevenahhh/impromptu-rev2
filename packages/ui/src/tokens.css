@@ -132,6 +132,7 @@
   --border-emphasis: oklch(25% 0.03 245deg / 30%);
   --color-accent: oklch(58% 0.19 27deg);
   --color-accent-strong: oklch(50% 0.2 26deg);
+  --color-success: oklch(38% 0.12 153deg);
   --text-on-accent: oklch(100% 0 0deg);
   --focus-ring: oklch(53% 0.18 232deg);
   --color-shadow: oklch(35% 0.05 70deg / 18%);

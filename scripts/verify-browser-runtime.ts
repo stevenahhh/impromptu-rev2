@@ -762,7 +762,7 @@ async function assertKeyboardFocusOrder(page: Page, route: AccessibilityRoute) {
 }
 
 async function assertComputedContrast(page: Page, route: AccessibilityRoute) {
-  const failures = await page.evaluate(() => {
+  const result = await page.evaluate(() => {
     const canvas = document.createElement("canvas");
     canvas.width = 1;
     canvas.height = 1;
@@ -799,36 +799,62 @@ async function assertComputedContrast(page: Page, route: AccessibilityRoute) {
       return 0.2126 * (linear[0] ?? 0) + 0.7152 * (linear[1] ?? 0) + 0.0722 * (linear[2] ?? 0);
     };
 
-    return [
-      ...document.querySelectorAll<HTMLElement>(
-        "h1, h2, p, label, button:not([disabled]), a[href]",
-      ),
-    ]
-      .filter(
-        (element) =>
-          element.textContent?.trim() && getComputedStyle(element).visibility !== "hidden",
-      )
-      .flatMap((element) => {
+    const renderedTextElements = [...document.body.querySelectorAll<HTMLElement>("*")].filter(
+      (element) => {
+        const hasDirectText = [...element.childNodes].some(
+          (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim(),
+        );
         const style = getComputedStyle(element);
-        const foreground = composite(rgba(style.color), backgroundOf(element));
-        const background = backgroundOf(element);
-        const lighter = Math.max(luminance(foreground), luminance(background));
-        const darker = Math.min(luminance(foreground), luminance(background));
-        const ratio = (lighter + 0.05) / (darker + 0.05);
-        const fontSize = Number.parseFloat(style.fontSize);
-        const fontWeight = Number.parseInt(style.fontWeight, 10) || 400;
-        const threshold = fontSize >= 24 || (fontSize >= 18.66 && fontWeight >= 700) ? 3 : 4.5;
-        return ratio + 0.01 < threshold
-          ? [
-              `${element.tagName.toLowerCase()}.${element.className}:${ratio.toFixed(2)}<${threshold}`,
-            ]
-          : [];
-      });
+        return (
+          hasDirectText &&
+          style.display !== "none" &&
+          style.visibility !== "hidden" &&
+          Number.parseFloat(style.opacity) > 0 &&
+          element.getClientRects().length > 0
+        );
+      },
+    );
+    const measurements = renderedTextElements.map((element) => {
+      const style = getComputedStyle(element);
+      const foreground = composite(rgba(style.color), backgroundOf(element));
+      const background = backgroundOf(element);
+      const lighter = Math.max(luminance(foreground), luminance(background));
+      const darker = Math.min(luminance(foreground), luminance(background));
+      const ratio = (lighter + 0.05) / (darker + 0.05);
+      const fontSize = Number.parseFloat(style.fontSize);
+      const fontWeight = Number.parseInt(style.fontWeight, 10) || 400;
+      const threshold = fontSize >= 24 || (fontSize >= 18.66 && fontWeight >= 700) ? 3 : 4.5;
+      return {
+        element: `${element.tagName.toLowerCase()}.${element.className}`,
+        ratio,
+        threshold,
+      };
+    });
+    const minimum = measurements.reduce(
+      (current, measurement) => (measurement.ratio < current.ratio ? measurement : current),
+      { element: "none", ratio: Number.POSITIVE_INFINITY, threshold: 4.5 },
+    );
+    const ratioFor = (className: string) => {
+      const measurement = measurements.find(({ element }) => element.includes(className));
+      return measurement ? Number(measurement.ratio.toFixed(3)) : null;
+    };
+    return {
+      accentBadgeRatio: ratioFor("ui-badge--accent"),
+      failures: measurements.flatMap((measurement) =>
+        measurement.ratio + 0.01 < measurement.threshold
+          ? [`${measurement.element}:${measurement.ratio.toFixed(3)}<${measurement.threshold}`]
+          : [],
+      ),
+      minimum: { ...minimum, ratio: Number(minimum.ratio.toFixed(3)) },
+      scannedCount: measurements.length,
+      successBadgeRatio: ratioFor("ui-badge--success"),
+    };
   });
 
-  if (failures.length > 0) {
-    throw new Error(`${route.app}/${route.name} contrast failures: ${failures.join(", ")}`);
+  if (result.failures.length > 0) {
+    throw new Error(`${route.app}/${route.name} contrast failures: ${result.failures.join(", ")}`);
   }
+  return result;
 }
 
 async function assertAccessibilityMedia(page: Page, route: AccessibilityRoute) {
@@ -865,16 +891,26 @@ async function assertAccessibilityMedia(page: Page, route: AccessibilityRoute) {
 }
 
 async function verifyAccessibilityMatrix(context: BrowserContext) {
+  const contrastEvidence: string[] = [];
   for (const route of accessibilityRoutes) {
     const page = await openAccessibilityRoute(context, route);
     await assertAccessibilityStructure(page, route);
     await assertKeyboardFocusOrder(page, route);
-    await assertComputedContrast(page, route);
+    const contrast = await assertComputedContrast(page, route);
+    const namedRatios = [
+      contrast.accentBadgeRatio === null ? null : `accent ${contrast.accentBadgeRatio}:1`,
+      contrast.successBadgeRatio === null ? null : `success ${contrast.successBadgeRatio}:1`,
+    ].filter((value) => value !== null);
+    contrastEvidence.push(
+      `${route.app}/${route.name}=${contrast.scannedCount} text containers, minimum ${contrast.minimum.ratio}:1 (${contrast.minimum.element})${namedRatios.length > 0 ? `, ${namedRatios.join(", ")}` : ""}`,
+    );
     await assertAccessibilityMedia(page, route);
     await page.screenshot({ path: join(artifactPath, `a11y-${route.app}-${route.name}.png`) });
     await page.close();
   }
-  console.log("Console and Stage accessibility route matrix passed.");
+  console.log(
+    `Console and Stage accessibility route matrix passed: ${contrastEvidence.join("; ")}.`,
+  );
 }
 
 async function verifyReducedMotion(context: BrowserContext) {
