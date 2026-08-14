@@ -295,17 +295,28 @@ export function createStageSessionClient(
       return body;
     },
     async subscribe(observer, timeoutMs = 5_000) {
-      const source = eventSourceFactory(`${baseUrl}/v1/events`);
+      const eventsUrl = `${baseUrl}/v1/events`;
+      let source = eventSourceFactory(eventsUrl);
       const timeout = AbortSignal.timeout(timeoutMs);
       let opened = false;
+      let everOpened = false;
       let closed = false;
+      let resolveInitialOpen: (() => void) | null = null;
+      const detach = (candidate: BrowserEventSource) => {
+        candidate.removeEventListener("message", onMessage);
+        candidate.removeEventListener("error", onError);
+        candidate.removeEventListener("open", onOpen);
+      };
       const close = () => {
         if (closed) return;
         closed = true;
+        detach(source);
         source.close();
-        source.removeEventListener("message", onMessage);
-        source.removeEventListener("error", onError);
-        source.removeEventListener("open", onOpen);
+      };
+      const attach = (candidate: BrowserEventSource) => {
+        candidate.addEventListener("message", onMessage);
+        candidate.addEventListener("error", onError);
+        candidate.addEventListener("open", onOpen);
       };
       const onMessage = (event: Event) => {
         const message = parseStreamMessage(event);
@@ -317,23 +328,29 @@ export function createStageSessionClient(
         }
       };
       const onError = () => {
-        if (opened) observer.onClose("NETWORK_ERROR");
+        if (!opened || closed) return;
+        opened = false;
+        observer.onClose("NETWORK_ERROR");
+        const failed = source;
+        detach(failed);
+        failed.close();
+        source = eventSourceFactory(eventsUrl);
+        attach(source);
       };
       const onOpen = () => {
-        const wasOpened = opened;
         opened = true;
-        if (wasOpened) observer.onOpen?.();
+        if (everOpened) observer.onOpen?.();
+        everOpened = true;
+        resolveInitialOpen?.();
+        resolveInitialOpen = null;
       };
-      source.addEventListener("message", onMessage);
-      source.addEventListener("error", onError);
-      source.addEventListener("open", onOpen);
+      attach(source);
       await new Promise<void>((resolve, reject) => {
-        const onInitialOpen = () => resolve();
-        source.addEventListener("open", onInitialOpen, { once: true });
+        resolveInitialOpen = resolve;
         timeout.addEventListener(
           "abort",
           () => {
-            if (!opened) {
+            if (!everOpened) {
               close();
               reject(new Error(`Stage event channel did not open within ${timeoutMs}ms`));
             }

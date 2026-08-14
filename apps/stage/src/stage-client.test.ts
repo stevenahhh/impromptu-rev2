@@ -17,7 +17,13 @@ afterEach(() => {
 describe("Stage network client", () => {
   test("subscribes to exact playback/card events before sending an applied receipt", async () => {
     const source = new FakeEventSource();
-    const factory: EventSourceFactory = () => source;
+    const recoveredSource = new FakeEventSource();
+    const sources = [source, recoveredSource];
+    const factory: EventSourceFactory = () => {
+      const next = sources.shift();
+      if (next === undefined) throw new Error("unexpected EventSource creation");
+      return next;
+    };
     const requests: string[] = [];
     const fetchMock = mock(async (input: string | URL | Request) => {
       requests.push(String(input));
@@ -85,10 +91,10 @@ describe("Stage network client", () => {
     });
     expect(requests).toEqual(["https://projection.example.test/v1/stage-applied"]);
     source.dispatchEvent(new Event("error"));
-    expect(source.closed).toBe(false);
-    source.dispatchEvent(new Event("open"));
+    expect(source.closed).toBe(true);
+    recoveredSource.dispatchEvent(new Event("open"));
     expect(channelEvents).toEqual(["close:NETWORK_ERROR", "open"]);
     subscription.close();
-    expect(source.closed).toBe(true);
+    expect(recoveredSource.closed).toBe(true);
   });
 });
