@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
   emergencyPublicSlideSet,
+  manualPlacementSummary,
   observeWindowsTopology,
+  placeStageOnTargetScreen,
+  recoverTargetScreenLoss,
   topologyInstructions,
   windowsDisplayMode,
 } from "./windows-topology";
@@ -24,6 +27,8 @@ describe("Windows Stage topology", () => {
     expect(topologyInstructions("extend").join(" ")).toContain("Drag this Stage");
     expect(topologyInstructions("duplicate").join(" ")).toContain("only session on this PC");
     expect(topologyInstructions("single").join(" ")).toContain("public slides only");
+    expect(manualPlacementSummary("duplicate")).toContain("only session on this PC");
+    expect(manualPlacementSummary("single")).toContain("only app on the audience screen");
   });
 
   test("maps the emergency keyboard fallback only to absolute public slide sets", () => {
@@ -53,6 +58,53 @@ describe("Windows Stage topology", () => {
     expect(await observeWindowsTopology({}, 1)).toEqual({
       observation: { source: "deterministic-fallback", screenCount: 1 },
       details: null,
+    });
+  });
+
+  test("places Stage on a deterministic non-primary target when changeScreen is available", async () => {
+    const primary = { isPrimary: true, label: "Built-in", left: 0, top: 0 };
+    const projector = { isPrimary: false, label: "Projector", left: 1920, top: 0 };
+    const details = Object.assign(new EventTarget(), {
+      screens: [projector, primary],
+      currentScreen: primary,
+    });
+    const placements: unknown[] = [];
+    const result = await placeStageOnTargetScreen(
+      {
+        getScreenDetails: async () => details,
+        async changeScreen(options) {
+          placements.push(options.screen);
+        },
+      },
+      details,
+    );
+    expect(result).toEqual({ status: "TARGET_PLACED", target: projector });
+    expect(placements).toEqual([projector]);
+  });
+
+  test("recovers target loss to a remaining screen and falls back cleanly without changeScreen", async () => {
+    const lost = { isPrimary: false, label: "Projector", left: 1920, top: 0 };
+    const primary = { isPrimary: true, label: "Built-in", left: 0, top: 0 };
+    const remaining = Object.assign(new EventTarget(), {
+      screens: [primary],
+      currentScreen: primary,
+    });
+    const placements: unknown[] = [];
+    expect(
+      await recoverTargetScreenLoss(
+        {
+          async changeScreen({ screen }) {
+            placements.push(screen);
+          },
+        },
+        remaining,
+        lost,
+      ),
+    ).toEqual({ status: "TARGET_LOST_RECOVERED", target: primary });
+    expect(placements).toEqual([primary]);
+    expect(await recoverTargetScreenLoss({}, remaining, lost)).toEqual({
+      status: "MANUAL_FALLBACK",
+      target: null,
     });
   });
 });

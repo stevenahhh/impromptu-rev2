@@ -610,7 +610,7 @@ describe("public Stage boundary", () => {
     expect(within(document.body).queryByText("Expiring curated claim")).toBeNull();
   });
 
-  test("observes topology transitions through the same platform event handler", () => {
+  test("observes topology transitions and target-screen loss through the platform handler", async () => {
     renderStage("/display/rehearsal");
     fireEvent(
       window,
@@ -620,6 +620,18 @@ describe("public Stage boundary", () => {
     );
 
     expect(within(document.body).getByText("duplicate / 1 screen")).toBeTruthy();
+
+    const recovered = nextStageEvent("impromptu:target-screen-recovery");
+    fireEvent(
+      window,
+      new CustomEvent("impromptu:platform-topology-change", {
+        detail: { observedMode: "single", screenCount: 1, targetScreenLost: true },
+      }),
+    );
+    expect(await recovered).toEqual({ status: "MANUAL_FALLBACK", privatePixelCount: 0 });
+    expect(
+      within(document.body).getByText(/Manual placement: drag this public Stage/),
+    ).toBeTruthy();
   });
 
   test("enters and exits fullscreen only from a Stage-local action", () => {

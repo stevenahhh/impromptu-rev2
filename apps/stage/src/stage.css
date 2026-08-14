@@ -149,9 +149,9 @@
   text-transform: uppercase;
 }
 
+.stage-placement-message,
 .stage-fullscreen-message {
   position: fixed;
-  inset-inline-end: var(--space-4);
   inset-block-end: var(--space-4);
   margin: var(--space-0);
   padding: var(--space-2) var(--space-3);
@@ -160,6 +160,18 @@
   background: var(--surface-panel);
   font-size: var(--text-caption);
   box-shadow: var(--shadow-panel);
+}
+
+.stage-placement-message {
+  display: flex;
+  max-width: calc(var(--size-full) * 0.65);
+  gap: var(--space-2);
+  align-items: center;
+  inset-inline-start: var(--space-4);
+}
+
+.stage-fullscreen-message {
+  inset-inline-end: var(--space-4);
 }
 
 @media (max-height: calc(540px * 1)) {

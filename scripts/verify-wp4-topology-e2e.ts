@@ -23,7 +23,7 @@ for (const mode of ["extend", "duplicate", "single"] as const) {
     modeRuns.length !== 3 ||
     modeRuns.some(
       (run) =>
-        run.faults.length !== 7 ||
+        run.faults.length !== 8 ||
         run.observedTransition !== run.requestedTransition ||
         run.outcome !== "SUCCESS",
     )
@@ -68,6 +68,8 @@ console.log(
             screenshotChecksums: runs.map((run) => run.artifact.screenshotChecksum),
             windowManagement: runs.map((run) => run.windowManagement),
             changeScreen: runs.map((run) => run.changeScreen),
+            manualPlacementFallback: runs.map((run) => run.manualPlacementFallback),
+            targetScreenLossRecovery: runs.map((run) => run.targetScreenLossRecovery),
           },
         ];
       }),

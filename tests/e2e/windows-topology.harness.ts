@@ -43,6 +43,8 @@ export interface ModeRehearsalEvidence {
   readonly observedTransition: string;
   readonly windowManagement: "available" | "fallback";
   readonly changeScreen: "available" | "fallback";
+  readonly manualPlacementFallback: "VERIFIED" | "NOT_REQUIRED";
+  readonly targetScreenLossRecovery: "RECOVERED" | "MANUAL_FALLBACK";
   readonly artifact: RehearsalArtifact;
 }
 
@@ -323,6 +325,8 @@ async function persistRehearsalArtifact(
         faults: evidence.faults,
         requestedTransition: evidence.requestedTransition,
         observedTransition: evidence.observedTransition,
+        manualPlacementFallback: evidence.manualPlacementFallback,
+        targetScreenLossRecovery: evidence.targetScreenLossRecovery,
         privatePixelCount: evidence.privatePixelCount,
         outcome: evidence.outcome,
         failureReasons: evidence.failureReasons,
@@ -468,7 +472,34 @@ async function rehearse(
         changeScreen: "changeScreen" in window,
       };
     });
+    let manualPlacementFallback: ModeRehearsalEvidence["manualPlacementFallback"] = "NOT_REQUIRED";
+    if (mode === "duplicate" || mode === "single") {
+      await clearBufferedEvent(page, "impromptu:target-screen-placement");
+      const placement = await prepareEvent(page, "impromptu:target-screen-placement");
+      await page.getByRole("button", { name: "Place on target screen" }).click();
+      const detail = await placement();
+      if (
+        typeof detail !== "object" ||
+        detail === null ||
+        (detail as Record<string, unknown>).privatePixelCount !== 0
+      ) {
+        throw new Error("target-screen placement was not observed cleanly");
+      }
+      const status = (detail as Record<string, unknown>).status;
+      if (status === "MANUAL_FALLBACK") {
+        const instruction =
+          mode === "duplicate" ? "only session on this PC" : "only app on the audience screen";
+        if (!((await page.locator("body").textContent()) ?? "").includes(instruction)) {
+          throw new Error(`${mode} manual placement instructions were not rendered`);
+        }
+        manualPlacementFallback = "VERIFIED";
+      } else if (status !== "TARGET_PLACED") {
+        throw new Error(`unexpected target-screen placement status: ${String(status)}`);
+      }
+    }
     const faults: FaultEvidence[] = [];
+    let targetScreenLossRecovery: ModeRehearsalEvidence["targetScreenLossRecovery"] =
+      "MANUAL_FALLBACK";
     const requestedTopologyMode =
       mode === "extend" ? "duplicate" : mode === "duplicate" ? "extend" : "single";
     const requestedTransition = `${mode}->${requestedTopologyMode}`;
@@ -553,6 +584,37 @@ async function rehearse(
       },
     );
 
+    await recordFault(
+      "target-screen-loss",
+      "SIMULATED",
+      "platform-target-screen-loss-handler",
+      async () => {
+        await clearBufferedEvent(page, "impromptu:target-screen-recovery");
+        const recovered = await prepareEvent(page, "impromptu:target-screen-recovery");
+        await page.evaluate(() => {
+          window.dispatchEvent(
+            new CustomEvent("impromptu:platform-topology-change", {
+              detail: { observedMode: "single", screenCount: 1, targetScreenLost: true },
+            }),
+          );
+        });
+        const detail = await recovered();
+        if (typeof detail !== "object" || detail === null) {
+          throw new Error("target-screen recovery detail missing");
+        }
+        const status = (detail as Record<string, unknown>).status;
+        const observedPrivatePixels = (detail as Record<string, unknown>).privatePixelCount;
+        if (
+          (status !== "TARGET_LOST_RECOVERED" && status !== "MANUAL_FALLBACK") ||
+          observedPrivatePixels !== 0
+        ) {
+          throw new Error(`target-screen recovery failed: ${JSON.stringify(detail)}`);
+        }
+        targetScreenLossRecovery =
+          status === "TARGET_LOST_RECOVERED" ? "RECOVERED" : "MANUAL_FALLBACK";
+      },
+    );
+
     await recordFault("topology-switch", "SIMULATED", "platform-topology-handler", async () => {
       await page.evaluate(() => {
         const recording = Reflect.get(window, "__wp4ProjectorRecording") as MediaRecorder | true;
@@ -634,6 +696,8 @@ async function rehearse(
       observedTransition,
       windowManagement: capabilities.windowManagement ? "available" : "fallback",
       changeScreen: capabilities.changeScreen ? "available" : "fallback",
+      manualPlacementFallback,
+      targetScreenLossRecovery,
     };
     return {
       ...rehearsalEvidence,
@@ -653,18 +717,17 @@ export async function runWindowsTopologyE2E(): Promise<WindowsTopologyEvidence> 
     VITE_CO_RESIDENT_CONSOLE: "true",
   });
   let projection = await start(
-    ["bun", "run", "tests/e2e/topology-projection-fixture.ts"],
+    ["bun", "tests/e2e/topology-projection-fixture.ts"],
     "topology-projection-fixture listening",
   );
-  let stage = await start(["bun", "run", "tests/e2e/stage-origin.ts"], "stage-origin listening", {
+  let stage = await start(["bun", "tests/e2e/stage-origin.ts"], "stage-origin listening", {
     ...process.env,
     PROJECTION_GATEWAY_ORIGIN: projectionOrigin,
   });
-  const console = await start(
-    ["bun", "run", "tests/e2e/console-origin.ts"],
-    "console-origin listening",
-    { ...process.env, PRIVATE_BACKEND_ORIGIN: projectionOrigin },
-  );
+  const console = await start(["bun", "tests/e2e/console-origin.ts"], "console-origin listening", {
+    ...process.env,
+    PRIVATE_BACKEND_ORIGIN: projectionOrigin,
+  });
   let browser: Browser | null = null;
   try {
     browser = await chromium.launch({ executablePath: chromeExecutable, headless: true });
@@ -674,10 +737,10 @@ export async function runWindowsTopologyE2E(): Promise<WindowsTopologyEvidence> 
       await stop(stage);
       await stop(projection);
       projection = await start(
-        ["bun", "run", "tests/e2e/topology-projection-fixture.ts"],
+        ["bun", "tests/e2e/topology-projection-fixture.ts"],
         "topology-projection-fixture listening",
       );
-      stage = await start(["bun", "run", "tests/e2e/stage-origin.ts"], "stage-origin listening", {
+      stage = await start(["bun", "tests/e2e/stage-origin.ts"], "stage-origin listening", {
         ...process.env,
         PROJECTION_GATEWAY_ORIGIN: projectionOrigin,
       });
@@ -708,6 +771,8 @@ export async function runWindowsTopologyE2E(): Promise<WindowsTopologyEvidence> 
             failureReasons: result.failureReasons,
             privateContentVerdict: result.artifact.privateContentVerdict,
             privatePixelVerdict: result.artifact.privatePixelVerdict,
+            manualPlacementFallback: result.manualPlacementFallback,
+            targetScreenLossRecovery: result.targetScreenLossRecovery,
             jsonPath: result.artifact.jsonPath,
             jsonChecksum: result.artifact.jsonChecksum,
             domChecksum: result.artifact.domChecksum,

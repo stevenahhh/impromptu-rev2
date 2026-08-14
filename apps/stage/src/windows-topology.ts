@@ -4,6 +4,7 @@ export type WindowsTopologyFault =
   | "popup-blocked"
   | "fullscreen-exit"
   | "monitor-unplug"
+  | "target-screen-loss"
   | "topology-switch"
   | "browser-refresh"
   | "controller-background"
@@ -17,6 +18,8 @@ export interface PublicSlideSet {
 export interface ScreenLike {
   readonly isPrimary?: boolean;
   readonly label?: string;
+  readonly left?: number;
+  readonly top?: number;
 }
 
 export interface ScreenDetailsLike extends EventTarget {
@@ -26,6 +29,12 @@ export interface ScreenDetailsLike extends EventTarget {
 
 export interface WindowManagementLike {
   getScreenDetails?: () => Promise<ScreenDetailsLike>;
+  changeScreen?: (options: Readonly<{ screen: ScreenLike }>) => Promise<void>;
+}
+
+export interface TargetScreenPlacement {
+  readonly status: "TARGET_PLACED" | "TARGET_LOST_RECOVERED" | "MANUAL_FALLBACK";
+  readonly target: ScreenLike | null;
 }
 
 export interface TopologyObservation {
@@ -57,6 +66,16 @@ export function topologyInstructions(mode: WindowsDisplayMode): readonly string[
     "Keep the private controller on a separate phone, tablet, or laptop.",
     "Emergency keyboard navigation changes public slides only.",
   ];
+}
+
+export function manualPlacementSummary(mode: WindowsDisplayMode): string {
+  if (mode === "duplicate") {
+    return "Manual placement: keep this public Stage as the only session on this PC; use a separate controller, then enter fullscreen.";
+  }
+  if (mode === "single") {
+    return "Manual placement: keep Stage as the only app on the audience screen, then enter fullscreen.";
+  }
+  return "Manual placement: drag this public Stage to the target screen, then enter fullscreen.";
 }
 
 export function emergencyPublicSlideSet(
@@ -97,6 +116,65 @@ export function emergencyPublicSlideSet(
   return publicSlideKey === undefined
     ? null
     : { kind: "PUBLIC_SLIDE_ABSOLUTE_SET", publicSlideKey };
+}
+
+function screenIdentity(screen: ScreenLike): string {
+  return `${screen.label ?? ""}:${screen.left ?? 0}:${screen.top ?? 0}:${screen.isPrimary === true}`;
+}
+
+export function screenIsPresent(details: ScreenDetailsLike, screen: ScreenLike): boolean {
+  const identity = screenIdentity(screen);
+  return details.screens.some(
+    (candidate) => candidate === screen || screenIdentity(candidate) === identity,
+  );
+}
+
+function deterministicTarget(details: ScreenDetailsLike): ScreenLike | null {
+  const ordered = [...details.screens].sort((left, right) =>
+    screenIdentity(left).localeCompare(screenIdentity(right)),
+  );
+  return (
+    ordered.find((screen) => screen.isPrimary !== true && screen !== details.currentScreen) ??
+    ordered.find((screen) => screen.isPrimary !== true) ??
+    null
+  );
+}
+
+export async function placeStageOnTargetScreen(
+  browserWindow: WindowManagementLike,
+  details: ScreenDetailsLike,
+): Promise<TargetScreenPlacement> {
+  const target = deterministicTarget(details);
+  if (target === null || browserWindow.changeScreen === undefined) {
+    return { status: "MANUAL_FALLBACK", target: null };
+  }
+  try {
+    await browserWindow.changeScreen({ screen: target });
+    return { status: "TARGET_PLACED", target };
+  } catch {
+    return { status: "MANUAL_FALLBACK", target: null };
+  }
+}
+
+export async function recoverTargetScreenLoss(
+  browserWindow: WindowManagementLike,
+  details: ScreenDetailsLike,
+  previousTarget: ScreenLike,
+): Promise<TargetScreenPlacement> {
+  if (screenIsPresent(details, previousTarget)) {
+    return { status: "TARGET_PLACED", target: previousTarget };
+  }
+  const recoveryTarget =
+    deterministicTarget(details) ?? details.currentScreen ?? details.screens[0];
+  if (recoveryTarget === undefined || browserWindow.changeScreen === undefined) {
+    return { status: "MANUAL_FALLBACK", target: null };
+  }
+  try {
+    await browserWindow.changeScreen({ screen: recoveryTarget });
+    return { status: "TARGET_LOST_RECOVERED", target: recoveryTarget };
+  } catch {
+    return { status: "MANUAL_FALLBACK", target: null };
+  }
 }
 
 export async function observeWindowsTopology(

@@ -5,7 +5,7 @@ import {
   type RealtimeTransition,
 } from "@impromptu/state/realtime";
 import { Badge, Brand, Button, Panel, Shell, StatusDot } from "@impromptu/ui";
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import {
   createStageSessionClient,
@@ -18,7 +18,12 @@ import {
 } from "./stage-client";
 import {
   emergencyPublicSlideSet,
+  manualPlacementSummary,
   observeWindowsTopology,
+  placeStageOnTargetScreen,
+  recoverTargetScreenLoss,
+  type ScreenDetailsLike,
+  type ScreenLike,
   topologyInstructions,
   windowsDisplayMode,
 } from "./windows-topology";
@@ -242,11 +247,14 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
   const requestedMode = windowsDisplayMode(new URL(window.location.href).searchParams.get("mode"));
   const [mode, setMode] = useState(requestedMode);
   const [screenCount, setScreenCount] = useState(1);
+  const [placementMessage, setPlacementMessage] = useState(manualPlacementSummary(requestedMode));
+  const detailsRef = useRef<ScreenDetailsLike | null>(null);
+  const targetRef = useRef<ScreenLike | null>(null);
   const [snapshot, setSnapshot] = useState<StageSnapshotView | null>(null);
 
   useEffect(() => {
     let active = true;
-    let details: Awaited<ReturnType<typeof observeWindowsTopology>>["details"] = null;
+    const windowManager = window as unknown as Parameters<typeof observeWindowsTopology>[0];
     const apply = (observedMode: ReturnType<typeof windowsDisplayMode>, count: number) => {
       setMode(observedMode);
       setScreenCount(Math.max(1, count));
@@ -256,10 +264,66 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
         screenCount: count,
       });
     };
-    const sync = () => {
+    const reportPlacement = (
+      status: "TARGET_PLACED" | "TARGET_LOST_RECOVERED" | "MANUAL_FALLBACK",
+    ) => {
+      setPlacementMessage(
+        status === "TARGET_PLACED"
+          ? "Stage placed on the selected public target screen."
+          : status === "TARGET_LOST_RECOVERED"
+            ? "Target screen disappeared. Stage recovered on a remaining public screen."
+            : manualPlacementSummary(requestedMode),
+      );
+    };
+    const sync = async () => {
+      const details = detailsRef.current;
       const count = details?.screens.length ?? 1;
+      const target = targetRef.current;
+      if (details !== null && target !== null) {
+        const recovery = await recoverTargetScreenLoss(windowManager, details, target);
+        if (!active) return;
+        targetRef.current = recovery.target;
+        reportPlacement(recovery.status);
+        if (recovery.status !== "TARGET_PLACED") {
+          publishStageEvent("impromptu:target-screen-recovery", {
+            status: recovery.status,
+            privatePixelCount: 0,
+          });
+        }
+      }
       apply(count > 1 ? "extend" : requestedMode === "single" ? "single" : "duplicate", count);
     };
+    const bindDetails = (details: ScreenDetailsLike | null) => {
+      detailsRef.current?.removeEventListener("screenschange", sync);
+      detailsRef.current = details;
+      details?.addEventListener("screenschange", sync);
+    };
+    const observeOrPlaceTarget = async (shouldPlace: boolean) => {
+      const extendedScreen = window.screen as Screen & { readonly isExtended?: boolean };
+      const result = await observeWindowsTopology(
+        windowManager,
+        extendedScreen.isExtended === true ? 2 : 1,
+      );
+      if (!active) return;
+      bindDetails(result.details);
+      if (shouldPlace || result.observation.screenCount !== 1) {
+        apply(requestedMode, result.observation.screenCount);
+      }
+      const placement =
+        !shouldPlace || result.details === null
+          ? { status: "MANUAL_FALLBACK" as const, target: null }
+          : await placeStageOnTargetScreen(windowManager, result.details);
+      if (!active) return;
+      targetRef.current = placement.target;
+      if (shouldPlace) {
+        reportPlacement(placement.status);
+        publishStageEvent("impromptu:target-screen-placement", {
+          status: placement.status,
+          privatePixelCount: 0,
+        });
+      }
+    };
+    const onPlacementRequest = () => void observeOrPlaceTarget(true);
     const onPlatformTopology = (event: Event) => {
       if (
         !(event instanceof CustomEvent) ||
@@ -272,25 +336,26 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
         typeof detail.observedMode === "string" ? detail.observedMode : null,
       );
       const count = typeof detail.screenCount === "number" ? detail.screenCount : 1;
+      if (detail.targetScreenLost === true) {
+        targetRef.current = null;
+        reportPlacement("MANUAL_FALLBACK");
+        publishStageEvent("impromptu:target-screen-recovery", {
+          status: "MANUAL_FALLBACK",
+          privatePixelCount: 0,
+        });
+      }
       apply(observedMode, count);
     };
-    const windowManager = window as unknown as Parameters<typeof observeWindowsTopology>[0];
-    const extendedScreen = window.screen as Screen & { readonly isExtended?: boolean };
-    void observeWindowsTopology(windowManager, extendedScreen.isExtended === true ? 2 : 1).then(
-      (result) => {
-        if (!active) return;
-        details = result.details;
-        apply(requestedMode, result.observation.screenCount);
-        details?.addEventListener("screenschange", sync);
-      },
-    );
+    void observeOrPlaceTarget(false);
     window.addEventListener("resize", sync);
     window.addEventListener("impromptu:platform-topology-change", onPlatformTopology);
+    window.addEventListener("impromptu:target-screen-placement-request", onPlacementRequest);
     return () => {
       active = false;
-      details?.removeEventListener("screenschange", sync);
+      detailsRef.current?.removeEventListener("screenschange", sync);
       window.removeEventListener("resize", sync);
       window.removeEventListener("impromptu:platform-topology-change", onPlatformTopology);
+      window.removeEventListener("impromptu:target-screen-placement-request", onPlacementRequest);
     };
   }, [requestedMode]);
 
@@ -758,6 +823,15 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
           </footer>
         </Panel>
       </main>
+      <aside className="stage-placement-message" aria-live="polite">
+        <Button
+          variant="quiet"
+          onClick={() => publishStageEvent("impromptu:target-screen-placement-request", null)}
+        >
+          Place on target screen
+        </Button>
+        <span>{placementMessage}</span>
+      </aside>
       <p className="stage-fullscreen-message" aria-live="polite">
         {fullscreen.error ?? (fullscreen.active ? "Fullscreen is active." : "Fullscreen is ready.")}
       </p>

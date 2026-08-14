@@ -25,12 +25,14 @@ Use this runbook at the venue with the approved emergency public PDF/URL already
 
 1. Leave the current public frame in place; do not open private controls on Stage.
 2. Press **Win+P**, choose the rehearsed mode, and verify the physical projector preview before moving a window.
-3. If fullscreen exited or was blocked, focus Stage and click **Enter fullscreen**. Use the browser fullscreen command if the button reports that fullscreen was blocked.
-4. If the mode changed unexpectedly, return to the Stage setup route, follow its displayed mode instructions, then reopen the approved display route.
-5. If Duplicate would expose Console, move Console to a separate device. The co-resident interlock must remain disabled after any private-pixel observation.
-6. Confirm the requested and observed modes match and check all recovery criteria.
+3. In a Window Management API browser, click **Place on target screen**, approve the screen request, verify Stage reports placement on the public target, and then enter fullscreen. Stage never moves itself before that local click.
+4. If the placement button reports manual fallback, follow the displayed mode instruction: in Extend, drag only Stage to the projector; in Duplicate, keep public Stage as the only browser session on that PC and use a separate controller; in Single, keep Stage as the only app on the audience screen. Then click **Enter fullscreen** locally.
+5. If the target disappears, leave the public frame visible. Stage attempts a remaining public screen when `changeScreen` is available; otherwise it returns to the same manual instruction. Recheck Win+P and fullscreen before resuming.
+6. If fullscreen exited or was blocked, focus Stage and click **Enter fullscreen**. Use the browser fullscreen command if the button reports that fullscreen was blocked.
+7. If Duplicate would expose Console, move Console to a separate device. The co-resident interlock must remain disabled after any private-pixel observation.
+8. Confirm the requested and observed modes match and check all recovery criteria.
 
-**Verified timing:** on 2026-08-14, 9 rehearsals total (3 each in Extend, Duplicate, and Single) completed 63/63 fault recoveries (21 per mode) with zero private pixels. Exact maximums were **11.062 ms** for topology switch, **39.377 ms** for fullscreen exit, **227.521 ms** for blocked fullscreen recovery, and **109.503 ms** for browser refresh. The maximum across every WP4 fault, including server restart, was **290.714 ms**. Command: `node --experimental-strip-types scripts/verify-wp4-topology-e2e.ts`; manifest checksum: `f933d0df1f1d9a3f7c75455092e1069bdd21ba7194a8f31b5d49349963a425c1`.
+**Verified timing:** on 2026-08-14, 9 real-Chrome rehearsals (3 each in Extend, Duplicate, and Single) completed **72/72** fault recoveries (24 per mode), including 9 target-screen-loss injections, with zero private pixels. Duplicate and Single completed all 6 manual placement fallback checks through the rendered mode instructions. Exact maximums in this run were **16.087 ms** for target-screen loss, **16.121 ms** for topology switch, **272.311 ms** for fullscreen exit, **296.922 ms** for blocked fullscreen recovery, and **160.242 ms** for browser refresh; the maximum across all faults was **328.655 ms**. Command: `node --experimental-strip-types scripts/verify-wp4-topology-e2e.ts`; manifest checksum: `85b56f838e3dea0bdd2c4de01da12420363b7a177da5eba0db8957daa679b94e`. This host exposed `getScreenDetails` but not `changeScreen`, so supported multi-screen placement success and setup-time saving remain `NOT_COLLECTED`; no WMA superiority or >=95% success claim is made.
 
 ## 3. Venue network partition
 

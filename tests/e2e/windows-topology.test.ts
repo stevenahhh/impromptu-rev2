@@ -17,6 +17,8 @@ interface TopologyVerifierEvidence {
       readonly privateContentVerdicts: readonly string[];
       readonly privatePixelVerdicts: readonly string[];
       readonly screenshotChecksums: readonly string[];
+      readonly manualPlacementFallback: readonly string[];
+      readonly targetScreenLossRecovery: readonly string[];
     }
   >;
   readonly unrecoverableFailureCount: number;
@@ -65,14 +67,24 @@ describe("WP4 Windows topology real-browser E2E", () => {
       expect(modeEvidence.rehearsals).toBe(3);
       expect(modeEvidence.successfulRehearsals).toBe(3);
       expect(modeEvidence.failedRehearsals).toBe(0);
-      expect(modeEvidence.faultRecoveries).toBe(21);
+      expect(modeEvidence.faultRecoveries).toBe(24);
       expect(modeEvidence.realFaults).toBe(12);
-      expect(modeEvidence.simulatedFaults).toBe(9);
+      expect(modeEvidence.simulatedFaults).toBe(12);
       expect(modeEvidence.privatePixelCount).toBe(0);
       expect(modeEvidence.maxRecoveryMs).toBeLessThanOrEqual(30_000);
       expect(modeEvidence.observedTransitions).toEqual(modeEvidence.requestedTransitions);
       expect(modeEvidence.privateContentVerdicts).toEqual(["CLEAN", "CLEAN", "CLEAN"]);
       expect(modeEvidence.privatePixelVerdicts).toEqual(["CLEAN", "CLEAN", "CLEAN"]);
+      expect(modeEvidence.targetScreenLossRecovery).toEqual([
+        "MANUAL_FALLBACK",
+        "MANUAL_FALLBACK",
+        "MANUAL_FALLBACK",
+      ]);
+      expect(modeEvidence.manualPlacementFallback).toEqual(
+        mode === "extend"
+          ? ["NOT_REQUIRED", "NOT_REQUIRED", "NOT_REQUIRED"]
+          : ["VERIFIED", "VERIFIED", "VERIFIED"],
+      );
       expect(modeEvidence.screenshotChecksums.every((value) => /^[a-f0-9]{64}$/.test(value))).toBe(
         true,
       );
