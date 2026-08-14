@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { PublicationAuthoritySchema } from "@impromptu/contracts/private";
+import {
+  CandidateIdSchema,
+  candidateRevision,
+  PublicationAuthoritySchema,
+} from "@impromptu/contracts/private";
 import {
   AudienceSnapshotSchema,
   displayBindingEpoch,
@@ -72,10 +76,20 @@ function stream() {
 }
 
 function candidate() {
-  const initial = createCandidateLifecycle("candidate_primary", "candidate-v1", hash("c"));
+  const initial = createCandidateLifecycle({
+    presentationSessionId: PresentationSessionIdSchema.parse("ps_session-1"),
+    presentationSessionEpoch: presentationSessionEpoch(3),
+    candidateId: CandidateIdSchema.parse("candidate_primary"),
+    candidateVersion: "candidate-v1",
+    contentHash: hash("c"),
+  });
   return reduceCandidateLifecycle(initial, {
     type: "QUALIFY",
-    candidateVersion: "candidate-v1",
+    presentationSessionId: initial.presentationSessionId,
+    presentationSessionEpoch: initial.presentationSessionEpoch,
+    candidateId: initial.candidateId,
+    candidateVersion: initial.candidateVersion,
+    expectedRevision: candidateRevision(0),
   }).state;
 }
 
@@ -169,7 +183,11 @@ describe("candidate and public card stream separation", () => {
 
     const stale = reduceCandidateLifecycle(eligible, {
       type: "MARK_STALE",
-      candidateVersion: "candidate-v1",
+      presentationSessionId: eligible.presentationSessionId,
+      presentationSessionEpoch: eligible.presentationSessionEpoch,
+      candidateId: eligible.candidateId,
+      candidateVersion: eligible.candidateVersion,
+      expectedRevision: eligible.candidateRevision,
     }).state;
     const rejected = applyAuthorizedPublicCardEvent(
       stream(),
@@ -194,7 +212,11 @@ describe("candidate and public card stream separation", () => {
 
     const superseded = reduceCandidateLifecycle(eligible, {
       type: "SUPERSEDE",
-      candidateVersion: "candidate-v1",
+      presentationSessionId: eligible.presentationSessionId,
+      presentationSessionEpoch: eligible.presentationSessionEpoch,
+      candidateId: eligible.candidateId,
+      candidateVersion: eligible.candidateVersion,
+      expectedRevision: eligible.candidateRevision,
     }).state;
     const supersededResult = applyAuthorizedPublicCardEvent(
       stream(),

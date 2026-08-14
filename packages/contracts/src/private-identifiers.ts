@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import { prefixedId } from "./identity-base.ts";
+import { encodedCounter, encodedCounterValue, prefixedId } from "./identity-base.ts";
 
 export const PublicationAuthorityIdSchema = prefixedId<"PublicationAuthorityId">("pubauth_");
 export const CaptureGrantIdSchema = prefixedId<"CaptureGrantId">("capture_");
@@ -12,6 +12,15 @@ export const PrivateDeckIdSchema = prefixedId<"PrivateDeckId">("private_deck_");
 export const PrivateSlideIdSchema = prefixedId<"PrivateSlideId">("private_slide_");
 export const AccountIdSchema = prefixedId<"AccountId">("account_");
 export const PrivateAssetIdSchema = prefixedId<"PrivateAssetId">("asset_");
+export const CandidateRevisionSchema = encodedCounter<"CandidateRevision">("candrev_");
+
+export function candidateRevision(value: number) {
+  return CandidateRevisionSchema.parse(`candrev_${value}`);
+}
+
+export function candidateRevisionValue(value: CandidateRevision): number {
+  return encodedCounterValue(value);
+}
 
 export type PublicationAuthorityId = z.infer<typeof PublicationAuthorityIdSchema>;
 export type CaptureGrantId = z.infer<typeof CaptureGrantIdSchema>;
@@ -24,3 +33,4 @@ export type PrivateDeckId = z.infer<typeof PrivateDeckIdSchema>;
 export type PrivateSlideId = z.infer<typeof PrivateSlideIdSchema>;
 export type AccountId = z.infer<typeof AccountIdSchema>;
 export type PrivateAssetId = z.infer<typeof PrivateAssetIdSchema>;
+export type CandidateRevision = z.infer<typeof CandidateRevisionSchema>;
