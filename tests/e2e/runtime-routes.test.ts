@@ -173,6 +173,22 @@ describe("runnable WP3 service composition", () => {
       });
       expect(response.status).not.toBe(404);
     }
+    const recommendation = await fetch("http://127.0.0.1:44101/v1/recommendations", {
+      method: "POST",
+      headers: authenticatedHeaders,
+      body: JSON.stringify({
+        query: "revenue",
+        deckVersion: "deck_v1",
+        manifestHash: "a".repeat(64),
+        maxResults: 3,
+      }),
+    });
+    expect(recommendation.status).toBe(200);
+    expect(await recommendation.json()).toMatchObject({
+      outcome: "RECOMMEND",
+      recommendation: { claim: "Acme revenue was 42 million USD in 2025." },
+    });
+
     const controllerEvents = await fetch("http://127.0.0.1:44101/v1/playback/controller-events", {
       headers: { cookie: accountCookie, origin: consoleOrigin },
     });

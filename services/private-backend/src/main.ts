@@ -1,8 +1,11 @@
+import { fileURLToPath } from "node:url";
 import {
   ModelRoutingRegistry,
+  NodePermissionAdapterIsolate,
   ServerModelRouter,
   StaticPolicyVersionAuthority,
 } from "@impromptu/model-router";
+import { z } from "zod";
 import { parsePrivateBackendConfig } from "./config.ts";
 import { createPrivateBackendHandler } from "./http.ts";
 import {
@@ -50,6 +53,10 @@ if (await snapshotFile.exists()) {
   }
   store = restored.store;
 }
+const fixtureObjectId = "runtime-fixture";
+const fixtureContent = "Acme revenue was 42 million USD in 2025.";
+const fixtureSourceHash = new Bun.CryptoHasher("sha256").update(fixtureContent).digest("hex");
+const fixtureManifestHash = "a".repeat(64);
 let coordinator: PreparedEvidenceCoordinator;
 const internalRetrieval = new InternalRetrievalService({
   principals: {
@@ -59,50 +66,107 @@ const internalRetrieval = new InternalRetrievalService({
         ? {
             tenantId: session.value.accountId,
             principalId: session.value.actorId,
-            groupIds: [],
-            attributes: {},
+            groupIds: ["runtime-fixture-readers"],
+            attributes: { role: "controller" },
           }
         : null;
     },
   },
   policy: {
-    async prefilter() {
-      return { version: "acl-runtime-v1", current: true, authorizedObjectIds: [] };
+    async prefilter(principal, request) {
+      const eligible =
+        principal.groupIds.includes("runtime-fixture-readers") &&
+        request.deckVersion === "deck_v1" &&
+        request.manifestHash === fixtureManifestHash;
+      return {
+        version: "acl-runtime-v1",
+        current: true,
+        authorizedObjectIds: eligible ? [fixtureObjectId] : [],
+      };
     },
-    async authorizeObject() {
-      return false;
+    async authorizeObject(principal, object, version) {
+      return (
+        version === "acl-runtime-v1" &&
+        principal.tenantId === object.tenantId &&
+        object.objectId === fixtureObjectId
+      );
     },
     async isCurrent(_tenantId, version) {
       return version === "acl-runtime-v1";
     },
   },
   ann: {
-    async search() {
-      return [];
+    async search(input) {
+      return input.authorizedObjectIds.includes(fixtureObjectId)
+        ? [
+            {
+              tenantId: input.tenantId,
+              objectId: fixtureObjectId,
+              score: 1,
+              indexedSourceHash: fixtureSourceHash,
+              indexedDeckVersion: "deck_v1",
+              indexedManifestHash: fixtureManifestHash,
+              indexedAuthorizationVersion: "acl-runtime-v1",
+            },
+          ]
+        : [];
     },
   },
   objects: {
-    async readMetadata() {
-      return null;
+    async readMetadata(tenantId, objectId) {
+      return objectId === fixtureObjectId
+        ? {
+            tenantId,
+            objectId,
+            sourceId: "source_runtime",
+            sourceRevision: "r1",
+            sourceHash: fixtureSourceHash,
+            deckVersion: "deck_v1",
+            manifestHash: fixtureManifestHash,
+            title: "Runtime evidence fixture",
+            anchor: "fixture=runtime",
+            rights: "APPROVED",
+            containsPii: false,
+          }
+        : null;
     },
-    async readContent() {
-      return null;
+    async readContent(_tenantId, objectId) {
+      return objectId === fixtureObjectId ? fixtureContent : null;
     },
   },
 });
 const externalFetcher = new SafeExternalEvidenceFetcher({
   dns: {
     async resolve() {
-      return [];
+      return ["93.184.216.34"];
     },
   },
   transport: {
     async request() {
-      throw new Error("External retrieval transport is not configured");
+      throw new Error("Pinned external retrieval transport is not configured");
     },
   },
 });
 const modelRegistry = new ModelRoutingRegistry();
+const fixedAdapterModule = fileURLToPath(
+  new URL("./model-adapters/fixed-retrieval.mjs", import.meta.url),
+);
+for (const capability of ["embedding", "rerank", "llm", "verifier"] as const) {
+  const registration = modelRegistry.registerIsolatedUnary({
+    descriptor: {
+      adapterId: `fixed-runtime-${capability}`,
+      capability,
+      provider: "fixed-runtime-provider",
+      model: `fixed-runtime-${capability}`,
+      modelVersion: "1",
+      estimatedCostUnits: 1,
+    },
+    inputSchema: z.unknown(),
+    outputSchema: z.unknown(),
+    module: { modulePath: fixedAdapterModule, exportName: capability, allowedReadPaths: [] },
+  });
+  if (registration !== undefined) throw new Error(`Failed to register ${capability} adapter`);
+}
 const modelBudget = {
   async reserve(request: { readonly estimatedCostUnits: number }) {
     return { reservationId: crypto.randomUUID(), reservedUnits: request.estimatedCostUnits };
@@ -111,6 +175,7 @@ const modelBudget = {
 };
 const modelRouter = new ServerModelRouter({
   registry: modelRegistry,
+  adapterIsolate: new NodePermissionAdapterIsolate(),
   policyVersionAuthority: new StaticPolicyVersionAuthority("model-policy-v1"),
   quotaPolicy: { async assertWithinQuota() {} },
   budget: modelBudget,
