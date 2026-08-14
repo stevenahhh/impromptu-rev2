@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { createServer as createHttpServer, type Server } from "node:http";
+import { createServer as createNetServer } from "node:net";
 import { extname, join, resolve } from "node:path";
 
 import { type BrowserContext, chromium, type Page } from "playwright-core";
@@ -10,14 +11,27 @@ import {
   waitForInstalledServiceWorkerUpdate,
 } from "./service-worker-activation.ts";
 
+async function availablePort(): Promise<number> {
+  const server = createNetServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (address === null || typeof address === "string") throw new Error("ephemeral port missing");
+  await new Promise<void>((resolve, reject) =>
+    server.close((error) => (error ? reject(error) : resolve())),
+  );
+  return address.port;
+}
+
 const chromeExecutable = "C:/Program Files/Google/Chrome/Application/chrome.exe";
 const chromeHeadless = process.env.BROWSER_HEADED !== "true";
-const portBase = 30_000 + (process.pid % 500) * 10;
-const consolePort = portBase;
-const stagePort = portBase + 1;
-const embedPort = portBase + 2;
-const devPortBase = portBase + 3;
-const lifecyclePortBase = portBase + 5;
+const consolePort = await availablePort();
+const stagePort = await availablePort();
+const embedPort = await availablePort();
+const devPorts = [await availablePort(), await availablePort()] as const;
+const lifecyclePorts = [await availablePort(), await availablePort()] as const;
 const runtimeRoot = join(
   process.env.TEMP ?? process.cwd(),
   `impromptu-r2-browser-runtime-${process.pid}`,
@@ -95,7 +109,8 @@ function address(surface: AppSurface) {
 
 async function verifyDevResponseHeaders() {
   for (const [index, surface] of surfaces.entries()) {
-    const port = devPortBase + index;
+    const port = devPorts[index];
+    if (port === undefined) throw new Error("dev verifier port missing");
     const server = await createViteServer({
       optimizeDeps: { noDiscovery: true },
       root: `apps/${surface.app}`,
@@ -377,7 +392,9 @@ async function verifyUpdateLifecycle(surface: AppSurface, index: number) {
   const lifecycleProfile = join(runtimeRoot, `${surface.app}-lifecycle-profile`);
 
   try {
-    const origin = await startLifecycleOrigin(surface, lifecyclePortBase + index);
+    const port = lifecyclePorts[index];
+    if (port === undefined) throw new Error("lifecycle verifier port missing");
+    const origin = await startLifecycleOrigin(surface, port);
     cleanup.add(origin.close);
     origin.setWorkerVersion("v1");
     const context = await chromium.launchPersistentContext(lifecycleProfile, {

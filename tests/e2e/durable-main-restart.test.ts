@@ -1,13 +1,28 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer as createNetServer } from "node:net";
 import { join } from "node:path";
 
 type ServiceProcess = ReturnType<typeof Bun.spawn<"ignore", "pipe", "pipe">>;
 const processes: ServiceProcess[] = [];
+async function availablePort(): Promise<number> {
+  const server = createNetServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (address === null || typeof address === "string") throw new Error("ephemeral port missing");
+  await new Promise<void>((resolve, reject) =>
+    server.close((error) => (error ? reject(error) : resolve())),
+  );
+  return address.port;
+}
+
 const privateSnapshotPath = join(import.meta.dir, ".restart-private-snapshot.json");
 const projectionDatabasePath = join(import.meta.dir, ".restart-projection-database.json");
-const privatePort = 37_000 + (process.pid % 1_000) * 2;
-const projectionPort = privatePort + 1;
+const privatePort = await availablePort();
+const projectionPort = await availablePort();
 const privateOrigin = `http://127.0.0.1:${privatePort}`;
 const projectionOrigin = `http://127.0.0.1:${projectionPort}`;
 const consoleOrigin = "http://127.0.0.1:44373";

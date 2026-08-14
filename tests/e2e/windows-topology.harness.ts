@@ -2,6 +2,7 @@ import { type ChildProcessByStdio, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer as createNetServer } from "node:net";
 import { relative, resolve } from "node:path";
 import type { Readable } from "node:stream";
 import { type Browser, type BrowserContext, chromium, type Page } from "playwright-core";
@@ -70,11 +71,26 @@ interface CoResidentCycleEvidence {
 }
 
 type ServiceProcess = ChildProcessByStdio<null, Readable, Readable>;
+
+async function availablePort(): Promise<number> {
+  const server = createNetServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (address === null || typeof address === "string") throw new Error("ephemeral port missing");
+  await new Promise<void>((resolve, reject) =>
+    server.close((error) => (error ? reject(error) : resolve())),
+  );
+  return address.port;
+}
+
 const chromeExecutable = "C:/Program Files/Google/Chrome/Application/chrome.exe";
-let projectionPort = 45_000 + (process.pid % 1_000) * 10;
+let projectionPort = await availablePort();
 let projectionOrigin = `http://127.0.0.1:${projectionPort}`;
-const stagePort = 35_000 + (process.pid % 1_000);
-const consolePort = 36_000 + (process.pid % 1_000);
+const stagePort = await availablePort();
+const consolePort = await availablePort();
 const stageOrigin = `http://127.0.0.1:${stagePort}`;
 const consoleOrigin = `http://127.0.0.1:${consolePort}`;
 const evidenceRoot = resolve(process.env.WP4_EVIDENCE_DIR ?? "artifacts/wp4-topology");
@@ -720,7 +736,7 @@ export async function runWindowsTopologyE2E(): Promise<WindowsTopologyEvidence> 
     ) => {
       await closeProjectionChannels(channelClosed);
       await stopProjectionFixture(projection);
-      projectionPort += 1;
+      projectionPort = await availablePort();
       projectionOrigin = `http://127.0.0.1:${projectionPort}`;
       projection = await start(
         ["bun", "run", "tests/e2e/topology-projection-fixture.ts"],

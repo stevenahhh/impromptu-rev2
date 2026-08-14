@@ -1,6 +1,7 @@
 import { type ChildProcessByStdio, spawn } from "node:child_process";
 import { once } from "node:events";
 import { rmSync } from "node:fs";
+import { createServer as createNetServer } from "node:net";
 import { join } from "node:path";
 import type { Readable } from "node:stream";
 import { type Browser, type BrowserContext, chromium, type Page } from "playwright-core";
@@ -24,14 +25,27 @@ export interface PreparedEvidenceEvidence {
 type ServiceProcess = ChildProcessByStdio<null, Readable, Readable>;
 type JsonRecord = Record<string, unknown>;
 
-const portBase = 40_000 + (process.pid % 500) * 10;
-const privatePort = portBase;
-const projectionPort = portBase + 1;
-const stagePort = portBase + 2;
-const chromeDebugPort = portBase + 3;
+async function availablePort(): Promise<number> {
+  const server = createNetServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (address === null || typeof address === "string") throw new Error("ephemeral port missing");
+  await new Promise<void>((resolve, reject) =>
+    server.close((error) => (error ? reject(error) : resolve())),
+  );
+  return address.port;
+}
+
+const privatePort = await availablePort();
+const projectionPort = await availablePort();
+const stagePort = await availablePort();
+const chromeDebugPort = await availablePort();
 const privateOrigin = `http://127.0.0.1:${privatePort}`;
 const projectionOrigin = `http://127.0.0.1:${projectionPort}`;
-const consoleOrigin = `http://127.0.0.1:${portBase + 4}`;
+const consoleOrigin = `http://127.0.0.1:${await availablePort()}`;
 const stageOrigin = `http://127.0.0.1:${stagePort}`;
 const serviceToken = "prepared-evidence-real-e2e-token";
 const chromeExecutable = "C:/Program Files/Google/Chrome/Application/chrome.exe";
