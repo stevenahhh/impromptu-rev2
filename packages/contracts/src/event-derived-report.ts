@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { PublicationDispatchSchema, type PublicationDispatchDto } from "./publication-dispatch.ts";
+import { type PublicationDispatchDto, PublicationDispatchSchema } from "./publication-dispatch.ts";
 
 const UuidSchema = z.string().uuid();
 const TimestampSchema = z.string().datetime({ offset: true });

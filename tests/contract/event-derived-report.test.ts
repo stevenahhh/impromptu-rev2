@@ -3,14 +3,20 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  deriveEventReport,
   EventDerivedReportSchema,
   PublicationEventLogSchema,
-  deriveEventReport,
 } from "@impromptu/contracts/public";
 
 const fixture = JSON.parse(
   readFileSync(join(import.meta.dir, "fixtures/publication-event-log.json"), "utf8"),
 );
+
+function requiredAt<Value>(values: readonly Value[], index: number): Value {
+  const value = values[index];
+  if (value === undefined) throw new Error(`fixture event ${index} is required`);
+  return value;
+}
 
 describe("event-derived presentation report", () => {
   test("derives the exact closed report from a fixed publication event log", () => {
@@ -39,12 +45,15 @@ describe("event-derived presentation report", () => {
 
   test("rejects mixed projections, duplicate dispatches, and revision gaps", () => {
     const events = PublicationEventLogSchema.parse(fixture);
-    const first = events[0]!;
-    const second = events[1]!;
-    const third = events[2]!;
-    const foreignProjection = PublicationEventLogSchema.parse([
-      { ...second, projectionId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" },
-    ])[0]!;
+    const first = requiredAt(events, 0);
+    const second = requiredAt(events, 1);
+    const third = requiredAt(events, 2);
+    const foreignProjection = requiredAt(
+      PublicationEventLogSchema.parse([
+        { ...second, projectionId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" },
+      ]),
+      0,
+    );
 
     expect(() => deriveEventReport([...events, first])).toThrow("duplicate dispatch key");
     expect(() => deriveEventReport([first, foreignProjection])).toThrow(
