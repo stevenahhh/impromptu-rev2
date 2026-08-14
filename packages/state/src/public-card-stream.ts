@@ -39,11 +39,11 @@ const PublicCardStreamSnapshotSchema = z
     const head = safeEncodedCounterValue(snapshot.publicCardRevision);
     const watermark = safeEncodedCounterValue(snapshot.tombstoneWatermark);
     if (head === null || watermark === null) return;
-    if (watermark > head) {
+    if (watermark !== 0) {
       context.addIssue({
         code: "custom",
         path: ["tombstoneWatermark"],
-        message: "watermark exceeds stream head",
+        message: "uncompacted event history requires a zero watermark",
       });
     }
     if (
@@ -57,51 +57,79 @@ const PublicCardStreamSnapshotSchema = z
         message: "authority belongs to another session",
       });
     }
-    for (const [key, card] of Object.entries(snapshot.cards)) {
-      const revision = safeEncodedCounterValue(card.publicCardRevision);
-      if (
-        revision === null ||
-        key !== card.projectionId ||
-        revision > head ||
-        revision <= watermark
-      ) {
-        context.addIssue({
-          code: "custom",
-          path: ["cards", key],
-          message: "invalid active card snapshot entry",
-        });
-      }
-      if (snapshot.tombstones[card.projectionId] !== undefined) {
-        context.addIssue({
-          code: "custom",
-          path: ["cards", key],
-          message: "terminal projection cannot be active",
-        });
-      }
-    }
-    for (const [key, tombstone] of Object.entries(snapshot.tombstones)) {
-      if (
-        key !== tombstone.projectionId ||
-        (safeEncodedCounterValue(tombstone.publicCardRevision) ?? Number.POSITIVE_INFINITY) > head
-      ) {
-        context.addIssue({
-          code: "custom",
-          path: ["tombstones", key],
-          message: "invalid tombstone snapshot entry",
-        });
-      }
-    }
+    const orderedEvents = new Map<number, PublicCardEvent>();
     for (const [key, event] of Object.entries(snapshot.eventsByRevision)) {
+      const revision = safeEncodedCounterValue(event.publicCardRevision);
       if (
         key !== event.publicCardRevision ||
-        (safeEncodedCounterValue(event.publicCardRevision) ?? Number.POSITIVE_INFINITY) > head
+        revision === null ||
+        revision < 1 ||
+        revision > head ||
+        orderedEvents.has(revision)
       ) {
         context.addIssue({
           code: "custom",
           path: ["eventsByRevision", key],
-          message: "invalid event history entry",
+          message: "invalid or duplicate event history revision",
         });
+        continue;
       }
+      orderedEvents.set(revision, event);
+    }
+    if (orderedEvents.size !== head) {
+      context.addIssue({
+        code: "custom",
+        path: ["eventsByRevision"],
+        message: "event history must contain every revision through the stream head",
+      });
+      return;
+    }
+
+    const derivedCards: Record<string, PublishedAudienceCard> = {};
+    const derivedTombstones: Record<string, PublicationTombstone> = {};
+    for (let revision = 1; revision <= head; revision += 1) {
+      const event = orderedEvents.get(revision);
+      if (event === undefined) {
+        context.addIssue({
+          code: "custom",
+          path: ["eventsByRevision"],
+          message: "event history contains a revision gap",
+        });
+        return;
+      }
+      if (derivedTombstones[event.projectionId] !== undefined) {
+        context.addIssue({
+          code: "custom",
+          path: ["eventsByRevision", event.publicCardRevision],
+          message: "terminal projection cannot be resurrected",
+        });
+        return;
+      }
+      if (event.status === "PUBLISHED") {
+        derivedCards[event.projectionId] = event;
+        continue;
+      }
+      delete derivedCards[event.projectionId];
+      derivedTombstones[event.projectionId] = event;
+    }
+
+    const cardsMatch =
+      Object.keys(snapshot.cards).length === Object.keys(derivedCards).length &&
+      Object.entries(derivedCards).every(
+        ([key, card]) => JSON.stringify(snapshot.cards[key]) === JSON.stringify(card),
+      );
+    const tombstonesMatch =
+      Object.keys(snapshot.tombstones).length === Object.keys(derivedTombstones).length &&
+      Object.entries(derivedTombstones).every(
+        ([key, tombstone]) =>
+          JSON.stringify(snapshot.tombstones[key]) === JSON.stringify(tombstone),
+      );
+    if (!cardsMatch || !tombstonesMatch) {
+      context.addIssue({
+        code: "custom",
+        path: ["eventsByRevision"],
+        message: "materialized card state conflicts with event history",
+      });
     }
   });
 
@@ -309,14 +337,17 @@ export function publicCardStreamFromSnapshot(
   const eventsByRevision = Object.fromEntries(
     [...input.cards, ...input.tombstones].map((event) => [event.publicCardRevision, event]),
   );
-  return restorePublicCardStream({
-    presentationSessionId: input.presentationSessionId,
-    presentationSessionEpoch: input.presentationSessionEpoch,
-    authority: current.authority,
-    publicCardRevision: input.publicCardRevision,
-    tombstoneWatermark: input.tombstoneWatermark,
-    cards,
-    tombstones,
-    eventsByRevision,
-  });
+  return {
+    outcome: "RESTORED",
+    state: {
+      presentationSessionId: input.presentationSessionId,
+      presentationSessionEpoch: input.presentationSessionEpoch,
+      authority: current.authority,
+      publicCardRevision: input.publicCardRevision,
+      tombstoneWatermark: input.tombstoneWatermark,
+      cards,
+      tombstones,
+      eventsByRevision,
+    },
+  };
 }

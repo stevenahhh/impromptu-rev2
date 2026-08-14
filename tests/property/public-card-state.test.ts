@@ -257,6 +257,40 @@ describe("candidate and public card stream separation", () => {
         publicCardRevision: "pcr_9007199254740992",
       }),
     ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+    expect(
+      restorePublicCardStream({
+        ...retracted.state,
+        eventsByRevision: { pcr_2: tombstone(2) },
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+    expect(
+      restorePublicCardStream({
+        ...retracted.state,
+        eventsByRevision: { pcr_1: tombstone(2), pcr_2: tombstone(2) },
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+    expect(
+      restorePublicCardStream({
+        ...retracted.state,
+        tombstones: {},
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+    expect(
+      restorePublicCardStream({
+        ...retracted.state,
+        tombstoneWatermark: "pcr_1",
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+    expect(
+      restorePublicCardStream({
+        ...retracted.state,
+        publicCardRevision: "pcr_3",
+        eventsByRevision: {
+          ...retracted.state.eventsByRevision,
+          pcr_3: card(3),
+        },
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
     const resurrection = applyPublicCardEvent(restored.state, card(3));
     expect(resurrection).toMatchObject({ outcome: "TERMINAL_PROJECTION" });
     expect(resurrection.state).toEqual(restored.state);

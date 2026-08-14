@@ -10,7 +10,6 @@ import {
   DisplayIdSchema,
   PublicCardRevisionSchema,
   PublicPlaybackRevisionSchema,
-  publicCardRevisionValue,
 } from "./public-identifiers.ts";
 import { PublicationTombstoneSchema, PublishedAudienceCardSchema } from "./public-publication.ts";
 import {
