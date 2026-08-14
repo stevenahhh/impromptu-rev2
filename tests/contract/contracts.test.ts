@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import {
   AudienceSnapshotSchema,
   authorizeRoleAction,
+  authorizeRoleSnapshot,
   BuildHandshakeSchema,
   checkHandshakeCompatibility,
   EvidenceCandidateSchema,
@@ -169,5 +170,28 @@ describe("role topic authorization", () => {
     expect(authorizeRoleAction("PUBLIC_STAGE", "PUBLIC_PLAYBACK", "WRITE")).toBe(false);
     expect(authorizeRoleAction("CONTROLLER", "PRIVATE_CANDIDATES", "WRITE")).toBe(false);
     expect(authorizeRoleAction("PUBLISHER", "PRESENTER_CONTROL", "WRITE")).toBe(false);
+  });
+
+  test("does not disclose a role-scoped snapshot to another role", () => {
+    const audienceSnapshot = {
+      role: "PUBLIC_STAGE",
+      presentationSessionId: "session-1",
+      presentationSessionEpoch: 3,
+      displayBindingEpoch: 4,
+      publicPlaybackRevision: 11,
+      publicCardRevision: 8,
+      deck: fixture("published-deck"),
+      occurrence: { publicSlideKey: "public-slide-1", occurrenceSeq: 2 },
+      blackout: false,
+      cards: [fixture("published-card")],
+      tombstones: [fixture("publication-tombstone")],
+      tombstoneWatermark: 5,
+    };
+    expect(authorizeRoleSnapshot("PUBLIC_STAGE", audienceSnapshot)).toBe(true);
+    expect(authorizeRoleSnapshot("CONTROLLER", audienceSnapshot)).toBe(false);
+    expect(authorizeRoleSnapshot("UNKNOWN_ROLE", audienceSnapshot)).toBe(false);
+    expect(
+      authorizeRoleSnapshot("PUBLIC_STAGE", { ...audienceSnapshot, privateNotes: "secret" }),
+    ).toBe(false);
   });
 });

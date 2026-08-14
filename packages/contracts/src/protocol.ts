@@ -283,6 +283,14 @@ export const RoleSnapshotSchema = z.discriminatedUnion("role", [
   AudienceSnapshotSchema,
 ]);
 
+export function authorizeRoleSnapshot(role: unknown, snapshot: unknown): boolean {
+  const parsedRole = RoleSchema.safeParse(role);
+  const parsedSnapshot = RoleSnapshotSchema.safeParse(snapshot);
+  return (
+    parsedRole.success && parsedSnapshot.success && parsedRole.data === parsedSnapshot.data.role
+  );
+}
+
 export type Role = z.infer<typeof RoleSchema>;
 export type RoleSession = z.infer<typeof RoleSessionSchema>;
 export type PlaybackCommand = z.infer<typeof PlaybackCommandSchema>;
