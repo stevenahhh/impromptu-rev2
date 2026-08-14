@@ -113,7 +113,14 @@ async function runCommand(command: readonly string[], cwd?: string): Promise<voi
 async function stopProcess(process: ServiceProcess): Promise<void> {
   if (process.exitCode !== null || process.signalCode !== null) return;
   const exited = once(process, "exit", { signal: AbortSignal.timeout(5_000) });
-  process.kill();
+  if (globalThis.process.platform === "win32" && process.pid !== undefined) {
+    const terminator = spawn("taskkill", ["/PID", String(process.pid), "/T", "/F"], {
+      stdio: ["ignore", "ignore", "ignore"],
+    });
+    await once(terminator, "exit", { signal: AbortSignal.timeout(5_000) });
+  } else {
+    process.kill("SIGTERM");
+  }
   await exited;
 }
 
