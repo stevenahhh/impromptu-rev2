@@ -216,7 +216,7 @@ describe("dispatch policy gates", () => {
       gates.events.push("provider");
       return { answer: "ok" };
     });
-    registry.registerUnary(adapter);
+    registry.registerDeterministicFakeUnary(adapter);
     const router = new ServerModelRouter(
       routerOptions(registry, time, gates, {
         secretStore: fixedSecretStore,
@@ -279,7 +279,7 @@ describe("dispatch policy gates", () => {
       entry.configure(gates);
       const registry = new ModelRoutingRegistry();
       const adapter = securedAdapter(() => ({ answer: "must not run" }));
-      registry.registerUnary(adapter);
+      registry.registerDeterministicFakeUnary(adapter);
       const router = new ServerModelRouter(
         routerOptions(registry, time, gates, {
           secretStore: fixedSecretStore,
@@ -316,7 +316,7 @@ describe("dispatch policy gates", () => {
         if (gate === "egress") egress.onAuthorized = stop;
         const registry = new ModelRoutingRegistry();
         const adapter = securedAdapter(() => ({ answer: "must not run" }));
-        registry.registerUnary(adapter);
+        registry.registerDeterministicFakeUnary(adapter);
         const router = new ServerModelRouter(
           routerOptions(registry, time, gates, {
             secretStore: fixedSecretStore,
@@ -354,7 +354,7 @@ describe("dispatch policy gates", () => {
     };
     const registry = new ModelRoutingRegistry();
     const adapter = securedAdapter(() => ({ answer: "must not run" }));
-    registry.registerUnary(adapter);
+    registry.registerDeterministicFakeUnary(adapter);
     const router = new ServerModelRouter(routerOptions(registry, time, gates));
 
     const pending = router.invoke(
@@ -377,7 +377,7 @@ describe("dispatch policy gates", () => {
       const gates = new RecordingPolicyGates();
       const registry = new ModelRoutingRegistry();
       const adapter = securedAdapter(() => ({ answer: "must not run" }));
-      registry.registerUnary(adapter);
+      registry.registerDeterministicFakeUnary(adapter);
       const secretStore: SecretStore = {
         async read() {
           if (mode === "cancel") cancellation.abort();
@@ -412,7 +412,7 @@ describe("dispatch policy gates", () => {
     gates.reconcileError = new Error("accounting unavailable");
     const registry = new ModelRoutingRegistry();
     const transcript = { text: "final", language: "ko", durationMs: 100 };
-    registry.registerStreamingStt(
+    registry.registerDeterministicFakeStreamingStt(
       new DeterministicFakeSttAdapter({
         transcript,
         events: [{ kind: "final", sequence: 0, transcript }],
@@ -441,7 +441,7 @@ describe("policy-mediated provider transport", () => {
     const egress = new CountingEgressPolicy();
     const transport = new RecordingTransport();
     const registry = new ModelRoutingRegistry();
-    registry.registerUnary(
+    registry.registerDeterministicFakeUnary(
       securedAdapter(async (_input, invocation) => {
         expect("providerAccess" in invocation).toBe(false);
         await invocation.transport?.request({ method: "POST", path: "/v1/first" });
@@ -488,7 +488,7 @@ describe("policy-mediated provider transport", () => {
       const started = new Promise<void>((resolve) => {
         invocationStarted = resolve;
       });
-      registry.registerUnary(
+      registry.registerDeterministicFakeUnary(
         securedAdapter(async (_input, invocation) => {
           retained = invocation.transport;
           invocationStarted?.();
@@ -532,7 +532,7 @@ describe("policy-mediated provider transport", () => {
     const gates = new RecordingPolicyGates();
     const transport = new RecordingTransport();
     const registry = new ModelRoutingRegistry();
-    registry.registerUnary(
+    registry.registerDeterministicFakeUnary(
       securedAdapter(async (_input, invocation) => {
         await invocation.transport?.request({
           method: "POST",

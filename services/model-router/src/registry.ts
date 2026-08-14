@@ -74,7 +74,7 @@ export class ModelRoutingRegistry {
   readonly #streamingStt = new Map<string, RegisteredStreamingSttAdapter>();
   #streamingSttDefault: string | undefined;
 
-  registerUnary<Input, Output>(
+  registerDeterministicFakeUnary<Input, Output>(
     adapter: UnaryModelAdapter<Input, Output>,
     options: RegistrationOptions = {},
   ): void {
@@ -124,7 +124,10 @@ export class ModelRoutingRegistry {
     return adapter;
   }
 
-  registerStreamingStt(adapter: StreamingSttAdapter, options: RegistrationOptions = {}): void {
+  registerDeterministicFakeStreamingStt(
+    adapter: StreamingSttAdapter,
+    options: RegistrationOptions = {},
+  ): void {
     const descriptor = sttDescriptor(adapter.descriptor);
     assertDeterministicTestProvider(descriptor);
     this.#registerStreamingStt(

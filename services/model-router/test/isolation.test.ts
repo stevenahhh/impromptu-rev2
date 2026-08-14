@@ -144,7 +144,7 @@ describe("production adapter process isolation", () => {
     const registry = new ModelRoutingRegistry();
 
     expect(() =>
-      registry.registerUnary({
+      registry.registerDeterministicFakeUnary({
         descriptor: {
           adapterId: "unsafe",
           capability: "llm",

@@ -158,12 +158,12 @@ describe("routing registry", () => {
     const primary = unaryAdapter("primary", ({ prompt }) => ({ answer: prompt }));
     const secondary = unaryAdapter("secondary", ({ prompt }) => ({ answer: prompt }));
 
-    registry.registerUnary(primary, { default: true });
-    registry.registerUnary(secondary);
+    registry.registerDeterministicFakeUnary(primary, { default: true });
+    registry.registerDeterministicFakeUnary(secondary);
 
     expect(registry.resolveUnary("llm").descriptor.adapterId).toBe("primary");
     expect(registry.resolveUnary("llm", "secondary").descriptor.adapterId).toBe("secondary");
-    expect(() => registry.registerUnary(primary)).toThrow("already registered");
+    expect(() => registry.registerDeterministicFakeUnary(primary)).toThrow("already registered");
     expect(() => registry.resolveUnary("ocr")).toThrow("No unary adapter");
   });
 
@@ -185,7 +185,7 @@ describe("routing registry", () => {
       respond: () => ({ answer: "must not register" }),
     });
 
-    expect(() => registry.registerUnary(adapter)).toThrow();
+    expect(() => registry.registerDeterministicFakeUnary(adapter)).toThrow();
   });
 
   test("deep-clones and freezes streaming descriptors at registration", () => {
@@ -204,7 +204,7 @@ describe("routing registry", () => {
       transcribe: (chunks, invocation) => adapter.transcribe(chunks, invocation),
     };
 
-    registry.registerStreamingStt(mutableAdapter);
+    registry.registerDeterministicFakeStreamingStt(mutableAdapter);
     requirement.secretId = "mutated";
     const registered = registry.resolveStreamingStt();
 
@@ -220,8 +220,8 @@ describe("routing registry", () => {
       events: [],
     });
 
-    registry.registerUnary(stt);
-    registry.registerStreamingStt(stt);
+    registry.registerDeterministicFakeUnary(stt);
+    registry.registerDeterministicFakeStreamingStt(stt);
 
     expect(registry.resolveUnary("stt")).toBeDefined();
     expect(registry.resolveStreamingStt().descriptor.adapterId).toBe("deterministic-fake-stt");
@@ -232,7 +232,9 @@ describe("server model router", () => {
   test("returns schema-valid failures for malformed request and context boundaries", async () => {
     const time = new ManualTime();
     const registry = new ModelRoutingRegistry();
-    registry.registerUnary(unaryAdapter("primary", ({ prompt }) => ({ answer: prompt })));
+    registry.registerDeterministicFakeUnary(
+      unaryAdapter("primary", ({ prompt }) => ({ answer: prompt })),
+    );
     const router = createRouter(registry, time);
 
     const malformedRequest = await router.invoke(
@@ -258,7 +260,7 @@ describe("server model router", () => {
   test("validates inputs and outputs while recording terminal metadata", async () => {
     const time = new ManualTime();
     const registry = new ModelRoutingRegistry();
-    registry.registerUnary(
+    registry.registerDeterministicFakeUnary(
       unaryAdapter("primary", ({ prompt }) => ({ answer: prompt.toUpperCase() })),
     );
     const router = createRouter(registry, time);
@@ -302,7 +304,7 @@ describe("server model router", () => {
     const started = new Promise<void>((resolve) => {
       invocationStarted = resolve;
     });
-    registry.registerUnary(
+    registry.registerDeterministicFakeUnary(
       unaryAdapter("pending", async () => {
         invocationStarted?.();
         return await new Promise<{ answer: string }>(() => undefined);
@@ -325,7 +327,7 @@ describe("server model router", () => {
   test("ends at an injected deadline without sleeps", async () => {
     const time = new ManualTime();
     const registry = new ModelRoutingRegistry();
-    registry.registerUnary(
+    registry.registerDeterministicFakeUnary(
       unaryAdapter("pending", async () => await new Promise<{ answer: string }>(() => undefined)),
     );
     const router = createRouter(registry, time);
@@ -348,7 +350,7 @@ describe("server model router", () => {
     const time = new ManualTime();
     const registry = new ModelRoutingRegistry();
     const adapter = unaryAdapter("never-started", () => ({ answer: "too late" }));
-    registry.registerUnary(adapter);
+    registry.registerDeterministicFakeUnary(adapter);
     const router = createRouter(registry, time);
 
     const result = await router.invoke(
@@ -372,7 +374,7 @@ describe("server model router", () => {
       secretId: "vendor/stt/service",
       egressOrigin: "https://api.vendor.example",
     });
-    registry.registerUnary(secured);
+    registry.registerDeterministicFakeUnary(secured);
     const router = createRouter(registry, time, {
       secretStore: secrets,
       egressPolicy: policy,
@@ -404,7 +406,7 @@ describe("server model router", () => {
       secretId: "vendor/stt/service",
       egressOrigin: "https://api.vendor.example/v1",
     });
-    registry.registerUnary(secured);
+    registry.registerDeterministicFakeUnary(secured);
     const router = createRouter(registry, time, {
       secretStore: secrets,
       egressPolicy: new StaticExactEgressPolicy([
@@ -427,7 +429,7 @@ describe("server model router", () => {
     const time = new ManualTime();
     const registry = new ModelRoutingRegistry();
     const transcript = { text: "확정", language: "ko", durationMs: 100 };
-    registry.registerStreamingStt(
+    registry.registerDeterministicFakeStreamingStt(
       new DeterministicFakeSttAdapter({
         transcript,
         events: [
@@ -483,7 +485,7 @@ describe("server model router", () => {
         yield event;
       },
     };
-    registry.registerStreamingStt(adapter);
+    registry.registerDeterministicFakeStreamingStt(adapter);
     const router = createRouter(registry, time);
 
     const routed = [];
@@ -539,7 +541,7 @@ describe("server model router", () => {
         };
       },
     };
-    registry.registerStreamingStt(adapter);
+    registry.registerDeterministicFakeStreamingStt(adapter);
     const router = createRouter(registry, time);
     const outer = router.streamStt(emptyAudio(), context(2_000))[Symbol.asyncIterator]();
 
@@ -555,7 +557,7 @@ describe("server model router", () => {
     const cancellation = new AbortController();
     const registry = new ModelRoutingRegistry();
     const transcript = { text: "final", language: "ko", durationMs: 100 };
-    registry.registerStreamingStt(
+    registry.registerDeterministicFakeStreamingStt(
       new DeterministicFakeSttAdapter({
         transcript,
         events: [
