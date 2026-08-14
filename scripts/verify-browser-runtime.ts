@@ -6,6 +6,7 @@ import { type BrowserContext, chromium, type Page } from "playwright-core";
 import { preview } from "vite";
 
 const chromeExecutable = "C:/Program Files/Google/Chrome/Application/chrome.exe";
+const chromeHeadless = process.env.BROWSER_HEADED !== "true";
 const runtimeRoot = join(process.env.TEMP ?? process.cwd(), "impromptu-r2-browser-runtime");
 const profilePath = join(runtimeRoot, "offline-profile");
 export const artifactPath = join(
@@ -280,7 +281,7 @@ async function verifyColdOfflineRestart() {
   const embedServer = await startEmbedOrigin();
   const onlineContext = await chromium.launchPersistentContext(profilePath, {
     executablePath: chromeExecutable,
-    headless: true,
+    headless: chromeHeadless,
     serviceWorkers: "allow",
   });
 
@@ -301,7 +302,7 @@ async function verifyColdOfflineRestart() {
   console.log("Restarting Chrome with cleared HTTP cache and stopped origins...");
   const offlineContext = await chromium.launchPersistentContext(profilePath, {
     executablePath: chromeExecutable,
-    headless: true,
+    headless: chromeHeadless,
     serviceWorkers: "allow",
   });
   try {
