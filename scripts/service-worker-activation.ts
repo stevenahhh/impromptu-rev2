@@ -53,7 +53,13 @@ export async function waitForFirstServiceWorkerActivation({
       if (!worker || observedWorkers.has(worker)) {
         return;
       }
-      const inspectState = () => inspectRegistration();
+      const inspectState = () => {
+        if (worker.state === "activated") {
+          globalThis.queueMicrotask(inspectRegistration);
+        } else {
+          inspectRegistration();
+        }
+      };
       observedWorkers.set(worker, inspectState);
       worker.addEventListener("statechange", inspectState);
     };

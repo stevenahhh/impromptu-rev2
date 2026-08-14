@@ -10,6 +10,7 @@ class FakeWorker extends EventTarget {
   readonly scriptURL: string;
   state: ServiceWorkerState;
   stateChangeSubscriptions = 0;
+  readonly #stateChangeListeners = new Set<EventListenerOrEventListenerObject>();
 
   constructor(state: ServiceWorkerState, scriptURL = "http://example.test/sw.js") {
     super();
@@ -22,18 +23,39 @@ class FakeWorker extends EventTarget {
     callback: EventListenerOrEventListenerObject | null,
     options?: AddEventListenerOptions | boolean,
   ) {
-    super.addEventListener(type, callback, options);
-    if (type === "statechange") {
-      this.stateChangeSubscriptions += 1;
-      const subscribed = this.onStateChangeSubscribed;
-      this.onStateChangeSubscribed = null;
-      subscribed?.();
+    if (type !== "statechange" || !callback) {
+      super.addEventListener(type, callback, options);
+      return;
     }
+    this.#stateChangeListeners.add(callback);
+    this.stateChangeSubscriptions += 1;
+    const subscribed = this.onStateChangeSubscribed;
+    this.onStateChangeSubscribed = null;
+    subscribed?.();
+  }
+
+  override removeEventListener(
+    type: string,
+    callback: EventListenerOrEventListenerObject | null,
+    options?: EventListenerOptions | boolean,
+  ) {
+    if (type !== "statechange" || !callback) {
+      super.removeEventListener(type, callback, options);
+      return;
+    }
+    this.#stateChangeListeners.delete(callback);
   }
 
   transition(state: ServiceWorkerState) {
     this.state = state;
-    this.dispatchEvent(new Event("statechange"));
+    const event = new Event("statechange");
+    for (const listener of [...this.#stateChangeListeners]) {
+      if (typeof listener === "function") {
+        listener.call(this, event);
+      } else {
+        listener.handleEvent(event);
+      }
+    }
   }
 }
 
@@ -120,6 +142,36 @@ describe("first service worker activation observer", () => {
       expect(result).toEqual({ state: "activated" });
       expect(registration.updateCalls).toBe(0);
       expect(registration.active?.state).toBe("activated");
+    } finally {
+      restore();
+    }
+  });
+
+  test("rechecks authority after activated statechange promotes the worker", async () => {
+    const registration = new FakeRegistration();
+    const worker = new FakeWorker("installing");
+    registration.installing = worker;
+    worker.onStateChangeSubscribed = () => {
+      queueMicrotask(() => {
+        worker.transition("installed");
+        registration.installing = null;
+        registration.waiting = worker;
+        worker.transition("activating");
+        registration.waiting = null;
+        worker.transition("activated");
+        registration.active = worker;
+      });
+    };
+    const restore = installServiceWorkerContainer(registration);
+
+    try {
+      const result = await waitForFirstServiceWorkerActivation({
+        scriptUrl: "/sw.js",
+        timeoutMs: 100,
+      });
+      expect(result).toEqual({ state: "activated" });
+      expect(registration.updateCalls).toBe(0);
+      expect(registration.active).toBe(worker);
     } finally {
       restore();
     }
