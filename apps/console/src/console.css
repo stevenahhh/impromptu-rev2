@@ -39,6 +39,20 @@
   gap: var(--space-8);
 }
 
+.console-co-resident {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: var(--size-hairline) solid var(--color-accent);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  background: var(--surface-inset);
+}
+
+.console-co-resident span {
+  color: var(--text-secondary);
+}
+
 .console-hero {
   max-width: var(--size-copy);
   padding-block: var(--space-8) var(--space-12);

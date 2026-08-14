@@ -166,11 +166,20 @@ function PrivateNavigation() {
   );
 }
 
-function PrivateLayout() {
+function PrivateLayout({ coResident }: { readonly coResident: boolean }) {
   return (
     <Shell header={<ConsoleHeader />}>
       <PrivateNavigation />
       <div className="console-content">
+        {coResident ? (
+          <aside className="console-co-resident" role="alert">
+            <strong>Co-resident convenience mode</strong>
+            <span>
+              Private Console is on the Stage PC. No-private-pixel protection does not apply; move
+              Console to a separate device before using Duplicate.
+            </span>
+          </aside>
+        ) : null}
         <Outlet />
       </div>
     </Shell>
@@ -248,14 +257,14 @@ function SessionPage() {
   );
 }
 
-export function ConsoleRoutes() {
+export function ConsoleRoutes({ coResident = false }: { readonly coResident?: boolean }) {
   return (
     <Routes>
       <Route element={<PublicOnly />}>
         <Route path="/sign-in" element={<SignInPage />} />
       </Route>
       <Route element={<RequireAuth />}>
-        <Route element={<PrivateLayout />}>
+        <Route element={<PrivateLayout coResident={coResident} />}>
           <Route index element={<OverviewPage />} />
           <Route path="/session" element={<SessionPage />} />
         </Route>

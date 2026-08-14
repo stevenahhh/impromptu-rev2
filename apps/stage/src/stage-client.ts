@@ -37,6 +37,7 @@ export type StageCardEvent = StageCardView | StageCardTombstone;
 
 export interface StageSnapshotView {
   readonly occurrence: { readonly publicSlideKey: string; readonly occurrenceSeq: number };
+  readonly publicSlideKeys?: readonly string[];
   readonly cards: readonly StageCardView[];
   readonly publicCardRevision: string;
   readonly tombstoneWatermark: string;
@@ -51,6 +52,7 @@ export interface StageEventObserver {
   onPlayback(event: StagePlaybackEvent): void;
   onCard(event: StageCardEvent): void;
   onClose(reason: string): void;
+  onOpen?(): void;
 }
 
 interface BrowserEventSource {
@@ -123,6 +125,14 @@ function snapshot(value: unknown): StageSnapshotView | null {
   ) {
     return null;
   }
+  const deck = record(candidate.deck);
+  const deckSlides = Array.isArray(deck?.slides) ? deck.slides : [];
+  const publicSlideKeys: string[] = [];
+  for (const valueSlide of deckSlides) {
+    const slide = record(valueSlide);
+    if (slide === null || typeof slide.publicSlideKey !== "string") return null;
+    publicSlideKeys.push(slide.publicSlideKey);
+  }
   const cards: StageCardView[] = [];
   for (const valueCard of candidate.cards) {
     const card = record(valueCard);
@@ -151,6 +161,7 @@ function snapshot(value: unknown): StageSnapshotView | null {
       publicSlideKey: occurrence.publicSlideKey,
       occurrenceSeq: occurrence.occurrenceSeq,
     },
+    publicSlideKeys: publicSlideKeys.length === 0 ? [occurrence.publicSlideKey] : publicSlideKeys,
     cards,
     publicCardRevision: candidate.publicCardRevision,
     tombstoneWatermark: candidate.tombstoneWatermark,
@@ -294,6 +305,7 @@ export function createStageSessionClient(
         source.close();
         source.removeEventListener("message", onMessage);
         source.removeEventListener("error", onError);
+        source.removeEventListener("open", onOpen);
       };
       const onMessage = (event: Event) => {
         const message = parseStreamMessage(event);
@@ -305,19 +317,19 @@ export function createStageSessionClient(
         }
       };
       const onError = () => {
-        if (opened) {
-          observer.onClose("NETWORK_ERROR");
-          close();
-        }
+        if (opened) observer.onClose("NETWORK_ERROR");
+      };
+      const onOpen = () => {
+        const wasOpened = opened;
+        opened = true;
+        if (wasOpened) observer.onOpen?.();
       };
       source.addEventListener("message", onMessage);
       source.addEventListener("error", onError);
+      source.addEventListener("open", onOpen);
       await new Promise<void>((resolve, reject) => {
-        const onOpen = () => {
-          opened = true;
-          resolve();
-        };
-        source.addEventListener("open", onOpen, { once: true });
+        const onInitialOpen = () => resolve();
+        source.addEventListener("open", onInitialOpen, { once: true });
         timeout.addEventListener(
           "abort",
           () => {

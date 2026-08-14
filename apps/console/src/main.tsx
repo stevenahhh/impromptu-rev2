@@ -20,7 +20,7 @@ createRoot(root).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
-        <ConsoleRoutes />
+        <ConsoleRoutes coResident={import.meta.env.VITE_CO_RESIDENT_CONSOLE === "true"} />
       </AuthProvider>
     </BrowserRouter>
   </StrictMode>,

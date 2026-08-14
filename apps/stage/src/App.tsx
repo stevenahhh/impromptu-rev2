@@ -1,5 +1,5 @@
 import { Badge, Brand, Button, Panel, Shell, StatusDot } from "@impromptu/ui";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import {
   createStageSessionClient,
@@ -9,6 +9,12 @@ import {
   type StageSnapshotView,
   type StageSubscription,
 } from "./stage-client";
+import {
+  emergencyPublicSlideSet,
+  observeWindowsTopology,
+  topologyInstructions,
+  windowsDisplayMode,
+} from "./windows-topology";
 
 function publishStageEvent(name: string, detail: unknown): void {
   window.dispatchEvent(new CustomEvent(name, { detail }));
@@ -36,7 +42,9 @@ function LandingPage({ client }: { readonly client: StageSessionClient }) {
     }),
     [],
   );
-  const deckVersion = new URL(window.location.href).searchParams.get("deck") ?? "deck_alpha";
+  const search = new URL(window.location.href).searchParams;
+  const deckVersion = search.get("deck") ?? "deck_alpha";
+  const mode = windowsDisplayMode(search.get("mode"));
   const [join, setJoin] = useState<DisplayJoinView | null>(null);
   const [message, setMessage] = useState("Creating a short-lived display code...");
 
@@ -88,6 +96,13 @@ function LandingPage({ client }: { readonly client: StageSessionClient }) {
           <Button disabled={join === null} onClick={() => void claim()}>
             Continue after approval
           </Button>
+        </Panel>
+        <Panel title={`${mode[0]?.toUpperCase()}${mode.slice(1)} setup`}>
+          <ol className="stage-setup-list">
+            {topologyInstructions(mode).map((instruction) => (
+              <li key={instruction}>{instruction}</li>
+            ))}
+          </ol>
         </Panel>
         <p className="stage-note" aria-live="polite">
           {message} The code grants no controller access by itself.
@@ -177,7 +192,77 @@ function applyCardEvent(
 function DisplayPage({ client }: { readonly client: StageSessionClient }) {
   const titleId = useId();
   const fullscreen = useStageFullscreen();
+  const mode = windowsDisplayMode(new URL(window.location.href).searchParams.get("mode"));
   const [snapshot, setSnapshot] = useState<StageSnapshotView | null>(null);
+  const [connection, setConnection] = useState<"ready" | "recovering">("recovering");
+  const [screenCount, setScreenCount] = useState(1);
+
+  const refreshSnapshot = useCallback(async () => {
+    const next = await client.snapshot();
+    setSnapshot((current) =>
+      current !== null &&
+      cardRevisionValue(current.publicCardRevision) > cardRevisionValue(next.publicCardRevision)
+        ? current
+        : next,
+    );
+    setConnection("ready");
+    publishStageEvent("impromptu:stage-ready", { mode });
+  }, [client, mode]);
+
+  useEffect(() => {
+    let active = true;
+    let details: Awaited<ReturnType<typeof observeWindowsTopology>>["details"] = null;
+    const sync = () => {
+      const count = details?.screens.length ?? 1;
+      setScreenCount(Math.max(1, count));
+      publishStageEvent("impromptu:topology-change", { mode, screenCount: count });
+    };
+    const windowManager = window as unknown as Parameters<typeof observeWindowsTopology>[0];
+    const extendedScreen = window.screen as Screen & { readonly isExtended?: boolean };
+    void observeWindowsTopology(windowManager, extendedScreen.isExtended === true ? 2 : 1).then(
+      (result) => {
+        if (!active) return;
+        details = result.details;
+        setScreenCount(result.observation.screenCount);
+        details?.addEventListener("screenschange", sync);
+      },
+    );
+    window.addEventListener("resize", sync);
+    return () => {
+      active = false;
+      details?.removeEventListener("screenschange", sync);
+      window.removeEventListener("resize", sync);
+    };
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode !== "single" || snapshot === null) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
+      const command = emergencyPublicSlideSet(
+        event,
+        snapshot.publicSlideKeys ?? [snapshot.occurrence.publicSlideKey],
+        snapshot.occurrence.publicSlideKey,
+      );
+      if (command === null) return;
+      event.preventDefault();
+      setSnapshot((current) =>
+        current === null
+          ? null
+          : {
+              ...current,
+              occurrence: {
+                publicSlideKey: command.publicSlideKey,
+                occurrenceSeq: current.occurrence.occurrenceSeq + 1,
+              },
+            },
+      );
+      publishStageEvent("impromptu:public-slide-set", command);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mode, snapshot]);
 
   useEffect(() => {
     let active = true;
@@ -204,33 +289,38 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
             }
           },
           onClose(reason) {
+            if (!active) return;
+            setConnection("recovering");
             publishStageEvent("impromptu:channel-close", { reason });
-            subscription = null;
+          },
+          onOpen() {
+            if (active) void refreshSnapshot();
           },
         });
         if (!active) {
           subscription.close();
           return;
         }
-        const next = await client.snapshot();
-        if (active) {
-          setSnapshot((current) =>
-            current !== null &&
-            cardRevisionValue(current.publicCardRevision) >
-              cardRevisionValue(next.publicCardRevision)
-              ? current
-              : next,
-          );
-        }
+        await refreshSnapshot();
       } catch {
+        setConnection("recovering");
         subscription?.close();
       }
     })();
+    const refresh = () => {
+      if (active) void refreshSnapshot();
+    };
+    window.addEventListener("online", refresh);
+    window.addEventListener("pageshow", refresh);
+    document.addEventListener("visibilitychange", refresh);
     return () => {
       active = false;
+      window.removeEventListener("online", refresh);
+      window.removeEventListener("pageshow", refresh);
+      document.removeEventListener("visibilitychange", refresh);
       subscription?.close();
     };
-  }, [client]);
+  }, [client, refreshSnapshot]);
 
   const card = snapshot?.cards[0];
 
@@ -239,9 +329,12 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
       <header className="stage-display__bar">
         <Brand eyebrow="Public Stage" />
         <div className="stage-display__actions">
-          <Badge tone="success">
-            <StatusDot label="Preview content visible" />
-            Preview
+          <Badge tone={connection === "ready" ? "success" : "accent"}>
+            <StatusDot label={connection === "ready" ? "Public Stage ready" : "Recovering Stage"} />
+            {connection === "ready" ? "Public only" : "Recovering"}
+          </Badge>
+          <Badge tone="accent">
+            {mode} / {screenCount} screen{screenCount === 1 ? "" : "s"}
           </Badge>
           <Button variant="quiet" onClick={() => void fullscreen.toggle()}>
             {fullscreen.active ? "Exit fullscreen" : "Enter fullscreen"}
@@ -270,7 +363,10 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
         </Panel>
       </main>
       <p className="stage-fullscreen-message" aria-live="polite">
-        {fullscreen.error ?? (fullscreen.active ? "Fullscreen is active." : "Fullscreen is ready.")}
+        {fullscreen.error ??
+          (fullscreen.active
+            ? "Fullscreen is active."
+            : "Fullscreen exited. Restore it locally when the audience surface is ready.")}
       </p>
     </div>
   );

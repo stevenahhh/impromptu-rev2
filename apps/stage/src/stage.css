@@ -63,6 +63,14 @@
   font-size: var(--text-small);
 }
 
+.stage-setup-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-0);
+  padding-inline-start: var(--space-6);
+  color: var(--text-secondary);
+}
+
 .stage-display {
   display: grid;
   width: var(--size-full);

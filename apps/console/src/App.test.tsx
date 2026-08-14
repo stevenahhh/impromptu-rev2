@@ -49,6 +49,21 @@ describe("Console route boundary", () => {
       within(document.body).getByRole("navigation", { name: "Private workspace" }),
     ).toBeTruthy();
     expect(within(document.body).getByText("Private workspace")).toBeTruthy();
+    expect(within(document.body).queryByRole("alert")).toBeNull();
+  });
+
+  test("suppresses the no-private-pixel claim when explicit co-resident convenience is enabled", () => {
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AuthProvider initialAuthenticated>
+          <ConsoleRoutes coResident />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    expect(within(document.body).getByRole("alert").textContent).toContain(
+      "No-private-pixel protection does not apply",
+    );
   });
 
   test("exchanges the entered code through the typed session client without storage", async () => {
