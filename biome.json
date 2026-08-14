@@ -9,7 +9,11 @@
       "!docs/*.pdf",
       "!.omo/boulder.json",
       "!.omo/senpi-task",
-      "!.senpi"
+      "!.senpi",
+      "!**/.venv",
+      "!**/.pytest_cache",
+      "!**/.ruff_cache",
+      "!**/.basedpyright"
     ]
   },
   "formatter": {
