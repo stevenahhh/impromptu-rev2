@@ -38,30 +38,38 @@ export class CancellationScope {
       },
     );
     this.#onExternalAbort = () => {
-      this.#cancel(new ModelRouterError("cancelled", "Model invocation was cancelled", false));
+      this.abort(new ModelRouterError("cancelled", "Model invocation was cancelled", false));
     };
     context.signal.addEventListener("abort", this.#onExternalAbort, { once: true });
     this.#removeDeadline = scheduler.schedule(context.deadlineAtMs, () => {
-      this.#cancel(new ModelRouterError("deadline_exceeded", "The model deadline elapsed", true));
+      this.abort(new ModelRouterError("deadline_exceeded", "The model deadline elapsed", true));
     });
 
     const initialError = cancellationError(context, clock());
-    if (initialError !== undefined) this.#cancel(initialError);
+    if (initialError !== undefined) this.abort(initialError);
   }
 
-  async race<Value>(operation: Promise<Value>): Promise<Value> {
-    return await Promise.race([operation, this.#cancelPromise]);
+  async race<Value>(operation: () => Promise<Value>): Promise<Value> {
+    this.throwIfCancelled();
+    return await Promise.race([operation(), this.#cancelPromise]);
+  }
+
+  throwIfCancelled(): void {
+    if (!this.signal.aborted) return;
+    throw this.signal.reason instanceof ModelRouterError
+      ? this.signal.reason
+      : new ModelRouterError("cancelled", "Model invocation was cancelled", false);
+  }
+
+  abort(error = new ModelRouterError("cancelled", "Model invocation was cancelled", false)): void {
+    if (this.#controller.signal.aborted) return;
+    this.#controller.abort(error);
+    this.#rejectCancellation(error);
   }
 
   dispose(): void {
     this.#removeDeadline();
     this.#externalSignal.removeEventListener("abort", this.#onExternalAbort);
-  }
-
-  #cancel(error: ModelRouterError): void {
-    if (this.#controller.signal.aborted) return;
-    this.#controller.abort(error);
-    this.#rejectCancellation(error);
   }
 }
 

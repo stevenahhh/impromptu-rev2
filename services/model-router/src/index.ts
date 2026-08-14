@@ -2,6 +2,7 @@ export * from "./context.ts";
 export * from "./deadline.ts";
 export * from "./errors.ts";
 export * from "./fakes.ts";
+export * from "./policy.ts";
 export * from "./ports.ts";
 export * from "./registry.ts";
 export * from "./router.ts";

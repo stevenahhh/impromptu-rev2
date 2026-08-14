@@ -1,7 +1,6 @@
 import { z } from "zod";
 import type { TrustedModelContext } from "./context.ts";
 import { modelCapabilitySchema } from "./schemas.ts";
-import type { ExactEgressGrant } from "./security.ts";
 
 export interface Schema<T> {
   parse(value: unknown): T;
@@ -28,32 +27,32 @@ export const modelAdapterDescriptorSchema = z
   .strict();
 export type ModelAdapterDescriptor = z.infer<typeof modelAdapterDescriptorSchema>;
 
-export interface ProviderTransportRequest {
-  readonly method: "DELETE" | "GET" | "PATCH" | "POST" | "PUT";
-  readonly path: string;
-  readonly headers?: Readonly<Record<string, string>>;
-  readonly body?: Uint8Array;
-}
+export const providerTransportRequestSchema = z
+  .object({
+    method: z.enum(["DELETE", "GET", "PATCH", "POST", "PUT"]),
+    path: z.string().min(1),
+    headers: z.record(z.string(), z.string()).optional(),
+    body: z.instanceof(Uint8Array).optional(),
+  })
+  .strict();
+export type ProviderTransportRequest = z.infer<typeof providerTransportRequestSchema>;
 
-export interface ProviderTransportResponse {
-  readonly status: number;
-  readonly headers: Readonly<Record<string, string>>;
-  readonly body: Uint8Array;
-}
+export const providerTransportResponseSchema = z
+  .object({
+    status: z.number().int().min(100).max(599),
+    headers: z.record(z.string(), z.string()),
+    body: z.instanceof(Uint8Array),
+  })
+  .strict();
+export type ProviderTransportResponse = z.infer<typeof providerTransportResponseSchema>;
 
 export interface ProviderTransport {
   request(request: ProviderTransportRequest): Promise<ProviderTransportResponse>;
 }
 
-export interface ProviderAccess {
-  readonly credential: string;
-  readonly egress: ExactEgressGrant;
-}
-
 export interface ModelInvocationContext {
   readonly trustedContext: TrustedModelContext;
   readonly signal: AbortSignal;
-  readonly providerAccess?: ProviderAccess;
   readonly transport?: ProviderTransport;
 }
 

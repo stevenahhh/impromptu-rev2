@@ -2,15 +2,26 @@ import { describe, expect, test } from "bun:test";
 import { z } from "zod";
 import {
   type AdapterRequirement,
+  type BudgetReconciliation,
+  type BudgetReservation,
   createTrustedModelContext,
   type DeadlineScheduler,
   DeterministicFakeSttAdapter,
   DeterministicFakeUnaryAdapter,
+  type ModelDispatchRequest,
   type ModelInvocationContext,
   ModelRoutingRegistry,
+  type PolicyVersionAuthority,
+  type ProviderEgressTransport,
+  type ProviderTransportResponse,
   type SecretStore,
   ServerModelRouter,
   StaticExactEgressPolicy,
+  type StreamingSttAdapter,
+  sttAudioChunkSchema,
+  sttStreamEventSchema,
+  type TenantBudget,
+  type TenantQuotaPolicy,
   type TrustedModelContext,
 } from "../src/index.ts";
 
@@ -37,6 +48,39 @@ class ManualTime implements DeadlineScheduler {
   }
 }
 
+class AllowPolicyGates implements PolicyVersionAuthority, TenantQuotaPolicy, TenantBudget {
+  async assertCurrent(
+    _request: ModelDispatchRequest,
+    _context: TrustedModelContext,
+  ): Promise<void> {}
+
+  async assertWithinQuota(
+    _request: ModelDispatchRequest,
+    _context: TrustedModelContext,
+  ): Promise<void> {}
+
+  async reserve(
+    request: ModelDispatchRequest,
+    _context: TrustedModelContext,
+  ): Promise<BudgetReservation> {
+    return {
+      reservationId: `test-${request.adapterId}`,
+      reservedUnits: request.estimatedCostUnits,
+    };
+  }
+
+  async reconcile(
+    _reconciliation: BudgetReconciliation,
+    _context: TrustedModelContext,
+  ): Promise<void> {}
+}
+
+const testProviderTransport: ProviderEgressTransport = {
+  async send(): Promise<ProviderTransportResponse> {
+    return { status: 200, headers: {}, body: new Uint8Array() };
+  },
+};
+
 class RecordingSecretStore implements SecretStore {
   readonly reads: string[] = [];
 
@@ -55,6 +99,31 @@ function context(deadlineAtMs: number, signal = new AbortController().signal) {
     policyVersion: "policy-2026-08",
     deadlineAtMs,
     signal,
+  });
+}
+
+function createRouter(
+  registry: ModelRoutingRegistry,
+  time: ManualTime,
+  extras: {
+    readonly secretStore?: SecretStore;
+    readonly egressPolicy?: StaticExactEgressPolicy;
+    readonly providerTransport?: ProviderEgressTransport;
+  } = {},
+): ServerModelRouter {
+  const gates = new AllowPolicyGates();
+  return new ServerModelRouter({
+    registry,
+    clock: time.now,
+    scheduler: time,
+    policyVersionAuthority: gates,
+    quotaPolicy: gates,
+    budget: gates,
+    ...(extras.secretStore === undefined ? {} : { secretStore: extras.secretStore }),
+    ...(extras.egressPolicy === undefined ? {} : { egressPolicy: extras.egressPolicy }),
+    ...(extras.providerTransport === undefined
+      ? {}
+      : { providerTransport: extras.providerTransport }),
   });
 }
 
@@ -113,13 +182,32 @@ describe("routing registry", () => {
 });
 
 describe("server model router", () => {
+  test("fails closed on an invalid runtime capability request", async () => {
+    const time = new ManualTime();
+    const registry = new ModelRoutingRegistry();
+    registry.registerUnary(unaryAdapter("primary", ({ prompt }) => ({ answer: prompt })));
+    const router = createRouter(registry, time);
+
+    let caught: unknown;
+    try {
+      await router.invoke({ capability: "not-a-capability", input: {} }, context(2_000));
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught).toMatchObject({
+      modelError: { code: "invalid_request", retryable: false },
+    });
+  });
+
   test("validates inputs and outputs while recording terminal metadata", async () => {
     const time = new ManualTime();
     const registry = new ModelRoutingRegistry();
     registry.registerUnary(
       unaryAdapter("primary", ({ prompt }) => ({ answer: prompt.toUpperCase() })),
     );
-    const router = new ServerModelRouter({ registry, clock: time.now, scheduler: time });
+    const router = createRouter(registry, time);
 
     const success = await router.invoke(
       { capability: "llm", input: { prompt: "typed" } },
@@ -166,7 +254,7 @@ describe("server model router", () => {
         return await new Promise<{ answer: string }>(() => undefined);
       }),
     );
-    const router = new ServerModelRouter({ registry, clock: time.now, scheduler: time });
+    const router = createRouter(registry, time);
 
     const pending = router.invoke(
       { capability: "llm", input: { prompt: "cancel" } },
@@ -186,7 +274,7 @@ describe("server model router", () => {
     registry.registerUnary(
       unaryAdapter("pending", async () => await new Promise<{ answer: string }>(() => undefined)),
     );
-    const router = new ServerModelRouter({ registry, clock: time.now, scheduler: time });
+    const router = createRouter(registry, time);
 
     const pending = router.invoke(
       { capability: "llm", input: { prompt: "deadline" } },
@@ -207,7 +295,7 @@ describe("server model router", () => {
     const registry = new ModelRoutingRegistry();
     const adapter = unaryAdapter("never-started", () => ({ answer: "too late" }));
     registry.registerUnary(adapter);
-    const router = new ServerModelRouter({ registry, clock: time.now, scheduler: time });
+    const router = createRouter(registry, time);
 
     const result = await router.invoke(
       { capability: "llm", input: { prompt: "expired" } },
@@ -226,23 +314,15 @@ describe("server model router", () => {
       { adapterId: "secured", origin: "https://api.vendor.example" },
     ]);
     const registry = new ModelRoutingRegistry();
-    const secured = unaryAdapter(
-      "secured",
-      (_input, invocation) => ({
-        answer: `${invocation.providerAccess?.egress.origin}:${invocation.providerAccess?.credential}`,
-      }),
-      {
-        secretId: "vendor/stt/service",
-        egressOrigin: "https://api.vendor.example",
-      },
-    );
+    const secured = unaryAdapter("secured", () => ({ answer: "authorized" }), {
+      secretId: "vendor/stt/service",
+      egressOrigin: "https://api.vendor.example",
+    });
     registry.registerUnary(secured);
-    const router = new ServerModelRouter({
-      registry,
-      clock: time.now,
-      scheduler: time,
+    const router = createRouter(registry, time, {
       secretStore: secrets,
       egressPolicy: policy,
+      providerTransport: testProviderTransport,
     });
 
     const result = await router.invoke(
@@ -253,9 +333,7 @@ describe("server model router", () => {
     expect(result.ok).toBe(true);
     expect(secrets.reads).toEqual(["vendor/stt/service"]);
     if (result.ok) {
-      expect(result.output).toEqual({
-        answer: "https://api.vendor.example:fixture-credential",
-      });
+      expect(result.output).toEqual({ answer: "authorized" });
     }
   });
 
@@ -273,14 +351,12 @@ describe("server model router", () => {
       egressOrigin: "https://api.vendor.example/v1",
     });
     registry.registerUnary(secured);
-    const router = new ServerModelRouter({
-      registry,
-      clock: time.now,
-      scheduler: time,
+    const router = createRouter(registry, time, {
       secretStore: secrets,
       egressPolicy: new StaticExactEgressPolicy([
         { adapterId: "secured", origin: "https://api.vendor.example" },
       ]),
+      providerTransport: testProviderTransport,
     });
 
     const result = await router.invoke(
@@ -306,7 +382,7 @@ describe("server model router", () => {
         ],
       }),
     );
-    const router = new ServerModelRouter({ registry, clock: time.now, scheduler: time });
+    const router = createRouter(registry, time);
 
     const routed = [];
     for await (const item of router.streamStt(emptyAudio(), context(2_000))) routed.push(item);
@@ -318,6 +394,59 @@ describe("server model router", () => {
       expect(completion.result.ok).toBe(true);
       if (completion.result.ok) expect(completion.result.output).toEqual(transcript);
     }
+  });
+
+  test("aborts the internal scope and returns the inner iterator when its consumer returns", async () => {
+    const time = new ManualTime();
+    const registry = new ModelRoutingRegistry();
+    let innerReturnCalled = false;
+    let signalAbortedAtReturn = false;
+    const transcript = { text: "partial", language: "ko", durationMs: 50 };
+    const adapter: StreamingSttAdapter = {
+      descriptor: {
+        adapterId: "cleanup-stt",
+        capability: "stt",
+        provider: "fake",
+        model: "cleanup",
+        modelVersion: "1",
+        estimatedCostUnits: 1,
+      },
+      chunkSchema: sttAudioChunkSchema,
+      eventSchema: sttStreamEventSchema,
+      transcribe(_chunks, invocation) {
+        let emitted = false;
+        return {
+          [Symbol.asyncIterator]() {
+            return {
+              async next() {
+                if (!emitted) {
+                  emitted = true;
+                  return {
+                    done: false as const,
+                    value: { kind: "partial" as const, sequence: 0, transcript },
+                  };
+                }
+                return await new Promise<never>(() => undefined);
+              },
+              async return() {
+                innerReturnCalled = true;
+                signalAbortedAtReturn = invocation.signal.aborted;
+                return { done: true as const, value: undefined };
+              },
+            };
+          },
+        };
+      },
+    };
+    registry.registerStreamingStt(adapter);
+    const router = createRouter(registry, time);
+    const outer = router.streamStt(emptyAudio(), context(2_000))[Symbol.asyncIterator]();
+
+    expect((await outer.next()).value?.kind).toBe("transcript");
+    await outer.return?.();
+
+    expect(innerReturnCalled).toBe(true);
+    expect(signalAbortedAtReturn).toBe(true);
   });
 
   test("cancels a streaming STT iterator before another event is requested", async () => {
@@ -334,7 +463,7 @@ describe("server model router", () => {
         ],
       }),
     );
-    const router = new ServerModelRouter({ registry, clock: time.now, scheduler: time });
+    const router = createRouter(registry, time);
     const stream = router
       .streamStt(emptyAudio(), context(2_000, cancellation.signal))
       [Symbol.asyncIterator]();
