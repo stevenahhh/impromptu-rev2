@@ -1,0 +1,17 @@
+import type {
+  AudienceCardSnapshotState,
+  PublicCardStreamState,
+} from "../../../packages/state/src/index.ts";
+
+declare const authoritative: PublicCardStreamState;
+const forged = {
+  stateKind: "COMPACT_AUDIENCE_CARD_SNAPSHOT" as const,
+  presentationSessionId: authoritative.presentationSessionId,
+  presentationSessionEpoch: authoritative.presentationSessionEpoch,
+  publicCardRevision: authoritative.publicCardRevision,
+  tombstoneWatermark: authoritative.tombstoneWatermark,
+  cards: authoritative.cards,
+  tombstones: authoritative.tombstones,
+};
+const compact: AudienceCardSnapshotState = forged;
+void compact;

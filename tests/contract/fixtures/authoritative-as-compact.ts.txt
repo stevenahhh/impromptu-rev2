@@ -1,0 +1,8 @@
+import type {
+  AudienceCardSnapshotState,
+  PublicCardStreamState,
+} from "../../../packages/state/src/index.ts";
+
+declare const authoritative: PublicCardStreamState;
+const compact: AudienceCardSnapshotState = authoritative;
+void compact;

@@ -358,6 +358,7 @@ describe("compacted audience card persistence", () => {
   test("round-trips compacted state and rejects forged maps and counters", () => {
     const parsed = AudienceSnapshotSchema.parse(audienceSnapshot());
     const restored = restoreAudienceCardSnapshotState({
+      stateKind: "COMPACT_AUDIENCE_CARD_SNAPSHOT",
       presentationSessionId: parsed.presentationSessionId,
       presentationSessionEpoch: parsed.presentationSessionEpoch,
       publicCardRevision: parsed.publicCardRevision,
@@ -367,9 +368,11 @@ describe("compacted audience card persistence", () => {
     });
     expect(restored.outcome).toBe("RESTORED");
     if (restored.outcome !== "RESTORED") throw new Error("compact snapshot was rejected");
-    expect(restoreAudienceCardSnapshotState(snapshotAudienceCardState(restored.state))).toEqual(
-      restored,
-    );
+    const persisted = snapshotAudienceCardState(restored.state);
+    expect(persisted).toEqual(restored);
+    if (persisted.outcome !== "RESTORED") throw new Error("compact state did not snapshot");
+    expect(restoreAudienceCardSnapshotState(persisted.state)).toEqual(restored);
+    expect(snapshotAudienceCardState(stream())).toEqual({ outcome: "INVALID_SNAPSHOT" });
     expect(restoreAudienceCardSnapshotState(stream())).toEqual({ outcome: "INVALID_SNAPSHOT" });
     expect(restorePublicCardStream(restored.state)).toEqual({ outcome: "INVALID_SNAPSHOT" });
     expect(
@@ -429,9 +432,10 @@ describe("runtime role snapshot restore", () => {
     expect(restored.outcome).toBe("APPLIED");
     expect(String(restored.playback.publicPlaybackRevision)).toBe("pbr_1");
     expect(String(restored.cards.publicCardRevision)).toBe("pcr_2");
-    const restartedCards = restoreAudienceCardSnapshotState(
-      snapshotAudienceCardState(restored.cards),
-    );
+    const persistedCards = snapshotAudienceCardState(restored.cards);
+    expect(persistedCards.outcome).toBe("RESTORED");
+    if (persistedCards.outcome !== "RESTORED") throw new Error("role cards did not snapshot");
+    const restartedCards = restoreAudienceCardSnapshotState(persistedCards.state);
     expect(restartedCards.outcome).toBe("RESTORED");
     if (restartedCards.outcome !== "RESTORED") throw new Error("role cards did not restart");
     expect(

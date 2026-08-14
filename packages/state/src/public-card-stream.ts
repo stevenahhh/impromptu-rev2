@@ -23,8 +23,9 @@ import type { CandidateLifecycleState } from "./candidate-lifecycle.ts";
 const PublicCardEventSchema = z.union([PublishedAudienceCardSchema, PublicationTombstoneSchema]);
 export type PublicCardEvent = z.infer<typeof PublicCardEventSchema>;
 
-const PublicCardStreamSnapshotSchema = z
+export const PublicCardStreamStateSchema = z
   .object({
+    stateKind: z.literal("AUTHORITATIVE_PUBLIC_CARD_STREAM"),
     presentationSessionId: PresentationSessionIdSchema,
     presentationSessionEpoch: PresentationSessionEpochSchema,
     authority: PublicationAuthoritySchema.nullable(),
@@ -131,18 +132,10 @@ const PublicCardStreamSnapshotSchema = z
         message: "materialized card state conflicts with event history",
       });
     }
-  });
+  })
+  .brand<"PublicCardStreamState">();
 
-export type PublicCardStreamState = Readonly<{
-  presentationSessionId: PresentationSessionId;
-  presentationSessionEpoch: PresentationSessionEpoch;
-  authority: PublicationAuthority | null;
-  publicCardRevision: PublicCardRevision;
-  tombstoneWatermark: PublicCardRevision;
-  cards: Readonly<Record<string, PublishedAudienceCard>>;
-  tombstones: Readonly<Record<string, PublicationTombstone>>;
-  eventsByRevision: Readonly<Record<string, PublicCardEvent>>;
-}>;
+export type PublicCardStreamState = z.infer<typeof PublicCardStreamStateSchema>;
 
 export type CreatePublicCardStream = Readonly<{
   presentationSessionId: PresentationSessionId;
@@ -159,7 +152,8 @@ export function createPublicCardStream(input: CreatePublicCardStream): PublicCar
   ) {
     throw new Error("publication authority belongs to a different presentation session");
   }
-  return {
+  return PublicCardStreamStateSchema.parse({
+    stateKind: "AUTHORITATIVE_PUBLIC_CARD_STREAM",
     presentationSessionId: input.presentationSessionId,
     presentationSessionEpoch: input.presentationSessionEpoch,
     authority: input.authority ?? null,
@@ -168,7 +162,7 @@ export function createPublicCardStream(input: CreatePublicCardStream): PublicCar
     cards: {},
     tombstones: {},
     eventsByRevision: {},
-  };
+  });
 }
 
 export type PublicCardEventOutcome =
@@ -218,12 +212,12 @@ export function applyPublicCardEvent(
 
   if (event.status === "PUBLISHED") {
     return {
-      state: {
+      state: PublicCardStreamStateSchema.parse({
         ...state,
         publicCardRevision: revision,
         cards: { ...state.cards, [event.projectionId]: event },
         eventsByRevision: { ...state.eventsByRevision, [revision]: event },
-      },
+      }),
       outcome: "APPLIED",
     };
   }
@@ -231,13 +225,13 @@ export function applyPublicCardEvent(
   const cards = { ...state.cards };
   delete cards[event.projectionId];
   return {
-    state: {
+    state: PublicCardStreamStateSchema.parse({
       ...state,
       publicCardRevision: revision,
       cards,
       tombstones: { ...state.tombstones, [event.projectionId]: event },
       eventsByRevision: { ...state.eventsByRevision, [revision]: event },
-    },
+    }),
     outcome: "APPLIED",
   };
 }
@@ -313,7 +307,7 @@ export type PublicCardStreamRestoreResult =
   | Readonly<{ outcome: "INVALID_SNAPSHOT" }>;
 
 export function restorePublicCardStream(input: unknown): PublicCardStreamRestoreResult {
-  const parsed = PublicCardStreamSnapshotSchema.safeParse(input);
+  const parsed = PublicCardStreamStateSchema.safeParse(input);
   return parsed.success
     ? { outcome: "RESTORED", state: parsed.data }
     : { outcome: "INVALID_SNAPSHOT" };

@@ -3,11 +3,8 @@ import {
   PresentationSessionEpochSchema,
   type PresentationSessionId,
   PresentationSessionIdSchema,
-  type PublicationTombstone,
   PublicationTombstoneSchema,
-  type PublicCardRevision,
   PublicCardRevisionSchema,
-  type PublishedAudienceCard,
   PublishedAudienceCardSchema,
   publicCardRevision,
 } from "@impromptu/contracts/public";
@@ -16,6 +13,7 @@ import { z } from "zod";
 
 export const AudienceCardSnapshotStateSchema = z
   .object({
+    stateKind: z.literal("COMPACT_AUDIENCE_CARD_SNAPSHOT"),
     presentationSessionId: PresentationSessionIdSchema,
     presentationSessionEpoch: PresentationSessionEpochSchema,
     publicCardRevision: PublicCardRevisionSchema,
@@ -89,29 +87,24 @@ export const AudienceCardSnapshotStateSchema = z
         message: "compacted card state has a post-watermark revision gap",
       });
     }
-  });
+  })
+  .brand<"AudienceCardSnapshotState">();
 
-export type AudienceCardSnapshotState = Readonly<{
-  presentationSessionId: PresentationSessionId;
-  presentationSessionEpoch: PresentationSessionEpoch;
-  publicCardRevision: PublicCardRevision;
-  tombstoneWatermark: PublicCardRevision;
-  cards: Readonly<Record<string, PublishedAudienceCard>>;
-  tombstones: Readonly<Record<string, PublicationTombstone>>;
-}>;
+export type AudienceCardSnapshotState = z.infer<typeof AudienceCardSnapshotStateSchema>;
 
 export function createAudienceCardSnapshotState(input: {
   presentationSessionId: PresentationSessionId;
   presentationSessionEpoch: PresentationSessionEpoch;
 }): AudienceCardSnapshotState {
-  return {
+  return AudienceCardSnapshotStateSchema.parse({
+    stateKind: "COMPACT_AUDIENCE_CARD_SNAPSHOT",
     presentationSessionId: input.presentationSessionId,
     presentationSessionEpoch: input.presentationSessionEpoch,
     publicCardRevision: publicCardRevision(0),
     tombstoneWatermark: publicCardRevision(0),
     cards: {},
     tombstones: {},
-  };
+  });
 }
 
 export type AudienceCardSnapshotRestoreResult =
@@ -127,8 +120,9 @@ export function restoreAudienceCardSnapshotState(
     : { outcome: "INVALID_SNAPSHOT" };
 }
 
-export function snapshotAudienceCardState(
-  state: AudienceCardSnapshotState,
-): AudienceCardSnapshotState {
-  return structuredClone(state);
+export function snapshotAudienceCardState(input: unknown): AudienceCardSnapshotRestoreResult {
+  const parsed = restoreAudienceCardSnapshotState(input);
+  return parsed.outcome === "RESTORED"
+    ? { outcome: "RESTORED", state: structuredClone(parsed.state) }
+    : parsed;
 }

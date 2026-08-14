@@ -75,6 +75,7 @@ export function restoreAudienceRoleStreams(
     return { playback, cards: currentCards, outcome: "STALE_SNAPSHOT" };
   }
   const restoredCards = restoreAudienceCardSnapshotState({
+    stateKind: "COMPACT_AUDIENCE_CARD_SNAPSHOT",
     presentationSessionId: snapshot.presentationSessionId,
     presentationSessionEpoch: snapshot.presentationSessionEpoch,
     publicCardRevision: snapshot.publicCardRevision,
