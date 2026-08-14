@@ -237,9 +237,6 @@ export function createProjectionGatewayHandler(
     if (origin instanceof Response) return origin;
 
     const url = new URL(request.url);
-    if (request.method !== "GET") {
-      return json({ error: "dispatcher_required" }, 403, origin);
-    }
     if (url.pathname === "/health") {
       return json({ service: "projection-gateway", status: "ok" }, 200, origin);
     }
@@ -410,6 +407,8 @@ export function createProjectionGatewayHandler(
         : json(snapshot, 200, origin);
     }
 
-    return json({ error: "not_found" }, 404, origin);
+    return request.method === "GET"
+      ? json({ error: "not_found" }, 404, origin)
+      : json({ error: "dispatcher_required" }, 403, origin);
   };
 }
