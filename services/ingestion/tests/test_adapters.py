@@ -1,3 +1,6 @@
+import hashlib
+import subprocess
+from contextlib import AbstractContextManager
 from pathlib import Path
 
 import pytest
@@ -9,18 +12,32 @@ from impromptu_ingestion.adapters import (
     StructuralExtractionError,
 )
 from impromptu_ingestion.canonical import canonical_manifest_bytes, manifest_sha256
-from impromptu_ingestion.contracts import IngestionJob, InputKind, ValidatedInput
-from impromptu_ingestion.validation import validate_input
+from impromptu_ingestion.contracts import (
+    IngestionJob,
+    IngestionLimits,
+    InputKind,
+    ValidatedInput,
+)
+from impromptu_ingestion.validation import stage_input
 
 
-def _validated(path: Path) -> ValidatedInput:
-    return validate_input(IngestionJob(job_id="job_adapter_01", source=path))
+def _staged(
+    path: Path, limits: IngestionLimits | None = None
+) -> AbstractContextManager[ValidatedInput]:
+    return stage_input(
+        IngestionJob(
+            job_id="job_adapter_01",
+            source=path,
+            limits=limits or IngestionLimits(),
+        )
+    )
 
 
 def test_pptx_extracts_text_table_image_and_chart_without_private_notes(
     sample_pptx: Path,
 ) -> None:
-    manifest = PptxStructuralAdapter().extract(_validated(sample_pptx))
+    with _staged(sample_pptx) as source:
+        manifest = PptxStructuralAdapter().extract(source)
 
     assert manifest.source_kind is InputKind.PPTX
     assert len(manifest.slides) == 1
@@ -34,12 +51,25 @@ def test_pptx_extracts_text_table_image_and_chart_without_private_notes(
     assert manifest.render_boundary.fidelity_verified is False
 
 
+def test_adapter_parses_the_hashed_stage_after_source_replacement(sample_pptx: Path) -> None:
+    original_digest = hashlib.sha256(sample_pptx.read_bytes()).hexdigest()
+
+    with _staged(sample_pptx) as source:
+        sample_pptx.write_bytes(b"replacement after staging")
+        manifest = PptxStructuralAdapter().extract(source)
+
+    assert manifest.source_sha256 == original_digest
+    assert any(
+        element.kind == "text" and element.text == "한국어 근거 자료"
+        for element in manifest.slides[0].elements
+    )
+
+
 def test_pptx_manifest_and_identity_are_repeatable(sample_pptx: Path) -> None:
     adapter = PptxStructuralAdapter()
-    validated = _validated(sample_pptx)
-
-    first = adapter.extract(validated)
-    second = adapter.extract(validated)
+    with _staged(sample_pptx) as source:
+        first = adapter.extract(source)
+        second = adapter.extract(source)
 
     assert canonical_manifest_bytes(first) == canonical_manifest_bytes(second)
     assert manifest_sha256(first) == manifest_sha256(second)
@@ -50,7 +80,8 @@ def test_pptx_manifest_and_identity_are_repeatable(sample_pptx: Path) -> None:
 def test_pdf_extracts_positioned_text_and_images_and_marks_scanned_pages(
     sample_pdf: Path,
 ) -> None:
-    manifest = PdfStructuralAdapter().extract(_validated(sample_pdf))
+    with _staged(sample_pdf) as source:
+        manifest = PdfStructuralAdapter().extract(source)
 
     assert manifest.source_kind is InputKind.PDF
     assert len(manifest.slides) == 2
@@ -70,11 +101,60 @@ def test_rendering_is_an_explicit_unsupported_boundary(
         adapter.render_slides()
 
 
+def test_truncated_pdf_that_mupdf_can_repair_is_strictly_rejected(
+    sample_pdf: Path, tmp_path: Path
+) -> None:
+    truncated = tmp_path / "truncated.pdf"
+    original = sample_pdf.read_bytes()
+    assert original.rstrip().endswith(b"%%EOF")
+    truncated.write_bytes(original[: original.rfind(b"%%EOF")])
+
+    with _staged(truncated) as staged, pytest.raises(StructuralExtractionError) as raised:
+        PdfStructuralAdapter().extract(staged)
+
+    assert raised.value.code == "repair_required"
+
+
+def test_pdf_enforces_page_object_and_resource_limits(sample_pdf: Path) -> None:
+    cases = (
+        IngestionLimits(max_pdf_pages=1),
+        IngestionLimits(max_pdf_objects=1),
+        IngestionLimits(max_pdf_resource_bytes=1),
+        IngestionLimits(max_pdf_elements=1),
+        IngestionLimits(max_pdf_image_pixels=1),
+    )
+
+    for limits in cases:
+        with (
+            _staged(sample_pdf, limits) as staged,
+            pytest.raises(StructuralExtractionError) as raised,
+        ):
+            PdfStructuralAdapter().extract(staged)
+        assert raised.value.code == "resource_limit"
+
+
+def test_pdf_worker_timeout_is_a_typed_failure(
+    sample_pdf: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def timeout(*args: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        raise subprocess.TimeoutExpired(cmd="pdf-worker", timeout=1)
+
+    monkeypatch.setattr(subprocess, "run", timeout)
+
+    with (
+        _staged(sample_pdf, IngestionLimits(operation_timeout_seconds=1)) as staged,
+        pytest.raises(StructuralExtractionError) as raised,
+    ):
+        PdfStructuralAdapter().extract(staged)
+
+    assert raised.value.code == "operation_timeout"
+
+
 def test_malformed_pdf_fails_with_a_typed_extraction_error(tmp_path: Path) -> None:
     source = tmp_path / "malformed.pdf"
     source.write_bytes(b"%PDF-1.7\nthis is not a document")
 
-    with pytest.raises(StructuralExtractionError) as raised:
-        PdfStructuralAdapter().extract(_validated(source))
+    with _staged(source) as staged, pytest.raises(StructuralExtractionError) as raised:
+        PdfStructuralAdapter().extract(staged)
 
     assert raised.value.code == "invalid_document"

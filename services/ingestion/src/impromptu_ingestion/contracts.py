@@ -23,11 +23,21 @@ class InputKind(StrEnum):
     PDF = "pdf"
 
 
+class IngestionLimits(ContractModel):
+    max_pdf_pages: Annotated[int, Field(gt=0, le=5_000)] = 500
+    max_pdf_objects: Annotated[int, Field(gt=0, le=1_000_000)] = 100_000
+    max_pdf_elements: Annotated[int, Field(gt=0, le=1_000_000)] = 100_000
+    max_pdf_resource_bytes: Annotated[int, Field(gt=0, le=1_073_741_824)] = 268_435_456
+    max_pdf_image_pixels: Annotated[int, Field(gt=0, le=1_000_000_000)] = 100_000_000
+    operation_timeout_seconds: Annotated[float, Field(ge=1, le=300)] = 30
+
+
 class IngestionJob(ContractModel):
     job_id: JobId
     source: Path
     expected_kind: InputKind | None = None
     max_input_bytes: Annotated[int, Field(gt=0, le=1_073_741_824)] = 104_857_600
+    limits: IngestionLimits = Field(default_factory=IngestionLimits)
 
     @model_validator(mode="after")
     def source_must_be_absolute(self) -> Self:
@@ -41,6 +51,7 @@ class ValidatedInput(ContractModel):
     kind: InputKind
     size_bytes: Annotated[int, Field(gt=0)]
     source_sha256: Sha256
+    limits: IngestionLimits = Field(default_factory=IngestionLimits)
 
 
 class RenderBoundary(ContractModel):
@@ -136,6 +147,17 @@ class DeckManifest(ContractModel):
         if len(keys) != len(self.slides):
             raise ValueError("slide keys must be unique")
         return self
+
+
+class PdfWorkerSuccess(ContractModel):
+    ok: Literal[True] = True
+    manifest: DeckManifest
+
+
+class PdfWorkerFailure(ContractModel):
+    ok: Literal[False] = False
+    code: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{2,63}$")]
+    message: str
 
 
 class CompletedIngestion(ContractModel):

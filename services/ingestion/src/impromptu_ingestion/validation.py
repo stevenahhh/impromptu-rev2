@@ -1,8 +1,14 @@
-"""Defensive validation at the local-file ingestion boundary."""
+"""Defensive staging and validation at the local-file ingestion boundary."""
 
 import hashlib
+import os
 import stat
+from collections.abc import Generator
+from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from tempfile import TemporaryDirectory
+from typing import BinaryIO
 from zipfile import BadZipFile, ZipFile
 
 from impromptu_ingestion.contracts import IngestionJob, InputKind, ValidatedInput
@@ -23,6 +29,31 @@ class InputValidationError(ValueError):
         super().__init__(f"{code}: {message}")
 
 
+@dataclass(frozen=True)
+class _FileIdentity:
+    device: int
+    inode: int
+    size: int
+    modified_ns: int
+
+
+@dataclass(frozen=True)
+class _StagedCopy:
+    opened_identity: _FileIdentity
+    final_identity: _FileIdentity
+    size: int
+    sha256: str
+
+
+def _identity(metadata: os.stat_result) -> _FileIdentity:
+    return _FileIdentity(
+        device=metadata.st_dev,
+        inode=metadata.st_ino,
+        size=metadata.st_size,
+        modified_ns=metadata.st_mtime_ns,
+    )
+
+
 def _kind_for_path(path: Path) -> InputKind:
     match path.suffix.lower():
         case ".pptx":
@@ -35,11 +66,9 @@ def _kind_for_path(path: Path) -> InputKind:
             )
 
 
-def _validate_regular_file(source: Path, max_input_bytes: int) -> tuple[Path, int]:
+def _initial_identity(source: Path, max_input_bytes: int) -> _FileIdentity:
     try:
-        if source.is_symlink():
-            raise InputValidationError("symlink_rejected", "symbolic-link inputs are not accepted")
-        metadata = source.stat()
+        metadata = source.lstat()
     except FileNotFoundError as error:
         raise InputValidationError("input_not_found", "input file does not exist") from error
     except OSError as error:
@@ -47,6 +76,8 @@ def _validate_regular_file(source: Path, max_input_bytes: int) -> tuple[Path, in
             "input_unreadable", "input metadata could not be read"
         ) from error
 
+    if stat.S_ISLNK(metadata.st_mode):
+        raise InputValidationError("symlink_rejected", "symbolic-link inputs are not accepted")
     if not stat.S_ISREG(metadata.st_mode):
         raise InputValidationError("not_regular_file", "input must be a regular file")
     if metadata.st_size <= 0:
@@ -55,7 +86,53 @@ def _validate_regular_file(source: Path, max_input_bytes: int) -> tuple[Path, in
         raise InputValidationError(
             "input_too_large", f"input exceeds the configured {max_input_bytes}-byte limit"
         )
-    return source.resolve(strict=True), metadata.st_size
+    return _identity(metadata)
+
+
+def _copy_stream(source: BinaryIO, destination: BinaryIO, max_input_bytes: int) -> tuple[int, str]:
+    digest = hashlib.sha256()
+    size = 0
+    while chunk := source.read(_CHUNK_SIZE):
+        size += len(chunk)
+        if size > max_input_bytes:
+            raise InputValidationError(
+                "input_too_large", f"input exceeds the configured {max_input_bytes}-byte limit"
+            )
+        destination.write(chunk)
+        digest.update(chunk)
+    return size, digest.hexdigest()
+
+
+def _copy_source_to_stage(source_path: Path, staged_path: Path, limit: int) -> _StagedCopy:
+    try:
+        with source_path.open("rb") as source, staged_path.open("xb") as destination:
+            opened_identity = _identity(os.fstat(source.fileno()))
+            size, digest = _copy_stream(source, destination, limit)
+            final_identity = _identity(os.fstat(source.fileno()))
+            destination.flush()
+            os.fsync(destination.fileno())
+    except InputValidationError:
+        raise
+    except OSError as error:
+        raise InputValidationError("input_unreadable", "input file could not be staged") from error
+    return _StagedCopy(
+        opened_identity=opened_identity,
+        final_identity=final_identity,
+        size=size,
+        sha256=digest,
+    )
+
+
+def _post_copy_identity(source: Path) -> _FileIdentity:
+    try:
+        metadata = source.lstat()
+    except OSError as error:
+        raise InputValidationError(
+            "source_replaced", "source changed or disappeared while it was staged"
+        ) from error
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+        raise InputValidationError("source_replaced", "source was replaced while it was staged")
+    return _identity(metadata)
 
 
 def _read_signature(path: Path) -> bytes:
@@ -63,7 +140,7 @@ def _read_signature(path: Path) -> bytes:
         with path.open("rb") as source:
             return source.read(8)
     except OSError as error:
-        raise InputValidationError("input_unreadable", "input file could not be read") from error
+        raise InputValidationError("input_unreadable", "staged input could not be read") from error
 
 
 def _validate_signature(path: Path, kind: InputKind) -> None:
@@ -119,33 +196,43 @@ def _validate_pptx_container(path: Path) -> None:
         raise InputValidationError("invalid_pptx", "PPTX container could not be read") from error
 
 
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    try:
-        with path.open("rb") as source:
-            while chunk := source.read(_CHUNK_SIZE):
-                digest.update(chunk)
-    except OSError as error:
-        raise InputValidationError("input_unreadable", "input file could not be hashed") from error
-    return digest.hexdigest()
-
-
-def validate_input(job: IngestionJob) -> ValidatedInput:
-    """Validate and fingerprint a supported local presentation input."""
+@contextmanager
+def stage_input(job: IngestionJob) -> Generator[ValidatedInput]:
+    """Copy one stable source snapshot to private storage and validate exactly that copy."""
     kind = _kind_for_path(job.source)
     if job.expected_kind is not None and job.expected_kind is not kind:
         raise InputValidationError(
             "kind_mismatch", f"expected {job.expected_kind.value}, received {kind.value}"
         )
 
-    path, size_bytes = _validate_regular_file(job.source, job.max_input_bytes)
-    _validate_signature(path, kind)
-    if kind is InputKind.PPTX:
-        _validate_pptx_container(path)
+    initial_identity = _initial_identity(job.source, job.max_input_bytes)
+    with TemporaryDirectory(prefix="impromptu-ingestion-") as temporary_directory:
+        directory = Path(temporary_directory)
+        directory.chmod(stat.S_IRWXU)
+        staged_path = directory / f"input.{kind.value}"
+        copied = _copy_source_to_stage(job.source, staged_path, job.max_input_bytes)
+        final_path_identity = _post_copy_identity(job.source)
+        if not (
+            initial_identity
+            == copied.opened_identity
+            == copied.final_identity
+            == final_path_identity
+        ):
+            raise InputValidationError(
+                "source_replaced", "source was modified or replaced while it was staged"
+            )
+        if copied.size <= 0:
+            raise InputValidationError("empty_input", "input file is empty")
 
-    return ValidatedInput(
-        path=path,
-        kind=kind,
-        size_bytes=size_bytes,
-        source_sha256=_sha256_file(path),
-    )
+        _validate_signature(staged_path, kind)
+        if kind is InputKind.PPTX:
+            _validate_pptx_container(staged_path)
+        staged_path.chmod(stat.S_IRUSR)
+
+        yield ValidatedInput(
+            path=staged_path,
+            kind=kind,
+            size_bytes=copied.size,
+            source_sha256=copied.sha256,
+            limits=job.limits,
+        )
