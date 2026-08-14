@@ -11,7 +11,7 @@ const forbiddenPublicExports = [
 ] as const;
 
 describe("role-scoped contract exports", () => {
-  test("publishes explicit public, control, private, and shared subpaths", () => {
+  test("publishes explicit public, control, private, retrieval, and shared subpaths", () => {
     const manifest = JSON.parse(readFileSync("packages/contracts/package.json", "utf8")) as {
       exports?: unknown;
     };
@@ -20,6 +20,7 @@ describe("role-scoped contract exports", () => {
       "./public": "./src/public.ts",
       "./control": "./src/control.ts",
       "./private": "./src/private.ts",
+      "./retrieval": "./src/retrieval.ts",
       "./shared": "./src/shared.ts",
     });
   });
