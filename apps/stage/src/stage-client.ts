@@ -427,24 +427,62 @@ function parseStreamMessage(
   return null;
 }
 
-async function verifyOfflinePackage(card: StageCardView): Promise<StageCardView> {
+const OFFLINE_DISPLAY_PUBLIC_KEY: JsonWebKey = {
+  kty: "EC",
+  crv: "P-256",
+  x: "bt2abKicLjB_DoIwd8C0nUzPIFcxcGgNm2yEyfu_KQw",
+  y: "vRlUGKUPFAnH1axFaQu-kaNxDMpfj8ZDV1dvFGxH3NU",
+  ext: true,
+  key_ops: ["verify"],
+};
+
+function base64UrlBytes(value: string): Uint8Array<ArrayBuffer> | null {
+  try {
+    const base64 = value.replaceAll("-", "+").replaceAll("_", "/");
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+    const binary = atob(padded);
+    const bytes = new Uint8Array(new ArrayBuffer(binary.length));
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return bytes;
+  } catch {
+    return null;
+  }
+}
+
+export async function verifyOfflinePackage(card: StageCardView): Promise<StageCardView> {
   const offline = card.offlinePackage;
   if (offline === undefined) return card;
-  const signedPayload = JSON.stringify({
-    projectionId: card.projectionId,
-    offlineDisplayAllowed: offline.offlineDisplayAllowed,
-    localExpiresAtMs: offline.localExpiresAtMs,
-  });
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(signedPayload));
-  const expected = Array.from(new Uint8Array(digest), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
+  const signature = base64UrlBytes(offline.signature);
+  let signatureVerified = false;
+  if (signature !== null) {
+    try {
+      const key = await crypto.subtle.importKey(
+        "jwk",
+        OFFLINE_DISPLAY_PUBLIC_KEY,
+        { name: "ECDSA", namedCurve: "P-256" },
+        false,
+        ["verify"],
+      );
+      const signedPayload = JSON.stringify({
+        projectionId: card.projectionId,
+        offlineDisplayAllowed: offline.offlineDisplayAllowed,
+        localExpiresAtMs: offline.localExpiresAtMs,
+      });
+      signatureVerified = await crypto.subtle.verify(
+        { name: "ECDSA", hash: "SHA-256" },
+        key,
+        signature,
+        new TextEncoder().encode(signedPayload),
+      );
+    } catch {
+      signatureVerified = false;
+    }
+  }
   return {
     ...card,
-    offlinePackage: {
-      ...offline,
-      signatureVerified: offline.signature === `sha256:${expected}`,
-    },
+    offlinePackage: { ...offline, signatureVerified },
   };
 }
 

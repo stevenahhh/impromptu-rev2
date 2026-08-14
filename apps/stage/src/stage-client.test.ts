@@ -2,6 +2,7 @@ import { afterEach, describe, expect, mock, test } from "bun:test";
 import {
   createStageSessionClient,
   type EventSourceFactory,
+  verifyOfflinePackage,
   type WebSocketFactory,
 } from "./stage-client";
 
@@ -34,6 +35,26 @@ afterEach(() => {
 });
 
 describe("Stage network client", () => {
+  test("fails closed for an unverified curated offline package", async () => {
+    const card = await verifyOfflinePackage({
+      projectionId: "projection_unsigned",
+      status: "PUBLISHED",
+      mode: "CURATED",
+      leaseExpiresAtMs: null,
+      offlinePackage: {
+        offlineDisplayAllowed: true,
+        localExpiresAtMs: Date.now() + 60_000,
+        signature: "not-a-valid-signature",
+        signatureVerified: false,
+      },
+      claim: "Unsigned claim",
+      supportSummary: "Must not persist",
+      sourceLabel: "Public source",
+      publicCardRevision: "pcr_1",
+    });
+    expect(card.offlinePackage?.signatureVerified).toBe(false);
+  });
+
   test("subscribes to exact playback/card events before sending an applied receipt", async () => {
     const source = new FakeEventSource();
     const recoveredSource = new FakeEventSource();
