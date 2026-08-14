@@ -5,7 +5,10 @@ import { extname, join, resolve } from "node:path";
 import { type BrowserContext, chromium, type Page } from "playwright-core";
 import { createServer as createViteServer, preview } from "vite";
 
-import { waitForFirstServiceWorkerActivation } from "./service-worker-activation.ts";
+import {
+  waitForFirstServiceWorkerActivation,
+  waitForInstalledServiceWorkerUpdate,
+} from "./service-worker-activation.ts";
 
 const chromeExecutable = "C:/Program Files/Google/Chrome/Application/chrome.exe";
 const chromeHeadless = process.env.BROWSER_HEADED !== "true";
@@ -253,44 +256,7 @@ async function installOfflineShell(context: BrowserContext, surface: AppSurface)
 }
 
 async function waitForWaitingUpdate(page: Page) {
-  return page.evaluate(async () => {
-    const registration = await navigator.serviceWorker.getRegistration();
-    if (!registration) {
-      throw new Error("Lifecycle test has no service worker registration");
-    }
-
-    return new Promise<{ state: ServiceWorkerState; waiting: boolean }>((resolveUpdate, reject) => {
-      const timeout = window.setTimeout(
-        () => reject(new Error("Waiting service worker installation timed out")),
-        10_000,
-      );
-      const observeInstalling = () => {
-        const worker = registration.installing;
-        if (!worker) {
-          return;
-        }
-        const inspect = () => {
-          if (worker.state === "installed") {
-            window.clearTimeout(timeout);
-            worker.removeEventListener("statechange", inspect);
-            resolveUpdate({ state: worker.state, waiting: registration.waiting === worker });
-          } else if (worker.state === "redundant") {
-            window.clearTimeout(timeout);
-            worker.removeEventListener("statechange", inspect);
-            reject(new Error("Lifecycle update became redundant"));
-          }
-        };
-        worker.addEventListener("statechange", inspect);
-        inspect();
-      };
-
-      registration.addEventListener("updatefound", observeInstalling, { once: true });
-      void registration.update().catch((error: unknown) => {
-        window.clearTimeout(timeout);
-        reject(error);
-      });
-    });
-  });
+  return page.evaluate(waitForInstalledServiceWorkerUpdate, { timeoutMs: 10_000 });
 }
 
 async function dispatchActivationAndWait(page: Page, eventName: string) {
