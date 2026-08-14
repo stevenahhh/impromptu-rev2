@@ -144,6 +144,8 @@ export class InternalRetrievalService {
           object.sourceHash !== candidate.indexedSourceHash ||
           object.deckVersion !== request.data.deckVersion ||
           object.manifestHash !== request.data.manifestHash ||
+          object.rights !== "APPROVED" ||
+          object.containsPii ||
           !(await this.#policy.authorizeObject(principal, object, snapshot.version))
         )
           continue;
@@ -182,7 +184,11 @@ export class InternalRetrievalService {
       ) {
         return { outcome: "DENIED", reason: "STALE_SOURCE" };
       }
-      if (!(await this.#policy.authorizeObject(principal, current, authorizationVersion))) {
+      if (
+        current.rights !== "APPROVED" ||
+        current.containsPii ||
+        !(await this.#policy.authorizeObject(principal, current, authorizationVersion))
+      ) {
         return { outcome: "DENIED", reason: "UNAUTHORIZED" };
       }
       const content = await this.#objects.readContent(principal.tenantId, object.objectId);
@@ -227,6 +233,8 @@ export class InternalRetrievalService {
         current.sourceRevision === evidence.sourceRevision &&
         current.deckVersion === evidence.deckVersion &&
         current.manifestHash === evidence.manifestHash &&
+        current.rights === "APPROVED" &&
+        !current.containsPii &&
         (await this.#policy.isCurrent(
           reference.principal.tenantId,
           reference.authorizationVersion,

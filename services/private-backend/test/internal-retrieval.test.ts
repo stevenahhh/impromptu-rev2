@@ -163,6 +163,34 @@ describe("ACL-first internal retrieval", () => {
     });
   });
 
+  test("denies publication when current metadata gains PII or loses approved rights", async () => {
+    const rights = fixture();
+    const rightsReference = required((await rights.service.retrieve("session-a", request))[0]);
+    const rightsEvidence = await rights.service.materialize(rightsReference);
+    if (rightsEvidence.outcome !== "MATERIALIZED") throw new Error("expected evidence");
+    rights.updateMetadata({ rights: "UNKNOWN" });
+    expect(
+      await rights.service.authorizeForPublication(rightsReference, rightsEvidence.evidence),
+    ).toBe(false);
+    expect(await rights.service.materialize(rightsReference)).toEqual({
+      outcome: "DENIED",
+      reason: "UNAUTHORIZED",
+    });
+
+    const pii = fixture();
+    const piiReference = required((await pii.service.retrieve("session-a", request))[0]);
+    const piiEvidence = await pii.service.materialize(piiReference);
+    if (piiEvidence.outcome !== "MATERIALIZED") throw new Error("expected evidence");
+    pii.updateMetadata({ containsPii: true });
+    expect(await pii.service.authorizeForPublication(piiReference, piiEvidence.evidence)).toBe(
+      false,
+    );
+    expect(await pii.service.materialize(piiReference)).toEqual({
+      outcome: "DENIED",
+      reason: "UNAUTHORIZED",
+    });
+  });
+
   test("denies stale deck metadata, source metadata, and content hash", async () => {
     const staleDeck = fixture();
     const deckRef = required((await staleDeck.service.retrieve("session-a", request))[0]);
