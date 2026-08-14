@@ -42,6 +42,7 @@
       "name": "@impromptu/stage",
       "version": "0.0.0",
       "dependencies": {
+        "@impromptu/state": "workspace:*",
         "@impromptu/ui": "workspace:*",
         "react": "19.1.1",
         "react-dom": "19.1.1",
