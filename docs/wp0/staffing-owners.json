@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "status": "BLOCKED",
+  "asOf": "2026-08-14",
+  "statement": "No named staffing owner has been supplied or accepted responsibility yet.",
+  "roles": [
+    {
+      "role": "product_owner",
+      "assignee": "UNASSIGNED",
+      "requiredBefore": "provisional live gates can be approved"
+    },
+    {
+      "role": "engineering_owner",
+      "assignee": "UNASSIGNED",
+      "requiredBefore": "WP1 integration can be accepted"
+    },
+    {
+      "role": "evaluation_owner",
+      "assignee": "UNASSIGNED",
+      "requiredBefore": "a holdout can be frozen or unblinded"
+    },
+    {
+      "role": "privacy_reviewer",
+      "assignee": "UNASSIGNED",
+      "requiredBefore": "audio capture or a vendor account can process participant data"
+    },
+    {
+      "role": "operations_owner",
+      "assignee": "UNASSIGNED",
+      "requiredBefore": "venue rehearsal or vendor prewarm can be signed off"
+    },
+    {
+      "role": "corpus_custodian",
+      "assignee": "UNASSIGNED",
+      "requiredBefore": "holdout collection, hashing, access control, and exposure records begin"
+    }
+  ],
+  "gate": {
+    "state": "BLOCKED",
+    "unblockWhen": [
+      "Each required role has a named human assignee and recorded acceptance.",
+      "Product owner separately approves the provisional thresholds before evaluation.",
+      "Evaluation owner and corpus custodian approve the disjointness and exposure protocol before collection."
+    ],
+    "evidenceRequired": [
+      "approval date",
+      "approver identity",
+      "approved document revision or SHA-256",
+      "role acceptance record"
+    ]
+  }
+}

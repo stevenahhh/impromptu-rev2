@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "manifestId": "impromptu-r2-korean-claims-v1",
+  "collectionState": "NOT_COLLECTED",
+  "gateState": "BLOCKED",
+  "artifactPath": null,
+  "sha256": null,
+  "recordCount": 0,
+  "language": "ko-KR",
+  "purpose": "Development and provider bake-off corpus; never the frozen acceptance holdout.",
+  "collectionContract": {
+    "requiredClaimClasses": [
+      "supportable",
+      "conflicting",
+      "not_enough_evidence",
+      "intentionally_unanswerable",
+      "numeric_date_entity_critical"
+    ],
+    "requiredRecordFields": [
+      "claim_id",
+      "claim_text_ko",
+      "paraphrase_family_id",
+      "source_id",
+      "source_revision",
+      "deck_fixture_id",
+      "speaker_id",
+      "recording_id",
+      "rights_record_id",
+      "expert_label"
+    ],
+    "audioRequirements": [
+      "expert-annotated semantic acoustic endpoint",
+      "immutable speaker and recording identifiers",
+      "capture conditions and microphone profile",
+      "no participant audio without notice, consent, retention, and deletion approval"
+    ],
+    "separation": "All claim, paraphrase, source revision, deck instance, speaker recording, and audio files must be disjoint from the acceptance holdout."
+  },
+  "approvalContract": {
+    "requiredRoles": ["evaluation_owner", "privacy_reviewer", "corpus_custodian"],
+    "approvers": {
+      "evaluation_owner": "UNASSIGNED",
+      "privacy_reviewer": "UNASSIGNED",
+      "corpus_custodian": "UNASSIGNED"
+    },
+    "approvalEvidence": null
+  },
+  "blockingReasons": [
+    "No Korean claim or audio records have been collected.",
+    "Rights, privacy, and evaluation owners are not assigned.",
+    "No canonical artifact or SHA-256 exists."
+  ]
+}

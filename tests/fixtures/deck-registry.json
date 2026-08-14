@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "registryId": "impromptu-r2-representative-decks-v1",
+  "collectionState": "NOT_COLLECTED",
+  "gateState": "BLOCKED",
+  "fixtures": [
+    {
+      "id": "ko-font-layout",
+      "kind": "korean_font_and_layout",
+      "state": "NOT_COLLECTED",
+      "path": null,
+      "sha256": null,
+      "rightsState": "NOT_APPROVED",
+      "acceptanceContract": [
+        "Korean font substitution and line wrapping are reviewable",
+        "stable slide identity can be derived",
+        "private notes are separately identifiable"
+      ]
+    },
+    {
+      "id": "ko-chart-table",
+      "kind": "chart_and_table",
+      "state": "NOT_COLLECTED",
+      "path": null,
+      "sha256": null,
+      "rightsState": "NOT_APPROVED",
+      "acceptanceContract": [
+        "chart labels, legends, units, and table cells are represented",
+        "render fidelity can be compared against an approved reference",
+        "claim anchors can identify source slide regions"
+      ]
+    },
+    {
+      "id": "ko-image-scanned",
+      "kind": "image_and_scanned",
+      "state": "NOT_COLLECTED",
+      "path": null,
+      "sha256": null,
+      "rightsState": "NOT_APPROVED",
+      "acceptanceContract": [
+        "image-heavy and scanned slides exercise selective OCR/VLM fallback",
+        "unsupported extraction produces an explicit warning",
+        "published artifacts contain zero private-note bytes"
+      ]
+    }
+  ],
+  "collectionContract": {
+    "allowedFormats": ["pptx", "pdf"],
+    "requiredPerFixture": [
+      "source provenance",
+      "rights approval",
+      "SHA-256",
+      "canonical filename",
+      "approved render-reference hash",
+      "private-note expectation"
+    ],
+    "storageRule": "Deck binaries remain ignored local uploads until rights approval; approved test fixtures are added explicitly in a reviewed commit."
+  },
+  "approvalContract": {
+    "requiredRoles": ["product_owner", "evaluation_owner", "privacy_reviewer"],
+    "approvers": {
+      "product_owner": "UNASSIGNED",
+      "evaluation_owner": "UNASSIGNED",
+      "privacy_reviewer": "UNASSIGNED"
+    },
+    "approvalEvidence": null
+  },
+  "blockingReasons": [
+    "No representative deck binaries or reference renders have been collected.",
+    "No rights approval or hashes exist.",
+    "Required approvers are UNASSIGNED."
+  ]
+}

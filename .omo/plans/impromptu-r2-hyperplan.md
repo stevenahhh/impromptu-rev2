@@ -1,24 +1,32 @@
+---
+plan_id: impromptu-r2-hyperplan
+approval_state: APPROVED
+execution_state: IN_PROGRESS
+repository_state: INITIALIZED
+---
+
 # impromptu-r2 구현 Hyperplan
 
 ## 0. 계획 상태
 
 - **계획 유형:** Greenfield guarded-pilot 구현 계획
-- **현재 상태:** 구현 전 사용자 승인 대기
+- **현재 상태:** 2026-08-14 실행 승인 후 진행 중. WP0 저장소 기반은 생성되었고 독립 worktree에서 후속 기반 작업이 진행 중이다.
 - **프로젝트 이름:** `impromptu-r2`
 - **근거:** `docs/신청서.pdf`, `docs/PWA-구현-최적화-연구보고서.md`, `.omo/ulw-research/20260814-040838/`, `.omo/hyperplan/pwa-presentation-debate.md`
 - **제품 완료 조건:** Windows 확장·복제 환경 모두에서 별도 private controller 기기가 Public Stage를 제어하고, pre-approved evidence와 supervised live evidence를 공개·철회하며, Stage에 private data path가 관찰되거나 provision되지 않는다.
 - **인력·기간:** 5 core FTE + part-time privacy/ops 기준 13~16주. 3 generalist이면 20~26주 또는 live-public AI와 자동 배치를 명시적으로 제거한다.
-- **저장소 상태:** 현재 Git 저장소가 아니므로 구현 시작 전 `git init`과 프로젝트 `.gitignore`가 WP0의 첫 blocking increment다.
+- **저장소 상태:** Git 저장소와 project policy skeleton이 commit `31ec229`에서 초기화되었다. 현재 작업은 topic branch/worktree에서 수행하고 integration owner가 검증 후 통합한다.
+- **WP0 증거 상태:** `BLOCKED`. 계획 실행 승인은 제품 오너의 평가 threshold 승인, staffing 수락, vendor/privacy 승인 또는 holdout 통과를 뜻하지 않는다.
 
-### 구현 시작 승인 경계
+### 구현 시작 승인 기록
 
-이 문서는 계획 산출물이며 아직 구현을 시작하지 않는다. 사용자가 이 plan을 승인하거나 `start work`/`계획 실행`을 명시하면 다음 순서로 시작한다.
+사용자가 이 plan의 실행을 명시했고 다음 시작 경계는 완료되었다.
 
-1. `git init`과 `.gitignore`를 만들고 검증한다.
-2. `chore(repo): initialize impromptu-r2 workspace`로 첫 local atomic commit을 만든다.
-3. 이후 WP0부터 dependency 순서대로 실행하며 모든 green increment를 local atomic commit으로 남긴다.
+1. `git init`과 `.gitignore` 생성 및 검증.
+2. `chore(repo): initialize impromptu-r2 workspace` local atomic commit (`31ec229`).
+3. 독립 topic branch/worktree에서 WP0 이후 dependency 작업 시작.
 
-승인 전에는 Git 초기화, dependency 설치, application scaffold, provider account 설정을 수행하지 않는다.
+Provider account 설정, 대표 deck/corpus 수집, holdout freezing/unblinding과 provisional live gate 승인은 아직 수행되지 않았다. 해당 작업은 아래 WP0 blocking evidence contract를 만족하기 전까지 통과로 주장하지 않는다.
 
 ## 1. 잠긴 결정
 
@@ -265,6 +273,18 @@ docs(plan): define server-only AI boundary
 - false-SUPPORT one-sided 95% upper bound <1%
 - 이 gate의 최소 대표 non-supportable zero-escape 표본은 299건
   - numeric/date/entity critical error 0
+
+**현재 WP0 evidence readiness (2026-08-14)**
+
+| Evidence | Record | Truthful state | Blocking condition |
+|---|---|---|---|
+| Staffing owners | `docs/wp0/staffing-owners.json` | `BLOCKED`; all required owners `UNASSIGNED` | named assignees must accept each role; product owner must separately approve provisional thresholds |
+| Vendor account/prewarm | `docs/runbooks/vendor-prewarm.md` | account `NOT_PROVISIONED`; evidence `NOT_COLLECTED` | privacy/vendor/account/region/retention/deletion approval and pinned-release prewarm evidence |
+| Frozen holdout | `tests/corpus/holdout-manifest.json` | corpus `NOT_COLLECTED`; `frozen: false`; gate `BLOCKED` | collect disjoint records, canonicalize/hash, assign approvers, approve protocol before unblinding |
+| Korean claim corpus | `tests/corpus/korean-claims.manifest.json` | `NOT_COLLECTED`; gate `BLOCKED` | rights/privacy review, exact record contract, canonical artifact and hash |
+| Representative decks | `tests/fixtures/deck-registry.json` | three required fixtures `NOT_COLLECTED`; rights `NOT_APPROVED` | collect Korean font/layout, chart/table, image/scanned fixtures with provenance, rights and hashes |
+
+Repository verification checks both the explicit missing states and their collection/approval contracts. It does **not** interpret these manifests as a passed WP0 product/evaluation gate. WP1 may only consume approved WP0 assumptions; live-public evaluation and any holdout claim remain blocked until the records transition with real evidence.
 
 ### WP1 — Contract와 fault harness
 

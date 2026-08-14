@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "manifestId": "impromptu-r2-korean-holdout-v1",
+  "protocolStatus": "DRAFT_BLOCKED",
+  "corpusState": "NOT_COLLECTED",
+  "gateState": "BLOCKED",
+  "frozen": false,
+  "artifactPath": null,
+  "sha256": null,
+  "recordCount": 0,
+  "language": "ko-KR",
+  "samplingContract": {
+    "minimumRepresentativeNonSupportable": 299,
+    "requiredCriticalErrors": 0,
+    "falseSupportRule": "With zero false-SUPPORT events, one-sided 95% Clopper-Pearson upper bound 1 - 0.05^(1/n) must be below 0.01.",
+    "requiredStrata": [
+      "supportable_fetchable",
+      "answerable",
+      "intentionally_unanswerable",
+      "non_supportable",
+      "numeric_date_entity_critical"
+    ],
+    "requiredRecordFields": [
+      "claim_id",
+      "claim_text_ko",
+      "claim_class",
+      "paraphrase_family_id",
+      "source_id",
+      "source_revision",
+      "deck_instance_id",
+      "speaker_recording_id",
+      "semantic_endpoint_labels",
+      "expert_label",
+      "network_profile",
+      "cache_profile"
+    ]
+  },
+  "disjointnessContract": {
+    "separateFrom": ["development", "provider_bakeoff", "adversarial_security"],
+    "disjointBy": [
+      "claim_id",
+      "paraphrase_family_id",
+      "source_id_and_revision",
+      "deck_instance_id",
+      "speaker_recording_id"
+    ]
+  },
+  "freezeContract": {
+    "hashAlgorithm": "sha256",
+    "canonicalization": "UTF-8 JSONL, LF endings, records sorted by claim_id, object keys lexicographically sorted",
+    "requiredApprovals": ["product_owner", "evaluation_owner", "corpus_custodian"],
+    "approvers": {
+      "product_owner": "UNASSIGNED",
+      "evaluation_owner": "UNASSIGNED",
+      "corpus_custodian": "UNASSIGNED"
+    },
+    "approvalEvidence": null,
+    "unblindOnlyAfter": "protocol hash, corpus hash, evaluator rubric/version, formulas, exclusions, and failure treatment are approved and timestamped"
+  },
+  "exposureProtocol": {
+    "onExposureOrFailedAcceptance": [
+      "mark the corpus EXPOSED and preserve the failed result",
+      "remove it permanently from acceptance use",
+      "collect a new corpus disjoint under every disjointness key",
+      "assign a new manifest ID and hash",
+      "repeat approval before unblinding"
+    ],
+    "exposureLog": []
+  },
+  "blockingReasons": [
+    "Corpus records have not been collected.",
+    "Representative decks and speaker recordings have not been collected.",
+    "Staffing owners and protocol approvers are UNASSIGNED.",
+    "No corpus hash or approval evidence exists."
+  ]
+}
