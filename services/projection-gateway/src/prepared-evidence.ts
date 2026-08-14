@@ -85,7 +85,12 @@ export interface AudienceProjectionSnapshot {
   readonly tombstoneRetentionMs: number;
 }
 
-type JoinState = { readonly locator: DisplayJoinLocator; consumed: boolean };
+type JoinState = {
+  readonly locator: DisplayJoinLocator;
+  consumed: boolean;
+  claimed: boolean;
+  audienceDisplaySessionId: string | null;
+};
 type ProjectionState = {
   binding: DisplayBindingRecord;
   displaySession: AudienceDisplaySessionRecord;
@@ -187,7 +192,12 @@ export class PreparedEvidenceProjectionGateway {
       displayFingerprint: input.displayFingerprint,
       expiresAtMs: nowMs + this.#joinTtlMs,
     };
-    this.#store.joins.set(locator.displayJoinId, { locator, consumed: false });
+    this.#store.joins.set(locator.displayJoinId, {
+      locator,
+      consumed: false,
+      claimed: false,
+      audienceDisplaySessionId: null,
+    });
     return locator;
   }
 
@@ -244,6 +254,7 @@ export class PreparedEvidenceProjectionGateway {
       binding,
       expiresAtMs: nowMs + this.#displaySessionTtlMs,
     };
+    join.audienceDisplaySessionId = session.audienceDisplaySessionId;
     const initialSlide = input.deck.slides[0];
     if (initialSlide === undefined) throw new Error("published deck must contain a slide");
     this.#closeSockets(input.presentationSessionId, "REBOUND");
@@ -262,6 +273,34 @@ export class PreparedEvidenceProjectionGateway {
       tombstones: current?.tombstones ?? new Map(),
     });
     return { outcome: "BOUND", session };
+  }
+
+  claimDisplaySession(
+    input: {
+      readonly displayJoinId: string;
+      readonly displayId: string;
+      readonly displayFingerprint: string;
+    },
+    nowMs: number,
+  ): AudienceDisplaySessionRecord | null {
+    const join = this.#store.joins.get(input.displayJoinId);
+    if (
+      join === undefined ||
+      !join.consumed ||
+      join.claimed ||
+      join.audienceDisplaySessionId === null ||
+      join.locator.displayId !== input.displayId ||
+      join.locator.displayFingerprint !== input.displayFingerprint
+    ) {
+      return null;
+    }
+    const projection = Array.from(this.#store.projections.values()).find(
+      (candidate) =>
+        candidate.displaySession.audienceDisplaySessionId === join.audienceDisplaySessionId,
+    );
+    if (projection === undefined || nowMs >= projection.displaySession.expiresAtMs) return null;
+    join.claimed = true;
+    return projection.displaySession;
   }
 
   connectStage(

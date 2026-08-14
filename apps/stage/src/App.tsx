@@ -1,6 +1,12 @@
 import { Badge, Brand, Button, Panel, Shell, StatusDot } from "@impromptu/ui";
-import { useEffect, useId, useState } from "react";
-import { Link, Navigate, Route, Routes } from "react-router-dom";
+import { useEffect, useId, useMemo, useState } from "react";
+import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import {
+  createStageSessionClient,
+  type DisplayJoinView,
+  type StageSessionClient,
+  type StageSnapshotView,
+} from "./stage-client";
 
 function StageHeader() {
   return (
@@ -14,8 +20,46 @@ function StageHeader() {
   );
 }
 
-function LandingPage() {
+function LandingPage({ client }: { readonly client: StageSessionClient }) {
   const titleId = useId();
+  const navigate = useNavigate();
+  const identity = useMemo(
+    () => ({
+      displayId: `display_${crypto.randomUUID().replaceAll("-", "")}`,
+      displayFingerprint: `stage-browser-${crypto.randomUUID()}`,
+    }),
+    [],
+  );
+  const [join, setJoin] = useState<DisplayJoinView | null>(null);
+  const [message, setMessage] = useState("Creating a short-lived display code...");
+
+  useEffect(() => {
+    let active = true;
+    void client
+      .createJoin(identity, "deck_alpha")
+      .then((created) => {
+        if (active) {
+          setJoin(created);
+          setMessage("Waiting for an authenticated controller to approve this display.");
+        }
+      })
+      .catch((error: unknown) => {
+        if (active) setMessage(error instanceof Error ? error.message : "Display join failed.");
+      });
+    return () => {
+      active = false;
+    };
+  }, [client, identity]);
+
+  const claim = async () => {
+    if (join === null) return;
+    try {
+      await client.claim(join);
+      navigate(`/display/${identity.displayId}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Display approval failed.");
+    }
+  };
 
   return (
     <Shell className="stage-shell" focused header={<StageHeader />}>
@@ -28,18 +72,17 @@ function LandingPage() {
         </p>
         <Panel className="stage-join" tone="inset">
           <div>
-            <p className="ui-eyebrow">Preview display code</p>
+            <p className="ui-eyebrow">Display join code</p>
             <p className="stage-code">
-              <span aria-hidden="true">7K4Q</span>
-              <span className="ui-sr-only">Display code 7 K 4 Q</span>
+              {join === null ? "----" : join.displayJoinId.slice(-8).toUpperCase()}
             </p>
           </div>
-          <Link className="ui-button ui-button--primary" to="/display/rehearsal">
-            Open display preview
-          </Link>
+          <Button disabled={join === null} onClick={() => void claim()}>
+            Continue after approval
+          </Button>
         </Panel>
-        <p className="stage-note">
-          A future controller may approve this display code. It grants no access by itself.
+        <p className="stage-note" aria-live="polite">
+          {message} The code grants no controller access by itself.
         </p>
       </section>
     </Shell>
@@ -98,9 +141,25 @@ function useStageFullscreen() {
   return { ...state, toggle };
 }
 
-function DisplayPage() {
+function DisplayPage({ client }: { readonly client: StageSessionClient }) {
   const titleId = useId();
   const fullscreen = useStageFullscreen();
+  const [snapshot, setSnapshot] = useState<StageSnapshotView | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void client
+      .snapshot()
+      .then((next) => {
+        if (active) setSnapshot(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [client]);
+
+  const card = snapshot?.cards[0];
 
   return (
     <div className="stage-display">
@@ -128,12 +187,12 @@ function DisplayPage() {
         <Panel className="stage-evidence ui-reveal ui-reveal--2">
           <Badge tone="accent">Pre-approved</Badge>
           <blockquote>
-            Supporting material stays legible at distance, cites its origin, and never reveals the
-            presenter&apos;s private workspace.
+            {card?.claim ??
+              "Supporting material stays legible at distance, cites its origin, and never reveals the presenter's private workspace."}
           </blockquote>
           <footer>
-            <span>Impromptu demo principle</span>
-            <span>Prepared for rehearsal</span>
+            <span>{card?.sourceLabel ?? "Impromptu demo principle"}</span>
+            <span>{card?.supportSummary ?? "Prepared for rehearsal"}</span>
           </footer>
         </Panel>
       </main>
@@ -144,11 +203,12 @@ function DisplayPage() {
   );
 }
 
-export function StageRoutes() {
+export function StageRoutes({ client }: { readonly client?: StageSessionClient }) {
+  const sessionClient = useMemo(() => client ?? createStageSessionClient(), [client]);
   return (
     <Routes>
-      <Route index element={<LandingPage />} />
-      <Route path="/display/:displayId" element={<DisplayPage />} />
+      <Route index element={<LandingPage client={sessionClient} />} />
+      <Route path="/display/:displayId" element={<DisplayPage client={sessionClient} />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
