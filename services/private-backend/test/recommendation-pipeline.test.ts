@@ -243,6 +243,31 @@ describe("private recommendation verifier", () => {
     expect(
       reconcileEvidence(
         {
+          claim: "Globex shipped 1200 kg on 2025-03-04.",
+          evidenceIds: [evidenceId],
+          facts: {
+            numbers: ["1200", "2025", "03", "04"],
+            units: ["kg"],
+            dates: ["2025-03-04"],
+            entities: [],
+          },
+        },
+        [evidence],
+      ),
+    ).toMatchObject({ outcome: "MISMATCH", category: "ENTITY" });
+    expect(
+      reconcileEvidence(
+        {
+          claim: "Globex revenue was 42 USD",
+          evidenceIds: [evidenceId],
+          facts: { numbers: ["42"], units: ["USD"], dates: [], entities: [] },
+        },
+        [{ ...evidence, content: "Acme revenue was 42 USD" }],
+      ),
+    ).toMatchObject({ outcome: "MISMATCH", category: "ENTITY" });
+    expect(
+      reconcileEvidence(
+        {
           claim: "Other shipped 1200 kg on 2025-03-04.",
           evidenceIds: [evidenceId],
           facts: {

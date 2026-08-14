@@ -49,13 +49,16 @@ export function reconcileEvidence(
     ["NUMBER", claimFacts.numbers] as const,
     ["UNIT", claimFacts.units] as const,
     ["DATE", claimFacts.dates] as const,
+    ["ENTITY", claimFacts.entities] as const,
   ]) {
     const declaredValues =
       category === "NUMBER"
         ? declared.numbers
         : category === "UNIT"
           ? declared.units
-          : declared.dates;
+          : category === "DATE"
+            ? declared.dates
+            : declared.entities;
     for (const value of values) {
       if (!declaredValues.includes(value)) return { outcome: "MISMATCH", category, value };
     }
@@ -72,8 +75,12 @@ export function reconcileEvidence(
   }
   const foldedClaim = fold(recommendation.claim);
   const foldedEvidence = fold(evidenceText);
-  for (const entity of declared.entities) {
-    if (!foldedClaim.includes(entity) || !foldedEvidence.includes(entity)) {
+  for (const entity of unique([...claimFacts.entities, ...declared.entities])) {
+    if (
+      !foldedClaim.includes(entity) ||
+      !foldedEvidence.includes(entity) ||
+      !evidenceFacts.entities.includes(entity)
+    ) {
       return { outcome: "MISMATCH", category: "ENTITY", value: entity };
     }
   }
@@ -98,7 +105,16 @@ export function extractFacts(text: string): EvidenceFactSet {
       ),
     ].map((match) => normalizeUnit(match[0])),
   );
-  return { numbers, units, dates, entities: [] };
+  const entities = unique(
+    [
+      ...text.matchAll(
+        /(?<![\p{L}\p{N}])\p{Lu}[\p{L}\p{N}&.'’-]*(?:\s+\p{Lu}[\p{L}\p{N}&.'’-]*)*/gu,
+      ),
+    ]
+      .map((match) => fold(match[0]))
+      .filter((entity) => entity.length > 1 && UNIT_ALIASES[entity] === undefined),
+  );
+  return { numbers, units, dates, entities };
 }
 
 function normalizeFacts(facts: EvidenceFactSet): EvidenceFactSet {
