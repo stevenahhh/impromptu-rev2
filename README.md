@@ -38,13 +38,15 @@ bun run check
 
 Python services are added in their own verified increment and use `uv sync`.
 
-Run the disposable PostgreSQL migration and role-isolation harness with Docker:
+Run the disposable PostgreSQL migration and role-isolation harnesses with Docker:
 
 ```bash
 bun run test:db
+bun run test:db:harness
+bun run test:db:concurrent
 ```
 
-See [`infra/database/README.md`](infra/database/README.md) for its role and migration contract.
+See [`infra/database/README.md`](infra/database/README.md) for the database split, outbox consequence, role boundary, migration ledger, and teardown contract.
 
 ## Work plan
 
