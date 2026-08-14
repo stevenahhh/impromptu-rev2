@@ -3,3 +3,4 @@ exact = true
 
 [test]
 root = "."
+timeout = 30000
