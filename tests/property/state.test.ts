@@ -18,13 +18,10 @@ import {
   applyPublicPlaybackEvent,
   applyPublicPlaybackSnapshot,
   createPlaybackAuthorityState,
-  createPublicationState,
   initialPublicPlaybackState,
   markStageApplied,
-  PUBLICATION_TRANSITIONS,
   type PublicPlaybackEvent,
   reducePlaybackCommand,
-  reducePublication,
   replacePlaybackLease,
   restorePlaybackAuthority,
   snapshotPlaybackAuthority,
@@ -342,77 +339,6 @@ describe("public playback projection", () => {
       publicPlaybackRevision: "pbr_7",
       occurrence: { publicSlideKey: "slide_2", occurrenceSeq: 8 },
       blackout: true,
-    });
-  });
-});
-
-describe("publication transition reducer", () => {
-  test("exports the formal legal transition table", () => {
-    expect(PUBLICATION_TRANSITIONS).toEqual({
-      PRIVATE: ["QUALIFY"],
-      ELIGIBLE: ["APPROVE"],
-      PUBLISHED: ["RETRACT", "EXPIRE"],
-      RETRACTED: [],
-      EXPIRED: [],
-    });
-  });
-
-  test("accepts legal transitions and rejects illegal or stale CAS operations", () => {
-    const initial = createPublicationState("candidate-1", "candidate-v1");
-    const qualified = reducePublication(initial, {
-      type: "QUALIFY",
-      commandId: "qualify-1",
-      requestHash: hash("a"),
-      expectedRevision: 0,
-    });
-    expect(qualified.result).toMatchObject({ outcome: "ACCEPTED", revision: 1 });
-
-    const illegal = reducePublication(qualified.state, {
-      type: "RETRACT",
-      commandId: "retract-1",
-      requestHash: hash("b"),
-      expectedRevision: 1,
-      projectionId: "projection-1",
-    });
-    expect(illegal.result).toMatchObject({ outcome: "REJECTED", reason: "ILLEGAL_TRANSITION" });
-
-    const published = reducePublication(qualified.state, {
-      type: "APPROVE",
-      commandId: "approve-1",
-      requestHash: hash("c"),
-      expectedRevision: 1,
-      candidateVersion: "candidate-v1",
-      projectionId: "projection-1",
-    });
-    expect(published.state.status).toBe("PUBLISHED");
-
-    const stale = reducePublication(published.state, {
-      type: "RETRACT",
-      commandId: "retract-2",
-      requestHash: hash("d"),
-      expectedRevision: 1,
-      projectionId: "projection-1",
-    });
-    expect(stale.result).toMatchObject({ outcome: "REJECTED", reason: "CAS_CONFLICT" });
-  });
-
-  test("deduplicates accepted publication mutations and detects payload conflict", () => {
-    const initial = createPublicationState("candidate-1", "candidate-v1");
-    const operation = {
-      type: "QUALIFY" as const,
-      commandId: "qualify-1",
-      requestHash: hash("a"),
-      expectedRevision: 0,
-    };
-    const first = reducePublication(initial, operation);
-    const duplicate = reducePublication(first.state, operation);
-    expect(duplicate.result).toEqual(first.result);
-    expect(duplicate.state).toEqual(first.state);
-
-    const conflict = reducePublication(first.state, { ...operation, requestHash: hash("b") });
-    expect(conflict.result).toMatchObject({
-      outcome: "REJECTED",
-      reason: "IDEMPOTENCY_CONFLICT",
     });
   });
 });

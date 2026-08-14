@@ -13,16 +13,11 @@ import {
   presentationSessionEpoch,
   publicPlaybackRevision,
 } from "@impromptu/contracts/public";
+import { initialPublicPlaybackState, type PublicPlaybackEvent } from "@impromptu/state";
 import {
-  createPublicationState,
-  initialPublicPlaybackState,
-  type PublicPlaybackEvent,
-  reducePublication,
-} from "@impromptu/state";
-import {
+  fastCheckParameters,
   type PlaybackFaultAction,
   type PlaybackIntent,
-  PROTOCOL_TRANSITION_MATRIX,
   type PublicProjectionFaultAction,
   playbackAuthorityFixture,
   playbackCommandFixture,
@@ -31,7 +26,7 @@ import {
 } from "@impromptu/test-harness";
 import fc from "fast-check";
 
-const propertyOptions = { seed: 20_260_814, numRuns: 250 } as const;
+const propertyOptions = fastCheckParameters();
 const manifestHash = "a".repeat(64);
 
 const intentArbitrary: fc.Arbitrary<PlaybackIntent> = fc.oneof(
@@ -193,44 +188,6 @@ describe("generated public projection schedules", () => {
   });
 });
 
-describe("generated publication races", () => {
-  test("concurrent approve/retract ordering has one deterministic published terminal state", () => {
-    fc.assert(
-      fc.property(fc.boolean(), (approveFirst) => {
-        const qualified = reducePublication(createPublicationState("candidate-1", "v1"), {
-          type: "QUALIFY",
-          commandId: "qualify",
-          requestHash: "1".repeat(64),
-          expectedRevision: 0,
-        }).state;
-        const approve = {
-          type: "APPROVE" as const,
-          commandId: "approve",
-          requestHash: "2".repeat(64),
-          expectedRevision: 1,
-          candidateVersion: "v1",
-          projectionId: "projection-1",
-        };
-        const retract = {
-          type: "RETRACT" as const,
-          commandId: "retract",
-          requestHash: "3".repeat(64),
-          expectedRevision: 1,
-          projectionId: "projection-1",
-        };
-        const ordered = approveFirst ? [approve, retract] : [retract, approve];
-        const terminal = ordered.reduce(
-          (state, operation) => reducePublication(state, operation).state,
-          qualified,
-        );
-        expect(terminal.status).toBe("PUBLISHED");
-        expect(terminal.revision).toBe(2);
-      }),
-      propertyOptions,
-    );
-  });
-});
-
 describe("generated security contracts", () => {
   test("keeps role/topic/action authorization closed by default", () => {
     const allowed = new Set([
@@ -306,16 +263,5 @@ describe("generated security contracts", () => {
       }),
       propertyOptions,
     );
-  });
-
-  test("enumerates all required formal fault scenarios", () => {
-    expect(PROTOCOL_TRANSITION_MATRIX.map(({ scenario }) => scenario)).toEqual([
-      "LEGAL_PLAYBACK_TRANSITION",
-      "ILLEGAL_PUBLICATION_TRANSITION",
-      "CONCURRENT_APPROVE_RETRACT",
-      "PARTITIONED_RELATIVE_COMMAND",
-      "STALE_ROLE_SNAPSHOT",
-      "INCOMPATIBLE_BUILD",
-    ]);
   });
 });

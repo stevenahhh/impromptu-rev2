@@ -121,12 +121,18 @@ export function applyPublicPlaybackSnapshot(
   ) {
     return { state, outcome: "STALE_CAUSAL_ENVELOPE" };
   }
-  if (
-    snapshot.presentationSessionEpoch === state.presentationSessionEpoch &&
-    publicPlaybackRevisionValue(snapshot.publicPlaybackRevision) <
-      publicPlaybackRevisionValue(state.publicPlaybackRevision)
-  ) {
-    return { state, outcome: "STALE_SNAPSHOT" };
+  if (snapshot.presentationSessionEpoch === state.presentationSessionEpoch) {
+    const snapshotRevision = publicPlaybackRevisionValue(snapshot.publicPlaybackRevision);
+    const currentRevision = publicPlaybackRevisionValue(state.publicPlaybackRevision);
+    if (snapshotRevision < currentRevision) {
+      return { state, outcome: "STALE_SNAPSHOT" };
+    }
+    if (snapshotRevision === currentRevision) {
+      return {
+        state,
+        outcome: sameVisibleState(state, snapshot) ? "DUPLICATE" : "STALE_OR_CONFLICTING",
+      };
+    }
   }
   return { state: structuredClone(snapshot), outcome: "APPLIED" };
 }

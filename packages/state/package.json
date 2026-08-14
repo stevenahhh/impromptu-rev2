@@ -5,6 +5,7 @@
   "type": "module",
   "exports": "./src/index.ts",
   "dependencies": {
-    "@impromptu/contracts": "workspace:*"
+    "@impromptu/contracts": "workspace:*",
+    "zod": "4.1.5"
   }
 }

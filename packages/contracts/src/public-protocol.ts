@@ -9,6 +9,7 @@ import {
   DisplayIdSchema,
   PublicCardRevisionSchema,
   PublicPlaybackRevisionSchema,
+  publicCardRevisionValue,
 } from "./public-identifiers.ts";
 import { PublicationTombstoneSchema, PublishedAudienceCardSchema } from "./public-publication.ts";
 import {
@@ -62,7 +63,88 @@ export const AudienceSnapshotSchema = z
     tombstones: z.array(PublicationTombstoneSchema),
     tombstoneWatermark: PublicCardRevisionSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((snapshot, context) => {
+    const head = publicCardRevisionValue(snapshot.publicCardRevision);
+    const watermark = publicCardRevisionValue(snapshot.tombstoneWatermark);
+    if (watermark > head) {
+      context.addIssue({
+        code: "custom",
+        path: ["tombstoneWatermark"],
+        message: "watermark exceeds stream head",
+      });
+    }
+
+    const active = new Set<string>();
+    const terminal = new Set<string>();
+    const revisions = new Set<number>();
+    for (const [index, card] of snapshot.cards.entries()) {
+      const revision = publicCardRevisionValue(card.publicCardRevision);
+      if (revision > head) {
+        context.addIssue({
+          code: "custom",
+          path: ["cards", index, "publicCardRevision"],
+          message: "card revision exceeds stream head",
+        });
+      }
+      if (revision <= watermark) {
+        context.addIssue({
+          code: "custom",
+          path: ["cards", index, "publicCardRevision"],
+          message: "card is at or below the tombstone watermark",
+        });
+      }
+      if (active.has(card.projectionId)) {
+        context.addIssue({
+          code: "custom",
+          path: ["cards", index, "projectionId"],
+          message: "duplicate active projection",
+        });
+      }
+      if (revisions.has(revision)) {
+        context.addIssue({
+          code: "custom",
+          path: ["cards", index, "publicCardRevision"],
+          message: "duplicate stream revision",
+        });
+      }
+      active.add(card.projectionId);
+      revisions.add(revision);
+    }
+    for (const [index, tombstone] of snapshot.tombstones.entries()) {
+      const revision = publicCardRevisionValue(tombstone.publicCardRevision);
+      if (revision > head) {
+        context.addIssue({
+          code: "custom",
+          path: ["tombstones", index, "publicCardRevision"],
+          message: "tombstone revision exceeds stream head",
+        });
+      }
+      if (terminal.has(tombstone.projectionId)) {
+        context.addIssue({
+          code: "custom",
+          path: ["tombstones", index, "projectionId"],
+          message: "duplicate terminal projection",
+        });
+      }
+      if (active.has(tombstone.projectionId)) {
+        context.addIssue({
+          code: "custom",
+          path: ["tombstones", index, "projectionId"],
+          message: "projection cannot be active and terminal",
+        });
+      }
+      if (revisions.has(revision)) {
+        context.addIssue({
+          code: "custom",
+          path: ["tombstones", index, "publicCardRevision"],
+          message: "duplicate stream revision",
+        });
+      }
+      terminal.add(tombstone.projectionId);
+      revisions.add(revision);
+    }
+  });
 
 export type DisplayBinding = z.infer<typeof DisplayBindingSchema>;
 export type AudienceDisplaySession = z.infer<typeof AudienceDisplaySessionSchema>;

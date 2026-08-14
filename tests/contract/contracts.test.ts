@@ -48,13 +48,13 @@ describe("protocol contract fixtures", () => {
       presentationSessionEpoch: "pse_3",
       displayBindingEpoch: "dbe_4",
       publicPlaybackRevision: "pbr_11",
-      publicCardRevision: "pcr_8",
+      publicCardRevision: "pcr_9",
       deck: fixture("published-deck"),
       occurrence: { publicSlideKey: "slide_public-1", occurrenceSeq: 2 },
       blackout: false,
       cards: [card],
       tombstones: [fixture("publication-tombstone")],
-      tombstoneWatermark: "pcr_5",
+      tombstoneWatermark: "pcr_7",
     });
   });
 });
@@ -180,13 +180,13 @@ describe("role topic authorization", () => {
       presentationSessionEpoch: "pse_3",
       displayBindingEpoch: "dbe_4",
       publicPlaybackRevision: "pbr_11",
-      publicCardRevision: "pcr_8",
+      publicCardRevision: "pcr_9",
       deck: fixture("published-deck"),
       occurrence: { publicSlideKey: "slide_public-1", occurrenceSeq: 2 },
       blackout: false,
       cards: [fixture("published-card")],
       tombstones: [fixture("publication-tombstone")],
-      tombstoneWatermark: "pcr_5",
+      tombstoneWatermark: "pcr_7",
     };
     expect(authorizeRoleSnapshot("PUBLIC_STAGE", audienceSnapshot)).toBe(true);
     expect(authorizeRoleSnapshot("CONTROLLER", audienceSnapshot)).toBe(false);

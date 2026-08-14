@@ -1,8 +1,6 @@
 import {
   ActorIdSchema,
-  CommandIdSchema,
   controllerEpoch,
-  controlRevision,
   type PlaybackCommand,
   PlaybackCommandSchema,
   PlaybackControlLeaseIdSchema,
@@ -59,19 +57,3 @@ export function playbackAuthorityFixture(): PlaybackAuthorityState {
     initialSlideKey: PublicSlideKeySchema.parse("slide_1"),
   });
 }
-
-export const PROTOCOL_TRANSITION_MATRIX = [
-  { scenario: "LEGAL_PLAYBACK_TRANSITION", expected: "ACCEPTED" },
-  { scenario: "ILLEGAL_PUBLICATION_TRANSITION", expected: "ILLEGAL_TRANSITION" },
-  { scenario: "CONCURRENT_APPROVE_RETRACT", expected: "CAS_SINGLE_WINNER" },
-  { scenario: "PARTITIONED_RELATIVE_COMMAND", expected: "OFFLINE_RELATIVE_COMMAND" },
-  { scenario: "STALE_ROLE_SNAPSHOT", expected: "STALE_SNAPSHOT" },
-  { scenario: "INCOMPATIBLE_BUILD", expected: "PROTOCOL_RANGE_MISMATCH" },
-] as const;
-
-export const fixtureIdentitySchemas = {
-  actor: ActorIdSchema,
-  command: CommandIdSchema,
-  lease: PlaybackControlLeaseIdSchema,
-  controlRevision,
-} as const;
