@@ -11,6 +11,7 @@ import {
   AudienceSnapshotSchema,
   BuildHandshakeSchema,
   checkHandshakeCompatibility,
+  PublicationDispatchSchema,
   PublicationTombstoneSchema,
   PublishedAudienceCardSchema,
   PublishedDeckArtifactSchema,
@@ -98,6 +99,39 @@ describe("closed public contracts", () => {
     expect(
       PublicationTombstoneSchema.safeParse({ ...tombstone, reasonDetail: "private moderation" })
         .success,
+    ).toBe(false);
+  });
+
+  test("rejects unknown fields in outbox dispatch envelopes and payloads", () => {
+    const dispatch = {
+      tenantId: "10000000-0000-4000-8000-000000000001",
+      dispatchKey: "70000000-0000-4000-8000-000000000001",
+      projectionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      eventKind: "publish_card",
+      publicPayload: {
+        cardId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        cardVersion: 1,
+        publicSlideKey: "slide-public-2",
+        occurrenceSeq: 1,
+        title: "Public evidence",
+        body: "Audience-safe body",
+        sourceLabel: "Public source",
+        canonicalUrl: "https://example.test/evidence",
+        publishedAt: "2026-08-14T08:00:00Z",
+        expiresAt: "2026-08-14T09:00:00Z",
+        revision: 10,
+      },
+    };
+
+    expect(PublicationDispatchSchema.safeParse(dispatch).success).toBe(true);
+    expect(
+      PublicationDispatchSchema.safeParse({ ...dispatch, privateDatabaseId: "secret" }).success,
+    ).toBe(false);
+    expect(
+      PublicationDispatchSchema.safeParse({
+        ...dispatch,
+        publicPayload: { ...dispatch.publicPayload, presenterNotes: "private" },
+      }).success,
     ).toBe(false);
   });
 

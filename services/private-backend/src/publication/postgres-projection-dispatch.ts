@@ -1,3 +1,4 @@
+import { PublicationDispatchSchema } from "@impromptu/contracts/public";
 import type { Sql } from "postgres";
 import type { ProjectionDispatchBoundary, PublicationDispatch } from "./outbox-dispatcher.ts";
 
@@ -8,17 +9,18 @@ type DispatchOutcomeRow = Readonly<{
 export function createPostgresProjectionDispatchBoundary(sql: Sql): ProjectionDispatchBoundary {
   return {
     async dispatch(message: PublicationDispatch) {
-      const payload = JSON.stringify(message.publicPayload);
+      const validated = PublicationDispatchSchema.parse(message);
+      const payload = JSON.stringify(validated.publicPayload);
       if (payload === undefined) {
         throw new TypeError("public payload must be JSON serializable");
       }
 
       const rows = await sql<readonly DispatchOutcomeRow[]>`
         SELECT public_projection.dispatch_publication(
-          ${message.dispatchKey}::uuid,
-          ${message.tenantId}::uuid,
-          ${message.projectionId}::uuid,
-          ${message.eventKind},
+          ${validated.dispatchKey}::uuid,
+          ${validated.tenantId}::uuid,
+          ${validated.projectionId}::uuid,
+          ${validated.eventKind},
           ${payload}::jsonb
         ) AS outcome
       `;

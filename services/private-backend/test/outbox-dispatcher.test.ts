@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { Sql } from "postgres";
 import {
   dispatchPublicationOutboxBatch,
   type PrivatePublicationOutbox,
@@ -6,6 +7,23 @@ import {
   type ProjectionDispatchBoundary,
   type PublicationDispatch,
 } from "../src/publication/outbox-dispatcher.ts";
+import { createPostgresProjectionDispatchBoundary } from "../src/publication/postgres-projection-dispatch.ts";
+
+function publishPayload(title: string) {
+  return {
+    cardId: "50000000-0000-4000-8000-000000000001",
+    cardVersion: 1,
+    publicSlideKey: "slide-public-1",
+    occurrenceSeq: 1,
+    title,
+    body: "Audience-safe body",
+    sourceLabel: "Public source",
+    canonicalUrl: "https://example.test/evidence",
+    publishedAt: "2026-08-14T08:00:00Z",
+    expiresAt: "2026-08-14T09:00:00Z",
+    revision: 1,
+  };
+}
 
 const dispatches = [
   {
@@ -13,21 +31,21 @@ const dispatches = [
     dispatchKey: "30000000-0000-4000-8000-000000000001",
     projectionId: "40000000-0000-4000-8000-000000000001",
     eventKind: "publish_card",
-    publicPayload: { title: "one" },
+    publicPayload: publishPayload("one"),
   },
   {
     tenantId: "10000000-0000-4000-8000-000000000001",
     dispatchKey: "30000000-0000-4000-8000-000000000002",
     projectionId: "40000000-0000-4000-8000-000000000001",
     eventKind: "publish_card",
-    publicPayload: { title: "two" },
+    publicPayload: publishPayload("two"),
   },
   {
     tenantId: "10000000-0000-4000-8000-000000000001",
     dispatchKey: "30000000-0000-4000-8000-000000000003",
     projectionId: "40000000-0000-4000-8000-000000000001",
     eventKind: "publish_card",
-    publicPayload: { title: "three" },
+    publicPayload: publishPayload("three"),
   },
 ] as const satisfies readonly PublicationDispatch[];
 
@@ -112,6 +130,26 @@ describe("publication outbox dispatcher", () => {
     expect(projection.applied.size).toBe(1);
     expect(replay).toEqual({ claimed: 1, applied: 0, duplicates: 1 });
     expect(outbox.delivered).toEqual(new Set([dispatches[0]?.dispatchKey]));
+  });
+
+  test("rejects an open DTO before issuing a projection query", async () => {
+    let queryCount = 0;
+    const sql = (() => {
+      queryCount += 1;
+      throw new Error("query must not execute");
+    }) as unknown as Sql;
+    const projection = createPostgresProjectionDispatchBoundary(sql);
+    const payloadWithPrivateField = {
+      ...dispatches[0].publicPayload,
+      presenterNotes: "PRIVATE_CANARY",
+    };
+    const openDispatch: PublicationDispatch = {
+      ...dispatches[0],
+      publicPayload: payloadWithPrivateField,
+    };
+
+    await expect(projection.dispatch(openDispatch)).rejects.toBeInstanceOf(Error);
+    expect(queryCount).toBe(0);
   });
 
   test("rejects unbounded or invalid batch sizes before opening a transaction", async () => {

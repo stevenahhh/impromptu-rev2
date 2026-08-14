@@ -13,6 +13,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@impromptu/contracts": "workspace:*",
     "postgres": "3.4.7"
   }
 }

@@ -1,18 +1,11 @@
+import {
+  type PublicationDispatchDto,
+  PublicationDispatchSchema,
+} from "@impromptu/contracts/public";
 import type { Sql } from "postgres";
 
-export type PublicationEventKind =
-  | "upsert_projection"
-  | "publish_card"
-  | "retract_card"
-  | "end_projection";
-
-export type PublicationDispatch = Readonly<{
-  tenantId: string;
-  dispatchKey: string;
-  projectionId: string;
-  eventKind: PublicationEventKind;
-  publicPayload: unknown;
-}>;
+export type PublicationEventKind = PublicationDispatchDto["eventKind"];
+export type PublicationDispatch = PublicationDispatchDto;
 
 export interface PrivatePublicationOutboxTransaction {
   claimUndelivered(limit: number): Promise<readonly PublicationDispatch[]>;
@@ -89,13 +82,15 @@ export function createPostgresPrivatePublicationOutbox(sql: Sql): PrivatePublica
               FOR UPDATE SKIP LOCKED
               LIMIT ${limit}
             `;
-            return rows.map((row) => ({
-              tenantId: row.tenant_id,
-              dispatchKey: row.dispatch_key,
-              projectionId: row.projection_id,
-              eventKind: row.event_kind,
-              publicPayload: row.public_payload,
-            }));
+            return rows.map((row) =>
+              PublicationDispatchSchema.parse({
+                tenantId: row.tenant_id,
+                dispatchKey: row.dispatch_key,
+                projectionId: row.projection_id,
+                eventKind: row.event_kind,
+                publicPayload: row.public_payload,
+              }),
+            );
           },
           markDelivered: async (dispatch) => {
             const updated = await transactionSql`

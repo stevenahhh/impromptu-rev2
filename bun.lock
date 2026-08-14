@@ -102,6 +102,7 @@
       "name": "@impromptu/private-backend",
       "version": "0.0.0",
       "dependencies": {
+        "@impromptu/contracts": "workspace:*",
         "postgres": "3.4.7",
       },
     },
