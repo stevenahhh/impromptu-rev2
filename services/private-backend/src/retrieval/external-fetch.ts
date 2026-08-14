@@ -48,6 +48,7 @@ export class SafeExternalEvidenceFetcher {
   readonly #now: () => number;
   readonly #maxBytes: number;
   readonly #maxRedirects: number;
+  readonly #scheduleDeadline: (deadlineAtMs: number, run: () => void) => () => void;
 
   constructor(dependencies: {
     readonly dns: PublicDnsResolver;
@@ -55,15 +56,56 @@ export class SafeExternalEvidenceFetcher {
     readonly now?: () => number;
     readonly maxBytes?: number;
     readonly maxRedirects?: number;
+    readonly scheduleDeadline?: (deadlineAtMs: number, run: () => void) => () => void;
   }) {
     this.#dns = dependencies.dns;
     this.#transport = dependencies.transport;
     this.#now = dependencies.now ?? Date.now;
     this.#maxBytes = dependencies.maxBytes ?? 1_000_000;
     this.#maxRedirects = dependencies.maxRedirects ?? 5;
+    this.#scheduleDeadline =
+      dependencies.scheduleDeadline ??
+      ((deadlineAtMs, run) => {
+        const timer = setTimeout(run, Math.max(0, deadlineAtMs - this.#now()));
+        return () => clearTimeout(timer);
+      });
   }
 
   async fetchCandidate(
+    candidate: SearchCandidate,
+    context: ExternalFetchContext,
+  ): Promise<ExternalFetchResult> {
+    const controller = new AbortController();
+    let resolveDeadline: (result: ExternalFetchResult) => void = () => undefined;
+    const deadline = new Promise<ExternalFetchResult>((resolve) => {
+      resolveDeadline = resolve;
+    });
+    const onAbort = () => {
+      controller.abort(context.signal.reason);
+      resolveDeadline({ outcome: "REJECTED", reason: "TIMEOUT" });
+    };
+    context.signal.addEventListener("abort", onAbort, { once: true });
+    const removeDeadline = this.#scheduleDeadline(context.deadlineAtMs, () => {
+      controller.abort("external fetch deadline exceeded");
+      resolveDeadline({ outcome: "REJECTED", reason: "TIMEOUT" });
+    });
+    if (context.signal.aborted) onAbort();
+    try {
+      return await Promise.race([
+        this.#fetchCandidate(candidate, { ...context, signal: controller.signal }).catch(() => ({
+          outcome: "REJECTED" as const,
+          reason: "TYPE" as const,
+        })),
+        deadline,
+      ]);
+    } finally {
+      removeDeadline();
+      context.signal.removeEventListener("abort", onAbort);
+      controller.abort("external fetch complete");
+    }
+  }
+
+  async #fetchCandidate(
     candidate: SearchCandidate,
     context: ExternalFetchContext,
   ): Promise<ExternalFetchResult> {
@@ -139,7 +181,12 @@ export class SafeExternalEvidenceFetcher {
         return { outcome: "REJECTED", reason: "NETWORK" };
       }
       const bytes = concatenate(chunks, byteLength);
-      const decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      let decoded: string;
+      try {
+        decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      } catch {
+        return { outcome: "REJECTED", reason: "TYPE" };
+      }
       const extracted = extractText(decoded, mediaType);
       if (extracted.length === 0) return { outcome: "REJECTED", reason: "TYPE" };
       const hash = await sha256(bytes);

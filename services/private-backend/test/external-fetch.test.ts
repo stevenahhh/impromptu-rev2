@@ -120,6 +120,62 @@ describe("SSRF-safe external evidence fetch", () => {
     expect(calls).toHaveLength(1);
   });
 
+  test("returns typed terminals for malformed UTF-8 and pending DNS at the local deadline", async () => {
+    const malformed = new SafeExternalEvidenceFetcher({
+      dns: {
+        async resolve() {
+          return ["93.184.216.34"];
+        },
+      },
+      transport: {
+        async request() {
+          return {
+            status: 200,
+            headers: { "content-type": "text/plain" },
+            body: {
+              async *[Symbol.asyncIterator]() {
+                yield new Uint8Array([0xc3, 0x28]);
+              },
+            },
+          };
+        },
+      },
+      now: () => 0,
+    });
+    expect(
+      await malformed.fetchCandidate(
+        { url: "https://example.com", snippet: "", sourceId: "s" },
+        context(),
+      ),
+    ).toEqual({ outcome: "REJECTED", reason: "TYPE" });
+
+    const startedAtMs = Date.now();
+    const pendingDns = new SafeExternalEvidenceFetcher({
+      dns: {
+        async resolve() {
+          return await new Promise<readonly string[]>(() => undefined);
+        },
+      },
+      transport: {
+        async request() {
+          throw new Error("must not connect");
+        },
+      },
+    });
+    expect(
+      await pendingDns.fetchCandidate(
+        { url: "https://example.com", snippet: "", sourceId: "s" },
+        {
+          deckVersion: "deck_v1",
+          manifestHash,
+          deadlineAtMs: startedAtMs + 10,
+          signal: new AbortController().signal,
+        },
+      ),
+    ).toEqual({ outcome: "REJECTED", reason: "TIMEOUT" });
+    expect(Date.now() - startedAtMs).toBeLessThan(80);
+  });
+
   test("enforces HTTPS, credentials, type, byte, redirect, and deadline limits", async () => {
     const base = {
       dns: {
