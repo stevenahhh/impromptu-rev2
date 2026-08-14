@@ -69,7 +69,9 @@ export type AudioStreamTerminal =
         | "ACTOR_LOGOUT"
         | "GRANT_EXPIRED"
         | "DEADLINE_EXCEEDED"
+        | "GRANT_REPLAYED"
         | "GRANT_REVOKED"
+        | "GRANT_SESSION_MISMATCH"
         | "MODEL_POLICY_DENIED"
         | "PROVIDER_FAILURE"
         | "SESSION_ENDED"
@@ -93,9 +95,16 @@ type ForcedTerminal = Exclude<AudioStreamTerminal["outcome"], "COMPLETED" | "PRO
 
 type GrantRecord = {
   readonly grant: CaptureGrant;
-  state: "ACTIVE" | "EXPIRED" | "REVOKED";
+  state: "ACTIVE" | "CONSUMED" | "EXPIRED" | "REVOKED";
+  started: boolean;
   stream: StreamRecord | undefined;
 };
+
+export interface CaptureSessionIdentity {
+  readonly actorId: string;
+  readonly presentationSessionId: string;
+  readonly presentationSessionEpoch: string;
+}
 
 type StreamRecord = {
   readonly queue: AudioChunkQueue;
@@ -138,14 +147,41 @@ export class AudioCaptureCoordinator {
       expiresAtMs: nowMs + this.#grantTtlMs,
     });
     Object.freeze(grant);
-    this.#grants.set(grant.captureGrantId, { grant, state: "ACTIVE", stream: undefined });
+    for (const existing of this.#grants.values()) {
+      if (
+        existing.state === "ACTIVE" &&
+        existing.grant.actorId === grant.actorId &&
+        (existing.grant.presentationSessionId !== grant.presentationSessionId ||
+          existing.grant.presentationSessionEpoch !== grant.presentationSessionEpoch)
+      ) {
+        this.#terminate(existing, "GRANT_REVOKED", "REVOKED");
+      }
+    }
+    this.#grants.set(grant.captureGrantId, {
+      grant,
+      state: "ACTIVE",
+      started: false,
+      stream: undefined,
+    });
     return grant;
   }
 
-  startCapture(grantId: string, actorId: string, nowMs: number): Promise<AudioStreamTerminal> {
+  startCapture(
+    grantId: string,
+    identity: CaptureSessionIdentity,
+    nowMs: number,
+  ): Promise<AudioStreamTerminal> {
     const record = this.#grants.get(grantId);
-    if (record === undefined || record.grant.actorId !== actorId) {
-      return Promise.resolve({ outcome: "GRANT_REVOKED" });
+    if (record === undefined) return Promise.resolve({ outcome: "GRANT_REVOKED" });
+    if (
+      record.grant.actorId !== identity.actorId ||
+      record.grant.presentationSessionId !== identity.presentationSessionId ||
+      record.grant.presentationSessionEpoch !== identity.presentationSessionEpoch
+    ) {
+      return Promise.resolve({ outcome: "GRANT_SESSION_MISMATCH" });
+    }
+    if (record.started || record.state === "CONSUMED") {
+      return Promise.resolve({ outcome: "GRANT_REPLAYED" });
     }
     if (record.state !== "ACTIVE") return Promise.resolve({ outcome: stateTerminal(record.state) });
     if (nowMs >= record.grant.expiresAtMs) {
@@ -160,6 +196,7 @@ export class AudioCaptureCoordinator {
       nextSequence: 0,
       forcedTerminal: undefined,
     };
+    record.started = true;
     record.stream = stream;
     return this.#run(record, stream);
   }
@@ -239,7 +276,7 @@ export class AudioCaptureCoordinator {
 
   cancelStream(grantId: string, _nowMs: number): void {
     const record = this.#grants.get(grantId);
-    if (record !== undefined) this.#terminate(record, "STREAM_CANCELLED", record.state);
+    if (record !== undefined) this.#terminate(record, "STREAM_CANCELLED", "ACTIVE");
   }
 
   bufferedBytes(grantId: string): number {
@@ -265,10 +302,15 @@ export class AudioCaptureCoordinator {
     } finally {
       stream.queue.clear();
       record.stream = undefined;
+      if (record.state === "ACTIVE") record.state = "CONSUMED";
     }
   }
 
-  #terminate(record: GrantRecord, terminal: ForcedTerminal, state: GrantRecord["state"]): void {
+  #terminate(
+    record: GrantRecord,
+    terminal: ForcedTerminal,
+    state: Exclude<GrantRecord["state"], "CONSUMED">,
+  ): void {
     record.state = state;
     const stream = record.stream;
     if (stream === undefined) return;
@@ -350,6 +392,8 @@ async function* sequenceChunks(
   }
 }
 
-function stateTerminal(state: "ACTIVE" | "EXPIRED" | "REVOKED"): ForcedTerminal {
-  return state === "EXPIRED" ? "GRANT_EXPIRED" : "GRANT_REVOKED";
+function stateTerminal(state: GrantRecord["state"]): ForcedTerminal {
+  if (state === "EXPIRED") return "GRANT_EXPIRED";
+  if (state === "CONSUMED") return "GRANT_REPLAYED";
+  return "GRANT_REVOKED";
 }

@@ -12,8 +12,10 @@ class FakeSttPort implements ServerAudioSttPort {
   readonly received: number[] = [];
   signal: AbortSignal | undefined;
   fail = false;
+  starts = 0;
 
   async transcribe(chunks: AsyncIterable<Uint8Array>, signal: AbortSignal) {
+    this.starts += 1;
     this.signal = signal;
     for await (const chunk of chunks) this.received.push(...chunk);
     if (this.fail) throw new Error("provider unavailable");
@@ -38,6 +40,14 @@ function consent(overrides: Partial<AudioCaptureConsent> = {}): AudioCaptureCons
     explicitlyAccepted: true,
     acceptedAtMs: 1_000,
     ...overrides,
+  };
+}
+
+function identity(value = consent()) {
+  return {
+    actorId: value.actorId,
+    presentationSessionId: value.presentationSessionId,
+    presentationSessionEpoch: value.presentationSessionEpoch,
   };
 }
 
@@ -90,7 +100,7 @@ describe("audio consent and capture lifecycle", () => {
     });
 
     const grant = coordinator.issueGrant(consent(), 1_000);
-    const terminal = coordinator.startCapture(grant.captureGrantId, consent().actorId, 1_001);
+    const terminal = coordinator.startCapture(grant.captureGrantId, identity(), 1_001);
     expect(
       coordinator.pushFrame(grant.captureGrantId, 0, new Uint8Array([1, 2]), 10, 1_002),
     ).toEqual({
@@ -108,7 +118,7 @@ describe("audio consent and capture lifecycle", () => {
   test("revocation aborts capture and rejects the next frame deterministically", async () => {
     const { coordinator, port } = capture();
     const grant = coordinator.issueGrant(consent(), 1_000);
-    const terminal = coordinator.startCapture(grant.captureGrantId, consent().actorId, 1_001);
+    const terminal = coordinator.startCapture(grant.captureGrantId, identity(), 1_001);
     coordinator.pushFrame(grant.captureGrantId, 0, new Uint8Array([1]), 10, 1_002);
 
     expect(coordinator.revokeGrant(grant.captureGrantId, 1_003)).toEqual({ outcome: "REVOKED" });
@@ -127,7 +137,7 @@ describe("audio consent and capture lifecycle", () => {
       const { coordinator, port } = capture();
       const grant = coordinator.issueGrant(consent(), 1_000);
       if (action === "provider") port.fail = true;
-      const terminal = coordinator.startCapture(grant.captureGrantId, consent().actorId, 1_001);
+      const terminal = coordinator.startCapture(grant.captureGrantId, identity(), 1_001);
       if (action === "expiry") coordinator.expireGrants(61_000);
       if (action === "logout") coordinator.actorLoggedOut(consent().actorId, 1_002);
       if (action === "session") coordinator.sessionEnded(consent().presentationSessionId, 1_002);
@@ -145,10 +155,36 @@ describe("audio consent and capture lifecycle", () => {
     ]);
   });
 
+  test("invalidates an old-session grant and consumes each grant after one capture start", async () => {
+    const { coordinator, port } = capture();
+    const oldConsent = consent();
+    const oldGrant = coordinator.issueGrant(oldConsent, 1_000);
+    const nextConsent = consent({
+      consentRecordId: "consent_beta" as AudioCaptureConsent["consentRecordId"],
+      presentationSessionId: "ps_beta" as AudioCaptureConsent["presentationSessionId"],
+      presentationSessionEpoch: "pse_2" as AudioCaptureConsent["presentationSessionEpoch"],
+    });
+    coordinator.issueGrant(nextConsent, 1_001);
+
+    expect(
+      await coordinator.startCapture(oldGrant.captureGrantId, identity(oldConsent), 1_002),
+    ).toEqual({ outcome: "GRANT_REVOKED" });
+    expect(port.starts).toBe(0);
+
+    const { coordinator: singleUse } = capture();
+    const grant = singleUse.issueGrant(oldConsent, 1_000);
+    const terminal = singleUse.startCapture(grant.captureGrantId, identity(oldConsent), 1_001);
+    singleUse.stopCapture(grant.captureGrantId, 1_002);
+    await terminal;
+    expect(await singleUse.startCapture(grant.captureGrantId, identity(oldConsent), 1_003)).toEqual(
+      { outcome: "GRANT_REPLAYED" },
+    );
+  });
+
   test("rejects sequence replay and more than 30 seconds of queued samples", () => {
     const { coordinator } = capture();
     const grant = coordinator.issueGrant(consent(), 1_000);
-    void coordinator.startCapture(grant.captureGrantId, consent().actorId, 1_001);
+    void coordinator.startCapture(grant.captureGrantId, identity(), 1_001);
     expect(coordinator.pushFrame(grant.captureGrantId, 1, new Uint8Array([1]), 1, 1_002)).toEqual({
       outcome: "REJECTED",
       reason: "INVALID_SEQUENCE",

@@ -121,16 +121,32 @@ describe("audio lifecycle security", () => {
       reason: "CONSENT_REQUIRED",
     });
     const deniedGrant = denied.issueGrant(consent(), 1_000);
-    expect(await denied.startCapture(deniedGrant.captureGrantId, consent().actorId, 1_001)).toEqual(
-      {
-        outcome: "MODEL_POLICY_DENIED",
-      },
-    );
+    expect(
+      await denied.startCapture(
+        deniedGrant.captureGrantId,
+        {
+          actorId: deniedGrant.actorId,
+          presentationSessionId: deniedGrant.presentationSessionId,
+          presentationSessionEpoch: deniedGrant.presentationSessionEpoch,
+        },
+        1_001,
+      ),
+    ).toEqual({
+      outcome: "MODEL_POLICY_DENIED",
+    });
     expect(denied.bufferedBytes(deniedGrant.captureGrantId)).toBe(0);
 
     const cancelled = system();
     const grant = cancelled.issueGrant(consent(), 1_000);
-    const terminal = cancelled.startCapture(grant.captureGrantId, consent().actorId, 1_001);
+    const terminal = cancelled.startCapture(
+      grant.captureGrantId,
+      {
+        actorId: grant.actorId,
+        presentationSessionId: grant.presentationSessionId,
+        presentationSessionEpoch: grant.presentationSessionEpoch,
+      },
+      1_001,
+    );
     cancelled.pushFrame(grant.captureGrantId, 0, new Uint8Array([1, 2, 3]), 10, 1_002);
     cancelled.revokeGrant(grant.captureGrantId, 1_003);
     expect(await terminal).toEqual({ outcome: "GRANT_REVOKED" });
