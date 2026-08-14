@@ -20,7 +20,7 @@ Release-security matrix record:
 - Public routes rejecting private-scope bodies: **7/7**
 - Private routes rejecting anonymous/Public Stage reachability: **16/16**
 - Cross-tenant private reads denied: **1/1**
-- Stage-compromise attempts contained: **4/4** (stale live ingress, forged durable snapshot, forged public role snapshot shape, direct write)
+- Stage-compromise checks passed: **4/4** (stale live ingress rejected, forged durable snapshot rejected, direct write rejected, post-compromise public cards zero)
 - Privacy-critical exposures across the 28 reachability/compromise attempts: **0**
 - Deletion/restore checks: active content removed, backup tombstone restored, revoked projection resurrection denied
 
