@@ -18,6 +18,8 @@ export {
   type ServerModelCapability,
   type ServerModelRouter,
 } from "./ports/server-model-router.ts";
+export * from "./prepared-evidence.ts";
+export { ProjectionHttpPort } from "./projection-http-port.ts";
 export {
   createPostgresPrivatePublicationOutbox,
   dispatchPublicationOutboxBatch,
@@ -29,5 +31,3 @@ export {
   type PublicationEventKind,
 } from "./publication/outbox-dispatcher.ts";
 export { createPostgresProjectionDispatchBoundary } from "./publication/postgres-projection-dispatch.ts";
-export * from "./prepared-evidence.ts";
-export { ProjectionHttpPort } from "./projection-http-port.ts";
