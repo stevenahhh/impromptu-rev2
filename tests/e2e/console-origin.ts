@@ -14,7 +14,7 @@ const contentTypes: Readonly<Record<string, string>> = {
 
 const server = Bun.serve({
   hostname: "127.0.0.1",
-  port: 44273,
+  port: Number(process.env.TOPOLOGY_CONSOLE_PORT ?? "44273"),
   async fetch(request) {
     const url = new URL(request.url);
     if (request.method === "POST" && url.pathname === "/__test/backend") {

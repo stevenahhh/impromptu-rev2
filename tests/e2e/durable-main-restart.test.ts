@@ -6,8 +6,10 @@ type ServiceProcess = ReturnType<typeof Bun.spawn<"ignore", "pipe", "pipe">>;
 const processes: ServiceProcess[] = [];
 const privateSnapshotPath = join(import.meta.dir, ".restart-private-snapshot.json");
 const projectionDatabasePath = join(import.meta.dir, ".restart-projection-database.json");
-const privateOrigin = "http://127.0.0.1:44301";
-const projectionOrigin = "http://127.0.0.1:44302";
+const privatePort = 37_000 + (process.pid % 1_000) * 2;
+const projectionPort = privatePort + 1;
+const privateOrigin = `http://127.0.0.1:${privatePort}`;
+const projectionOrigin = `http://127.0.0.1:${projectionPort}`;
 const consoleOrigin = "http://127.0.0.1:44373";
 const stageOrigin = "http://127.0.0.1:44374";
 const serviceToken = "durable-main-restart-token";
@@ -99,7 +101,7 @@ const projectionEnvironment = {
   PRIVATE_BACKEND_ORIGIN: privateOrigin,
   PROJECTION_DATABASE_PATH: projectionDatabasePath,
   PROJECTION_GATEWAY_HOST: "127.0.0.1",
-  PROJECTION_GATEWAY_PORT: "44302",
+  PROJECTION_GATEWAY_PORT: String(projectionPort),
   SERVICE_AUTH_TOKEN: serviceToken,
   STAGE_ORIGIN: stageOrigin,
 };
@@ -109,7 +111,7 @@ const privateEnvironment = {
   CONTROLLER_ACTOR_ID: "actor_restart",
   CONTROLLER_AUTHORIZATION_CODE: "restart-code",
   PRIVATE_BACKEND_HOST: "127.0.0.1",
-  PRIVATE_BACKEND_PORT: "44301",
+  PRIVATE_BACKEND_PORT: String(privatePort),
   PRIVATE_SNAPSHOT_PATH: privateSnapshotPath,
   PROJECTION_GATEWAY_ORIGIN: projectionOrigin,
   SERVICE_AUTH_TOKEN: serviceToken,

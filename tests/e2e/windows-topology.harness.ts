@@ -73,8 +73,10 @@ type ServiceProcess = ChildProcessByStdio<null, Readable, Readable>;
 const chromeExecutable = "C:/Program Files/Google/Chrome/Application/chrome.exe";
 let projectionPort = 45_000 + (process.pid % 1_000) * 10;
 let projectionOrigin = `http://127.0.0.1:${projectionPort}`;
-const stageOrigin = "http://127.0.0.1:44274";
-const consoleOrigin = "http://127.0.0.1:44273";
+const stagePort = 35_000 + (process.pid % 1_000);
+const consolePort = 36_000 + (process.pid % 1_000);
+const stageOrigin = `http://127.0.0.1:${stagePort}`;
+const consoleOrigin = `http://127.0.0.1:${consolePort}`;
 const evidenceRoot = resolve(process.env.WP4_EVIDENCE_DIR ?? "artifacts/wp4-topology");
 export const privateSurfaceVocabulary = [
   "PRIVATE_CANARY_WP4",
@@ -680,11 +682,16 @@ export async function runWindowsTopologyE2E(): Promise<WindowsTopologyEvidence> 
   const stage = await start(["bun", "run", "tests/e2e/stage-origin.ts"], "stage-origin listening", {
     ...process.env,
     PROJECTION_GATEWAY_ORIGIN: projectionOrigin,
+    TOPOLOGY_STAGE_PORT: String(stagePort),
   });
   const console = await start(
     ["bun", "run", "tests/e2e/console-origin.ts"],
     "console-origin listening",
-    { ...process.env, PRIVATE_BACKEND_ORIGIN: projectionOrigin },
+    {
+      ...process.env,
+      PRIVATE_BACKEND_ORIGIN: projectionOrigin,
+      TOPOLOGY_CONSOLE_PORT: String(consolePort),
+    },
   );
   let browser: Browser | null = null;
   try {
