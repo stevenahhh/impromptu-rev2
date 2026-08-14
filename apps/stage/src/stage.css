@@ -161,3 +161,27 @@
   font-size: var(--text-caption);
   box-shadow: var(--shadow-panel);
 }
+
+@media (max-height: 540px) {
+  .stage-display {
+    --space-stage: var(--space-2);
+  }
+
+  .stage-display__bar,
+  .stage-display__actions {
+    gap: var(--space-2);
+  }
+
+  .stage-claim {
+    gap: var(--space-2);
+  }
+
+  .stage-evidence blockquote {
+    margin: var(--space-2) var(--space-0);
+    font-size: var(--text-lead);
+  }
+
+  .stage-evidence footer {
+    gap: var(--space-2);
+  }
+}
