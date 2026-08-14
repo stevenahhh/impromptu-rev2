@@ -484,6 +484,7 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
         }
         const next = await client.snapshot(pins);
         if (!active) return;
+        publishStageEvent("impromptu:stage-ready", { requestedMode, observedMode: mode });
         if (realtimeState === null) {
           realtimeState = createRealtimeStageState(
             {
@@ -563,7 +564,7 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
       sseSubscription?.close();
       for (const timer of leaseTimers.values()) globalThis.clearTimeout(timer);
     };
-  }, [client]);
+  }, [client, mode, requestedMode]);
 
   const navigateCachedSlide = useCallback((offset: -1 | 1) => {
     setSnapshot((current) => {
