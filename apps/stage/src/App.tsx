@@ -193,7 +193,7 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
     let latestSnapshot: StageSnapshotView | null = null;
     let realtimeState: RealtimeStageState | null = null;
     let realtimeReconnectAttempts = 0;
-    const leaseTimers = new Map<string, number>();
+    const leaseTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
     const transition = (event: RealtimeTransition) => {
       if (realtimeState === null) return null;
@@ -220,31 +220,41 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
       return true;
     };
 
-    const scheduleLease = (card: StageSnapshotView["cards"][number]) => {
+    const scheduleLease = (card: StageSnapshotView["cards"][number]): void => {
       const existing = leaseTimers.get(card.projectionId);
-      if (existing !== undefined) window.clearTimeout(existing);
-      if (card.mode !== "LIVE" || card.leaseExpiresAtMs === null) return;
-      const timer = window.setTimeout(
+      if (existing !== undefined) globalThis.clearTimeout(existing);
+      const expiresAtMs =
+        card.mode === "LIVE" ? card.leaseExpiresAtMs : card.offlinePackage?.localExpiresAtMs;
+      if (expiresAtMs === null || expiresAtMs === undefined) return;
+      const timer = globalThis.setTimeout(
         () => {
           leaseTimers.delete(card.projectionId);
-          setSnapshot((current) => {
-            if (current === null) return null;
-            const present = current.cards.find(
-              (candidate) => candidate.projectionId === card.projectionId,
-            );
-            if (present?.leaseExpiresAtMs !== card.leaseExpiresAtMs) return current;
-            const result = transition({ type: "CLOCK", nowMs: Date.now() });
-            if (result === null || result.outcome !== "APPLIED") return current;
-            const next = visibleCards(current, result.state);
-            latestSnapshot = next;
+          if (Date.now() < expiresAtMs) {
+            scheduleLease(card);
+            return;
+          }
+          const current = latestSnapshot;
+          const present = current?.cards.find(
+            (candidate) => candidate.projectionId === card.projectionId,
+          );
+          const presentExpiresAtMs =
+            present?.mode === "LIVE"
+              ? present.leaseExpiresAtMs
+              : present?.offlinePackage?.localExpiresAtMs;
+          if (current === null || presentExpiresAtMs !== expiresAtMs) return;
+          const result = transition({ type: "CLOCK", nowMs: Date.now() });
+          if (result === null || result.outcome !== "APPLIED") return;
+          const next = visibleCards(current, result.state);
+          latestSnapshot = next;
+          setSnapshot(next);
+          if (!next.cards.some((candidate) => candidate.projectionId === card.projectionId)) {
             publishStageEvent("impromptu:card-hidden", {
               projectionId: card.projectionId,
-              reason: "LEASE_EXPIRED",
+              reason: card.mode === "LIVE" ? "LEASE_EXPIRED" : "LOCAL_EXPIRY",
             });
-            return next;
-          });
+          }
         },
-        Math.max(0, card.leaseExpiresAtMs - Date.now()),
+        Math.max(0, expiresAtMs - Date.now()),
       );
       leaseTimers.set(card.projectionId, timer);
     };
@@ -356,7 +366,7 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
             if (event.status === "PUBLISHED") scheduleLease(event);
             else {
               const timer = leaseTimers.get(event.projectionId);
-              if (timer !== undefined) window.clearTimeout(timer);
+              if (timer !== undefined) globalThis.clearTimeout(timer);
               leaseTimers.delete(event.projectionId);
             }
             publishStageEvent("impromptu:card-event", event);
@@ -484,7 +494,7 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
       active = false;
       subscription?.close();
       sseSubscription?.close();
-      for (const timer of leaseTimers.values()) window.clearTimeout(timer);
+      for (const timer of leaseTimers.values()) globalThis.clearTimeout(timer);
     };
   }, [client]);
 

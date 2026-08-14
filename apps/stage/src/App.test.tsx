@@ -63,6 +63,20 @@ function textMutation(text: string, visible: boolean) {
   });
 }
 
+function nextStageEvent(type: string): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const signal = AbortSignal.timeout(2_000);
+    window.addEventListener(
+      type,
+      (event) => resolve(event instanceof CustomEvent ? event.detail : null),
+      { once: true, signal },
+    );
+    signal.addEventListener("abort", () => reject(new Error(`Stage event timeout: ${type}`)), {
+      once: true,
+    });
+  });
+}
+
 function renderStage(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
@@ -401,6 +415,82 @@ describe("public Stage boundary", () => {
     await act(async () => installedObserver.onCard({ ...liveCard, publicCardRevision: "pcr_1" }));
     expect(await staleHidden.promise).toEqual({ reason: "STALE_EVENT" });
     await act(async () => waitHidden);
+  });
+
+  test("hides a verified curated card at local expiry while partitioned", async () => {
+    let observer: StageEventObserver | null = null;
+    const reconnectSnapshot = deferred<StageSnapshotView>();
+    const localExpiresAtMs = Date.now() + 500;
+    const snapshot: StageSnapshotView = {
+      role: "PUBLIC_STAGE",
+      stateHash: "a".repeat(64),
+      presentationSessionId: "ps_alpha",
+      presentationSessionEpoch: "pse_1",
+      displayBindingEpoch: "dbe_1",
+      deckVersion: "deck_alpha",
+      manifestHash: "b".repeat(64),
+      deckSlides: [],
+      publicPlaybackRevision: "pbr_0",
+      blackout: false,
+      occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+      cards: [
+        {
+          projectionId: "projection_curated",
+          status: "PUBLISHED",
+          mode: "CURATED",
+          leaseExpiresAtMs: null,
+          offlinePackage: {
+            offlineDisplayAllowed: true,
+            localExpiresAtMs,
+            signature: "verified-fixture",
+            signatureVerified: true,
+          },
+          claim: "Expiring curated claim",
+          supportSummary: "Partition-safe only until expiry",
+          sourceLabel: "Public source",
+          publicCardRevision: "pcr_1",
+        },
+      ],
+      publicCardRevision: "pcr_1",
+      tombstoneWatermark: "pcr_0",
+      tombstoneRetentionMs: 60_000,
+    };
+    let snapshotReads = 0;
+    const client: StageSessionClient = {
+      async createJoin() {
+        throw new Error("not used");
+      },
+      async claim() {},
+      snapshot() {
+        snapshotReads += 1;
+        return snapshotReads === 1 ? Promise.resolve(snapshot) : reconnectSnapshot.promise;
+      },
+      async subscribe(nextObserver) {
+        observer = nextObserver;
+        return { close() {} };
+      },
+      async recordApplied() {
+        return null;
+      },
+    };
+    const snapshotApplied = nextStageEvent("impromptu:snapshot-applied");
+    const waitVisible = textMutation("Expiring curated claim", true);
+    render(
+      <MemoryRouter initialEntries={["/display/display_alpha"]}>
+        <StageRoutes client={client} />
+      </MemoryRouter>,
+    );
+    await act(async () => snapshotApplied);
+    await act(async () => waitVisible);
+    const installedObserver = observer as StageEventObserver | null;
+    if (installedObserver === null) throw new Error("Stage observer was not installed");
+    const hidden = nextStageEvent("impromptu:card-hidden");
+    await act(async () => installedObserver.onClose("NETWORK_ERROR"));
+    expect(await act(async () => hidden)).toEqual({
+      projectionId: "projection_curated",
+      reason: "LOCAL_EXPIRY",
+    });
+    expect(within(document.body).queryByText("Expiring curated claim")).toBeNull();
   });
 
   test("enters and exits fullscreen only from a Stage-local action", () => {
