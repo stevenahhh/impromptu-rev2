@@ -105,7 +105,11 @@
       "version": "0.0.0",
       "dependencies": {
         "@impromptu/contracts": "workspace:*",
+        "@impromptu/state": "workspace:*",
         "postgres": "3.4.7",
+      },
+      "devDependencies": {
+        "@impromptu/projection-gateway": "workspace:*",
       },
     },
     "services/projection-gateway": {
