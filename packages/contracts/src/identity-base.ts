@@ -11,11 +11,13 @@ export function prefixedId<const Brand extends string>(prefix: string) {
 
 export function encodedCounter<const Brand extends string>(prefix: string) {
   const pattern = new RegExp(`^${prefix}(0|[1-9][0-9]*)$`);
+  const maximumLength = prefix.length + Number.MAX_SAFE_INTEGER.toString().length;
   return z
     .string()
+    .max(maximumLength)
     .regex(pattern)
     .refine((value) => {
-      if (!pattern.test(value)) return false;
+      if (value.length > maximumLength || !pattern.test(value)) return false;
       const digits = value.slice(prefix.length);
       return BigInt(digits) <= BigInt(Number.MAX_SAFE_INTEGER);
     }, "counter exceeds Number.MAX_SAFE_INTEGER")

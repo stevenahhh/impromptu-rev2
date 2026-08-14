@@ -318,36 +318,3 @@ export function restorePublicCardStream(input: unknown): PublicCardStreamRestore
     ? { outcome: "RESTORED", state: parsed.data }
     : { outcome: "INVALID_SNAPSHOT" };
 }
-
-export function publicCardStreamFromSnapshot(
-  current: PublicCardStreamState,
-  input: {
-    presentationSessionId: PresentationSessionId;
-    presentationSessionEpoch: PresentationSessionEpoch;
-    publicCardRevision: PublicCardRevision;
-    tombstoneWatermark: PublicCardRevision;
-    cards: readonly PublishedAudienceCard[];
-    tombstones: readonly PublicationTombstone[];
-  },
-): PublicCardStreamRestoreResult {
-  const cards = Object.fromEntries(input.cards.map((card) => [card.projectionId, card]));
-  const tombstones = Object.fromEntries(
-    input.tombstones.map((tombstone) => [tombstone.projectionId, tombstone]),
-  );
-  const eventsByRevision = Object.fromEntries(
-    [...input.cards, ...input.tombstones].map((event) => [event.publicCardRevision, event]),
-  );
-  return {
-    outcome: "RESTORED",
-    state: {
-      presentationSessionId: input.presentationSessionId,
-      presentationSessionEpoch: input.presentationSessionEpoch,
-      authority: current.authority,
-      publicCardRevision: input.publicCardRevision,
-      tombstoneWatermark: input.tombstoneWatermark,
-      cards,
-      tombstones,
-      eventsByRevision,
-    },
-  };
-}

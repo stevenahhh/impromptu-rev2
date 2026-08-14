@@ -77,6 +77,9 @@ describe("domain identities", () => {
       expect(() => schema.safeParse(value)).not.toThrow();
       expect(schema.safeParse(value).success).toBe(false);
     }
+    const overlong = `pcr_1${"0".repeat(100_000)}`;
+    expect(() => PublicCardRevisionSchema.safeParse(overlong)).not.toThrow();
+    expect(PublicCardRevisionSchema.safeParse(overlong).success).toBe(false);
   });
 
   test("parses non-interchangeable lease and capability contracts", () => {

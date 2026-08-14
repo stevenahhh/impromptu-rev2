@@ -1,5 +1,8 @@
 import { AudienceSnapshotSchema, publicCardRevisionValue } from "@impromptu/contracts/public";
-import { type PublicCardStreamState, publicCardStreamFromSnapshot } from "./public-card-stream.ts";
+import {
+  type AudienceCardSnapshotState,
+  restoreAudienceCardSnapshotState,
+} from "./audience-card-state.ts";
 import { applyAudiencePlaybackSnapshot, type PublicPlaybackState } from "./public-projection.ts";
 
 export type AudienceRoleRestoreOutcome =
@@ -12,11 +15,11 @@ export type AudienceRoleRestoreOutcome =
 
 export type AudienceRoleRestoreResult = Readonly<{
   playback: PublicPlaybackState;
-  cards: PublicCardStreamState;
+  cards: AudienceCardSnapshotState;
   outcome: AudienceRoleRestoreOutcome;
 }>;
 
-function comparableCards(state: PublicCardStreamState): string {
+function comparableCards(state: AudienceCardSnapshotState): string {
   const cards = Object.values(state.cards).sort((left, right) =>
     left.projectionId.localeCompare(right.projectionId),
   );
@@ -33,21 +36,26 @@ function comparableCards(state: PublicCardStreamState): string {
 
 export function restoreAudienceRoleStreams(
   playback: PublicPlaybackState,
-  cards: PublicCardStreamState,
+  cards: AudienceCardSnapshotState,
   input: unknown,
   requestedRole: unknown,
 ): AudienceRoleRestoreResult {
+  const parsedCards = restoreAudienceCardSnapshotState(cards);
+  if (parsedCards.outcome !== "RESTORED") {
+    return { playback, cards, outcome: "INVALID_SNAPSHOT" };
+  }
+  const currentCards = parsedCards.state;
   const parsed = AudienceSnapshotSchema.safeParse(input);
-  if (!parsed.success) return { playback, cards, outcome: "INVALID_SNAPSHOT" };
+  if (!parsed.success) return { playback, cards: currentCards, outcome: "INVALID_SNAPSHOT" };
   const snapshot = parsed.data;
   if (requestedRole !== "PUBLIC_STAGE" || snapshot.role !== requestedRole) {
     return { playback, cards, outcome: "UNAUTHORIZED_ROLE" };
   }
   if (
-    snapshot.presentationSessionId !== cards.presentationSessionId ||
-    snapshot.presentationSessionEpoch !== cards.presentationSessionEpoch
+    snapshot.presentationSessionId !== currentCards.presentationSessionId ||
+    snapshot.presentationSessionEpoch !== currentCards.presentationSessionEpoch
   ) {
-    return { playback, cards, outcome: "CONFLICTING_SNAPSHOT" };
+    return { playback, cards: currentCards, outcome: "CONFLICTING_SNAPSHOT" };
   }
 
   const playbackResult = applyAudiencePlaybackSnapshot(playback, snapshot);
@@ -61,27 +69,36 @@ export function restoreAudienceRoleStreams(
     return { playback, cards, outcome: "CONFLICTING_SNAPSHOT" };
   }
 
-  const currentCardRevision = publicCardRevisionValue(cards.publicCardRevision);
+  const currentCardRevision = publicCardRevisionValue(currentCards.publicCardRevision);
   const snapshotCardRevision = publicCardRevisionValue(snapshot.publicCardRevision);
   if (snapshotCardRevision < currentCardRevision) {
-    return { playback, cards, outcome: "STALE_SNAPSHOT" };
+    return { playback, cards: currentCards, outcome: "STALE_SNAPSHOT" };
   }
-  const restoredCards = publicCardStreamFromSnapshot(cards, snapshot);
+  const restoredCards = restoreAudienceCardSnapshotState({
+    presentationSessionId: snapshot.presentationSessionId,
+    presentationSessionEpoch: snapshot.presentationSessionEpoch,
+    publicCardRevision: snapshot.publicCardRevision,
+    tombstoneWatermark: snapshot.tombstoneWatermark,
+    cards: Object.fromEntries(snapshot.cards.map((card) => [card.projectionId, card])),
+    tombstones: Object.fromEntries(
+      snapshot.tombstones.map((tombstone) => [tombstone.projectionId, tombstone]),
+    ),
+  });
   if (restoredCards.outcome !== "RESTORED") {
     return { playback, cards, outcome: "INVALID_SNAPSHOT" };
   }
   if (
     snapshotCardRevision === currentCardRevision &&
-    comparableCards(restoredCards.state) !== comparableCards(cards)
+    comparableCards(restoredCards.state) !== comparableCards(currentCards)
   ) {
-    return { playback, cards, outcome: "CONFLICTING_SNAPSHOT" };
+    return { playback, cards: currentCards, outcome: "CONFLICTING_SNAPSHOT" };
   }
 
   const cardsChanged = snapshotCardRevision > currentCardRevision;
   const playbackChanged = playbackResult.outcome === "APPLIED";
   return {
     playback: playbackResult.state,
-    cards: cardsChanged ? restoredCards.state : cards,
+    cards: cardsChanged ? restoredCards.state : currentCards,
     outcome: playbackChanged || cardsChanged ? "APPLIED" : "DUPLICATE",
   };
 }

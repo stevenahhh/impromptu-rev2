@@ -17,12 +17,15 @@ import {
   applyAuthorizedPublicCardEvent,
   applyPublicCardEvent,
   applyPublicPlaybackEvent,
+  createAudienceCardSnapshotState,
   createCandidateLifecycle,
   createPublicCardStream,
   initialPublicPlaybackState,
   reduceCandidateLifecycle,
+  restoreAudienceCardSnapshotState,
   restoreAudienceRoleStreams,
   restorePublicCardStream,
+  snapshotAudienceCardState,
 } from "@impromptu/state";
 import { fastCheckParameters } from "@impromptu/test-harness";
 import fc from "fast-check";
@@ -72,6 +75,13 @@ function stream() {
     presentationSessionId: PresentationSessionIdSchema.parse("ps_session-1"),
     presentationSessionEpoch: presentationSessionEpoch(3),
     authority: authority(),
+  });
+}
+
+function audienceCards() {
+  return createAudienceCardSnapshotState({
+    presentationSessionId: PresentationSessionIdSchema.parse("ps_session-1"),
+    presentationSessionEpoch: presentationSessionEpoch(3),
   });
 }
 
@@ -344,6 +354,49 @@ describe("candidate and public card stream separation", () => {
   });
 });
 
+describe("compacted audience card persistence", () => {
+  test("round-trips compacted state and rejects forged maps and counters", () => {
+    const parsed = AudienceSnapshotSchema.parse(audienceSnapshot());
+    const restored = restoreAudienceCardSnapshotState({
+      presentationSessionId: parsed.presentationSessionId,
+      presentationSessionEpoch: parsed.presentationSessionEpoch,
+      publicCardRevision: parsed.publicCardRevision,
+      tombstoneWatermark: parsed.tombstoneWatermark,
+      cards: {},
+      tombstones: Object.fromEntries(parsed.tombstones.map((entry) => [entry.projectionId, entry])),
+    });
+    expect(restored.outcome).toBe("RESTORED");
+    if (restored.outcome !== "RESTORED") throw new Error("compact snapshot was rejected");
+    expect(restoreAudienceCardSnapshotState(snapshotAudienceCardState(restored.state))).toEqual(
+      restored,
+    );
+    expect(
+      restoreAudienceCardSnapshotState({
+        ...restored.state,
+        tombstones: { forged: parsed.tombstones[0] },
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+    expect(
+      restoreAudienceCardSnapshotState({
+        ...restored.state,
+        cards: { [card(2).projectionId]: card(2) },
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+    expect(
+      restoreAudienceCardSnapshotState({
+        ...restored.state,
+        publicCardRevision: "pcr_3",
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+    expect(
+      restoreAudienceCardSnapshotState({
+        ...restored.state,
+        publicCardRevision: "pcr_9007199254740992",
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+  });
+});
+
 describe("runtime role snapshot restore", () => {
   test("parses unknown input, authorizes exact role, and restores streams independently", () => {
     const playback = initialPublicPlaybackState({
@@ -361,25 +414,43 @@ describe("runtime role snapshot restore", () => {
     }).state;
     const restored = restoreAudienceRoleStreams(
       advancedPlayback,
-      stream(),
+      audienceCards(),
       audienceSnapshot(),
       "PUBLIC_STAGE",
     );
     expect(restored.outcome).toBe("APPLIED");
     expect(String(restored.playback.publicPlaybackRevision)).toBe("pbr_1");
     expect(String(restored.cards.publicCardRevision)).toBe("pcr_2");
+    const restartedCards = restoreAudienceCardSnapshotState(
+      snapshotAudienceCardState(restored.cards),
+    );
+    expect(restartedCards.outcome).toBe("RESTORED");
+    if (restartedCards.outcome !== "RESTORED") throw new Error("role cards did not restart");
+    expect(
+      restoreAudienceRoleStreams(
+        restored.playback,
+        restartedCards.state,
+        audienceSnapshot(),
+        "PUBLIC_STAGE",
+      ).outcome,
+    ).toBe("DUPLICATE");
 
     expect(
-      restoreAudienceRoleStreams(playback, stream(), audienceSnapshot(), "CONTROLLER").outcome,
+      restoreAudienceRoleStreams(playback, audienceCards(), audienceSnapshot(), "CONTROLLER")
+        .outcome,
     ).toBe("UNAUTHORIZED_ROLE");
     expect(
-      restoreAudienceRoleStreams(playback, stream(), { role: "PUBLIC_STAGE" }, "PUBLIC_STAGE")
-        .outcome,
+      restoreAudienceRoleStreams(
+        playback,
+        audienceCards(),
+        { role: "PUBLIC_STAGE" },
+        "PUBLIC_STAGE",
+      ).outcome,
     ).toBe("INVALID_SNAPSHOT");
     expect(() =>
       restoreAudienceRoleStreams(
         playback,
-        stream(),
+        audienceCards(),
         audienceSnapshot({ publicCardRevision: "pcr_9007199254740992" }),
         "PUBLIC_STAGE",
       ),
@@ -387,7 +458,7 @@ describe("runtime role snapshot restore", () => {
     expect(
       restoreAudienceRoleStreams(
         playback,
-        stream(),
+        audienceCards(),
         audienceSnapshot({ publicCardRevision: "pcr_9007199254740992" }),
         "PUBLIC_STAGE",
       ).outcome,
@@ -408,7 +479,7 @@ describe("runtime role snapshot restore", () => {
     const current = { ...playback, publicPlaybackRevision: parsed.publicPlaybackRevision };
     const conflict = restoreAudienceRoleStreams(
       current,
-      stream(),
+      audienceCards(),
       audienceSnapshot({ blackout: true }),
       "PUBLIC_STAGE",
     );
@@ -417,24 +488,27 @@ describe("runtime role snapshot restore", () => {
 
     const hashConflict = restoreAudienceRoleStreams(
       current,
-      stream(),
+      audienceCards(),
       audienceSnapshot({ deck: { ...parsed.deck, manifestHash: hash("d") } }),
       "PUBLIC_STAGE",
     );
     expect(hashConflict.outcome).toBe("CONFLICTING_SNAPSHOT");
     expect(hashConflict.playback).toEqual(current);
 
-    const cardsAtTwo = applyPublicCardEvent(
-      applyPublicCardEvent(stream(), card(1, "projection_live")).state,
-      tombstone(2, "projection_other"),
-    ).state;
+    const cardsAtTwo = restoreAudienceCardSnapshotState({
+      ...audienceCards(),
+      publicCardRevision: "pcr_2",
+      cards: { projection_live: card(1, "projection_live") },
+      tombstones: { projection_other: tombstone(2, "projection_other") },
+    });
+    if (cardsAtTwo.outcome !== "RESTORED") throw new Error("current role cards were rejected");
     const stale = restoreAudienceRoleStreams(
       playback,
-      cardsAtTwo,
+      cardsAtTwo.state,
       audienceSnapshot({ publicCardRevision: "pcr_1", tombstones: [] }),
       "PUBLIC_STAGE",
     );
     expect(stale.outcome).toBe("STALE_SNAPSHOT");
-    expect(stale.cards).toEqual(cardsAtTwo);
+    expect(stale.cards).toEqual(cardsAtTwo.state);
   });
 });
