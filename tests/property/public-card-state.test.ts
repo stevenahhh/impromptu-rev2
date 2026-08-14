@@ -370,6 +370,8 @@ describe("compacted audience card persistence", () => {
     expect(restoreAudienceCardSnapshotState(snapshotAudienceCardState(restored.state))).toEqual(
       restored,
     );
+    expect(restoreAudienceCardSnapshotState(stream())).toEqual({ outcome: "INVALID_SNAPSHOT" });
+    expect(restorePublicCardStream(restored.state)).toEqual({ outcome: "INVALID_SNAPSHOT" });
     expect(
       restoreAudienceCardSnapshotState({
         ...restored.state,

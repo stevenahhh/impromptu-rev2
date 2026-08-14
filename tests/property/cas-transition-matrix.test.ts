@@ -15,7 +15,6 @@ import {
 } from "@impromptu/contracts/public";
 import {
   applyAuthorizedPublicCardEvent,
-  applyPublicCardEvent,
   type CandidateLifecycleOperation,
   type CandidateLifecycleState,
   createCandidateLifecycle,
