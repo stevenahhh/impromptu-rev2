@@ -1,5 +1,6 @@
 import type { TrustedModelContext } from "./context.ts";
 import type { ModelCapability } from "./schemas.ts";
+import type { ExactEgressGrant } from "./security.ts";
 
 export interface Schema<T> {
   parse(value: unknown): T;
@@ -17,11 +18,6 @@ export interface ModelAdapterDescriptor {
   readonly model: string;
   readonly modelVersion: string;
   readonly requirement?: AdapterRequirement;
-}
-
-export interface ExactEgressGrant {
-  readonly adapterId: string;
-  readonly origin: string;
 }
 
 export interface ProviderAccess {
