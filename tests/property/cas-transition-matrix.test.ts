@@ -138,7 +138,8 @@ describe("generated CAS and illegal-transition matrices", () => {
             const result = reduceCandidateLifecycle(entry.state, operation(entry.state, type));
             const legal =
               (entry.status === "PRIVATE" && type !== "PUBLISH") ||
-              (entry.status === "ELIGIBLE" && type !== "QUALIFY");
+              (entry.status === "ELIGIBLE" && type !== "QUALIFY") ||
+              (entry.status === "PUBLISHED" && (type === "MARK_STALE" || type === "SUPERSEDE"));
             expect(result.outcome).toBe(legal ? "APPLIED" : "REJECTED");
             if (!legal && result.outcome === "REJECTED") {
               expect(result.reason).toBe(
