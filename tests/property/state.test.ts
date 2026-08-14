@@ -241,17 +241,25 @@ describe("playback authority reducer", () => {
   test("restores all authoritative and idempotency state after restart", () => {
     const accepted = reducePlaybackCommand(authority(), command({ type: "SLIDE_NEXT" }), nowMs);
     const restored = restorePlaybackAuthority(snapshotPlaybackAuthority(accepted.state));
-    expect(restored).toEqual(accepted.state);
+    expect(restored.outcome).toBe("RESTORED");
+    if (restored.outcome !== "RESTORED") throw new Error("valid playback snapshot was rejected");
+    expect(restored.state).toEqual(accepted.state);
 
-    const duplicate = reducePlaybackCommand(restored, command({ type: "SLIDE_NEXT" }), nowMs);
+    const duplicate = reducePlaybackCommand(restored.state, command({ type: "SLIDE_NEXT" }), nowMs);
     expect(String(duplicate.state.controlRevision)).toBe("cr_1");
     expect(duplicate.receipt).toEqual(accepted.receipt);
-    expect(() =>
+    expect(
       restorePlaybackAuthority({
         ...snapshotPlaybackAuthority(accepted.state),
         controlRevision: "pbr_1",
       }),
-    ).toThrow();
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+    expect(
+      restorePlaybackAuthority({
+        ...snapshotPlaybackAuthority(accepted.state),
+        controlRevision: "cr_9007199254740992",
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
   });
 });
 

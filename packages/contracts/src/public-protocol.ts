@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PublicSlideOccurrenceSchema, Sha256Schema, TimestampMsSchema } from "./common.ts";
+import { safeEncodedCounterValue } from "./identity-base.ts";
 import { PublishedDeckArtifactSchema } from "./public-deck.ts";
 import {
   AudienceDisplaySessionIdSchema,
@@ -65,8 +66,9 @@ export const AudienceSnapshotSchema = z
   })
   .strict()
   .superRefine((snapshot, context) => {
-    const head = publicCardRevisionValue(snapshot.publicCardRevision);
-    const watermark = publicCardRevisionValue(snapshot.tombstoneWatermark);
+    const head = safeEncodedCounterValue(snapshot.publicCardRevision);
+    const watermark = safeEncodedCounterValue(snapshot.tombstoneWatermark);
+    if (head === null || watermark === null) return;
     if (watermark > head) {
       context.addIssue({
         code: "custom",
@@ -79,7 +81,8 @@ export const AudienceSnapshotSchema = z
     const terminal = new Set<string>();
     const revisions = new Set<number>();
     for (const [index, card] of snapshot.cards.entries()) {
-      const revision = publicCardRevisionValue(card.publicCardRevision);
+      const revision = safeEncodedCounterValue(card.publicCardRevision);
+      if (revision === null) continue;
       if (revision > head) {
         context.addIssue({
           code: "custom",
@@ -112,7 +115,8 @@ export const AudienceSnapshotSchema = z
       revisions.add(revision);
     }
     for (const [index, tombstone] of snapshot.tombstones.entries()) {
-      const revision = publicCardRevisionValue(tombstone.publicCardRevision);
+      const revision = safeEncodedCounterValue(tombstone.publicCardRevision);
+      if (revision === null) continue;
       if (revision > head) {
         context.addIssue({
           code: "custom",

@@ -62,6 +62,21 @@ describe("domain identities", () => {
     expect(ControlRevisionSchema.safeParse(cardRevision).success).toBe(false);
   });
 
+  test("rejects counters above Number.MAX_SAFE_INTEGER without throwing", () => {
+    const oversized = (BigInt(Number.MAX_SAFE_INTEGER) + 1n).toString();
+    for (const [schema, value] of [
+      [PresentationSessionEpochSchema, `pse_${oversized}`],
+      [ControllerEpochSchema, `ce_${oversized}`],
+      [DisplayBindingEpochSchema, `dbe_${oversized}`],
+      [ControlRevisionSchema, `cr_${oversized}`],
+      [PublicPlaybackRevisionSchema, `pbr_${oversized}`],
+      [PublicCardRevisionSchema, `pcr_${oversized}`],
+    ] as const) {
+      expect(() => schema.safeParse(value)).not.toThrow();
+      expect(schema.safeParse(value).success).toBe(false);
+    }
+  });
+
   test("parses non-interchangeable lease and capability contracts", () => {
     const lease = PlaybackControlLeaseSchema.parse({
       leaseId: "lease_primary",

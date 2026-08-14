@@ -67,9 +67,12 @@ export function restoreAudienceRoleStreams(
     return { playback, cards, outcome: "STALE_SNAPSHOT" };
   }
   const restoredCards = publicCardStreamFromSnapshot(cards, snapshot);
+  if (restoredCards.outcome !== "RESTORED") {
+    return { playback, cards, outcome: "INVALID_SNAPSHOT" };
+  }
   if (
     snapshotCardRevision === currentCardRevision &&
-    comparableCards(restoredCards) !== comparableCards(cards)
+    comparableCards(restoredCards.state) !== comparableCards(cards)
   ) {
     return { playback, cards, outcome: "CONFLICTING_SNAPSHOT" };
   }
@@ -78,7 +81,7 @@ export function restoreAudienceRoleStreams(
   const playbackChanged = playbackResult.outcome === "APPLIED";
   return {
     playback: playbackResult.state,
-    cards: cardsChanged ? restoredCards : cards,
+    cards: cardsChanged ? restoredCards.state : cards,
     outcome: playbackChanged || cardsChanged ? "APPLIED" : "DUPLICATE",
   };
 }

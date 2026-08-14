@@ -16,6 +16,7 @@ import {
   publicCardRevision,
   publicCardRevisionValue,
 } from "@impromptu/contracts/public";
+import { safeEncodedCounterValue } from "@impromptu/contracts/shared";
 import { z } from "zod";
 import type { CandidateLifecycleState } from "./candidate-lifecycle.ts";
 
@@ -35,8 +36,9 @@ const PublicCardStreamSnapshotSchema = z
   })
   .strict()
   .superRefine((snapshot, context) => {
-    const head = publicCardRevisionValue(snapshot.publicCardRevision);
-    const watermark = publicCardRevisionValue(snapshot.tombstoneWatermark);
+    const head = safeEncodedCounterValue(snapshot.publicCardRevision);
+    const watermark = safeEncodedCounterValue(snapshot.tombstoneWatermark);
+    if (head === null || watermark === null) return;
     if (watermark > head) {
       context.addIssue({
         code: "custom",
@@ -56,8 +58,13 @@ const PublicCardStreamSnapshotSchema = z
       });
     }
     for (const [key, card] of Object.entries(snapshot.cards)) {
-      const revision = publicCardRevisionValue(card.publicCardRevision);
-      if (key !== card.projectionId || revision > head || revision <= watermark) {
+      const revision = safeEncodedCounterValue(card.publicCardRevision);
+      if (
+        revision === null ||
+        key !== card.projectionId ||
+        revision > head ||
+        revision <= watermark
+      ) {
         context.addIssue({
           code: "custom",
           path: ["cards", key],
@@ -75,7 +82,7 @@ const PublicCardStreamSnapshotSchema = z
     for (const [key, tombstone] of Object.entries(snapshot.tombstones)) {
       if (
         key !== tombstone.projectionId ||
-        publicCardRevisionValue(tombstone.publicCardRevision) > head
+        (safeEncodedCounterValue(tombstone.publicCardRevision) ?? Number.POSITIVE_INFINITY) > head
       ) {
         context.addIssue({
           code: "custom",
@@ -87,7 +94,7 @@ const PublicCardStreamSnapshotSchema = z
     for (const [key, event] of Object.entries(snapshot.eventsByRevision)) {
       if (
         key !== event.publicCardRevision ||
-        publicCardRevisionValue(event.publicCardRevision) > head
+        (safeEncodedCounterValue(event.publicCardRevision) ?? Number.POSITIVE_INFINITY) > head
       ) {
         context.addIssue({
           code: "custom",
@@ -273,8 +280,15 @@ export function applyAuthorizedPublicCardEvent(
   return { state, outcome: "REJECTED", reason };
 }
 
-export function restorePublicCardStream(input: unknown): PublicCardStreamState {
-  return PublicCardStreamSnapshotSchema.parse(input);
+export type PublicCardStreamRestoreResult =
+  | Readonly<{ outcome: "RESTORED"; state: PublicCardStreamState }>
+  | Readonly<{ outcome: "INVALID_SNAPSHOT" }>;
+
+export function restorePublicCardStream(input: unknown): PublicCardStreamRestoreResult {
+  const parsed = PublicCardStreamSnapshotSchema.safeParse(input);
+  return parsed.success
+    ? { outcome: "RESTORED", state: parsed.data }
+    : { outcome: "INVALID_SNAPSHOT" };
 }
 
 export function publicCardStreamFromSnapshot(
@@ -287,7 +301,7 @@ export function publicCardStreamFromSnapshot(
     cards: readonly PublishedAudienceCard[];
     tombstones: readonly PublicationTombstone[];
   },
-): PublicCardStreamState {
+): PublicCardStreamRestoreResult {
   const cards = Object.fromEntries(input.cards.map((card) => [card.projectionId, card]));
   const tombstones = Object.fromEntries(
     input.tombstones.map((tombstone) => [tombstone.projectionId, tombstone]),
@@ -295,7 +309,7 @@ export function publicCardStreamFromSnapshot(
   const eventsByRevision = Object.fromEntries(
     [...input.cards, ...input.tombstones].map((event) => [event.publicCardRevision, event]),
   );
-  return PublicCardStreamSnapshotSchema.parse({
+  return restorePublicCardStream({
     presentationSessionId: input.presentationSessionId,
     presentationSessionEpoch: input.presentationSessionEpoch,
     authority: current.authority,

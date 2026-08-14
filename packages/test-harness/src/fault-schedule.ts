@@ -66,10 +66,15 @@ export function runPlaybackFaultSchedule(
         trace.push({ type: "STAGE_APPLY", outcome: application.outcome });
         break;
       }
-      case "RESTART":
-        state = restorePlaybackAuthority(snapshotPlaybackAuthority(state));
+      case "RESTART": {
+        const restored = restorePlaybackAuthority(snapshotPlaybackAuthority(state));
+        if (restored.outcome !== "RESTORED") {
+          throw new Error("fault harness produced an invalid playback snapshot");
+        }
+        state = restored.state;
         trace.push({ type: "RESTART" });
         break;
+      }
       case "STAGE_STATUS":
         state = { ...state, stageStatus: action.status };
         trace.push({ type: "STAGE_STATUS", status: action.status });

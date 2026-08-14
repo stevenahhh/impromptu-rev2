@@ -10,17 +10,29 @@ export function prefixedId<const Brand extends string>(prefix: string) {
 }
 
 export function encodedCounter<const Brand extends string>(prefix: string) {
+  const pattern = new RegExp(`^${prefix}(0|[1-9][0-9]*)$`);
   return z
     .string()
-    .regex(new RegExp(`^${prefix}(0|[1-9][0-9]*)$`))
+    .regex(pattern)
+    .refine((value) => {
+      if (!pattern.test(value)) return false;
+      const digits = value.slice(prefix.length);
+      return BigInt(digits) <= BigInt(Number.MAX_SAFE_INTEGER);
+    }, "counter exceeds Number.MAX_SAFE_INTEGER")
     .brand<Brand>();
 }
 
-export function encodedCounterValue(value: string): number {
+export function safeEncodedCounterValue(value: unknown): number | null {
+  if (typeof value !== "string") return null;
   const separator = value.lastIndexOf("_");
-  if (separator < 0) throw new Error("encoded counter is missing its domain prefix");
+  if (separator < 0) return null;
   const numeric = Number(value.slice(separator + 1));
-  if (!Number.isSafeInteger(numeric) || numeric < 0) {
+  return Number.isSafeInteger(numeric) && numeric >= 0 ? numeric : null;
+}
+
+export function encodedCounterValue(value: string): number {
+  const numeric = safeEncodedCounterValue(value);
+  if (numeric === null) {
     throw new Error("encoded counter is outside the safe non-negative integer range");
   }
   return numeric;

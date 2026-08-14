@@ -243,15 +243,23 @@ describe("candidate and public card stream separation", () => {
     const retracted = applyPublicCardEvent(upserted.state, tombstone(2));
     expect(retracted.outcome).toBe("APPLIED");
     const restored = restorePublicCardStream(structuredClone(retracted.state));
-    expect(() =>
+    expect(restored.outcome).toBe("RESTORED");
+    if (restored.outcome !== "RESTORED") throw new Error("valid card snapshot was rejected");
+    expect(
       restorePublicCardStream({
         ...retracted.state,
         cards: { [card(3).projectionId]: card(3) },
       }),
-    ).toThrow();
-    const resurrection = applyPublicCardEvent(restored, card(3));
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+    expect(
+      restorePublicCardStream({
+        ...retracted.state,
+        publicCardRevision: "pcr_9007199254740992",
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+    const resurrection = applyPublicCardEvent(restored.state, card(3));
     expect(resurrection).toMatchObject({ outcome: "TERMINAL_PROJECTION" });
-    expect(resurrection.state).toEqual(restored);
+    expect(resurrection.state).toEqual(restored.state);
   });
 
   test("converges generated duplicate and out-of-order card schedules without resurrection", () => {

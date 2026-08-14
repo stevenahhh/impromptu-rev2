@@ -38,6 +38,7 @@ import {
   publicPlaybackRevision,
   Sha256Schema,
 } from "@impromptu/contracts/public";
+import { safeEncodedCounterValue } from "@impromptu/contracts/shared";
 import { z } from "zod";
 
 export type StageStatus = "READY" | "DISCONNECTED" | "UNBOUND";
@@ -122,13 +123,16 @@ const PlaybackAuthoritySnapshotSchema = z
     ) {
       context.addIssue({ code: "custom", path: ["slideOrder"], message: "invalid slide registry" });
     }
-    const controlHead = controlRevisionValue(snapshot.controlRevision);
+    const controlHead = safeEncodedCounterValue(snapshot.controlRevision);
+    if (controlHead === null) return;
     for (const [key, record] of Object.entries(snapshot.acceptedCommands)) {
+      const acceptedRevision = safeEncodedCounterValue(record.receipt.acceptedControlRevision);
       if (
         record.requestHash !== record.receipt.requestHash ||
         record.effect.commandId !== record.receipt.commandId ||
         record.effect.acceptedControlRevision !== record.receipt.acceptedControlRevision ||
-        controlRevisionValue(record.receipt.acceptedControlRevision) > controlHead
+        acceptedRevision === null ||
+        acceptedRevision > controlHead
       ) {
         context.addIssue({
           code: "custom",
@@ -446,6 +450,13 @@ export function snapshotPlaybackAuthority(
   return structuredClone(state);
 }
 
-export function restorePlaybackAuthority(snapshot: unknown): PlaybackAuthorityState {
-  return PlaybackAuthoritySnapshotSchema.parse(snapshot);
+export type PlaybackAuthorityRestoreResult =
+  | Readonly<{ outcome: "RESTORED"; state: PlaybackAuthorityState }>
+  | Readonly<{ outcome: "INVALID_SNAPSHOT" }>;
+
+export function restorePlaybackAuthority(snapshot: unknown): PlaybackAuthorityRestoreResult {
+  const parsed = PlaybackAuthoritySnapshotSchema.safeParse(snapshot);
+  return parsed.success
+    ? { outcome: "RESTORED", state: parsed.data }
+    : { outcome: "INVALID_SNAPSHOT" };
 }
