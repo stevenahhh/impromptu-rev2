@@ -198,9 +198,7 @@ function applyCardEvent(
 function DisplayPage({ client }: { readonly client: StageSessionClient }) {
   const titleId = useId();
   const fullscreen = useStageFullscreen();
-  const requestedMode = windowsDisplayMode(
-    new URL(window.location.href).searchParams.get("mode"),
-  );
+  const requestedMode = windowsDisplayMode(new URL(window.location.href).searchParams.get("mode"));
   const [mode, setMode] = useState(requestedMode);
   const [screenCount, setScreenCount] = useState(1);
   const [snapshot, setSnapshot] = useState<StageSnapshotView | null>(null);
