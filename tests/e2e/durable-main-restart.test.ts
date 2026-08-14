@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 type ServiceProcess = ReturnType<typeof Bun.spawn<"ignore", "pipe", "pipe">>;
@@ -44,6 +44,38 @@ async function start(entrypoint: string, environment: Record<string, string>, re
   processes.push(process);
   await waitForOutput(process.stdout, ready);
   return process;
+}
+
+async function expectRejectedStartup(
+  entrypoint: string,
+  environment: Record<string, string>,
+  expectedErrorType: string,
+): Promise<void> {
+  const process = Bun.spawn<"ignore", "pipe", "pipe">({
+    cmd: ["bun", "run", entrypoint],
+    env: { ...Bun.env, ...environment },
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  processes.push(process);
+  const [exitCode, stdout, stderr] = await Promise.all([
+    Promise.race([
+      process.exited,
+      new Promise<never>((_resolve, reject) => {
+        AbortSignal.timeout(5_000).addEventListener(
+          "abort",
+          () => reject(new Error(`${entrypoint} did not reject its snapshot`)),
+          { once: true },
+        );
+      }),
+    ]),
+    new Response(process.stdout).text(),
+    new Response(process.stderr).text(),
+  ]);
+  expect(exitCode).not.toBe(0);
+  expect(stdout).not.toContain("listening");
+  expect(stderr).toContain(expectedErrorType);
 }
 
 async function stop(process: ServiceProcess): Promise<void> {
@@ -153,6 +185,70 @@ describe("durable service-main restore boundary", () => {
       }),
     });
     expect(binding.status).toBe(201);
+    const candidateId = "candidate_restart_terminal";
+    const candidate = await fetch(`${privateOrigin}/v1/candidates/curated`, {
+      method: "POST",
+      headers: authenticatedHeaders,
+      body: JSON.stringify({
+        candidateId,
+        candidateVersion: "candidate-version-restart",
+        provenance: "CURATED_PREAPPROVED",
+        verdict: "SUPPORTED",
+        claimText: "Restart terminal claim",
+        evidenceExcerpt: "Restart terminal support",
+        privateSourceUri: "private://restart/terminal",
+        causal: {
+          presentationSessionId: presentation.lifecycle.presentationSessionId,
+          presentationSessionEpoch: "pse_1",
+          displayBindingEpoch: "dbe_1",
+          deckVersion: artifacts.publicDeck.deckVersion,
+          manifestHash: artifacts.publicDeck.manifestHash,
+          occurrence: {
+            publicSlideKey: artifacts.publicDeck.slides[0].publicSlideKey,
+            occurrenceSeq: 1,
+          },
+          transcriptFinalId: null,
+          source: {
+            sourceId: "source_restart_terminal",
+            revision: "source-revision-1",
+            contentHash: artifacts.sourceHash,
+          },
+          decisions: {
+            acl: "acl-1",
+            publicationPolicy: "publication-policy-1",
+            rights: "rights-1",
+            dlp: "dlp-1",
+          },
+        },
+      }),
+    });
+    expect(candidate.status).toBe(201);
+    const publishedResponse = await fetch(`${privateOrigin}/v1/publications/approve`, {
+      method: "POST",
+      headers: authenticatedHeaders,
+      body: JSON.stringify({
+        presentationSessionId: presentation.lifecycle.presentationSessionId,
+        candidateId,
+        expectedCandidateRevision: "candrev_1",
+        expectedPublicCardRevision: "pcr_0",
+        authorityId: presentation.authority.authorityId,
+        expiresAtMs: null,
+      }),
+    });
+    expect(publishedResponse.status).toBe(201);
+    const published = await publishedResponse.json();
+    const terminated = await fetch(`${privateOrigin}/v1/publications/terminate`, {
+      method: "POST",
+      headers: authenticatedHeaders,
+      body: JSON.stringify({
+        presentationSessionId: presentation.lifecycle.presentationSessionId,
+        projectionId: published.projectionId,
+        expectedPublicCardRevision: "pcr_1",
+        authorityId: presentation.authority.authorityId,
+        status: "RETRACTED",
+      }),
+    });
+    expect(terminated.status).toBe(200);
 
     await stop(privateBackend);
     privateBackend = await start(
@@ -180,7 +276,65 @@ describe("durable service-main restore boundary", () => {
     expect(claimAfterProjectionRestart.status).toBe(201);
     expect((await claimAfterProjectionRestart.json()).binding.displayBindingEpoch).toBe("dbe_1");
 
-    void privateBackend;
-    void projection;
+    await stop(privateBackend);
+    await stop(projection);
+    const privateBaseline: unknown = JSON.parse(readFileSync(privateSnapshotPath, "utf8"));
+    const projectionBaseline: unknown = JSON.parse(readFileSync(projectionDatabasePath, "utf8"));
+
+    const unsafeOccurrence = structuredClone(projectionBaseline) as {
+      projections: Array<{ occurrence: { occurrenceSeq: number } }>;
+    };
+    const unsafeProjection = unsafeOccurrence.projections[0];
+    if (unsafeProjection === undefined) throw new Error("projection snapshot fixture missing");
+    unsafeProjection.occurrence.occurrenceSeq = Number.MAX_SAFE_INTEGER + 1;
+    writeFileSync(projectionDatabasePath, JSON.stringify(unsafeOccurrence));
+    await expectRejectedStartup(
+      "services/projection-gateway/src/main.ts",
+      projectionEnvironment,
+      "ProjectionGatewaySnapshotError",
+    );
+
+    const strippedTerminalHistory = structuredClone(projectionBaseline) as {
+      projections: Array<{ tombstones: unknown[] }>;
+    };
+    const strippedProjection = strippedTerminalHistory.projections[0];
+    if (strippedProjection === undefined) throw new Error("projection snapshot fixture missing");
+    strippedProjection.tombstones = [];
+    writeFileSync(projectionDatabasePath, JSON.stringify(strippedTerminalHistory));
+    await expectRejectedStartup(
+      "services/projection-gateway/src/main.ts",
+      projectionEnvironment,
+      "ProjectionGatewaySnapshotError",
+    );
+
+    const mismatchedCandidateHash = structuredClone(privateBaseline) as {
+      presentations: Array<{
+        candidates: Array<{ lifecycle: { contentHash: string } }>;
+      }>;
+    };
+    const hashCandidate = mismatchedCandidateHash.presentations[0]?.candidates[0];
+    if (hashCandidate === undefined) throw new Error("private candidate fixture missing");
+    hashCandidate.lifecycle.contentHash = "f".repeat(64);
+    writeFileSync(privateSnapshotPath, JSON.stringify(mismatchedCandidateHash));
+    await expectRejectedStartup(
+      "services/private-backend/src/main.ts",
+      privateEnvironment,
+      "PreparedEvidenceSnapshotError",
+    );
+
+    const mismatchedCandidateVersion = structuredClone(privateBaseline) as {
+      presentations: Array<{
+        candidates: Array<{ lifecycle: { candidateVersion: string } }>;
+      }>;
+    };
+    const versionCandidate = mismatchedCandidateVersion.presentations[0]?.candidates[0];
+    if (versionCandidate === undefined) throw new Error("private candidate fixture missing");
+    versionCandidate.lifecycle.candidateVersion = "candidate-version-forged";
+    writeFileSync(privateSnapshotPath, JSON.stringify(mismatchedCandidateVersion));
+    await expectRejectedStartup(
+      "services/private-backend/src/main.ts",
+      privateEnvironment,
+      "PreparedEvidenceSnapshotError",
+    );
   });
 });

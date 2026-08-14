@@ -114,6 +114,11 @@ export function createProjectionGatewayStore(): ProjectionGatewayStore {
 
 export class ProjectionGatewaySnapshotError extends Error {
   readonly code = "INVALID_PROJECTION_DATABASE_SNAPSHOT";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "ProjectionGatewaySnapshotError";
+  }
 }
 
 export type ProjectionGatewayStoreRestoreResult =
@@ -403,6 +408,8 @@ export function restoreProjectionGatewayStore(input: unknown): ProjectionGateway
       !snapshotRecord(projectionInput.occurrence) ||
       typeof projectionInput.occurrence.publicSlideKey !== "string" ||
       typeof projectionInput.occurrence.occurrenceSeq !== "number" ||
+      !Number.isSafeInteger(projectionInput.occurrence.occurrenceSeq) ||
+      projectionInput.occurrence.occurrenceSeq <= 0 ||
       !Array.isArray(projectionInput.cards) ||
       !Array.isArray(projectionInput.tombstones)
     ) {
@@ -453,6 +460,17 @@ export function restoreProjectionGatewayStore(input: unknown): ProjectionGateway
         return { outcome: "INVALID_SNAPSHOT" };
       }
       tombstones.set(tombstone.projectionId, tombstone);
+    }
+    const representedRevisions = [...cards.values(), ...tombstones.values()].map((event) =>
+      revisionValue(event.publicCardRevision, "pcr_"),
+    );
+    if (
+      representedRevisions.some((revision) => revision === null) ||
+      (cardRevision === 0
+        ? representedRevisions.length !== 0
+        : Math.max(...representedRevisions.map((revision) => revision ?? -1)) !== cardRevision)
+    ) {
+      return { outcome: "INVALID_SNAPSHOT" };
     }
     store.projections.set(displaySession.binding.presentationSessionId, {
       binding: displaySession.binding,

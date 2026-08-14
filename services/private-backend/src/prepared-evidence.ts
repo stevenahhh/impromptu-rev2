@@ -117,6 +117,11 @@ export function createPreparedEvidenceStore(): PreparedEvidenceStore {
 
 export class PreparedEvidenceSnapshotError extends Error {
   readonly code = "INVALID_PREPARED_EVIDENCE_SNAPSHOT";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "PreparedEvidenceSnapshotError";
+  }
 }
 
 export type PreparedEvidenceStoreRestoreResult =
@@ -230,6 +235,8 @@ export function restorePreparedEvidenceStore(input: unknown): PreparedEvidenceSt
         !candidate.success ||
         candidateLifecycle.outcome !== "RESTORED" ||
         candidate.data.candidateId !== candidateLifecycle.state.candidateId ||
+        candidate.data.candidateVersion !== candidateLifecycle.state.candidateVersion ||
+        candidate.data.causal.source.contentHash !== candidateLifecycle.state.contentHash ||
         candidate.data.causal.presentationSessionId !== lifecycle.data.presentationSessionId ||
         candidates.has(candidate.data.candidateId)
       ) {

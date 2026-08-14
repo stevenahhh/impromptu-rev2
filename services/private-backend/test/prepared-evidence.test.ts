@@ -203,8 +203,43 @@ describe("prepared evidence private coordinator", () => {
     expect(rejectedOldController).toEqual({ outcome: "REJECTED", reason: "UNAUTHORIZED" });
   });
 
-  test("restores durable sessions and rejects forged unsafe counters", async () => {
+  test("restores durable sessions and rejects forged candidate lifecycle identity", async () => {
     const flow = await createBoundFlow();
+    expect(
+      flow.coordinator.addCuratedCandidate(
+        flow.account.accountSessionId,
+        {
+          candidateId: "candidate_durable_identity",
+          candidateVersion: "candidate-version-durable",
+          provenance: "CURATED_PREAPPROVED",
+          verdict: "SUPPORTED",
+          claimText: "Durable candidate",
+          evidenceExcerpt: "Durable support",
+          privateSourceUri: "private://source/durable",
+          causal: {
+            presentationSessionId: flow.created.lifecycle.presentationSessionId,
+            presentationSessionEpoch: "pse_1",
+            displayBindingEpoch: "dbe_1",
+            deckVersion: publicDeck.deckVersion,
+            manifestHash,
+            occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+            transcriptFinalId: null,
+            source: {
+              sourceId: "source_durable",
+              revision: "source-revision-1",
+              contentHash: sourceHash,
+            },
+            decisions: {
+              acl: "acl-1",
+              publicationPolicy: "publication-policy-1",
+              rights: "rights-1",
+              dlp: "dlp-1",
+            },
+          },
+        },
+        1_002,
+      ).outcome,
+    ).toBe("APPLIED");
     const snapshot = snapshotPreparedEvidenceStore(flow.store);
     const restored = restorePreparedEvidenceStore(snapshot);
     expect(restored.outcome).toBe("RESTORED");
@@ -221,6 +256,30 @@ describe("prepared evidence private coordinator", () => {
     if (presentation === undefined) throw new Error("snapshot fixture missing presentation");
     presentation.playback.controlRevision = "cr_9007199254740992";
     expect(restorePreparedEvidenceStore(forged)).toEqual({ outcome: "INVALID_SNAPSHOT" });
+
+    const mismatchedCandidateHash = structuredClone(snapshot) as {
+      presentations: Array<{
+        candidates: Array<{ lifecycle: { contentHash: string } }>;
+      }>;
+    };
+    const hashCandidate = mismatchedCandidateHash.presentations[0]?.candidates[0];
+    if (hashCandidate === undefined) throw new Error("candidate snapshot fixture missing");
+    hashCandidate.lifecycle.contentHash = "c".repeat(64);
+    expect(restorePreparedEvidenceStore(mismatchedCandidateHash)).toEqual({
+      outcome: "INVALID_SNAPSHOT",
+    });
+
+    const mismatchedCandidateVersion = structuredClone(snapshot) as {
+      presentations: Array<{
+        candidates: Array<{ lifecycle: { candidateVersion: string } }>;
+      }>;
+    };
+    const versionCandidate = mismatchedCandidateVersion.presentations[0]?.candidates[0];
+    if (versionCandidate === undefined) throw new Error("candidate snapshot fixture missing");
+    versionCandidate.lifecycle.candidateVersion = "candidate-version-forged";
+    expect(restorePreparedEvidenceStore(mismatchedCandidateVersion)).toEqual({
+      outcome: "INVALID_SNAPSHOT",
+    });
   });
 
   test("accepts absolute slide.set and records only the ordered Stage prefix after restart", async () => {

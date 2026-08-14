@@ -240,6 +240,29 @@ describe("prepared evidence projection gateway", () => {
       1_001,
     );
     if (bound.outcome !== "BOUND") throw new Error("binding fixture failed");
+    expect(
+      gateway.projectCard("ps_durable", {
+        projectionId: "projection_durable_terminal",
+        status: "PUBLISHED",
+        claim: "Durable claim",
+        supportSummary: "Durable support",
+        sourceLabel: "Prepared source terminal",
+        publishedAtMs: 1_002,
+        expiresAtMs: null,
+        publicCardRevision: "pcr_1",
+        deckVersion: deck.deckVersion,
+        manifestHash: deck.manifestHash,
+        occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+      }),
+    ).toBe(true);
+    expect(
+      gateway.projectCard("ps_durable", {
+        projectionId: "projection_durable_terminal",
+        status: "RETRACTED",
+        publicCardRevision: "pcr_2",
+        occurredAtMs: 1_003,
+      }),
+    ).toBe(true);
     const snapshot = snapshotProjectionGatewayStore(store);
     const restored = restoreProjectionGatewayStore(snapshot);
     expect(restored.outcome).toBe("RESTORED");
@@ -255,12 +278,36 @@ describe("prepared evidence projection gateway", () => {
       ),
     ).not.toBeNull();
 
-    const forged = structuredClone(snapshot) as {
+    const forgedRevision = structuredClone(snapshot) as {
       projections: Array<{ publicCardRevision: string }>;
     };
-    const projection = forged.projections[0];
-    if (projection === undefined) throw new Error("snapshot fixture missing projection");
-    projection.publicCardRevision = "pcr_9007199254740992";
-    expect(restoreProjectionGatewayStore(forged)).toEqual({ outcome: "INVALID_SNAPSHOT" });
+    const forgedRevisionProjection = forgedRevision.projections[0];
+    if (forgedRevisionProjection === undefined)
+      throw new Error("snapshot fixture missing projection");
+    forgedRevisionProjection.publicCardRevision = "pcr_9007199254740992";
+    expect(restoreProjectionGatewayStore(forgedRevision)).toEqual({
+      outcome: "INVALID_SNAPSHOT",
+    });
+
+    const unsafeOccurrence = structuredClone(snapshot) as {
+      projections: Array<{ occurrence: { occurrenceSeq: number } }>;
+    };
+    const unsafeOccurrenceProjection = unsafeOccurrence.projections[0];
+    if (unsafeOccurrenceProjection === undefined)
+      throw new Error("snapshot fixture missing projection");
+    unsafeOccurrenceProjection.occurrence.occurrenceSeq = Number.MAX_SAFE_INTEGER + 1;
+    expect(restoreProjectionGatewayStore(unsafeOccurrence)).toEqual({
+      outcome: "INVALID_SNAPSHOT",
+    });
+
+    const strippedTerminalHistory = structuredClone(snapshot) as {
+      projections: Array<{ tombstones: unknown[] }>;
+    };
+    const strippedProjection = strippedTerminalHistory.projections[0];
+    if (strippedProjection === undefined) throw new Error("snapshot fixture missing projection");
+    strippedProjection.tombstones = [];
+    expect(restoreProjectionGatewayStore(strippedTerminalHistory)).toEqual({
+      outcome: "INVALID_SNAPSHOT",
+    });
   });
 });
