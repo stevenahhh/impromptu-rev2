@@ -10,7 +10,31 @@
         "@impromptu/state": "workspace:*",
         "@impromptu/test-harness": "workspace:*",
         "@types/bun": "1.2.20",
+        "fast-check": "4.3.0",
         "typescript": "5.9.2",
+      },
+    },
+    "packages/contracts": {
+      "name": "@impromptu/contracts",
+      "version": "0.0.0",
+      "dependencies": {
+        "zod": "4.1.5",
+      },
+    },
+    "packages/state": {
+      "name": "@impromptu/state",
+      "version": "0.0.0",
+      "dependencies": {
+        "@impromptu/contracts": "workspace:*",
+        "zod": "4.1.5",
+      },
+    },
+    "packages/test-harness": {
+      "name": "@impromptu/test-harness",
+      "version": "0.0.0",
+      "dependencies": {
+        "@impromptu/contracts": "workspace:*",
+        "@impromptu/state": "workspace:*",
       },
     },
     "services/private-backend": {
@@ -41,9 +65,15 @@
 
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.2.0", "", { "os": "win32", "cpu": "x64" }, "sha512-Nawu5nHjP/zPKTIryh2AavzTc/KEg4um/MxWdXW0A6P/RZOyIpa7+QSjeXwAwX/utJGaCoXRPWtF3m5U/bB3Ww=="],
 
+    "@impromptu/contracts": ["@impromptu/contracts@workspace:packages/contracts"],
+
     "@impromptu/private-backend": ["@impromptu/private-backend@workspace:services/private-backend"],
 
     "@impromptu/projection-gateway": ["@impromptu/projection-gateway@workspace:services/projection-gateway"],
+
+    "@impromptu/state": ["@impromptu/state@workspace:packages/state"],
+
+    "@impromptu/test-harness": ["@impromptu/test-harness@workspace:packages/test-harness"],
 
     "@types/bun": ["@types/bun@1.2.20", "", { "dependencies": { "bun-types": "1.2.20" } }, "sha512-dX3RGzQ8+KgmMw7CsW4xT5ITBSCrSbfHc36SNT31EOUg/LA9JWq0VDdEXDRSe1InVWpd2yLUM1FUF/kEOyTzYA=="],
 
@@ -55,8 +85,14 @@
 
     "csstype": ["csstype@3.2.3", "", {}, "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ=="],
 
+    "fast-check": ["fast-check@4.3.0", "", { "dependencies": { "pure-rand": "^7.0.0" } }, "sha512-JVw/DJSxVKl8uhCb7GrwanT9VWsCIdBkK3WpP37B/Au4pyaspriSjtrY2ApbSFwTg3ViPfniT13n75PhzE7VEQ=="],
+
+    "pure-rand": ["pure-rand@7.0.1", "", {}, "sha512-oTUZM/NAZS8p7ANR3SHh30kXB+zK2r2BPcEn/awJIbOvq82WoMN4p62AWWp3Hhw50G0xMsw1mhIBLqHw64EcNQ=="],
+
     "typescript": ["typescript@5.9.2", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-CWBzXQrc/qOkhidw1OzBTQuYRbfyxDXJMVJ1XNwUHGROVmuaeiEm3OslpZ1RV96d7SKKjZKrSJu3+t/xlw3R9A=="],
 
     "undici-types": ["undici-types@8.3.0", "", {}, "sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ=="],
+
+    "zod": ["zod@4.1.5", "", {}, "sha512-rcUUZqlLJgBC33IT3PNMgsCq6TzLQEG/Ei/KTCU0PedSWRMAXoOUN+4t/0H+Q8bdnLPdqUYnvboJT0bn/229qg=="],
   }
 }
