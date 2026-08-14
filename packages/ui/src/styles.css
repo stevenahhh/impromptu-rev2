@@ -50,6 +50,16 @@ a {
   background: var(--color-accent);
 }
 
+.ui-sr-only {
+  position: absolute;
+  width: var(--size-sr-only);
+  height: var(--size-sr-only);
+  overflow: hidden;
+  margin: var(--offset-sr-only);
+  clip-path: inset(var(--inset-sr-only));
+  white-space: nowrap;
+}
+
 .ui-skip-link {
   position: fixed;
   z-index: var(--layer-skip);

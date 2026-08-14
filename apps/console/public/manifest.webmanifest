@@ -1,5 +1,5 @@
 {
-  "id": "/",
+  "id": "/?app=console",
   "name": "Impromptu Presenter Console",
   "short_name": "Console",
   "description": "Private presentation setup and control workspace.",

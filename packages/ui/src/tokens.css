@@ -59,6 +59,9 @@
   --space-20: 5rem;
 
   --size-hairline: 0.0625rem;
+  --size-sr-only: 0.0625rem;
+  --offset-sr-only: -0.0625rem;
+  --inset-sr-only: 50%;
   --size-control: 2.75rem;
   --size-target: 3rem;
   --size-icon-sm: 0.5rem;
@@ -73,6 +76,8 @@
   --size-viewport: 100dvh;
   --size-sign-in-offset: 12vh;
   --fraction-full: 1fr;
+  --fluid-page: 3vw;
+  --fluid-gap: 6vw;
 
   --radius-sm: 0.375rem;
   --radius-md: 0.75rem;

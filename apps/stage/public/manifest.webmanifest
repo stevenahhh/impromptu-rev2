@@ -1,0 +1,20 @@
+{
+  "id": "/?app=stage",
+  "name": "Impromptu Public Stage",
+  "short_name": "Stage",
+  "description": "Audience-safe presentation evidence display.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "fullscreen",
+  "orientation": "landscape-primary",
+  "background_color": "#eee4c9",
+  "theme_color": "#eee4c9",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

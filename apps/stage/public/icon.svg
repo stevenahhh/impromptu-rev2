@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" style="--icon-canvas:#eee4c9;--icon-accent:#c34831;--icon-ink:#1c293d">
+  <rect width="512" height="512" rx="112" fill="var(--icon-canvas)"/>
+  <circle cx="256" cy="256" r="136" fill="var(--icon-accent)"/>
+  <path d="M170 184h172v56H286v88h56v56H170v-56h56v-88h-56z" fill="var(--icon-ink)"/>
+</svg>
