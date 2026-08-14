@@ -15,15 +15,26 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+async function serveRequest(request) {
+  try {
+    return await fetch(request);
+  } catch {
+    const cached = await caches.match(request);
+    if (cached) {
+      return cached;
+    }
+    if (request.mode === "navigate") {
+      return (await caches.match("/index.html")) ?? Response.error();
+    }
+    return Response.error();
+  }
+}
+
 self.addEventListener("fetch", (event) => {
   const requestUrl = new URL(event.request.url);
   if (event.request.method !== "GET" || requestUrl.origin !== self.location.origin) {
     return;
   }
 
-  event.respondWith(
-    fetch(event.request).catch(() =>
-      caches.match(event.request).then((cached) => cached ?? caches.match("/index.html")),
-    ),
-  );
+  event.respondWith(serveRequest(event.request));
 });

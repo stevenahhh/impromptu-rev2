@@ -15,11 +15,27 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+async function serveRequest(request) {
+  const cached = await caches.match(request);
+  if (cached) {
+    return cached;
+  }
+
+  try {
+    return await fetch(request);
+  } catch {
+    if (request.mode === "navigate") {
+      return (await caches.match("/index.html")) ?? Response.error();
+    }
+    return Response.error();
+  }
+}
+
 self.addEventListener("fetch", (event) => {
   const requestUrl = new URL(event.request.url);
   if (event.request.method !== "GET" || requestUrl.origin !== self.location.origin) {
     return;
   }
 
-  event.respondWith(caches.match(event.request).then((cached) => cached ?? fetch(event.request)));
+  event.respondWith(serveRequest(event.request));
 });

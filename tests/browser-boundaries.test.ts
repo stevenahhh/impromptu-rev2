@@ -88,6 +88,8 @@ describe("browser build boundaries", () => {
     expect(consoleCache).not.toBe(stageCache);
     expect(consoleWorker).not.toMatch(/https?:\/\//);
     expect(stageWorker).not.toMatch(/https?:\/\//);
+    expect(consoleWorker).toContain('request.mode === "navigate"');
+    expect(stageWorker).toContain('request.mode === "navigate"');
   });
 
   test("keeps application styles on shared design tokens", () => {
