@@ -507,6 +507,16 @@ export class PreparedEvidenceCoordinator {
     if (authorized.outcome === "REJECTED") return authorized;
     const record = authorized.value.candidates.get(input.candidateId);
     if (record === undefined) return { outcome: "REJECTED", reason: "CANDIDATE_NOT_FOUND" };
+    if (
+      record.candidate.causal.presentationSessionEpoch !==
+        authorized.value.lifecycle.presentationSessionEpoch ||
+      record.candidate.causal.displayBindingEpoch !==
+        authorized.value.playback.displayBindingEpoch ||
+      record.candidate.causal.deckVersion !== authorized.value.publicDeck.deckVersion ||
+      record.candidate.causal.manifestHash !== authorized.value.publicDeck.manifestHash
+    ) {
+      return { outcome: "REJECTED", reason: "STALE_CANDIDATE" };
+    }
     if (record.lifecycle.candidateRevision !== input.expectedCandidateRevision) {
       return { outcome: "REJECTED", reason: "CANDIDATE_CAS_CONFLICT" };
     }

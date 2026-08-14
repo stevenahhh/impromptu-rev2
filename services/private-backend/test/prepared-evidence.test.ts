@@ -287,4 +287,75 @@ describe("prepared evidence private coordinator", () => {
     expect(cardEvents).toEqual(["pcr_1:PUBLISHED", "pcr_2:RETRACTED"]);
     expect(flow.gateway.snapshot(flow.bound.audienceDisplaySessionId, 1_006)?.cards).toEqual([]);
   });
+
+  test("rejects approval when a rebind makes the curated candidate stale", async () => {
+    const flow = await createBoundFlow();
+    const candidate = {
+      candidateId: "candidate_pending_rebind",
+      candidateVersion: "candidate-version-1",
+      provenance: "CURATED_PREAPPROVED",
+      verdict: "SUPPORTED",
+      claimText: "Pending claim",
+      evidenceExcerpt: "Pending support",
+      privateSourceUri: "private://source/pending",
+      causal: {
+        presentationSessionId: flow.created.lifecycle.presentationSessionId,
+        presentationSessionEpoch: "pse_1",
+        displayBindingEpoch: "dbe_1",
+        deckVersion: publicDeck.deckVersion,
+        manifestHash,
+        occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+        transcriptFinalId: null,
+        source: {
+          sourceId: "source_pending",
+          revision: "source-revision-1",
+          contentHash: sourceHash,
+        },
+        decisions: {
+          acl: "acl-1",
+          publicationPolicy: "publication-policy-1",
+          rights: "rights-1",
+          dlp: "dlp-1",
+        },
+      },
+    };
+    expect(
+      flow.coordinator.addCuratedCandidate(flow.account.accountSessionId, candidate, 1_002).outcome,
+    ).toBe("APPLIED");
+    const join = flow.gateway.createDisplayJoin(
+      {
+        displayId: "display_beta",
+        deckVersion: publicDeck.deckVersion,
+        displayFingerprint: "fingerprint-stage-beta",
+      },
+      1_003,
+    );
+    const rebound = await flow.coordinator.approveDisplay(
+      flow.account.accountSessionId,
+      {
+        presentationSessionId: flow.created.lifecycle.presentationSessionId,
+        displayJoinId: join.displayJoinId,
+        expectedDisplayBindingEpoch: "dbe_1",
+        expectedDeckVersion: publicDeck.deckVersion,
+        approvedDisplayId: join.displayId,
+        approvedDisplayFingerprint: join.displayFingerprint,
+      },
+      1_004,
+    );
+    expect(rebound.outcome).toBe("APPLIED");
+    expect(
+      await flow.coordinator.approveCandidate(
+        flow.account.accountSessionId,
+        {
+          presentationSessionId: flow.created.lifecycle.presentationSessionId,
+          candidateId: candidate.candidateId,
+          expectedCandidateRevision: "candrev_1",
+          expectedPublicCardRevision: "pcr_0",
+          authorityId: flow.created.authority.authorityId,
+          expiresAtMs: null,
+        },
+        1_005,
+      ),
+    ).toEqual({ outcome: "REJECTED", reason: "STALE_CANDIDATE" });
+  });
 });
