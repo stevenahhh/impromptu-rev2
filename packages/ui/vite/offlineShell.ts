@@ -8,10 +8,12 @@ interface ServiceWorkerOptions {
   appId: "console" | "stage";
   assets: string[];
   buildId: string;
+  cohort: string;
 }
 
 interface OfflineShellOptions {
   appId: ServiceWorkerOptions["appId"];
+  cohort: string;
 }
 
 const excludedExtensions = new Set([".map"]);
@@ -41,17 +43,30 @@ function createBuildId(root: string, assets: string[]): string {
   return hash.digest("hex").slice(0, 12);
 }
 
-export function createServiceWorkerSource({ appId, assets, buildId }: ServiceWorkerOptions) {
-  const cachePrefix = `impromptu-${appId}-shell-`;
+export function createServiceWorkerSource({
+  appId,
+  assets,
+  buildId,
+  cohort,
+}: ServiceWorkerOptions) {
+  if (!/^[a-z0-9][a-z0-9-]{0,31}$/.test(cohort)) {
+    throw new Error("service worker cohort must be a lowercase release identifier");
+  }
+  const cachePrefix = `impromptu-${appId}-shell-${cohort}-`;
   const cacheName = `${cachePrefix}${buildId}`;
 
-  return `const CACHE_PREFIX = ${JSON.stringify(cachePrefix)};
+  return `const COHORT = ${JSON.stringify(cohort)};
+const BUILD_ID = ${JSON.stringify(buildId)};
+const CACHE_PREFIX = ${JSON.stringify(cachePrefix)};
 const CACHE_NAME = ${JSON.stringify(cacheName)};
 const PRECACHE_URLS = ${JSON.stringify(assets, null, 2)};
 
 self.addEventListener("install", (event) => {
+  const requestedCohort = new URL(self.location.href).searchParams.get("cohort");
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS)),
+    requestedCohort === COHORT
+      ? caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS))
+      : Promise.reject(new Error("service worker release cohort mismatch")),
   );
 });
 
@@ -69,6 +84,10 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("message", (event) => {
   const { type, reason } = event.data ?? {};
+  if (type === "IMPROMPTU_GET_RELEASE_PIN") {
+    event.ports[0]?.postMessage({ cohort: COHORT, buildId: BUILD_ID });
+    return;
+  }
   if (
     type !== "IMPROMPTU_ACTIVATE_UPDATE" ||
     (reason !== "SESSION_ENDED" && reason !== "OPERATOR_CONFIRMED")
@@ -112,7 +131,7 @@ self.addEventListener("fetch", (event) => {
 `;
 }
 
-export function versionedOfflineShell({ appId }: OfflineShellOptions): Plugin {
+export function versionedOfflineShell({ appId, cohort }: OfflineShellOptions): Plugin {
   let resolvedConfig: ResolvedConfig;
 
   return {
@@ -125,7 +144,7 @@ export function versionedOfflineShell({ appId }: OfflineShellOptions): Plugin {
       const outputDirectory = resolve(resolvedConfig.root, resolvedConfig.build.outDir);
       const assets = collectShellAssets(outputDirectory);
       const buildId = createBuildId(outputDirectory, assets);
-      const worker = createServiceWorkerSource({ appId, assets, buildId });
+      const worker = createServiceWorkerSource({ appId, assets, buildId, cohort });
       writeFileSync(join(outputDirectory, "sw.js"), worker);
     },
   };

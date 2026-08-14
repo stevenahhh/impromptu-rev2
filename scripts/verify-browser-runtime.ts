@@ -202,7 +202,7 @@ async function installOfflineShell(context: BrowserContext, surface: AppSurface)
   const page = await context.newPage();
   const response = await page.goto(address(surface), { waitUntil: "domcontentloaded" });
   await page.evaluate(waitForFirstServiceWorkerActivation, {
-    scriptUrl: "/sw.js",
+    scriptUrl: "/sw.js?cohort=stable",
     timeoutMs: 10_000,
   });
   await page.getByText(surface.expectedText, { exact: true }).waitFor({ state: "visible" });
@@ -257,6 +257,45 @@ async function installOfflineShell(context: BrowserContext, surface: AppSurface)
 
 async function waitForWaitingUpdate(page: Page) {
   return page.evaluate(waitForInstalledServiceWorkerUpdate, { timeoutMs: 10_000 });
+}
+
+async function readServiceWorkerReleasePin(page: Page) {
+  return page.evaluate(async () => {
+    const registration = await navigator.serviceWorker.getRegistration();
+    const worker = registration?.active;
+    if (!worker) throw new Error("active service worker is missing its release pin");
+
+    const pin = await new Promise<{ buildId: string; cohort: string }>((resolve, reject) => {
+      const channel = new MessageChannel();
+      const timeout = window.setTimeout(
+        () => reject(new Error("service worker release pin response timed out")),
+        10_000,
+      );
+      channel.port1.onmessage = (event: MessageEvent<unknown>) => {
+        window.clearTimeout(timeout);
+        channel.port1.close();
+        channel.port2.close();
+        const value = event.data;
+        if (
+          typeof value !== "object" ||
+          value === null ||
+          !("cohort" in value) ||
+          typeof value.cohort !== "string" ||
+          !("buildId" in value) ||
+          typeof value.buildId !== "string"
+        ) {
+          reject(new Error("service worker returned an invalid release pin"));
+          return;
+        }
+        resolve({ cohort: value.cohort, buildId: value.buildId });
+      };
+      worker.postMessage({ type: "IMPROMPTU_GET_RELEASE_PIN" }, [channel.port2]);
+    });
+    return {
+      ...pin,
+      scriptCohort: new URL(worker.scriptURL).searchParams.get("cohort"),
+    };
+  });
 }
 
 async function dispatchActivationAndWait(page: Page, eventName: string) {
@@ -329,7 +368,7 @@ async function verifyUpdateLifecycle(surface: AppSurface, index: number) {
     const page = await context.newPage();
     await page.goto(`${origin.url}${surface.route}`, { waitUntil: "domcontentloaded" });
     await page.evaluate(waitForFirstServiceWorkerActivation, {
-      scriptUrl: "/sw.js",
+      scriptUrl: "/sw.js?cohort=stable",
       timeoutMs: 10_000,
     });
     await page.getByText(surface.expectedText, { exact: true }).waitFor({ state: "visible" });
@@ -355,8 +394,13 @@ async function verifyUpdateLifecycle(surface: AppSurface, index: number) {
     const controlledAfterRefresh = await page.evaluate(
       () => navigator.serviceWorker.controller !== null,
     );
-    if (!controlledAfterRefresh) {
-      throw new Error(`${surface.app} first worker did not control the refreshed tab`);
+    const refreshPin = await readServiceWorkerReleasePin(page);
+    if (
+      !controlledAfterRefresh ||
+      refreshPin.cohort !== "stable" ||
+      refreshPin.scriptCohort !== "stable"
+    ) {
+      throw new Error(`${surface.app} first worker did not retain its cohort after refresh`);
     }
 
     await page.evaluate(() => {
@@ -454,12 +498,16 @@ async function verifyUpdateLifecycle(surface: AppSurface, index: number) {
       }),
       surface.cachePrefix,
     );
+    const restartPin = await readServiceWorkerReleasePin(restartPage);
     if (
       !restartState.controlled ||
       restartState.cacheNames.length !== 1 ||
-      !restartState.cacheNames[0]?.endsWith("lifecycle-v3")
+      !restartState.cacheNames[0]?.includes("-stable-") ||
+      !restartState.cacheNames[0]?.endsWith("lifecycle-v3") ||
+      restartPin.cohort !== "stable" ||
+      restartPin.scriptCohort !== "stable"
     ) {
-      throw new Error(`${surface.app} latest update did not survive a cold browser restart`);
+      throw new Error(`${surface.app} latest cohort pin did not survive a cold browser restart`);
     }
     await restartPage.screenshot({
       path: join(artifactPath, `${surface.app}-update-cold-restart.png`),

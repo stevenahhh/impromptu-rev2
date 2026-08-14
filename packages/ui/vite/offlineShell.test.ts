@@ -16,10 +16,13 @@ describe("versioned offline shell", () => {
       appId: "stage",
       assets,
       buildId: "release123",
+      cohort: "canary-a",
     });
 
-    expect(worker).toContain('const CACHE_PREFIX = "impromptu-stage-shell-"');
-    expect(worker).toContain('const CACHE_NAME = "impromptu-stage-shell-release123"');
+    expect(worker).toContain('const COHORT = "canary-a"');
+    expect(worker).toContain('const BUILD_ID = "release123"');
+    expect(worker).toContain('const CACHE_PREFIX = "impromptu-stage-shell-canary-a-"');
+    expect(worker).toContain('const CACHE_NAME = "impromptu-stage-shell-canary-a-release123"');
     for (const asset of assets) {
       expect(worker).toContain(`"${asset}"`);
     }
@@ -32,6 +35,7 @@ describe("versioned offline shell", () => {
       appId: "console",
       assets,
       buildId: "release123",
+      cohort: "stable",
     });
     const installBlock = worker.slice(
       worker.indexOf('self.addEventListener("install"'),
@@ -53,6 +57,7 @@ describe("versioned offline shell", () => {
       appId: "stage",
       assets,
       buildId: "release123",
+      cohort: "stable",
     });
 
     expect(worker).not.toContain("caches.match(");
@@ -61,5 +66,19 @@ describe("versioned offline shell", () => {
       worker.indexOf('shellCache.match("/index.html"'),
     );
     expect(worker).toContain("requestUrl.origin !== self.location.origin");
+  });
+
+  test("rejects a script URL outside its release cohort and reports the immutable pin", () => {
+    const worker = createServiceWorkerSource({
+      appId: "console",
+      assets,
+      buildId: "release123",
+      cohort: "rollback-7",
+    });
+
+    expect(worker).toContain('searchParams.get("cohort")');
+    expect(worker).toContain("requestedCohort === COHORT");
+    expect(worker).toContain('type === "IMPROMPTU_GET_RELEASE_PIN"');
+    expect(worker).toContain("event.ports[0]?.postMessage({ cohort: COHORT, buildId: BUILD_ID });");
   });
 });

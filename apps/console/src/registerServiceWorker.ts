@@ -12,7 +12,8 @@ export function registerConsoleServiceWorker() {
 
   updateCoordinator = new UpdateCoordinator(navigator.serviceWorker);
   bindUpdateCoordinator(updateCoordinator);
-  void updateCoordinator.register("/sw.js").catch((error: unknown) => {
+  const cohort = encodeURIComponent(import.meta.env.IMPROMPTU_SW_COHORT ?? "stable");
+  void updateCoordinator.register(`/sw.js?cohort=${cohort}`).catch((error: unknown) => {
     window.dispatchEvent(new CustomEvent(UPDATE_EVENTS.activationFailed, { detail: error }));
   });
   return updateCoordinator;

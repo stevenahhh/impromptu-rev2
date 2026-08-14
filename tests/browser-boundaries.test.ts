@@ -80,8 +80,12 @@ describe("browser build boundaries", () => {
 
     const consoleConfig = readFileSync("apps/console/vite.config.ts", "utf8");
     const stageConfig = readFileSync("apps/stage/vite.config.ts", "utf8");
-    expect(consoleConfig).toContain('versionedOfflineShell({ appId: "console" })');
-    expect(stageConfig).toContain('versionedOfflineShell({ appId: "stage" })');
+    expect(consoleConfig).toContain(
+      'versionedOfflineShell({ appId: "console", cohort: serviceWorkerCohort })',
+    );
+    expect(stageConfig).toContain(
+      'versionedOfflineShell({ appId: "stage", cohort: serviceWorkerCohort })',
+    );
     expect(existsSync("apps/console/public/sw.js")).toBe(false);
     expect(existsSync("apps/stage/public/sw.js")).toBe(false);
   });
