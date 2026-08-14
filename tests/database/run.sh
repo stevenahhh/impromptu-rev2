@@ -296,7 +296,7 @@ compose exec --no-TTY postgres rm -rf "$DRIFT_ROOT"
 readonly INTERRUPTION_ROOT="/tmp/migrations-interruption-$$"
 compose exec --no-TTY postgres sh -eu -c \
   "cp -R /workspace/infra/migrations '$INTERRUPTION_ROOT'; cp /workspace/tests/database/fixtures/9999_interrupted.sql '$INTERRUPTION_ROOT/private/9999_interrupted.sql'"
-expect_migration_failure "$INTERRUPTION_ROOT" "division by zero"
+expect_migration_failure "$INTERRUPTION_ROOT" "server closed the connection unexpectedly"
 rollback_ok="$(psql_value "$BOOTSTRAP_ROLE" "$PRIVATE_DATABASE" \
   "SELECT to_regclass('private_app.interruption_probe') IS NULL AND NOT EXISTS (SELECT 1 FROM _migrations.applied_migrations WHERE migration_name = '9999_interrupted.sql')")"
 if [[ "$rollback_ok" != "t" ]]; then

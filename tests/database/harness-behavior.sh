@@ -56,6 +56,7 @@ readonly FAILURE_PROJECT="impromptu-r2-preserve-$PPID-$$"
 run_expected_failure \
   "$FAILURE_PROJECT" \
   42 \
+  DATABASE_TEST_MODE=smoke \
   DATABASE_TEST_FORCE_TEST_FAILURE=42 \
   DATABASE_TEST_FORCE_CLEANUP_FAILURE=1
 
@@ -63,6 +64,7 @@ readonly CLEANUP_PROJECT="impromptu-r2-cleanup-$PPID-$$"
 run_expected_failure \
   "$CLEANUP_PROJECT" \
   97 \
+  DATABASE_TEST_MODE=smoke \
   DATABASE_TEST_FORCE_CLEANUP_FAILURE=1
 
 echo "Harness failure and cleanup behavior verified."

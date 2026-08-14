@@ -4,4 +4,5 @@ CREATE TABLE private_app.interruption_probe (
   probe_id integer PRIMARY KEY
 );
 
-SELECT 1 / 0;
+RESET ROLE;
+SELECT pg_catalog.pg_terminate_backend(pg_catalog.pg_backend_pid());
