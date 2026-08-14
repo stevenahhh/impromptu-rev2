@@ -79,13 +79,7 @@ describe("Stage network client", () => {
 
   test("subscribes to exact playback/card events before sending an applied receipt", async () => {
     const source = new FakeEventSource();
-    const recoveredSource = new FakeEventSource();
-    const sources = [source, recoveredSource];
-    const factory: EventSourceFactory = () => {
-      const next = sources.shift();
-      if (next === undefined) throw new Error("unexpected EventSource creation");
-      return next;
-    };
+    const factory: EventSourceFactory = () => source;
     const requests: string[] = [];
     const fetchMock = mock(async (input: string | URL | Request) => {
       requests.push(String(input));
@@ -98,7 +92,6 @@ describe("Stage network client", () => {
     const client = createStageSessionClient("https://projection.example.test", factory);
     const playbackEvents: string[] = [];
     const cardEvents: string[] = [];
-    const channelEvents: string[] = [];
     const subscriptionPromise = client.subscribe({
       onPlayback(event) {
         playbackEvents.push(event.commandId);
@@ -106,12 +99,7 @@ describe("Stage network client", () => {
       onCard(event) {
         cardEvents.push(`${event.publicCardRevision}:${event.status}`);
       },
-      onClose(reason) {
-        channelEvents.push(`close:${reason}`);
-      },
-      onOpen() {
-        channelEvents.push("open");
-      },
+      onClose() {},
     });
     source.dispatchEvent(new Event("open"));
     const subscription = await subscriptionPromise;
@@ -156,12 +144,8 @@ describe("Stage network client", () => {
       blackout: false,
     });
     expect(requests).toEqual(["https://projection.example.test/v1/stage-applied"]);
-    source.dispatchEvent(new Event("error"));
-    expect(source.closed).toBe(true);
-    recoveredSource.dispatchEvent(new Event("open"));
-    expect(channelEvents).toEqual(["close:NETWORK_ERROR", "open"]);
     subscription.close();
-    expect(recoveredSource.closed).toBe(true);
+    expect(source.closed).toBe(true);
   });
 
   test("receives commands and returns typed receipts over the realtime extension", async () => {

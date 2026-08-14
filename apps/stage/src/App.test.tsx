@@ -498,6 +498,18 @@ describe("public Stage boundary", () => {
     expect(within(document.body).queryByText("Expiring curated claim")).toBeNull();
   });
 
+  test("observes topology transitions through the same platform event handler", () => {
+    renderStage("/display/rehearsal");
+    fireEvent(
+      window,
+      new CustomEvent("impromptu:platform-topology-change", {
+        detail: { observedMode: "duplicate", screenCount: 1 },
+      }),
+    );
+
+    expect(within(document.body).getByText("duplicate / 1 screen")).toBeTruthy();
+  });
+
   test("enters and exits fullscreen only from a Stage-local action", () => {
     const requestFullscreen = mock(async () => {
       Object.defineProperty(document, "fullscreenElement", {

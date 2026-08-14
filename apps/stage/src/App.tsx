@@ -5,7 +5,7 @@ import {
   type RealtimeTransition,
 } from "@impromptu/state/realtime";
 import { Badge, Brand, Button, Panel, Shell, StatusDot } from "@impromptu/ui";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import {
   createStageSessionClient,
@@ -16,6 +16,12 @@ import {
   type StageSnapshotView,
   type StageSubscription,
 } from "./stage-client";
+import {
+  emergencyPublicSlideSet,
+  observeWindowsTopology,
+  topologyInstructions,
+  windowsDisplayMode,
+} from "./windows-topology";
 
 function publishStageEvent(name: string, detail: unknown): void {
   window.dispatchEvent(new CustomEvent(name, { detail }));
@@ -44,6 +50,7 @@ function LandingPage({ client }: { readonly client: StageSessionClient }) {
     [],
   );
   const deckVersion = new URL(window.location.href).searchParams.get("deck") ?? "deck_alpha";
+  const mode = windowsDisplayMode(new URL(window.location.href).searchParams.get("mode"));
   const [join, setJoin] = useState<DisplayJoinView | null>(null);
   const [message, setMessage] = useState("Creating a short-lived display code...");
 
@@ -95,6 +102,13 @@ function LandingPage({ client }: { readonly client: StageSessionClient }) {
           <Button disabled={join === null} onClick={() => void claim()}>
             Continue after approval
           </Button>
+        </Panel>
+        <Panel title={`${mode[0]?.toUpperCase()}${mode.slice(1)} setup`}>
+          <ol className="stage-setup-list">
+            {topologyInstructions(mode).map((instruction) => (
+              <li key={instruction}>{instruction}</li>
+            ))}
+          </ol>
         </Panel>
         <p className="stage-note" aria-live="polite">
           {message} The code grants no controller access by itself.
@@ -184,7 +198,62 @@ function applyCardEvent(
 function DisplayPage({ client }: { readonly client: StageSessionClient }) {
   const titleId = useId();
   const fullscreen = useStageFullscreen();
+  const requestedMode = windowsDisplayMode(
+    new URL(window.location.href).searchParams.get("mode"),
+  );
+  const [mode, setMode] = useState(requestedMode);
+  const [screenCount, setScreenCount] = useState(1);
   const [snapshot, setSnapshot] = useState<StageSnapshotView | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    let details: Awaited<ReturnType<typeof observeWindowsTopology>>["details"] = null;
+    const apply = (observedMode: ReturnType<typeof windowsDisplayMode>, count: number) => {
+      setMode(observedMode);
+      setScreenCount(Math.max(1, count));
+      publishStageEvent("impromptu:topology-change", {
+        requestedMode,
+        observedMode,
+        screenCount: count,
+      });
+    };
+    const sync = () => {
+      const count = details?.screens.length ?? 1;
+      apply(count > 1 ? "extend" : requestedMode === "single" ? "single" : "duplicate", count);
+    };
+    const onPlatformTopology = (event: Event) => {
+      if (
+        !(event instanceof CustomEvent) ||
+        typeof event.detail !== "object" ||
+        event.detail === null
+      )
+        return;
+      const detail = event.detail as Record<string, unknown>;
+      const observedMode = windowsDisplayMode(
+        typeof detail.observedMode === "string" ? detail.observedMode : null,
+      );
+      const count = typeof detail.screenCount === "number" ? detail.screenCount : 1;
+      apply(observedMode, count);
+    };
+    const windowManager = window as unknown as Parameters<typeof observeWindowsTopology>[0];
+    const extendedScreen = window.screen as Screen & { readonly isExtended?: boolean };
+    void observeWindowsTopology(windowManager, extendedScreen.isExtended === true ? 2 : 1).then(
+      (result) => {
+        if (!active) return;
+        details = result.details;
+        apply(requestedMode, result.observation.screenCount);
+        details?.addEventListener("screenschange", sync);
+      },
+    );
+    window.addEventListener("resize", sync);
+    window.addEventListener("impromptu:platform-topology-change", onPlatformTopology);
+    return () => {
+      active = false;
+      details?.removeEventListener("screenschange", sync);
+      window.removeEventListener("resize", sync);
+      window.removeEventListener("impromptu:platform-topology-change", onPlatformTopology);
+    };
+  }, [requestedMode]);
 
   useEffect(() => {
     let active = true;
@@ -498,7 +567,7 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
     };
   }, [client]);
 
-  const navigateCachedSlide = (offset: -1 | 1) => {
+  const navigateCachedSlide = useCallback((offset: -1 | 1) => {
     setSnapshot((current) => {
       if (current === null) return null;
       const slides = [...current.deckSlides].sort((left, right) => left.ordinal - right.ordinal);
@@ -514,15 +583,40 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
       publishStageEvent("impromptu:local-slide", occurrence);
       return { ...current, occurrence };
     });
-  };
+  }, []);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
+      if (mode === "single" && snapshot !== null) {
+        const command = emergencyPublicSlideSet(
+          event,
+          snapshot.deckSlides.map((slide) => slide.publicSlideKey),
+          snapshot.occurrence.publicSlideKey,
+        );
+        if (command !== null) {
+          event.preventDefault();
+          publishStageEvent("impromptu:public-slide-set", command);
+          setSnapshot((current) =>
+            current === null
+              ? null
+              : {
+                  ...current,
+                  occurrence: {
+                    publicSlideKey: command.publicSlideKey,
+                    occurrenceSeq: current.occurrence.occurrenceSeq + 1,
+                  },
+                },
+          );
+          return;
+        }
+      }
       if (event.key === "ArrowLeft") navigateCachedSlide(-1);
       if (event.key === "ArrowRight") navigateCachedSlide(1);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  });
+  }, [mode, navigateCachedSlide, snapshot]);
   const card = snapshot?.cards[0];
   const currentSlide = snapshot?.deckSlides.find(
     (slide) => slide.publicSlideKey === snapshot.occurrence.publicSlideKey,
@@ -536,6 +630,9 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
           <Badge tone="success">
             <StatusDot label="Preview content visible" />
             Preview
+          </Badge>
+          <Badge tone="accent">
+            {mode} / {screenCount} screen{screenCount === 1 ? "" : "s"}
           </Badge>
           <Button variant="quiet" onClick={() => void fullscreen.toggle()}>
             {fullscreen.active ? "Exit fullscreen" : "Enter fullscreen"}
