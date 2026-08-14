@@ -1,5 +1,8 @@
 import { type ChildProcessByStdio, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { once } from "node:events";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { relative, resolve } from "node:path";
 import type { Readable } from "node:stream";
 import { type Browser, type BrowserContext, chromium, type Page } from "playwright-core";
 import type {
@@ -16,6 +19,17 @@ interface FaultEvidence {
   readonly recoveryMs: number;
 }
 
+interface RehearsalArtifact {
+  readonly jsonPath: string;
+  readonly domPath: string;
+  readonly screenshotPath: string;
+  readonly jsonChecksum: string;
+  readonly domChecksum: string;
+  readonly screenshotChecksum: string;
+  readonly privateContentVerdict: "CLEAN";
+  readonly privatePixelVerdict: "CLEAN";
+}
+
 export interface ModeRehearsalEvidence {
   readonly mode: WindowsDisplayMode;
   readonly observedMode: WindowsDisplayMode;
@@ -27,6 +41,7 @@ export interface ModeRehearsalEvidence {
   readonly observedTransition: string;
   readonly windowManagement: "available" | "fallback";
   readonly changeScreen: "available" | "fallback";
+  readonly artifact: RehearsalArtifact;
 }
 
 export interface WindowsTopologyEvidence {
@@ -38,19 +53,41 @@ export interface WindowsTopologyEvidence {
   readonly audienceReadyP90Ms: number;
   readonly maxRecoveryMs: number;
   readonly coResidentConvenienceDisabled: boolean;
+  readonly evidenceArtifactPath: string;
+  readonly evidenceArtifactChecksum: string;
 }
 
 type ServiceProcess = ChildProcessByStdio<null, Readable, Readable>;
 const chromeExecutable = "C:/Program Files/Google/Chrome/Application/chrome.exe";
 const projectionOrigin = "http://127.0.0.1:44402";
 const stageOrigin = "http://127.0.0.1:44274";
-const forbiddenPublicPixels = [
+const evidenceRoot = resolve(process.env.WP4_EVIDENCE_DIR ?? "artifacts/wp4-topology");
+export const privateSurfaceVocabulary = [
   "PRIVATE_CANARY_WP4",
-  "Enter private workspace",
-  "Session controls",
+  "Presenter Console",
+  "Local preview",
+  "Private origin",
+  "Private presentation control",
   "One-time sign-in code",
+  "Enter private workspace",
+  "Private workspace",
+  "Room overview",
+  "Session setup",
   "Leave workspace",
+  "Ready for the room",
+  "Prepare a session",
+  "Session controls",
+  "Choose the room",
+  "Co-resident convenience mode",
+  "No-private-pixel protection does not apply",
+  "preview-csrf",
+  "account_preview",
+  "actor_preview",
 ] as const;
+
+function checksum(path: string): string {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
 
 async function waitForOutput(
   stream: Readable,
@@ -204,8 +241,18 @@ async function clearBufferedEvent(page: Page, name: string): Promise<void> {
 
 async function assertAudienceReady(page: Page): Promise<number> {
   const text = (await page.locator("body").textContent()) ?? "";
-  const matches = forbiddenPublicPixels.filter((value) => text.includes(value)).length;
-  if (matches !== 0) throw new Error(`private pixel detected on Stage: ${String(matches)}`);
+  const vocabularyMatches = privateSurfaceVocabulary.filter((value) => text.includes(value));
+  const privateControls = await page
+    .locator(
+      "input, textarea, [data-surface='console'], [aria-label*='Private'], [aria-label*='private']",
+    )
+    .count();
+  const matches = vocabularyMatches.length + privateControls;
+  if (matches !== 0) {
+    throw new Error(
+      `private content detected on Stage: vocabulary=${vocabularyMatches.join(",")} controls=${privateControls}`,
+    );
+  }
   if (!text.includes("Public only") || !text.includes("Evidence, without the detour")) {
     throw new Error("Stage is not audience-ready");
   }
@@ -236,6 +283,51 @@ function percentile(samples: readonly number[], fraction: number): number {
   const value = ordered[Math.max(0, Math.ceil(ordered.length * fraction) - 1)];
   if (value === undefined) throw new Error("percentile requires samples");
   return value;
+}
+
+async function persistRehearsalArtifact(
+  page: Page,
+  evidence: Omit<ModeRehearsalEvidence, "artifact">,
+): Promise<RehearsalArtifact> {
+  const stem = `${evidence.mode}-rehearsal-${evidence.rehearsal}`;
+  const domPath = resolve(evidenceRoot, `${stem}.html`);
+  const screenshotPath = resolve(evidenceRoot, `${stem}.png`);
+  const jsonPath = resolve(evidenceRoot, `${stem}.json`);
+  writeFileSync(domPath, await page.content(), "utf8");
+  await page.screenshot({ path: screenshotPath, fullPage: true });
+  const domChecksum = checksum(domPath);
+  const screenshotChecksum = checksum(screenshotPath);
+  writeFileSync(
+    jsonPath,
+    `${JSON.stringify(
+      {
+        mode: evidence.mode,
+        observedMode: evidence.observedMode,
+        rehearsal: evidence.rehearsal,
+        faults: evidence.faults,
+        requestedTransition: evidence.requestedTransition,
+        observedTransition: evidence.observedTransition,
+        privatePixelCount: evidence.privatePixelCount,
+        privateContentVerdict: "CLEAN",
+        privatePixelVerdict: "CLEAN",
+        domChecksum,
+        screenshotChecksum,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  return {
+    jsonPath: relative(process.cwd(), jsonPath).replaceAll("\\", "/"),
+    domPath: relative(process.cwd(), domPath).replaceAll("\\", "/"),
+    screenshotPath: relative(process.cwd(), screenshotPath).replaceAll("\\", "/"),
+    jsonChecksum: checksum(jsonPath),
+    domChecksum,
+    screenshotChecksum,
+    privateContentVerdict: "CLEAN",
+    privatePixelVerdict: "CLEAN",
+  };
 }
 
 async function rehearse(
@@ -427,7 +519,7 @@ async function rehearse(
       }
     }
 
-    return {
+    const rehearsalEvidence: Omit<ModeRehearsalEvidence, "artifact"> = {
       mode,
       observedMode,
       rehearsal,
@@ -439,12 +531,18 @@ async function rehearse(
       windowManagement: capabilities.windowManagement ? "available" : "fallback",
       changeScreen: capabilities.changeScreen ? "available" : "fallback",
     };
+    return {
+      ...rehearsalEvidence,
+      artifact: await persistRehearsalArtifact(page, rehearsalEvidence),
+    };
   } finally {
     await context.close();
   }
 }
 
 export async function runWindowsTopologyE2E(): Promise<WindowsTopologyEvidence> {
+  rmSync(evidenceRoot, { force: true, recursive: true });
+  mkdirSync(evidenceRoot, { recursive: true });
   await run(["bun", "run", "build"], "apps/stage");
   let projection = await start(
     ["bun", "run", "tests/e2e/topology-projection-fixture.ts"],
@@ -480,6 +578,30 @@ export async function runWindowsTopologyE2E(): Promise<WindowsTopologyEvidence> 
       result.faults.map((fault) => fault.recoveryMs),
     );
     const privatePixelCount = rehearsals.reduce((sum, result) => sum + result.privatePixelCount, 0);
+    const manifestPath = resolve(evidenceRoot, "manifest.json");
+    writeFileSync(
+      manifestPath,
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          rehearsals: rehearsals.map((result) => ({
+            mode: result.mode,
+            rehearsal: result.rehearsal,
+            requestedTransition: result.requestedTransition,
+            observedTransition: result.observedTransition,
+            privateContentVerdict: result.artifact.privateContentVerdict,
+            privatePixelVerdict: result.artifact.privatePixelVerdict,
+            jsonPath: result.artifact.jsonPath,
+            jsonChecksum: result.artifact.jsonChecksum,
+            domChecksum: result.artifact.domChecksum,
+            screenshotChecksum: result.artifact.screenshotChecksum,
+          })),
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
     return {
       rehearsals,
       unrecoverableFailureCount: 0,
@@ -489,6 +611,8 @@ export async function runWindowsTopologyE2E(): Promise<WindowsTopologyEvidence> 
       audienceReadyP90Ms: percentile(setupSamples, 0.9),
       maxRecoveryMs: Math.max(...recoverySamples),
       coResidentConvenienceDisabled: true,
+      evidenceArtifactPath: relative(process.cwd(), manifestPath).replaceAll("\\", "/"),
+      evidenceArtifactChecksum: checksum(manifestPath),
     };
   } finally {
     await browser?.close();

@@ -54,6 +54,9 @@ console.log(
             requestedTransitions: runs.map((run) => run.requestedTransition),
             observedTransitions: runs.map((run) => run.observedTransition),
             observedModes: runs.map((run) => run.observedMode),
+            privateContentVerdicts: runs.map((run) => run.artifact.privateContentVerdict),
+            privatePixelVerdicts: runs.map((run) => run.artifact.privatePixelVerdict),
+            screenshotChecksums: runs.map((run) => run.artifact.screenshotChecksum),
             windowManagement: runs.map((run) => run.windowManagement),
             changeScreen: runs.map((run) => run.changeScreen),
           },
@@ -67,6 +70,8 @@ console.log(
     audienceReadyP90Ms: Number(evidence.audienceReadyP90Ms.toFixed(3)),
     maxRecoveryMs: Number(evidence.maxRecoveryMs.toFixed(3)),
     coResidentConvenienceDisabled: evidence.coResidentConvenienceDisabled,
+    evidenceArtifactPath: evidence.evidenceArtifactPath,
+    evidenceArtifactChecksum: evidence.evidenceArtifactChecksum,
     surface: "clean-signed-out-chrome+public-stage+projection-sse-fault-fixture",
   }),
 );

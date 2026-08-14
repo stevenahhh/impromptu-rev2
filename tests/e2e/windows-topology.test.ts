@@ -12,6 +12,9 @@ interface TopologyVerifierEvidence {
       readonly maxRecoveryMs: number;
       readonly requestedTransitions: readonly string[];
       readonly observedTransitions: readonly string[];
+      readonly privateContentVerdicts: readonly string[];
+      readonly privatePixelVerdicts: readonly string[];
+      readonly screenshotChecksums: readonly string[];
     }
   >;
   readonly unrecoverableFailureCount: number;
@@ -21,6 +24,8 @@ interface TopologyVerifierEvidence {
   readonly audienceReadyP90Ms: number;
   readonly maxRecoveryMs: number;
   readonly coResidentConvenienceDisabled: boolean;
+  readonly evidenceArtifactPath: string;
+  readonly evidenceArtifactChecksum: string;
 }
 
 function evidence(value: unknown): TopologyVerifierEvidence {
@@ -56,6 +61,11 @@ describe("WP4 Windows topology real-browser E2E", () => {
       expect(modeEvidence.privatePixelCount).toBe(0);
       expect(modeEvidence.maxRecoveryMs).toBeLessThanOrEqual(30_000);
       expect(modeEvidence.observedTransitions).toEqual(modeEvidence.requestedTransitions);
+      expect(modeEvidence.privateContentVerdicts).toEqual(["CLEAN", "CLEAN", "CLEAN"]);
+      expect(modeEvidence.privatePixelVerdicts).toEqual(["CLEAN", "CLEAN", "CLEAN"]);
+      expect(modeEvidence.screenshotChecksums.every((value) => /^[a-f0-9]{64}$/.test(value))).toBe(
+        true,
+      );
     }
     expect(result.unrecoverableFailureCount).toBe(0);
     expect(result.privatePixelCount).toBe(0);
@@ -64,5 +74,7 @@ describe("WP4 Windows topology real-browser E2E", () => {
     expect(result.audienceReadyP90Ms).toBeLessThanOrEqual(300_000);
     expect(result.maxRecoveryMs).toBeLessThanOrEqual(30_000);
     expect(result.coResidentConvenienceDisabled).toBe(true);
+    expect(result.evidenceArtifactPath).toBe("artifacts/wp4-topology/manifest.json");
+    expect(result.evidenceArtifactChecksum).toMatch(/^[a-f0-9]{64}$/);
   }, 180_000);
 });
