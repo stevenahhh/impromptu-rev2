@@ -1,11 +1,3 @@
-import {
-  AudienceDisplaySessionSchema,
-  DisplayJoinSchema,
-  PublicationTombstoneSchema,
-  PublishedAudienceCardSchema,
-  PublishedDeckArtifactSchema,
-} from "@impromptu/contracts/public";
-
 export interface PublicDeckArtifact {
   readonly deckVersion: string;
   readonly manifestHash: string;
@@ -141,6 +133,200 @@ function exactKeys(value: Record<string, unknown>, expected: readonly string[]):
   );
 }
 
+function validId(value: unknown, prefix: string): value is string {
+  return (
+    typeof value === "string" &&
+    value.length <= 200 &&
+    new RegExp(`^${prefix}[A-Za-z0-9][A-Za-z0-9._-]*$`).test(value)
+  );
+}
+
+function validTimestamp(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function validHash(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
+}
+
+function parseDisplayJoin(value: unknown): DisplayJoinLocator | null {
+  if (
+    !snapshotRecord(value) ||
+    !exactKeys(value, [
+      "displayJoinId",
+      "displayId",
+      "deckVersion",
+      "displayFingerprint",
+      "expiresAtMs",
+    ]) ||
+    typeof value.displayJoinId !== "string" ||
+    !/^join_[0-9a-f]{32,}$/.test(value.displayJoinId) ||
+    !validId(value.displayId, "display_") ||
+    !validId(value.deckVersion, "deck_") ||
+    typeof value.displayFingerprint !== "string" ||
+    value.displayFingerprint.length < 16 ||
+    value.displayFingerprint.length > 256 ||
+    !validTimestamp(value.expiresAtMs)
+  ) {
+    return null;
+  }
+  return {
+    displayJoinId: value.displayJoinId,
+    displayId: value.displayId,
+    deckVersion: value.deckVersion,
+    displayFingerprint: value.displayFingerprint,
+    expiresAtMs: value.expiresAtMs,
+  };
+}
+
+function parseDeck(value: unknown): PublicDeckArtifact | null {
+  if (
+    !snapshotRecord(value) ||
+    !exactKeys(value, ["deckVersion", "manifestHash", "title", "slides"]) ||
+    !validId(value.deckVersion, "deck_") ||
+    !validHash(value.manifestHash) ||
+    typeof value.title !== "string" ||
+    value.title.length < 1 ||
+    value.title.length > 500 ||
+    !Array.isArray(value.slides) ||
+    value.slides.length === 0
+  ) {
+    return null;
+  }
+  const slides: PublicDeckArtifact["slides"][number][] = [];
+  for (const slide of value.slides) {
+    if (
+      !snapshotRecord(slide) ||
+      !exactKeys(slide, ["publicSlideKey", "ordinal", "image", "accessibilityLabel"]) ||
+      !validId(slide.publicSlideKey, "slide_") ||
+      typeof slide.ordinal !== "number" ||
+      !Number.isSafeInteger(slide.ordinal) ||
+      slide.ordinal <= 0 ||
+      typeof slide.accessibilityLabel !== "string" ||
+      slide.accessibilityLabel.length < 1 ||
+      slide.accessibilityLabel.length > 1_000 ||
+      !snapshotRecord(slide.image) ||
+      !exactKeys(slide.image, ["url", "contentHash", "width", "height"]) ||
+      typeof slide.image.url !== "string" ||
+      !URL.canParse(slide.image.url) ||
+      !validHash(slide.image.contentHash) ||
+      typeof slide.image.width !== "number" ||
+      !Number.isSafeInteger(slide.image.width) ||
+      slide.image.width <= 0 ||
+      typeof slide.image.height !== "number" ||
+      !Number.isSafeInteger(slide.image.height) ||
+      slide.image.height <= 0
+    ) {
+      return null;
+    }
+    slides.push({
+      publicSlideKey: slide.publicSlideKey,
+      ordinal: slide.ordinal,
+      image: {
+        url: slide.image.url,
+        contentHash: slide.image.contentHash,
+        width: slide.image.width,
+        height: slide.image.height,
+      },
+      accessibilityLabel: slide.accessibilityLabel,
+    });
+  }
+  return {
+    deckVersion: value.deckVersion,
+    manifestHash: value.manifestHash,
+    title: value.title,
+    slides,
+  };
+}
+
+function parseDisplaySession(value: unknown): AudienceDisplaySessionRecord | null {
+  if (
+    !snapshotRecord(value) ||
+    !exactKeys(value, ["audienceDisplaySessionId", "binding", "expiresAtMs"]) ||
+    !validId(value.audienceDisplaySessionId, "audience_") ||
+    !validTimestamp(value.expiresAtMs) ||
+    !snapshotRecord(value.binding) ||
+    !exactKeys(value.binding, [
+      "displayBindingId",
+      "presentationSessionId",
+      "presentationSessionEpoch",
+      "displayId",
+      "displayBindingEpoch",
+      "deckVersion",
+      "manifestHash",
+    ]) ||
+    !validId(value.binding.displayBindingId, "binding_") ||
+    !validId(value.binding.presentationSessionId, "ps_") ||
+    revisionValue(value.binding.presentationSessionEpoch, "pse_") === null ||
+    !validId(value.binding.displayId, "display_") ||
+    revisionValue(value.binding.displayBindingEpoch, "dbe_") === null ||
+    !validId(value.binding.deckVersion, "deck_") ||
+    !validHash(value.binding.manifestHash)
+  ) {
+    return null;
+  }
+  return {
+    audienceDisplaySessionId: value.audienceDisplaySessionId,
+    binding: value.binding as unknown as DisplayBindingRecord,
+    expiresAtMs: value.expiresAtMs,
+  };
+}
+
+function parseStoredCard(value: unknown): PublicCardUpsert | null {
+  if (
+    !snapshotRecord(value) ||
+    !exactKeys(value, [
+      "projectionId",
+      "status",
+      "claim",
+      "supportSummary",
+      "sourceLabel",
+      "publishedAtMs",
+      "expiresAtMs",
+      "publicCardRevision",
+      "deckVersion",
+      "manifestHash",
+      "occurrence",
+    ]) ||
+    !validId(value.projectionId, "projection_") ||
+    value.status !== "PUBLISHED" ||
+    typeof value.claim !== "string" ||
+    value.claim.length < 1 ||
+    value.claim.length > 2_000 ||
+    typeof value.supportSummary !== "string" ||
+    value.supportSummary.length < 1 ||
+    value.supportSummary.length > 4_000 ||
+    typeof value.sourceLabel !== "string" ||
+    value.sourceLabel.length < 1 ||
+    value.sourceLabel.length > 500 ||
+    !validTimestamp(value.publishedAtMs) ||
+    (value.expiresAtMs !== null && !validTimestamp(value.expiresAtMs)) ||
+    revisionValue(value.publicCardRevision, "pcr_") === null ||
+    !validId(value.deckVersion, "deck_") ||
+    !validHash(value.manifestHash) ||
+    !snapshotRecord(value.occurrence) ||
+    !exactKeys(value.occurrence, ["publicSlideKey", "occurrenceSeq"]) ||
+    !validId(value.occurrence.publicSlideKey, "slide_") ||
+    typeof value.occurrence.occurrenceSeq !== "number" ||
+    !Number.isSafeInteger(value.occurrence.occurrenceSeq) ||
+    value.occurrence.occurrenceSeq <= 0
+  ) {
+    return null;
+  }
+  return value as unknown as PublicCardUpsert;
+}
+
+function parseStoredTombstone(value: unknown): PublicCardTombstone | null {
+  return snapshotRecord(value) &&
+    exactKeys(value, ["projectionId", "status", "publicCardRevision", "occurredAtMs"]) &&
+    validId(value.projectionId, "projection_") &&
+    (value.status === "RETRACTED" || value.status === "EXPIRED") &&
+    revisionValue(value.publicCardRevision, "pcr_") !== null &&
+    validTimestamp(value.occurredAtMs)
+    ? (value as unknown as PublicCardTombstone)
+    : null;
+}
+
 export function snapshotProjectionGatewayStore(store: ProjectionGatewayStore): unknown {
   return {
     stateKind: "PREPARED_EVIDENCE_PROJECTION_DATABASE_SNAPSHOT",
@@ -181,17 +367,17 @@ export function restoreProjectionGatewayStore(input: unknown): ProjectionGateway
     ) {
       return { outcome: "INVALID_SNAPSHOT" };
     }
-    const locator = DisplayJoinSchema.safeParse(joinInput.locator);
+    const locator = parseDisplayJoin(joinInput.locator);
     if (
-      !locator.success ||
-      store.joins.has(locator.data.displayJoinId) ||
+      locator === null ||
+      store.joins.has(locator.displayJoinId) ||
       (joinInput.claimed && !joinInput.consumed) ||
       joinInput.consumed !== (joinInput.audienceDisplaySessionId !== null)
     ) {
       return { outcome: "INVALID_SNAPSHOT" };
     }
-    store.joins.set(locator.data.displayJoinId, {
-      locator: locator.data,
+    store.joins.set(locator.displayJoinId, {
+      locator,
       consumed: joinInput.consumed,
       claimed: joinInput.claimed,
       audienceDisplaySessionId: joinInput.audienceDisplaySessionId,
@@ -222,8 +408,8 @@ export function restoreProjectionGatewayStore(input: unknown): ProjectionGateway
     ) {
       return { outcome: "INVALID_SNAPSHOT" };
     }
-    const displaySession = AudienceDisplaySessionSchema.safeParse(projectionInput.displaySession);
-    const deck = PublishedDeckArtifactSchema.safeParse(projectionInput.deck);
+    const displaySession = parseDisplaySession(projectionInput.displaySession);
+    const deck = parseDeck(projectionInput.deck);
     const occurrence = {
       publicSlideKey: projectionInput.occurrence.publicSlideKey,
       occurrenceSeq: projectionInput.occurrence.occurrenceSeq,
@@ -231,51 +417,47 @@ export function restoreProjectionGatewayStore(input: unknown): ProjectionGateway
     const playbackRevision = revisionValue(projectionInput.publicPlaybackRevision, "pbr_");
     const cardRevision = revisionValue(projectionInput.publicCardRevision, "pcr_");
     if (
-      !displaySession.success ||
-      !deck.success ||
+      displaySession === null ||
+      deck === null ||
       playbackRevision === null ||
       cardRevision === null ||
-      JSON.stringify(displaySession.data.binding) !== JSON.stringify(projectionInput.binding) ||
-      displaySession.data.binding.deckVersion !== deck.data.deckVersion ||
-      displaySession.data.binding.manifestHash !== deck.data.manifestHash ||
-      !deck.data.slides.some((slide) => slide.publicSlideKey === occurrence.publicSlideKey) ||
-      store.projections.has(displaySession.data.binding.presentationSessionId)
+      JSON.stringify(displaySession.binding) !== JSON.stringify(projectionInput.binding) ||
+      displaySession.binding.deckVersion !== deck.deckVersion ||
+      displaySession.binding.manifestHash !== deck.manifestHash ||
+      !deck.slides.some((slide) => slide.publicSlideKey === occurrence.publicSlideKey) ||
+      store.projections.has(displaySession.binding.presentationSessionId)
     ) {
       return { outcome: "INVALID_SNAPSHOT" };
     }
     const cards = new Map<string, PublicCardUpsert>();
     for (const cardInput of projectionInput.cards) {
-      const card = PublishedAudienceCardSchema.safeParse(cardInput);
-      if (!card.success) return { outcome: "INVALID_SNAPSHOT" };
-      const eventRevision = revisionValue(card.data.publicCardRevision, "pcr_");
-      if (
-        eventRevision === null ||
-        eventRevision > cardRevision ||
-        cards.has(card.data.projectionId)
-      ) {
+      const card = parseStoredCard(cardInput);
+      if (card === null) return { outcome: "INVALID_SNAPSHOT" };
+      const eventRevision = revisionValue(card.publicCardRevision, "pcr_");
+      if (eventRevision === null || eventRevision > cardRevision || cards.has(card.projectionId)) {
         return { outcome: "INVALID_SNAPSHOT" };
       }
-      cards.set(card.data.projectionId, card.data);
+      cards.set(card.projectionId, card);
     }
     const tombstones = new Map<string, PublicCardTombstone>();
     for (const tombstoneInput of projectionInput.tombstones) {
-      const tombstone = PublicationTombstoneSchema.safeParse(tombstoneInput);
-      if (!tombstone.success) return { outcome: "INVALID_SNAPSHOT" };
-      const eventRevision = revisionValue(tombstone.data.publicCardRevision, "pcr_");
+      const tombstone = parseStoredTombstone(tombstoneInput);
+      if (tombstone === null) return { outcome: "INVALID_SNAPSHOT" };
+      const eventRevision = revisionValue(tombstone.publicCardRevision, "pcr_");
       if (
         eventRevision === null ||
         eventRevision > cardRevision ||
-        cards.has(tombstone.data.projectionId) ||
-        tombstones.has(tombstone.data.projectionId)
+        cards.has(tombstone.projectionId) ||
+        tombstones.has(tombstone.projectionId)
       ) {
         return { outcome: "INVALID_SNAPSHOT" };
       }
-      tombstones.set(tombstone.data.projectionId, tombstone.data);
+      tombstones.set(tombstone.projectionId, tombstone);
     }
-    store.projections.set(displaySession.data.binding.presentationSessionId, {
-      binding: displaySession.data.binding,
-      displaySession: displaySession.data,
-      deck: deck.data,
+    store.projections.set(displaySession.binding.presentationSessionId, {
+      binding: displaySession.binding,
+      displaySession,
+      deck,
       publicPlaybackRevision: projectionInput.publicPlaybackRevision,
       publicCardRevision: projectionInput.publicCardRevision,
       occurrence,
@@ -336,8 +518,8 @@ function opaqueHex(byteLength: number): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function revisionValue(revision: string, prefix: string): number | null {
-  if (!revision.startsWith(prefix)) return null;
+function revisionValue(revision: unknown, prefix: string): number | null {
+  if (typeof revision !== "string" || !revision.startsWith(prefix)) return null;
   const value = Number(revision.slice(prefix.length));
   return Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
