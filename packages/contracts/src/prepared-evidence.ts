@@ -51,6 +51,13 @@ export const DisplayJoinSchema = z
   })
   .strict();
 
+export const PlaybackLeaseTakeoverSchema = z
+  .object({
+    presentationSessionId: PresentationSessionIdSchema,
+    expectedDisplayBindingEpoch: DisplayBindingEpochSchema,
+  })
+  .strict();
+
 export const DisplayApprovalSchema = z
   .object({
     presentationSessionId: PresentationSessionIdSchema,
@@ -68,3 +75,4 @@ export type AccountSession = z.infer<typeof AccountSessionSchema>;
 export type PresentationSessionLifecycle = z.infer<typeof PresentationSessionLifecycleSchema>;
 export type DisplayJoin = z.infer<typeof DisplayJoinSchema>;
 export type DisplayApproval = z.infer<typeof DisplayApprovalSchema>;
+export type PlaybackLeaseTakeover = z.infer<typeof PlaybackLeaseTakeoverSchema>;

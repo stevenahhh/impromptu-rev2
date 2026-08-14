@@ -3,6 +3,7 @@ import {
   AccountSessionSchema,
   DisplayApprovalSchema,
   DisplayJoinSchema,
+  PlaybackLeaseTakeoverSchema,
   PresentationSessionLifecycleSchema,
 } from "@impromptu/contracts/private";
 
@@ -50,5 +51,21 @@ describe("prepared evidence session contracts", () => {
         approvedDisplayFingerprint: join.displayFingerprint,
       }),
     ).toBeDefined();
+  });
+
+  test("closes the authenticated playback takeover request", () => {
+    expect(
+      PlaybackLeaseTakeoverSchema.parse({
+        presentationSessionId: "ps_alpha",
+        expectedDisplayBindingEpoch: "dbe_1",
+      }),
+    ).toBeDefined();
+    expect(
+      PlaybackLeaseTakeoverSchema.safeParse({
+        presentationSessionId: "ps_alpha",
+        expectedDisplayBindingEpoch: "dbe_1",
+        actorId: "actor_forged",
+      }).success,
+    ).toBe(false);
   });
 });

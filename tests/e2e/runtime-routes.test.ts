@@ -158,6 +158,7 @@ describe("runnable WP3 service composition", () => {
       ["POST", "/v1/presentation-sessions", {}],
       ["POST", "/v1/display-bindings", {}],
       ["POST", "/v1/playback/slide-set", {}],
+      ["POST", "/v1/playback/lease-takeover", {}],
       ["POST", "/v1/candidates/curated", {}],
       ["POST", "/v1/publications/approve", {}],
       ["POST", "/v1/publications/terminate", {}],
@@ -170,6 +171,10 @@ describe("runnable WP3 service composition", () => {
       });
       expect(response.status).not.toBe(404);
     }
+    const controllerEvents = await fetch("http://127.0.0.1:44101/v1/playback/controller-events", {
+      headers: { cookie: accountCookie, origin: consoleOrigin },
+    });
+    expect(controllerEvents.status).not.toBe(404);
     const accountSession = await fetch("http://127.0.0.1:44101/v1/account-session", {
       headers: { cookie: accountCookie, origin: consoleOrigin },
     });

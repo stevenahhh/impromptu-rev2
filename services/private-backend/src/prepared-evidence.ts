@@ -4,6 +4,7 @@ import {
   controllerEpoch,
   PlaybackControlLeaseSchema,
   type StageAppliedReceipt,
+  type SupersededCommandReceipt,
 } from "@impromptu/contracts/control";
 import {
   type AccountSession,
@@ -11,6 +12,7 @@ import {
   DisplayApprovalSchema,
   type EvidenceCandidate,
   EvidenceCandidateSchema,
+  PlaybackLeaseTakeoverSchema,
   type PresentationSessionLifecycle,
   PresentationSessionLifecycleSchema,
   type PrivateDeckContext,
@@ -41,6 +43,7 @@ import {
   type PublicCardStreamState,
   reduceCandidateLifecycle,
   reducePlaybackCommand,
+  replacePlaybackLease,
   restoreCandidateLifecycle,
   restorePlaybackAuthority,
   restorePublicCardStream,
@@ -262,6 +265,21 @@ export type OperationResult<Value> =
   | Readonly<{ outcome: "APPLIED"; value: Value }>
   | Readonly<{ outcome: "REJECTED"; reason: SessionRejection | string }>;
 
+export type ControllerSocketCloseReason = "SUPERSEDED" | "CLIENT_CLOSED";
+
+export interface ControllerSocket {
+  readonly closed: boolean;
+  readonly closeReason: ControllerSocketCloseReason | null;
+  close(): void;
+}
+
+type MutableControllerSocket = {
+  closed: boolean;
+  closeReason: ControllerSocketCloseReason | null;
+  leaseId: string;
+  onClose: (reason: ControllerSocketCloseReason) => void;
+};
+
 function opaqueHex(byteLength: number): string {
   const bytes = crypto.getRandomValues(new Uint8Array(byteLength));
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -282,6 +300,7 @@ export class PreparedEvidenceCoordinator {
   readonly #projection: PreparedEvidenceProjectionPort;
   readonly #accountSessionTtlMs: number;
   readonly #presentationCapabilityTtlMs: number;
+  readonly #controllerSockets = new Map<string, Set<MutableControllerSocket>>();
 
   constructor(
     projection: PreparedEvidenceProjectionPort,
@@ -479,6 +498,98 @@ export class PreparedEvidenceCoordinator {
     return { outcome: "APPLIED", value: session.data };
   }
 
+  connectPlaybackController(
+    accountSessionId: string,
+    presentationSessionId: string,
+    nowMs: number,
+    onClose: (reason: ControllerSocketCloseReason) => void,
+  ): OperationResult<ControllerSocket> {
+    const authorized = this.#authorizedPresentation(accountSessionId, presentationSessionId, nowMs);
+    if (authorized.outcome === "REJECTED") return authorized;
+    const account = this.readAccountSession(accountSessionId, nowMs);
+    if (
+      account.outcome === "REJECTED" ||
+      account.value.actorId !== authorized.value.playback.activeLease.actorId
+    ) {
+      return { outcome: "REJECTED", reason: "UNAUTHORIZED" };
+    }
+    const mutable: MutableControllerSocket = {
+      closed: false,
+      closeReason: null,
+      leaseId: authorized.value.playback.activeLease.leaseId,
+      onClose,
+    };
+    const sockets = this.#controllerSockets.get(presentationSessionId) ?? new Set();
+    sockets.add(mutable);
+    this.#controllerSockets.set(presentationSessionId, sockets);
+    return {
+      outcome: "APPLIED",
+      value: {
+        get closed() {
+          return mutable.closed;
+        },
+        get closeReason() {
+          return mutable.closeReason;
+        },
+        close: () => this.#closeControllerSocket(presentationSessionId, mutable, "CLIENT_CLOSED"),
+      },
+    };
+  }
+
+  takeoverPlaybackLease(
+    accountSessionId: string,
+    input: unknown,
+    nowMs: number,
+  ): OperationResult<{
+    readonly lease: PlaybackAuthorityState["activeLease"];
+    readonly supersededReceipts: readonly SupersededCommandReceipt[];
+  }> {
+    const takeover = PlaybackLeaseTakeoverSchema.safeParse(input);
+    if (!takeover.success) return { outcome: "REJECTED", reason: "INVALID_LEASE_TAKEOVER" };
+    const authorized = this.#authorizedPresentation(
+      accountSessionId,
+      takeover.data.presentationSessionId,
+      nowMs,
+    );
+    if (authorized.outcome === "REJECTED") return authorized;
+    if (
+      takeover.data.expectedDisplayBindingEpoch !== authorized.value.playback.displayBindingEpoch
+    ) {
+      return { outcome: "REJECTED", reason: "STALE_DISPLAY_BINDING" };
+    }
+    const account = this.readAccountSession(accountSessionId, nowMs);
+    if (account.outcome === "REJECTED") return account;
+    const previousLease = authorized.value.playback.activeLease;
+    const currentEpoch = Number(previousLease.controllerEpoch.slice(3));
+    let replacementLease: PlaybackAuthorityState["activeLease"];
+    try {
+      replacementLease = PlaybackControlLeaseSchema.parse({
+        leaseId: `lease_${opaqueHex(16)}`,
+        presentationSessionId: previousLease.presentationSessionId,
+        presentationSessionEpoch: previousLease.presentationSessionEpoch,
+        actorId: account.value.actorId,
+        controllerEpoch: controllerEpoch(currentEpoch + 1),
+        expiresAtMs: nowMs + this.#presentationCapabilityTtlMs,
+      });
+    } catch {
+      return { outcome: "REJECTED", reason: "CONTROLLER_EPOCH_EXHAUSTED" };
+    }
+    const replaced = replacePlaybackLease(authorized.value.playback, replacementLease);
+    authorized.value.playback = replaced;
+    const supersededReceipts = Object.values(replaced.acceptedCommands).flatMap((record) =>
+      record.supersededReceipt !== null &&
+      record.supersededReceipt.supersededByLeaseId === replacementLease.leaseId
+        ? [record.supersededReceipt]
+        : [],
+    );
+    for (const socket of this.#controllerSockets.get(takeover.data.presentationSessionId) ?? []) {
+      if (!socket.closed && socket.leaseId === previousLease.leaseId) {
+        this.#closeControllerSocket(takeover.data.presentationSessionId, socket, "SUPERSEDED");
+      }
+    }
+    return { outcome: "APPLIED", value: { lease: replacementLease, supersededReceipts } };
+  }
+
   async setSlide(
     accountSessionId: string,
     input: {
@@ -496,6 +607,13 @@ export class PreparedEvidenceCoordinator {
       nowMs,
     );
     if (authorized.outcome === "REJECTED") return authorized;
+    const account = this.readAccountSession(accountSessionId, nowMs);
+    if (
+      account.outcome === "REJECTED" ||
+      account.value.actorId !== authorized.value.playback.activeLease.actorId
+    ) {
+      return { outcome: "REJECTED", reason: "UNAUTHORIZED" };
+    }
     const commandId = CommandIdSchema.safeParse(input.commandId);
     const baseRevision = ControlRevisionSchema.safeParse(input.baseRevision);
     const bindingEpoch = DisplayBindingEpochSchema.safeParse(input.displayBindingEpoch);
@@ -762,6 +880,18 @@ export class PreparedEvidenceCoordinator {
     }
     authorized.value.cards = applied.state;
     return { outcome: "APPLIED", value: event };
+  }
+
+  #closeControllerSocket(
+    presentationSessionId: string,
+    socket: MutableControllerSocket,
+    reason: ControllerSocketCloseReason,
+  ): void {
+    if (socket.closed) return;
+    socket.closed = true;
+    socket.closeReason = reason;
+    this.#controllerSockets.get(presentationSessionId)?.delete(socket);
+    socket.onClose(reason);
   }
 
   #authorizedPresentation(

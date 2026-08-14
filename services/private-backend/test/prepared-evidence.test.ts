@@ -135,6 +135,74 @@ describe("prepared evidence private coordinator", () => {
     });
   });
 
+  test("takes over an authenticated lease, supersedes pending work, and closes the old socket", async () => {
+    const flow = await createBoundFlow();
+    const closeReasons: string[] = [];
+    const socket = flow.coordinator.connectPlaybackController(
+      flow.account.accountSessionId,
+      flow.created.lifecycle.presentationSessionId,
+      1_002,
+      (reason) => closeReasons.push(reason),
+    );
+    expect(socket.outcome).toBe("APPLIED");
+    expect(
+      (
+        await flow.coordinator.setSlide(
+          flow.account.accountSessionId,
+          {
+            presentationSessionId: flow.created.lifecycle.presentationSessionId,
+            commandId: "cmd_pending_takeover",
+            publicSlideKey: "slide_two",
+            displayBindingEpoch: "dbe_1",
+            baseRevision: "cr_0",
+          },
+          1_003,
+        )
+      ).outcome,
+    ).toBe("APPLIED");
+    const replacementAccount = flow.coordinator.createAccountSession(
+      { accountId: "account_alpha", actorId: "actor_beta" },
+      1_004,
+    );
+    expect(
+      flow.coordinator.takeoverPlaybackLease(
+        replacementAccount.accountSessionId,
+        {
+          presentationSessionId: flow.created.lifecycle.presentationSessionId,
+          expectedDisplayBindingEpoch: "dbe_0",
+        },
+        1_005,
+      ),
+    ).toEqual({ outcome: "REJECTED", reason: "STALE_DISPLAY_BINDING" });
+    const takeover = flow.coordinator.takeoverPlaybackLease(
+      replacementAccount.accountSessionId,
+      {
+        presentationSessionId: flow.created.lifecycle.presentationSessionId,
+        expectedDisplayBindingEpoch: "dbe_1",
+      },
+      1_006,
+    );
+    expect(takeover.outcome).toBe("APPLIED");
+    if (takeover.outcome !== "APPLIED") throw new Error("takeover fixture failed");
+    expect(String(takeover.value.lease.controllerEpoch)).toBe("ce_2");
+    expect(takeover.value.supersededReceipts).toHaveLength(1);
+    expect(takeover.value.supersededReceipts[0]?.status).toBe("SUPERSEDED");
+    expect(String(takeover.value.supersededReceipts[0]?.commandId)).toBe("cmd_pending_takeover");
+    expect(closeReasons).toEqual(["SUPERSEDED"]);
+    const rejectedOldController = await flow.coordinator.setSlide(
+      flow.account.accountSessionId,
+      {
+        presentationSessionId: flow.created.lifecycle.presentationSessionId,
+        commandId: "cmd_old_controller",
+        publicSlideKey: "slide_one",
+        displayBindingEpoch: "dbe_1",
+        baseRevision: "cr_1",
+      },
+      1_007,
+    );
+    expect(rejectedOldController).toEqual({ outcome: "REJECTED", reason: "UNAUTHORIZED" });
+  });
+
   test("restores durable sessions and rejects forged unsafe counters", async () => {
     const flow = await createBoundFlow();
     const snapshot = snapshotPreparedEvidenceStore(flow.store);

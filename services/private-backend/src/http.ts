@@ -1,6 +1,6 @@
 import type { ExactOrigin, PrivateBackendConfig } from "./config.ts";
 import { createPreparedDeckArtifacts } from "./prepared-deck-upload.ts";
-import type { PreparedEvidenceCoordinator } from "./prepared-evidence.ts";
+import type { ControllerSocket, PreparedEvidenceCoordinator } from "./prepared-evidence.ts";
 
 export type PrivateBackendHandler = (request: Request) => Response | Promise<Response>;
 
@@ -75,6 +75,49 @@ async function requestBody(request: Request): Promise<unknown> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function controllerEventStream(
+  coordinator: PreparedEvidenceCoordinator,
+  accountSessionId: string,
+  presentationSessionId: string,
+  nowMs: number,
+  headers: Headers,
+): Response {
+  let socket: ControllerSocket | null = null;
+  let cancelled = false;
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const connected = coordinator.connectPlaybackController(
+        accountSessionId,
+        presentationSessionId,
+        nowMs,
+        (reason) => {
+          if (!cancelled) {
+            controller.enqueue(
+              new TextEncoder().encode(
+                `data: ${JSON.stringify({ kind: "CLOSE", payload: { reason } })}\n\n`,
+              ),
+            );
+            controller.close();
+          }
+        },
+      );
+      if (connected.outcome === "REJECTED") {
+        controller.error(new Error(connected.reason));
+        return;
+      }
+      socket = connected.value;
+      controller.enqueue(new TextEncoder().encode(": ready\n\n"));
+    },
+    cancel() {
+      cancelled = true;
+      socket?.close();
+    },
+  });
+  headers.set("content-type", "text/event-stream; charset=utf-8");
+  headers.set("cache-control", "no-store");
+  return new Response(body, { status: socket === null ? 409 : 200, headers });
 }
 
 function csrfToken(internalAuthToken: string, accountSessionId: string): string {
@@ -173,6 +216,18 @@ export function createPrivateBackendHandler(
         origin,
       );
     }
+    if (request.method === "GET" && url.pathname === "/v1/playback/controller-events") {
+      const presentationSessionId = url.searchParams.get("presentationSessionId");
+      return presentationSessionId === null
+        ? json({ error: "presentation_session_required" }, 400, origin)
+        : controllerEventStream(
+            dependencies.coordinator,
+            accountSessionId,
+            presentationSessionId,
+            dependencies.now(),
+            origin,
+          );
+    }
     if (request.method === "DELETE" && url.pathname === "/v1/account-session") {
       const result = dependencies.coordinator.revokeAccountSession(
         accountSessionId,
@@ -232,6 +287,19 @@ export function createPrivateBackendHandler(
       return json(
         result.outcome === "APPLIED" ? result.value : { error: result.reason },
         result.outcome === "APPLIED" ? 201 : 409,
+        origin,
+      );
+    }
+    if (request.method === "POST" && url.pathname === "/v1/playback/lease-takeover") {
+      const result = dependencies.coordinator.takeoverPlaybackLease(
+        accountSessionId,
+        body,
+        dependencies.now(),
+      );
+      if (result.outcome === "APPLIED") await dependencies.persist?.();
+      return json(
+        result.outcome === "APPLIED" ? result.value : { error: result.reason },
+        result.outcome === "APPLIED" ? 200 : 409,
         origin,
       );
     }

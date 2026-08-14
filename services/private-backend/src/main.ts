@@ -20,6 +20,11 @@ const internalAuthToken = required("SERVICE_AUTH_TOKEN");
 const expectedAuthorizationCode = required("CONTROLLER_AUTHORIZATION_CODE");
 const accountId = required("CONTROLLER_ACCOUNT_ID");
 const actorId = required("CONTROLLER_ACTOR_ID");
+const takeoverAuthorizationCode = Bun.env.TAKEOVER_AUTHORIZATION_CODE;
+const takeoverActorId = Bun.env.TAKEOVER_ACTOR_ID;
+if ((takeoverAuthorizationCode === undefined) !== (takeoverActorId === undefined)) {
+  throw new Error("TAKEOVER_AUTHORIZATION_CODE and TAKEOVER_ACTOR_ID must be configured together");
+}
 const projection = new ProjectionHttpPort(required("PROJECTION_GATEWAY_ORIGIN"), internalAuthToken);
 const snapshotPath = required("PRIVATE_SNAPSHOT_PATH");
 const snapshotFile = Bun.file(snapshotPath);
@@ -49,7 +54,10 @@ const server = Bun.serve({
     internalAuthToken,
     identityVerifier: {
       async exchangeAuthorizationCode(code) {
-        return code === expectedAuthorizationCode ? { accountId, actorId } : null;
+        if (code === expectedAuthorizationCode) return { accountId, actorId };
+        return code === takeoverAuthorizationCode && takeoverActorId !== undefined
+          ? { accountId, actorId: takeoverActorId }
+          : null;
       },
     },
     now: Date.now,
