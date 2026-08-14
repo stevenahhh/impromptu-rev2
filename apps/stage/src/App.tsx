@@ -207,6 +207,19 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
       cards: current.cards.filter((card) => state.visibleCardIds.includes(card.projectionId)),
     });
 
+    const hideStaleEvent = (result: ReturnType<typeof transition>) => {
+      if (result?.outcome !== "STALE_EVENT") return false;
+      const hidden = transition({ type: "EXPLICIT_HIDE", reason: "STALE_EVENT" });
+      setSnapshot((current) => {
+        if (current === null || hidden === null) return current;
+        const next = visibleCards(current, hidden.state);
+        latestSnapshot = next;
+        return next;
+      });
+      publishStageEvent("impromptu:card-hidden", { reason: "STALE_EVENT" });
+      return true;
+    };
+
     const scheduleLease = (card: StageSnapshotView["cards"][number]) => {
       const existing = leaseTimers.get(card.projectionId);
       if (existing !== undefined) window.clearTimeout(existing);
@@ -285,6 +298,8 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
                 commandId: event.commandId,
                 occurrence: event.occurrence,
               });
+            } else {
+              hideStaleEvent(playbackResult);
             }
             const recordOverHttp = () =>
               client
@@ -330,6 +345,7 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
                     projectionId: event.projectionId,
                     publicCardRevision: event.publicCardRevision,
                   });
+            if (hideStaleEvent(cardResult)) return;
             setSnapshot((current) => {
               const streamed = applyCardEvent(current, event);
               if (streamed === null || cardResult === null) return streamed;
@@ -498,6 +514,9 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   });
   const card = snapshot?.cards[0];
+  const currentSlide = snapshot?.deckSlides.find(
+    (slide) => slide.publicSlideKey === snapshot.occurrence.publicSlideKey,
+  );
 
   return (
     <div className="stage-display">
@@ -515,6 +534,13 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
       </header>
       <main className="stage-display__content" aria-labelledby={titleId}>
         <section className="stage-claim ui-reveal">
+          {currentSlide === undefined ? null : (
+            <img
+              className="stage-slide"
+              src={currentSlide.imageUrl}
+              alt={currentSlide.accessibilityLabel}
+            />
+          )}
           <p className="ui-eyebrow">Curated evidence preview</p>
           <h1 id={titleId}>Evidence, without the detour</h1>
           <p className="stage-lead">

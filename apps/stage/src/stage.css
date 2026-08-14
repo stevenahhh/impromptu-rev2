@@ -103,8 +103,25 @@
 }
 
 .stage-claim {
+  position: relative;
+  isolation: isolate;
   display: grid;
   gap: var(--space-5);
+  overflow: hidden;
+}
+
+.stage-claim > :not(.stage-slide) {
+  position: relative;
+  z-index: 1;
+}
+
+.stage-slide {
+  position: absolute;
+  z-index: 0;
+  width: var(--size-full);
+  height: var(--size-full);
+  object-fit: cover;
+  opacity: 0.14;
 }
 
 .stage-evidence {

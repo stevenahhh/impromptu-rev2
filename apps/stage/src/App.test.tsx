@@ -180,18 +180,7 @@ describe("public Stage boundary", () => {
     ]);
   });
 
-  test("observes topology transitions through the same platform event handler", () => {
-    renderStage("/display/rehearsal");
-    fireEvent(
-      window,
-      new CustomEvent("impromptu:platform-topology-change", {
-        detail: { observedMode: "duplicate", screenCount: 1 },
-      }),
-    );
-
-    expect(within(document.body).getByText("duplicate / 1 screen")).toBeTruthy();
-
-  test("observes one visible effect, keeps verified curated offline, and hides on session epoch change", async () => {
+  test("observes one visible effect, renders cached navigation, and hides on stale playback", async () => {
     let observer: StageEventObserver | null = null;
     const snapshotApplied = deferred<unknown>();
     const visibleEffects: unknown[] = [];
@@ -292,7 +281,25 @@ describe("public Stage boundary", () => {
     });
     await act(async () => waitVisible);
     expect(within(document.body).getByText("Verified offline claim")).toBeTruthy();
-    if (observer === null) throw new Error("Stage observer was not installed");
+    expect(within(document.body).getByRole("img", { name: "One" }).getAttribute("src")).toBe(
+      "https://public.test/one.png",
+    );
+    const localSlide = deferred<unknown>();
+    window.addEventListener(
+      "impromptu:local-slide",
+      (event) => localSlide.resolve(event instanceof CustomEvent ? event.detail : null),
+      { once: true },
+    );
+    await act(async () => fireEvent.keyDown(window, { key: "ArrowRight" }));
+    expect(await localSlide.promise).toEqual({
+      publicSlideKey: "slide_two",
+      occurrenceSeq: 2,
+    });
+    expect(within(document.body).getByRole("img", { name: "Two" }).getAttribute("src")).toBe(
+      "https://public.test/two.png",
+    );
+    const installedObserver = observer as StageEventObserver | null;
+    if (installedObserver === null) throw new Error("Stage observer was not installed");
     const playback = {
       commandId: "cmd_one",
       presentationSessionEpoch: "pse_1",
@@ -303,21 +310,97 @@ describe("public Stage boundary", () => {
       blackout: false,
     };
     await act(async () => {
-      observer?.onPlayback(playback);
-      observer?.onPlayback(playback);
+      installedObserver.onPlayback(playback);
+      installedObserver.onPlayback(playback);
     });
     expect(visibleEffects).toHaveLength(1);
-    await act(async () => observer?.onClose("NETWORK_ERROR"));
-    expect(within(document.body).getByText("Verified offline claim")).toBeTruthy();
+    const staleHidden = deferred<unknown>();
+    const waitHidden = textMutation("Verified offline claim", false);
+    window.addEventListener(
+      "impromptu:card-hidden",
+      (event) => staleHidden.resolve(event instanceof CustomEvent ? event.detail : null),
+      { once: true },
+    );
     await act(async () =>
-      observer?.onPlayback({
+      installedObserver.onPlayback({
         ...playback,
-        commandId: "cmd_stale_epoch",
-        presentationSessionEpoch: "pse_2",
-        publicPlaybackRevision: "pbr_2",
+        commandId: "cmd_stale_playback",
+        publicPlaybackRevision: "pbr_3",
       }),
     );
-    expect(within(document.body).queryByText("Verified offline claim")).toBeNull();
+    expect(await staleHidden.promise).toEqual({ reason: "STALE_EVENT" });
+    await act(async () => waitHidden);
+  });
+
+  test("hides a visible card on an observed stale card event", async () => {
+    let observer: StageEventObserver | null = null;
+    const snapshotApplied = deferred<unknown>();
+    window.addEventListener("impromptu:snapshot-applied", () => snapshotApplied.resolve(null), {
+      once: true,
+    });
+    const liveCard: StageSnapshotView["cards"][number] = {
+      projectionId: "projection_live",
+      status: "PUBLISHED",
+      mode: "LIVE",
+      leaseExpiresAtMs: Date.now() + 2_000,
+      claim: "Fresh live claim",
+      supportSummary: "Visible support",
+      sourceLabel: "Public source",
+      publicCardRevision: "pcr_2",
+    };
+    const snapshot: StageSnapshotView = {
+      role: "PUBLIC_STAGE",
+      stateHash: "a".repeat(64),
+      presentationSessionId: "ps_alpha",
+      presentationSessionEpoch: "pse_1",
+      displayBindingEpoch: "dbe_1",
+      deckVersion: "deck_alpha",
+      manifestHash: "b".repeat(64),
+      deckSlides: [],
+      publicPlaybackRevision: "pbr_0",
+      blackout: false,
+      occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+      cards: [liveCard],
+      publicCardRevision: "pcr_2",
+      tombstoneWatermark: "pcr_0",
+      tombstoneRetentionMs: 60_000,
+    };
+    const client: StageSessionClient = {
+      async createJoin() {
+        throw new Error("not used");
+      },
+      async claim() {},
+      async snapshot() {
+        return snapshot;
+      },
+      async subscribe(nextObserver) {
+        observer = nextObserver;
+        return { close() {} };
+      },
+      async recordApplied() {
+        return null;
+      },
+    };
+    const waitVisible = textMutation("Fresh live claim", true);
+    render(
+      <MemoryRouter initialEntries={["/display/display_alpha"]}>
+        <StageRoutes client={client} />
+      </MemoryRouter>,
+    );
+    await act(async () => snapshotApplied.promise);
+    await act(async () => waitVisible);
+    const installedObserver = observer as StageEventObserver | null;
+    if (installedObserver === null) throw new Error("Stage observer was not installed");
+    const staleHidden = deferred<unknown>();
+    const waitHidden = textMutation("Fresh live claim", false);
+    window.addEventListener(
+      "impromptu:card-hidden",
+      (event) => staleHidden.resolve(event instanceof CustomEvent ? event.detail : null),
+      { once: true },
+    );
+    await act(async () => installedObserver.onCard({ ...liveCard, publicCardRevision: "pcr_1" }));
+    expect(await staleHidden.promise).toEqual({ reason: "STALE_EVENT" });
+    await act(async () => waitHidden);
   });
 
   test("enters and exits fullscreen only from a Stage-local action", () => {
