@@ -2,9 +2,11 @@
 
 import argparse
 import json
+import os
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from tempfile import mkstemp
 from typing import cast
 
 from pydantic import ValidationError
@@ -62,15 +64,42 @@ def _absolute_without_resolving(path: Path) -> Path:
     return path if path.is_absolute() else Path.cwd() / path
 
 
+def _write_and_sync(path: Path, payload: bytes) -> None:
+    with path.open("wb") as stream:
+        stream.write(payload)
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
 def _write_new_output(path: Path, result: CompletedIngestion) -> None:
     output = _absolute_without_resolving(path)
     try:
-        with output.open("xb") as stream:
-            stream.write(_json_bytes(result.model_dump(mode="json")))
-    except FileExistsError as error:
-        raise CliOperationError("output_exists", "refusing to overwrite existing output") from error
+        descriptor, temporary_name = mkstemp(
+            dir=output.parent,
+            prefix=f".{output.name}.",
+            suffix=".tmp",
+        )
+        os.close(descriptor)
     except OSError as error:
-        raise CliOperationError("output_unwritable", "output file could not be written") from error
+        raise CliOperationError(
+            "output_unwritable", "output temporary file could not be created"
+        ) from error
+
+    temporary = Path(temporary_name)
+    try:
+        _write_and_sync(temporary, _json_bytes(result.model_dump(mode="json")))
+        try:
+            os.link(temporary, output)
+        except FileExistsError as error:
+            raise CliOperationError(
+                "output_exists", "refusing to overwrite existing output"
+            ) from error
+        except OSError as error:
+            raise CliOperationError(
+                "output_unwritable", "output file could not be atomically published"
+            ) from error
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _run_doctor(as_json: bool) -> int:
