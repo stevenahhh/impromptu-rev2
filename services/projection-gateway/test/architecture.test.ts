@@ -16,6 +16,14 @@ function fixture(name: string): string {
   return readFileSync(resolve(fixtureRoot, `${name}.fixture`), "utf8");
 }
 
+function packageFixture(name: string): string {
+  return readFileSync(resolve(fixtureRoot, `${name}.package.fixture`), "utf8");
+}
+
+function packageFixtureViolations(name: string) {
+  return scanPackageManifest(`${name}.package.json`, packageFixture(name));
+}
+
 function violationCodes(name: string): readonly ArchitectureViolationCode[] {
   return scanSourceText(resolve(sourceRoot, `${name}.ts`), fixture(name), {
     sourceRoot,
@@ -118,5 +126,32 @@ describe("projection gateway architecture", () => {
     );
 
     expect(violations.map((violation) => violation.code)).toContain("FORBIDDEN_PRIVATE_DEPENDENCY");
+  });
+
+  test("normalizes canonical Bun patched dependency identities", () => {
+    const violations = packageFixtureViolations("patched-private");
+
+    expect(violations.map((violation) => [violation.code, violation.group])).toContainEqual([
+      "FORBIDDEN_PRIVATE_DEPENDENCY",
+      "patchedDependencies",
+    ]);
+  });
+
+  test("rejects nested versioned override and resolution selectors", () => {
+    for (const [fixtureName, group] of [
+      ["overrides-private", "overrides"],
+      ["resolutions-private", "resolutions"],
+    ] as const) {
+      const violations = packageFixtureViolations(fixtureName);
+
+      expect(violations.map((violation) => [violation.code, violation.group])).toContainEqual([
+        "FORBIDDEN_PRIVATE_DEPENDENCY",
+        group,
+      ]);
+    }
+  });
+
+  test("accepts unrelated package controls", () => {
+    expect(packageFixtureViolations("package-controls-safe")).toEqual([]);
   });
 });

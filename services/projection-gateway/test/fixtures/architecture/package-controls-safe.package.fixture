@@ -1,0 +1,13 @@
+{
+  "patchedDependencies": {
+    "@impromptu/public-contracts@0.0.0": "patches/@impromptu%2Fpublic-contracts@0.0.0.patch"
+  },
+  "overrides": {
+    "@impromptu/public-shell@1.0.0": {
+      "@impromptu/public-contracts@0.0.0": "0.0.1"
+    }
+  },
+  "resolutions": {
+    "@impromptu/public-shell@1.0.0/@impromptu/public-contracts@0.0.0": "0.0.1"
+  }
+}

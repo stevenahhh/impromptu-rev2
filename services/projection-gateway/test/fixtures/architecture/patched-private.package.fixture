@@ -1,0 +1,5 @@
+{
+  "patchedDependencies": {
+    "@impromptu/private-backend@0.0.0": "patches/@impromptu%2Fprivate-backend@0.0.0.patch"
+  }
+}

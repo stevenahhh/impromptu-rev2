@@ -1,0 +1,7 @@
+{
+  "overrides": {
+    "@impromptu/public-shell@1.0.0": {
+      "@impromptu/private-backend@0.0.0": "0.0.1"
+    }
+  }
+}

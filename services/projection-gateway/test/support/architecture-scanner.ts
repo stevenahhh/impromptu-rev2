@@ -161,12 +161,83 @@ function sourceFiles(directory: string): readonly string[] {
   });
 }
 
-function isForbiddenPrivateDependency(name: string, specifier?: string): boolean {
-  if (name === "@impromptu/private-backend") {
-    return true;
+const FORBIDDEN_PRIVATE_PACKAGE = "@impromptu/private-backend";
+
+function normalizePackageIdentity(selector: string): string {
+  if (selector.startsWith("@")) {
+    const scopeSeparator = selector.indexOf("/");
+    if (scopeSeparator === -1) {
+      return selector;
+    }
+
+    const versionSeparator = selector.indexOf("@", scopeSeparator + 1);
+    return versionSeparator === -1 ? selector : selector.slice(0, versionSeparator);
   }
 
-  return specifier?.includes("@impromptu/private-backend") === true;
+  const versionSeparator = selector.indexOf("@");
+  return versionSeparator === -1 ? selector : selector.slice(0, versionSeparator);
+}
+
+function referencesForbiddenPrivatePackage(selector: string): boolean {
+  let start = selector.indexOf(FORBIDDEN_PRIVATE_PACKAGE);
+  while (start !== -1) {
+    const before = selector[start - 1];
+    const after = selector[start + FORBIDDEN_PRIVATE_PACKAGE.length];
+    const hasIdentityBoundaryBefore =
+      before === undefined || before === ":" || before === "/" || before === "\\" || before === ">";
+    const hasIdentityBoundaryAfter =
+      after === undefined || after === "@" || after === "/" || after === "\\" || after === ">";
+    if (hasIdentityBoundaryBefore && hasIdentityBoundaryAfter) {
+      return true;
+    }
+
+    start = selector.indexOf(FORBIDDEN_PRIVATE_PACKAGE, start + 1);
+  }
+
+  return false;
+}
+
+function isForbiddenPrivateDependency(name: string, specifier?: string): boolean {
+  return (
+    normalizePackageIdentity(name) === FORBIDDEN_PRIVATE_PACKAGE ||
+    (specifier !== undefined && referencesForbiddenPrivatePackage(specifier))
+  );
+}
+
+function scanPackageControl(
+  file: string,
+  group: string,
+  value: unknown,
+  violations: ArchitectureViolation[],
+): void {
+  if (typeof value === "string") {
+    if (referencesForbiddenPrivatePackage(value)) {
+      violations.push({
+        code: "FORBIDDEN_PRIVATE_DEPENDENCY",
+        file,
+        group,
+        dependency: value,
+      });
+    }
+    return;
+  }
+
+  if (!isRecord(value)) {
+    violations.push({ code: "MALFORMED_DEPENDENCY_GROUP", file, group });
+    return;
+  }
+
+  for (const [selector, controlledValue] of Object.entries(value)) {
+    if (referencesForbiddenPrivatePackage(selector)) {
+      violations.push({
+        code: "FORBIDDEN_PRIVATE_DEPENDENCY",
+        file,
+        group,
+        dependency: selector,
+      });
+    }
+    scanPackageControl(file, group, controlledValue, violations);
+  }
 }
 
 export function scanPackageManifest(file: string, text: string): readonly ArchitectureViolation[] {
@@ -183,6 +254,11 @@ export function scanPackageManifest(file: string, text: string): readonly Archit
 
   const violations: ArchitectureViolation[] = [];
   for (const [group, value] of Object.entries(manifest)) {
+    if (group === "overrides" || group === "resolutions") {
+      scanPackageControl(file, group, value, violations);
+      continue;
+    }
+
     if (group !== "dependencies" && !group.endsWith("Dependencies")) {
       continue;
     }
