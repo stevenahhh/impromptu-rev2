@@ -170,6 +170,70 @@ describe("generated playback fault schedules", () => {
     );
   });
 
+  test("restores generated distinct-lease takeover chains and interleavings", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 3, max: 8 }),
+        fc.array(fc.boolean(), { maxLength: 8 }),
+        (leaseCount, restartSelectors) => {
+          const actions: PlaybackFaultAction[] = [];
+          const commands: PlaybackCommand[] = [];
+          let currentLease = playbackAuthorityFixture().activeLease;
+          for (let index = 0; index < leaseCount; index += 1) {
+            const command: PlaybackCommand = {
+              ...playbackCommandFixture(index + 1, {
+                type: "BLACKOUT_SET",
+                enabled: index % 2 === 0,
+              }),
+              actorId: currentLease.actorId,
+              leaseId: currentLease.leaseId,
+              controllerEpoch: currentLease.controllerEpoch,
+            };
+            commands.push(command);
+            actions.push({ type: "COMMAND", command });
+            if (index === leaseCount - 1) continue;
+            const nextEpoch = index + 10;
+            const replacement = PlaybackControlLeaseSchema.parse({
+              ...currentLease,
+              leaseId: `lease_chain-${nextEpoch}`,
+              actorId: `actor_chain-${nextEpoch}`,
+              controllerEpoch: `ce_${nextEpoch}`,
+            });
+            actions.push({ type: "TAKEOVER", lease: replacement });
+            if (restartSelectors[index] === true) actions.push({ type: "RESTART" });
+            currentLease = replacement;
+          }
+          const finalCommand = commands.at(-1);
+          if (finalCommand === undefined) throw new Error("chain command was not generated");
+          actions.push({
+            type: "STAGE_APPLY",
+            commandId: finalCommand.commandId,
+            displayBindingEpoch: displayBindingEpoch(1),
+          });
+          actions.push({ type: "RESTART" });
+
+          const result = runPlaybackFaultSchedule(playbackAuthorityFixture(), actions);
+          expect(result.state.leaseTakeovers).toHaveLength(leaseCount - 1);
+          for (let index = 0; index < result.state.leaseTakeovers.length - 1; index += 1) {
+            const edge = result.state.leaseTakeovers[index];
+            const nextEdge = result.state.leaseTakeovers[index + 1];
+            if (edge === undefined || nextEdge === undefined) {
+              throw new Error("generated takeover chain has a gap");
+            }
+            expect(edge.replacementLease).toEqual(nextEdge.previousLease);
+          }
+          expect(
+            Object.values(result.state.acceptedCommands)
+              .slice(0, -1)
+              .every(({ supersededReceipt }) => supersededReceipt?.status === "SUPERSEDED"),
+          ).toBe(true);
+          expect(result.trace.at(-2)).toMatchObject({ type: "STAGE_APPLY", outcome: "APPLIED" });
+        },
+      ),
+      propertyOptions,
+    );
+  });
+
   test("old-lease duplicates remain rejected after generated takeovers", () => {
     fc.assert(
       fc.property(fc.integer({ min: 2, max: 1_000 }), (nextEpoch) => {

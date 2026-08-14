@@ -60,6 +60,27 @@ type AcceptanceContext = Readonly<{
   acceptedAtMs: number;
 }>;
 
+type PlaybackLeaseTakeover = Readonly<{
+  previousLease: PlaybackControlLease;
+  replacementLease: PlaybackControlLease;
+  atControlRevision: ControlRevision;
+}>;
+
+function sameLease(left: PlaybackControlLease, right: PlaybackControlLease): boolean {
+  return (
+    left.presentationSessionId === right.presentationSessionId &&
+    left.presentationSessionEpoch === right.presentationSessionEpoch &&
+    left.actorId === right.actorId &&
+    left.leaseId === right.leaseId &&
+    left.controllerEpoch === right.controllerEpoch &&
+    left.expiresAtMs === right.expiresAtMs
+  );
+}
+
+function leaseEpochKey(lease: PlaybackControlLease): string {
+  return `${lease.leaseId}:${lease.controllerEpoch}`;
+}
+
 type AcceptedCommandRecord = Readonly<{
   command: PlaybackCommand;
   acceptanceContext: AcceptanceContext;
@@ -83,6 +104,7 @@ export type PlaybackAuthorityState = Readonly<{
   occurrence: PublicSlideOccurrence;
   nextOccurrenceSeq: number;
   blackout: boolean;
+  leaseTakeovers: readonly PlaybackLeaseTakeover[];
   acceptedCommands: Readonly<Record<string, AcceptedCommandRecord>>;
 }>;
 
@@ -96,6 +118,14 @@ const PlaybackEffectSchema = z
     blackout: z.boolean(),
   })
   .strict();
+const PlaybackLeaseTakeoverSchema = z
+  .object({
+    previousLease: PlaybackControlLeaseSchema,
+    replacementLease: PlaybackControlLeaseSchema,
+    atControlRevision: ControlRevisionSchema,
+  })
+  .strict();
+
 const AcceptedCommandRecordSchema = z
   .object({
     command: PlaybackCommandSchema,
@@ -128,6 +158,7 @@ const PlaybackAuthoritySnapshotSchema = z
     occurrence: PublicSlideOccurrenceSchema,
     nextOccurrenceSeq: z.number().int().positive(),
     blackout: z.boolean(),
+    leaseTakeovers: z.array(PlaybackLeaseTakeoverSchema),
     acceptedCommands: z.record(z.string(), AcceptedCommandRecordSchema),
   })
   .strict()
@@ -155,6 +186,67 @@ const PlaybackAuthoritySnapshotSchema = z
     const appliedByPublicRevision = new Map<number, AcceptedCommandRecord>();
     const currentBinding = safeEncodedCounterValue(snapshot.displayBindingEpoch);
     if (currentBinding === null) return;
+
+    const knownLeases = new Map<string, PlaybackControlLease>();
+    const incomingTakeovers = new Map<string, PlaybackLeaseTakeover>();
+    const outgoingTakeovers = new Map<string, PlaybackLeaseTakeover>();
+    const seenLeaseEpochs = new Set<string>();
+    let priorTakeover: PlaybackLeaseTakeover | null = null;
+    let priorTakeoverRevision = 0;
+    let takeoverHistoryValid = true;
+    for (const [index, takeover] of snapshot.leaseTakeovers.entries()) {
+      const previousKey = leaseEpochKey(takeover.previousLease);
+      const replacementKey = leaseEpochKey(takeover.replacementLease);
+      const takeoverRevision = safeEncodedCounterValue(takeover.atControlRevision);
+      const valid =
+        takeover.previousLease.presentationSessionId === snapshot.presentationSessionId &&
+        takeover.previousLease.presentationSessionEpoch === snapshot.presentationSessionEpoch &&
+        takeover.replacementLease.presentationSessionId === snapshot.presentationSessionId &&
+        takeover.replacementLease.presentationSessionEpoch === snapshot.presentationSessionEpoch &&
+        previousKey !== replacementKey &&
+        takeoverRevision !== null &&
+        takeoverRevision >= priorTakeoverRevision &&
+        takeoverRevision <= controlHead &&
+        !outgoingTakeovers.has(previousKey) &&
+        !incomingTakeovers.has(replacementKey) &&
+        !seenLeaseEpochs.has(replacementKey) &&
+        (priorTakeover === null ||
+          sameLease(takeover.previousLease, priorTakeover.replacementLease));
+      if (!valid) {
+        takeoverHistoryValid = false;
+        context.addIssue({
+          code: "custom",
+          path: ["leaseTakeovers", index],
+          message: "takeover history is disconnected, cyclic, or out of order",
+        });
+        continue;
+      }
+      if (priorTakeover === null) {
+        seenLeaseEpochs.add(previousKey);
+        knownLeases.set(previousKey, takeover.previousLease);
+      }
+      seenLeaseEpochs.add(replacementKey);
+      knownLeases.set(replacementKey, takeover.replacementLease);
+      outgoingTakeovers.set(previousKey, takeover);
+      incomingTakeovers.set(replacementKey, takeover);
+      priorTakeover = takeover;
+      priorTakeoverRevision = takeoverRevision;
+    }
+    if (snapshot.leaseTakeovers.length === 0) {
+      knownLeases.set(leaseEpochKey(snapshot.activeLease), snapshot.activeLease);
+    } else if (
+      priorTakeover === null ||
+      !sameLease(priorTakeover.replacementLease, snapshot.activeLease)
+    ) {
+      takeoverHistoryValid = false;
+      context.addIssue({
+        code: "custom",
+        path: ["activeLease"],
+        message: "active lease is not the terminal takeover lease",
+      });
+    }
+    if (!takeoverHistoryValid) return;
+
     for (const [key, record] of Object.entries(snapshot.acceptedCommands)) {
       const command = record.command;
       const receipt = record.receipt;
@@ -162,6 +254,18 @@ const PlaybackAuthoritySnapshotSchema = z
       const acceptedLease = acceptance.lease;
       const acceptedRevision = safeEncodedCounterValue(receipt.acceptedControlRevision);
       const canonicalHash = canonicalPlaybackRequestHash(command);
+      const acceptedLeaseKey = leaseEpochKey(acceptedLease);
+      const knownLease = knownLeases.get(acceptedLeaseKey);
+      const incomingTakeover = incomingTakeovers.get(acceptedLeaseKey);
+      const outgoingTakeover = outgoingTakeovers.get(acceptedLeaseKey);
+      const incomingRevision =
+        incomingTakeover === undefined
+          ? null
+          : safeEncodedCounterValue(incomingTakeover.atControlRevision);
+      const outgoingRevision =
+        outgoingTakeover === undefined
+          ? null
+          : safeEncodedCounterValue(outgoingTakeover.atControlRevision);
       const identityMatches =
         command.presentationSessionId === receipt.presentationSessionId &&
         command.presentationSessionEpoch === receipt.presentationSessionEpoch &&
@@ -181,7 +285,12 @@ const PlaybackAuthoritySnapshotSchema = z
         acceptedLease.leaseId === command.leaseId &&
         acceptedLease.controllerEpoch === command.controllerEpoch &&
         acceptance.displayBindingEpoch === command.displayBindingEpoch &&
-        acceptance.acceptedAtMs < acceptedLease.expiresAtMs;
+        acceptance.acceptedAtMs < acceptedLease.expiresAtMs &&
+        knownLease !== undefined &&
+        sameLease(knownLease, acceptedLease) &&
+        acceptedRevision !== null &&
+        (incomingRevision === null || acceptedRevision > incomingRevision) &&
+        (outgoingRevision === null || acceptedRevision <= outgoingRevision);
       let valid =
         key === commandKey(command) &&
         command.presentationSessionId === snapshot.presentationSessionId &&
@@ -239,8 +348,10 @@ const PlaybackAuthoritySnapshotSchema = z
           superseded.displayBindingEpoch === receipt.displayBindingEpoch &&
           superseded.acceptedControlRevision === receipt.acceptedControlRevision &&
           !ownedByActiveLease &&
-          superseded.supersededByLeaseId === snapshot.activeLease.leaseId &&
-          superseded.supersededByControllerEpoch === snapshot.activeLease.controllerEpoch;
+          outgoingTakeover !== undefined &&
+          superseded.supersededByLeaseId === outgoingTakeover.replacementLease.leaseId &&
+          superseded.supersededByControllerEpoch ===
+            outgoingTakeover.replacementLease.controllerEpoch;
       }
       if (acceptedRevision !== null) recordsByRevision.set(acceptedRevision, record);
       if (!valid) {
@@ -443,6 +554,7 @@ export function createPlaybackAuthorityState(
     occurrence: { publicSlideKey: input.initialSlideKey, occurrenceSeq: 1 },
     nextOccurrenceSeq: 2,
     blackout: false,
+    leaseTakeovers: [],
     acceptedCommands: {},
   };
 }
@@ -749,7 +861,19 @@ export function replacePlaybackLease(
       return [key, { ...record, supersededReceipt }];
     }),
   );
-  return { ...state, activeLease, acceptedCommands };
+  return {
+    ...state,
+    activeLease,
+    leaseTakeovers: [
+      ...state.leaseTakeovers,
+      {
+        previousLease: state.activeLease,
+        replacementLease: activeLease,
+        atControlRevision: state.controlRevision,
+      },
+    ],
+    acceptedCommands,
+  };
 }
 
 export function setPlaybackStageStatus(

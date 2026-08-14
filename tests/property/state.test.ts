@@ -374,6 +374,107 @@ describe("playback authority reducer", () => {
     });
   });
 
+  test("restores the exact A to B to C supersession chain", () => {
+    const acceptedA = reducePlaybackCommand(authority(), command({ type: "SLIDE_NEXT" }), nowMs);
+    const leaseB = PlaybackControlLeaseSchema.parse({
+      ...acceptedA.state.activeLease,
+      leaseId: "lease_b",
+      actorId: "actor_controller-b",
+      controllerEpoch: "ce_8",
+    });
+    const atB = replacePlaybackLease(acceptedA.state, leaseB);
+    const acceptedB = reducePlaybackCommand(
+      atB,
+      command({
+        type: "BLACKOUT_SET",
+        actorId: "actor_controller-b",
+        leaseId: "lease_b",
+        controllerEpoch: "ce_8",
+        commandId: "cmd_2",
+        baseRevision: 1,
+      }),
+      nowMs,
+    );
+    const leaseC = PlaybackControlLeaseSchema.parse({
+      ...leaseB,
+      leaseId: "lease_c",
+      actorId: "actor_controller-c",
+      controllerEpoch: "ce_9",
+    });
+    const atC = replacePlaybackLease(acceptedB.state, leaseC);
+    expect(restorePlaybackAuthority(snapshotPlaybackAuthority(atC))).toEqual({
+      outcome: "RESTORED",
+      state: atC,
+    });
+    const firstEdge = atC.leaseTakeovers[0];
+    const secondEdge = atC.leaseTakeovers[1];
+    if (firstEdge === undefined || secondEdge === undefined) {
+      throw new Error("takeover chain was not persisted");
+    }
+    expect(
+      restorePlaybackAuthority({
+        ...atC,
+        leaseTakeovers: [
+          firstEdge,
+          {
+            ...secondEdge,
+            previousLease: { ...secondEdge.previousLease, leaseId: "lease_disconnected" },
+          },
+        ],
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+    expect(
+      restorePlaybackAuthority({
+        ...atC,
+        activeLease: firstEdge.previousLease,
+        leaseTakeovers: [firstEdge, { ...secondEdge, replacementLease: firstEdge.previousLease }],
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+
+    const entries = Object.entries(atC.acceptedCommands);
+    const commandA = entries.find(([, record]) => record.receipt.leaseId === "lease_primary");
+    const commandB = entries.find(([, record]) => record.receipt.leaseId === "lease_b");
+    if (
+      commandA === undefined ||
+      commandA[1].supersededReceipt === null ||
+      commandB === undefined ||
+      commandB[1].supersededReceipt === null
+    ) {
+      throw new Error("supersession receipts were not persisted");
+    }
+    expect(
+      restorePlaybackAuthority({
+        ...atC,
+        acceptedCommands: {
+          ...atC.acceptedCommands,
+          [commandA[0]]: {
+            ...commandA[1],
+            supersededReceipt: {
+              ...commandA[1].supersededReceipt,
+              supersededByLeaseId: "lease_c",
+              supersededByControllerEpoch: "ce_9",
+            },
+          },
+        },
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+    expect(
+      restorePlaybackAuthority({
+        ...atC,
+        acceptedCommands: {
+          ...atC.acceptedCommands,
+          [commandB[0]]: {
+            ...commandB[1],
+            supersededReceipt: {
+              ...commandB[1].supersededReceipt,
+              supersededByControllerEpoch: "ce_10",
+            },
+          },
+        },
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+  });
+
   test("supersedes old pending commands during lease takeover without blocking the new lease", () => {
     const acceptedOld = reducePlaybackCommand(authority(), command({ type: "SLIDE_NEXT" }), nowMs);
     const replacement = PlaybackControlLeaseSchema.parse({
