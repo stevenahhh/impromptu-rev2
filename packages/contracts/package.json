@@ -8,6 +8,7 @@
     "./public": "./src/public.ts",
     "./control": "./src/control.ts",
     "./private": "./src/private.ts",
+    "./retrieval": "./src/retrieval.ts",
     "./shared": "./src/shared.ts"
   },
   "dependencies": {

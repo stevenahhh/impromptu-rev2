@@ -15,6 +15,7 @@ export {
   type ServerModelRouter,
 } from "./ports/server-model-router.ts";
 export * from "./prepared-evidence.ts";
+export * from "./retrieval/internal-retrieval.ts";
 export { ProjectionHttpPort } from "./projection-http-port.ts";
 export {
   createPostgresPrivatePublicationOutbox,
