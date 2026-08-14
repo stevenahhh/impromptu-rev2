@@ -34,7 +34,7 @@ export class DeterministicFakeUnaryAdapter<Input, Output>
   #invocationCount = 0;
 
   constructor(options: DeterministicFakeUnaryAdapterOptions<Input, Output>) {
-    this.descriptor = options.descriptor;
+    this.descriptor = cloneAndFreeze(options.descriptor);
     this.inputSchema = options.inputSchema;
     this.outputSchema = options.outputSchema;
     this.#respond = options.respond;
@@ -46,7 +46,7 @@ export class DeterministicFakeUnaryAdapter<Input, Output>
 
   async invoke(input: Input, context: ModelInvocationContext): Promise<Output> {
     this.#invocationCount += 1;
-    return await this.#respond(input, context);
+    return cloneAndFreeze(await this.#respond(input, context));
   }
 }
 
@@ -66,15 +66,16 @@ export class DeterministicFakeSttAdapter implements UnarySttAdapter, StreamingSt
   readonly #events: readonly SttStreamEvent[];
 
   constructor(options: DeterministicFakeSttAdapterOptions) {
-    this.descriptor = {
+    this.descriptor = cloneAndFreeze({
       adapterId: options.adapterId ?? "deterministic-fake-stt",
       capability: "stt",
       provider: "fake",
       model: "scripted-stt",
       modelVersion: "1",
-    };
-    this.#transcript = sttTranscriptSchema.parse(options.transcript);
-    this.#events = options.events.map((event) => sttStreamEventSchema.parse(event));
+      estimatedCostUnits: 1,
+    });
+    this.#transcript = cloneAndFreeze(sttTranscriptSchema.parse(options.transcript));
+    this.#events = cloneAndFreeze(options.events.map((event) => sttStreamEventSchema.parse(event)));
   }
 
   async invoke(
@@ -82,7 +83,7 @@ export class DeterministicFakeSttAdapter implements UnarySttAdapter, StreamingSt
     context: ModelInvocationContext,
   ): Promise<SttTranscript> {
     throwIfAborted(context.signal);
-    return this.#transcript;
+    return cloneAndFreeze(this.#transcript);
   }
 
   async *transcribe(
@@ -91,9 +92,19 @@ export class DeterministicFakeSttAdapter implements UnarySttAdapter, StreamingSt
   ): AsyncIterable<SttStreamEvent> {
     for (const event of this.#events) {
       throwIfAborted(context.signal);
-      yield event;
+      yield cloneAndFreeze(event);
     }
   }
+}
+
+function cloneAndFreeze<Value>(value: Value): Value {
+  return deepFreeze(structuredClone(value));
+}
+
+function deepFreeze<Value>(value: Value): Value {
+  if (typeof value !== "object" || value === null || ArrayBuffer.isView(value)) return value;
+  for (const child of Object.values(value)) deepFreeze(child);
+  return Object.freeze(value);
 }
 
 function throwIfAborted(signal: AbortSignal): void {

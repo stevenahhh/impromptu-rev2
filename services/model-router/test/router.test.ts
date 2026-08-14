@@ -73,6 +73,7 @@ function unaryAdapter(
       provider: "fake",
       model: "fixed-output",
       modelVersion: "1",
+      estimatedCostUnits: 1,
       ...(requirement === undefined ? {} : { requirement }),
     },
     inputSchema: z.object({ prompt: z.string() }),

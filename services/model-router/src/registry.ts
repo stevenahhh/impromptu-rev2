@@ -1,15 +1,27 @@
-import type { UnaryModelAdapter } from "./ports.ts";
+import {
+  type ModelInvocationContext,
+  modelAdapterDescriptorSchema,
+  type Schema,
+  type UnaryModelAdapter,
+} from "./ports.ts";
 import type { ModelCapability } from "./schemas.ts";
-import type { StreamingSttAdapter } from "./stt.ts";
+import type { StreamingSttAdapter, SttAudioChunk, SttStreamEvent } from "./stt.ts";
 
 export interface RegisteredUnaryAdapter {
   readonly descriptor: UnaryModelAdapter<unknown, unknown>["descriptor"];
   parseInput(input: unknown): unknown;
   parseOutput(output: unknown): unknown;
-  invoke(
-    input: unknown,
-    context: Parameters<UnaryModelAdapter<unknown, unknown>["invoke"]>[1],
-  ): Promise<unknown>;
+  invoke(input: unknown, context: ModelInvocationContext): Promise<unknown>;
+}
+
+export interface RegisteredStreamingSttAdapter {
+  readonly descriptor: StreamingSttAdapter["descriptor"];
+  readonly chunkSchema: Schema<SttAudioChunk>;
+  readonly eventSchema: Schema<SttStreamEvent>;
+  transcribe(
+    chunks: AsyncIterable<SttAudioChunk>,
+    context: ModelInvocationContext,
+  ): AsyncIterable<SttStreamEvent>;
 }
 
 export interface RegistrationOptions {
@@ -19,20 +31,21 @@ export interface RegistrationOptions {
 export class ModelRoutingRegistry {
   readonly #unary = new Map<ModelCapability, Map<string, RegisteredUnaryAdapter>>();
   readonly #unaryDefaults = new Map<ModelCapability, string>();
-  readonly #streamingStt = new Map<string, StreamingSttAdapter>();
+  readonly #streamingStt = new Map<string, RegisteredStreamingSttAdapter>();
   #streamingSttDefault: string | undefined;
 
   registerUnary<Input, Output>(
     adapter: UnaryModelAdapter<Input, Output>,
     options: RegistrationOptions = {},
   ): void {
-    const { adapterId, capability } = adapter.descriptor;
+    const descriptor = Object.freeze(modelAdapterDescriptorSchema.parse(adapter.descriptor));
+    const { adapterId, capability } = descriptor;
     const adapters = this.#unary.get(capability) ?? new Map<string, RegisteredUnaryAdapter>();
     if (adapters.has(adapterId)) {
       throw new Error(`Unary adapter ${adapterId} is already registered for ${capability}`);
     }
     adapters.set(adapterId, {
-      descriptor: adapter.descriptor,
+      descriptor,
       parseInput: (input) => adapter.inputSchema.parse(input),
       parseOutput: (output) => adapter.outputSchema.parse(output),
       invoke: async (input, context) =>
@@ -59,17 +72,26 @@ export class ModelRoutingRegistry {
   }
 
   registerStreamingStt(adapter: StreamingSttAdapter, options: RegistrationOptions = {}): void {
-    const { adapterId } = adapter.descriptor;
+    const descriptor = Object.freeze(modelAdapterDescriptorSchema.parse(adapter.descriptor));
+    if (descriptor.capability !== "stt") {
+      throw new TypeError("Streaming STT adapters must declare the stt capability");
+    }
+    const { adapterId } = descriptor;
     if (this.#streamingStt.has(adapterId)) {
       throw new Error(`Streaming STT adapter ${adapterId} is already registered`);
     }
-    this.#streamingStt.set(adapterId, adapter);
+    this.#streamingStt.set(adapterId, {
+      descriptor: { ...descriptor, capability: "stt" },
+      chunkSchema: adapter.chunkSchema,
+      eventSchema: adapter.eventSchema,
+      transcribe: (chunks, context) => adapter.transcribe(chunks, context),
+    });
     if (options.default === true || this.#streamingSttDefault === undefined) {
       this.#streamingSttDefault = adapterId;
     }
   }
 
-  resolveStreamingStt(adapterId?: string): StreamingSttAdapter {
+  resolveStreamingStt(adapterId?: string): RegisteredStreamingSttAdapter {
     const resolvedId = adapterId ?? this.#streamingSttDefault;
     const adapter = resolvedId === undefined ? undefined : this.#streamingStt.get(resolvedId);
     if (adapter === undefined) {

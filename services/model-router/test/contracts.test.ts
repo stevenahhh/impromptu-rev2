@@ -92,12 +92,51 @@ describe("model-router contracts", () => {
     ).toThrow();
   });
 
-  test("brands only contexts created at the trusted server boundary", () => {
+  test("brands only complete, strict contexts with a real AbortSignal", () => {
     const context = createTrustedModelContext(trustedContextInput);
 
     expect(isTrustedModelContext(context)).toBe(true);
     expect(isTrustedModelContext({ ...trustedContextInput })).toBe(false);
     expect(Object.isFrozen(context)).toBe(true);
+    expect(() => createTrustedModelContext({ ...trustedContextInput, unexpected: true })).toThrow();
+    expect(() =>
+      createTrustedModelContext({
+        ...trustedContextInput,
+        signal: { aborted: false } as AbortSignal,
+      }),
+    ).toThrow();
+  });
+
+  test("rejects unknown properties recursively in router-owned results", () => {
+    const resultSchema = modelResultSchema(z.object({ answer: z.string() }).strict());
+
+    expect(() =>
+      resultSchema.parse({
+        ok: true,
+        output: { answer: "ok" },
+        metadata: { ...metadata, unexpected: true },
+      }),
+    ).toThrow();
+    expect(() =>
+      resultSchema.parse({
+        ok: false,
+        error: {
+          code: "provider_error",
+          message: "failed",
+          retryable: true,
+          unexpected: true,
+        },
+        metadata,
+      }),
+    ).toThrow();
+    expect(() =>
+      resultSchema.parse({
+        ok: true,
+        output: { answer: "ok" },
+        metadata,
+        unexpected: true,
+      }),
+    ).toThrow();
   });
 });
 
@@ -110,6 +149,7 @@ describe("deterministic fake adapters", () => {
         provider: "fake",
         model: "fixed-output",
         modelVersion: "1",
+        estimatedCostUnits: 1,
       },
       inputSchema: z.object({ prompt: z.string() }),
       outputSchema: z.object({ answer: z.string() }),
@@ -121,6 +161,33 @@ describe("deterministic fake adapters", () => {
       adapter.invoke({ prompt: "repeatable" }, { trustedContext: context, signal: context.signal }),
     ).resolves.toEqual({ answer: "REPEATABLE" });
     expect(adapter.invocationCount).toBe(1);
+  });
+
+  test("clones and freezes outputs so caller mutation cannot alter later calls", async () => {
+    const scripted = { nested: { values: ["stable"] } };
+    const adapter = new DeterministicFakeUnaryAdapter({
+      descriptor: {
+        adapterId: "fake-clone",
+        capability: "llm",
+        provider: "fake",
+        model: "fixed-output",
+        modelVersion: "1",
+        estimatedCostUnits: 1,
+      },
+      inputSchema: z.object({}).strict(),
+      outputSchema: z
+        .object({ nested: z.object({ values: z.array(z.string()) }).strict() })
+        .strict(),
+      respond: () => scripted,
+    });
+    const context = createTrustedModelContext(trustedContextInput);
+    const invocation = { trustedContext: context, signal: context.signal };
+
+    const first = await adapter.invoke({}, invocation);
+    expect(Object.isFrozen(first)).toBe(true);
+    expect(Object.isFrozen(first.nested)).toBe(true);
+    expect(() => first.nested.values.push("mutated")).toThrow();
+    expect(await adapter.invoke({}, invocation)).toEqual({ nested: { values: ["stable"] } });
   });
 
   test("replays scripted unary and streaming STT results in order", async () => {

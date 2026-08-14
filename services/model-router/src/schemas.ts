@@ -22,17 +22,23 @@ export const modelErrorCodeSchema = z.enum([
   "invalid_request",
   "unsupported_capability",
   "policy_denied",
+  "policy_version_mismatch",
+  "quota_exceeded",
+  "budget_exceeded",
   "secret_unavailable",
+  "transport_error",
   "provider_error",
 ]);
 export type ModelErrorCode = z.infer<typeof modelErrorCodeSchema>;
 
-export const modelErrorSchema = z.object({
-  code: modelErrorCodeSchema,
-  message: z.string().min(1),
-  retryable: z.boolean(),
-  details: z.record(z.string(), z.string()).optional(),
-});
+export const modelErrorSchema = z
+  .object({
+    code: modelErrorCodeSchema,
+    message: z.string().min(1),
+    retryable: z.boolean(),
+    details: z.record(z.string(), z.string()).optional(),
+  })
+  .strict();
 export type ModelError = z.infer<typeof modelErrorSchema>;
 
 export const modelResultMetadataSchema = z
@@ -50,6 +56,7 @@ export const modelResultMetadataSchema = z
     latencyMs: z.number().finite().nonnegative(),
     cacheStatus: z.enum(["hit", "miss", "bypass"]),
   })
+  .strict()
   .superRefine((metadata, context) => {
     if (metadata.completedAtMs < metadata.startedAtMs) {
       context.addIssue({
@@ -69,18 +76,22 @@ export const modelResultMetadataSchema = z
 export type ModelResultMetadata = z.infer<typeof modelResultMetadataSchema>;
 
 export function modelSuccessSchema<OutputSchema extends z.ZodType>(outputSchema: OutputSchema) {
-  return z.object({
-    ok: z.literal(true),
-    output: outputSchema,
-    metadata: modelResultMetadataSchema,
-  });
+  return z
+    .object({
+      ok: z.literal(true),
+      output: outputSchema,
+      metadata: modelResultMetadataSchema,
+    })
+    .strict();
 }
 
-export const modelFailureSchema = z.object({
-  ok: z.literal(false),
-  error: modelErrorSchema,
-  metadata: modelResultMetadataSchema,
-});
+export const modelFailureSchema = z
+  .object({
+    ok: z.literal(false),
+    error: modelErrorSchema,
+    metadata: modelResultMetadataSchema,
+  })
+  .strict();
 
 export function modelResultSchema<OutputSchema extends z.ZodType>(outputSchema: OutputSchema) {
   return z.union([modelSuccessSchema(outputSchema), modelFailureSchema]);
