@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 
-const gatewayOrigin = process.env.PROJECTION_GATEWAY_ORIGIN;
+let gatewayOrigin = process.env.PROJECTION_GATEWAY_ORIGIN;
 if (gatewayOrigin === undefined) throw new Error("PROJECTION_GATEWAY_ORIGIN is required");
 const distributionRoot = resolve("apps/stage/dist");
 const contentTypes: Readonly<Record<string, string>> = {
@@ -17,6 +17,19 @@ const server = Bun.serve({
   port: 44274,
   async fetch(request) {
     const url = new URL(request.url);
+    if (request.method === "POST" && url.pathname === "/__test/gateway") {
+      const body: unknown = await request.json();
+      if (
+        typeof body !== "object" ||
+        body === null ||
+        Array.isArray(body) ||
+        typeof (body as Record<string, unknown>).origin !== "string"
+      ) {
+        return Response.json({ error: "invalid_origin" }, { status: 400 });
+      }
+      gatewayOrigin = (body as { origin: string }).origin;
+      return Response.json({ status: "updated" });
+    }
     if (url.pathname.startsWith("/v1/")) {
       return fetch(`${gatewayOrigin}${url.pathname}${url.search}`, {
         method: request.method,

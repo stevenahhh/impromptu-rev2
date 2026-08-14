@@ -1,5 +1,5 @@
 const host = "127.0.0.1";
-const port = 44402;
+const port = Number(process.env.TOPOLOGY_PROJECTION_PORT ?? "44402");
 const publicSlides = ["slide_public_1", "slide_public_2", "slide_public_3"];
 let joinSequence = 0;
 
@@ -12,6 +12,10 @@ const server = Bun.serve<Record<never, never>, Record<never, never>>({
   port,
   async fetch(request, bunServer) {
     const url = new URL(request.url);
+    if (request.method === "POST" && url.pathname === "/__test/shutdown") {
+      queueMicrotask(() => void server.stop(true));
+      return json({ status: "stopping" }, 202);
+    }
     if (url.pathname === "/v1/realtime") {
       return bunServer.upgrade(request)
         ? undefined

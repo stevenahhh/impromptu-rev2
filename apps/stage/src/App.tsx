@@ -710,9 +710,17 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
         }
       }
     };
+    const reconnectWhenOnline = () => {
+      if (!active) return;
+      subscription?.close();
+      subscription = null;
+      void connect(latestSnapshot ?? undefined);
+    };
+    window.addEventListener("online", reconnectWhenOnline);
     void connect();
     return () => {
       active = false;
+      window.removeEventListener("online", reconnectWhenOnline);
       subscription?.close();
       sseSubscription?.close();
       for (const timer of leaseTimers.values()) globalThis.clearTimeout(timer);

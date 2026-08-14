@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 
-const backendOrigin = process.env.PRIVATE_BACKEND_ORIGIN;
+let backendOrigin = process.env.PRIVATE_BACKEND_ORIGIN;
 if (backendOrigin === undefined) throw new Error("PRIVATE_BACKEND_ORIGIN is required");
 const distributionRoot = resolve("apps/console/dist");
 const contentTypes: Readonly<Record<string, string>> = {
@@ -17,6 +17,19 @@ const server = Bun.serve({
   port: 44273,
   async fetch(request) {
     const url = new URL(request.url);
+    if (request.method === "POST" && url.pathname === "/__test/backend") {
+      const body: unknown = await request.json();
+      if (
+        typeof body !== "object" ||
+        body === null ||
+        Array.isArray(body) ||
+        typeof (body as Record<string, unknown>).origin !== "string"
+      ) {
+        return Response.json({ error: "invalid_origin" }, { status: 400 });
+      }
+      backendOrigin = (body as { origin: string }).origin;
+      return Response.json({ status: "updated" });
+    }
     if (url.pathname.startsWith("/v1/")) {
       return fetch(`${backendOrigin}${url.pathname}${url.search}`, {
         method: request.method,

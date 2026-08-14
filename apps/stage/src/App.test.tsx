@@ -603,6 +603,9 @@ describe("public Stage boundary", () => {
     if (installedObserver === null) throw new Error("Stage observer was not installed");
     const hidden = nextStageEvent("impromptu:card-hidden");
     await act(async () => installedObserver.onClose("NETWORK_ERROR"));
+    expect(snapshotReads).toBe(2);
+    await act(async () => window.dispatchEvent(new Event("online")));
+    expect(snapshotReads).toBe(3);
     expect(await act(async () => hidden)).toEqual({
       projectionId: "projection_curated",
       reason: "LOCAL_EXPIRY",
