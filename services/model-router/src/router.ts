@@ -115,8 +115,10 @@ export class ServerModelRouter {
   ): Promise<ModelResult<unknown>> {
     const startedAtMs = this.#now();
     const resultContext = resultContextFrom(untrustedContext);
-    const requestResult = modelInvocationRequestSchema.safeParse(untrustedRequest);
-    if (!requestResult.success) {
+    let request: ModelInvocationRequest;
+    try {
+      request = modelInvocationRequestSchema.parse(untrustedRequest);
+    } catch {
       return this.#validatedResult(
         this.#failure(
           null,
@@ -130,7 +132,6 @@ export class ServerModelRouter {
         startedAtMs,
       );
     }
-    const request = requestResult.data;
     if (!isTrustedModelContext(untrustedContext)) {
       return this.#validatedResult(
         this.#failure(
@@ -261,7 +262,7 @@ export class ServerModelRouter {
       scope.throwIfCancelled();
       let output: unknown;
       try {
-        output = adapter.parseOutput(rawOutput);
+        output = structuredClone(adapter.parseOutput(rawOutput));
       } catch {
         throw new ModelRouterError(
           "provider_error",
@@ -688,15 +689,18 @@ export class ServerModelRouter {
     context: ResultContext,
     startedAtMs: number,
   ): ModelResult<unknown> {
-    const parsed = terminalResultSchema.safeParse(result);
-    if (parsed.success) return parsed.data as ModelResult<unknown>;
-    return this.#failure(
-      capability,
-      null,
-      context,
-      startedAtMs,
-      normalizedModelError("provider_error", "Model terminal result was invalid", false),
-    );
+    try {
+      const parsed = terminalResultSchema.parse(result);
+      return parsed as ModelResult<unknown>;
+    } catch {
+      return this.#failure(
+        capability,
+        null,
+        context,
+        startedAtMs,
+        normalizedModelError("provider_error", "Model terminal result was invalid", false),
+      );
+    }
   }
 
   #validatedSttResult(
@@ -704,15 +708,18 @@ export class ServerModelRouter {
     context: ResultContext,
     startedAtMs: number,
   ): ModelResult<SttTranscript> {
-    const parsed = sttTerminalResultSchema.safeParse(result);
-    if (parsed.success) return parsed.data as ModelResult<SttTranscript>;
-    return this.#failure(
-      "stt",
-      null,
-      context,
-      startedAtMs,
-      normalizedModelError("provider_error", "Streaming STT terminal result was invalid", false),
-    );
+    try {
+      const parsed = sttTerminalResultSchema.parse(result);
+      return parsed as ModelResult<SttTranscript>;
+    } catch {
+      return this.#failure(
+        "stt",
+        null,
+        context,
+        startedAtMs,
+        normalizedModelError("provider_error", "Streaming STT terminal result was invalid", false),
+      );
+    }
   }
 
   #now(): number {
@@ -786,14 +793,18 @@ async function* validatedChunks(
 }
 
 function resultContextFrom(value: unknown): ResultContext {
-  if (isTrustedModelContext(value)) return value;
-  if (typeof value !== "object" || value === null) return untrustedResultContext();
-  const candidate = value as Readonly<Record<string, unknown>>;
-  return {
-    policyVersion: nonemptyString(candidate.policyVersion) ?? "untrusted",
-    requestId: nonemptyString(candidate.requestId) ?? "untrusted",
-    traceId: nonemptyString(candidate.traceId) ?? "untrusted",
-  };
+  try {
+    if (isTrustedModelContext(value)) return value;
+    if (typeof value !== "object" || value === null) return untrustedResultContext();
+    const candidate = value as Readonly<Record<string, unknown>>;
+    return {
+      policyVersion: nonemptyString(candidate.policyVersion) ?? "untrusted",
+      requestId: nonemptyString(candidate.requestId) ?? "untrusted",
+      traceId: nonemptyString(candidate.traceId) ?? "untrusted",
+    };
+  } catch {
+    return untrustedResultContext();
+  }
 }
 
 function untrustedResultContext(): ResultContext {

@@ -351,6 +351,71 @@ describe("server model router", () => {
     });
   });
 
+  test("contains throwing Proxy access at request, context, and result boundaries", async () => {
+    const time = new ManualTime();
+    const registry = new ModelRoutingRegistry();
+    const hostileOutput = new Proxy<{ answer: string }>(
+      { answer: "hidden" },
+      {
+        get() {
+          throw new Error("hostile output getter");
+        },
+        ownKeys() {
+          throw new Error("hostile output reflection");
+        },
+      },
+    );
+    const adapter = createScriptedUnaryAdapter<{ prompt: string }, { answer: string }>({
+      descriptor: {
+        adapterId: "hostile-boundary",
+        capability: "llm",
+        provider: "fake",
+        model: "hostile-boundary",
+        modelVersion: "1",
+        estimatedCostUnits: 1,
+      },
+      inputSchema: z.object({ prompt: z.string() }).strict(),
+      outputSchema: { parse: () => hostileOutput },
+      steps: [{ kind: "output", output: { answer: "plain-provider-output" } }],
+    });
+    registry.registerDeterministicFakeUnary(adapter);
+    const router = createRouter(registry, time);
+    const hostileBoundary = new Proxy(
+      {},
+      {
+        get() {
+          throw new Error("hostile boundary getter");
+        },
+        ownKeys() {
+          throw new Error("hostile boundary reflection");
+        },
+      },
+    );
+
+    const malformedRequest = await router.invoke(hostileBoundary, context(2_000));
+    const malformedContext = await router.invoke(
+      { capability: "llm", input: { prompt: "blocked" } },
+      hostileBoundary,
+    );
+    expect(adapter.invocationCount).toBe(0);
+    const malformedOutput = await router.invoke(
+      { capability: "llm", input: { prompt: "invoke" } },
+      context(2_000),
+    );
+    const streamed = [];
+    for await (const item of router.streamStt(emptyAudio(), hostileBoundary)) streamed.push(item);
+
+    expect(modelFailureSchema.parse(malformedRequest).error.code).toBe("invalid_request");
+    expect(modelFailureSchema.parse(malformedContext).error.code).toBe("policy_denied");
+    expect(modelFailureSchema.parse(malformedOutput).error.code).toBe("provider_error");
+    expect(streamed).toHaveLength(1);
+    expect(streamed[0]?.kind).toBe("complete");
+    if (streamed[0]?.kind === "complete") {
+      expect(modelFailureSchema.parse(streamed[0].result).error.code).toBe("policy_denied");
+    }
+    expect(adapter.invocationCount).toBe(1);
+  });
+
   test("validates inputs and outputs while recording terminal metadata", async () => {
     const time = new ManualTime();
     const registry = new ModelRoutingRegistry();
