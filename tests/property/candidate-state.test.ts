@@ -128,6 +128,27 @@ describe("candidate lifecycle persistence", () => {
         },
       }),
     ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+    expect(
+      restoreCandidateLifecycle({
+        ...snapshot,
+        eventsByRevision: {
+          ...snapshot.eventsByRevision,
+          candrev_2: {
+            ...snapshot.eventsByRevision.candrev_2,
+            expectedRevision: candidateRevision(0),
+          },
+        },
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+    expect(
+      restoreCandidateLifecycle({
+        ...snapshot,
+        eventsByRevision: {
+          candrev_1: snapshot.eventsByRevision.candrev_2,
+          candrev_2: snapshot.eventsByRevision.candrev_2,
+        },
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
     expect(restoreCandidateLifecycle({ ...snapshot, status: "ELIGIBLE" })).toEqual({
       outcome: "INVALID_SNAPSHOT",
     });
