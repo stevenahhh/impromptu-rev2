@@ -7,6 +7,8 @@ readonly DATABASE_NAME="impromptu"
 readonly BOOTSTRAP_ROLE="impromptu_bootstrap"
 readonly MIGRATION_ROLE="migration"
 readonly PROJECTION_ROLE="projection_app"
+readonly WORKTREE_TAG="$(basename "$REPO_ROOT" | tr '[:upper:]_' '[:lower:]-' | tr -cd 'a-z0-9-')"
+readonly PROJECT_NAME="${DATABASE_TEST_PROJECT_NAME:-impromptu-r2-${WORKTREE_TAG}-$$-${RANDOM}}"
 
 mapfile -t migrations < <(find "$REPO_ROOT/infra/migrations" -maxdepth 1 -type f -name '*.sql' 2>/dev/null | sort)
 if (( ${#migrations[@]} == 0 )); then
@@ -15,15 +17,82 @@ if (( ${#migrations[@]} == 0 )); then
 fi
 
 compose() {
-  docker compose --file "$COMPOSE_FILE" "$@"
+  docker compose --project-name "$PROJECT_NAME" --file "$COMPOSE_FILE" "$@"
 }
 
-cleanup() {
-  compose down --volumes --remove-orphans >/dev/null 2>&1 || true
+project_resources() {
+  local kind="$1"
+
+  case "$kind" in
+    container)
+      docker ps --all --quiet --filter "label=com.docker.compose.project=$PROJECT_NAME"
+      ;;
+    network)
+      docker network ls --quiet --filter "label=com.docker.compose.project=$PROJECT_NAME"
+      ;;
+    volume)
+      docker volume ls --quiet --filter "label=com.docker.compose.project=$PROJECT_NAME"
+      ;;
+  esac
 }
-trap cleanup EXIT
+
+cleanup_resources() {
+  local cleanup_status=0
+  local inspect_status resources kind
+
+  compose down --volumes --remove-orphans >/dev/null 2>&1 || cleanup_status=$?
+
+  if [[ "${DATABASE_TEST_FORCE_CLEANUP_FAILURE:-}" == "1" ]]; then
+    cleanup_status=97
+  fi
+
+  for kind in container network volume; do
+    resources="$(project_resources "$kind")"
+    inspect_status=$?
+    if (( inspect_status != 0 )); then
+      echo "database test cleanup failed: could not inspect $kind resources for $PROJECT_NAME" >&2
+      cleanup_status=98
+    elif [[ -n "$resources" ]]; then
+      echo "database test cleanup failed: leaked $kind resources for $PROJECT_NAME: $resources" >&2
+      cleanup_status=98
+    fi
+  done
+
+  return "$cleanup_status"
+}
+
+finish() {
+  local original_status=$?
+  local cleanup_status=0
+  local final_status
+
+  trap - EXIT
+  set +e
+  cleanup_resources
+  cleanup_status=$?
+  set -e
+
+  if (( cleanup_status != 0 )); then
+    echo "database test cleanup failed with status $cleanup_status" >&2
+  fi
+
+  final_status=$original_status
+  if (( final_status == 0 )); then
+    final_status=$cleanup_status
+  fi
+
+  if (( final_status == 0 )); then
+    echo "Database migrations and runtime isolation verified."
+  fi
+  exit "$final_status"
+}
+trap finish EXIT
 
 compose up --detach --wait --wait-timeout 60
+
+if [[ -n "${DATABASE_TEST_FORCE_TEST_FAILURE:-}" ]]; then
+  exit "$DATABASE_TEST_FORCE_TEST_FAILURE"
+fi
 
 for index in "${!migrations[@]}"; do
   role="$MIGRATION_ROLE"
@@ -91,5 +160,3 @@ expect_denied \
   "assume the private_app role" \
   "SET ROLE private_app" \
   "permission denied to set role"
-
-echo "Database migrations and runtime isolation verified."

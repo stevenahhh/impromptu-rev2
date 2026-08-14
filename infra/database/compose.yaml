@@ -1,5 +1,3 @@
-name: impromptu-r2-database-test
-
 services:
   postgres:
     image: postgres:17-alpine
