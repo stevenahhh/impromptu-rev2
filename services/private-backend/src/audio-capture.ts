@@ -68,7 +68,9 @@ export type AudioStreamTerminal =
       outcome:
         | "ACTOR_LOGOUT"
         | "GRANT_EXPIRED"
+        | "DEADLINE_EXCEEDED"
         | "GRANT_REVOKED"
+        | "MODEL_POLICY_DENIED"
         | "PROVIDER_FAILURE"
         | "SESSION_ENDED"
         | "STREAM_CANCELLED";
@@ -250,19 +252,23 @@ export class AudioCaptureCoordinator {
       return stream.forcedTerminal === undefined
         ? { outcome: "COMPLETED", transcript: Object.freeze(structuredClone(transcript)) }
         : { outcome: stream.forcedTerminal };
-    } catch {
-      return { outcome: stream.forcedTerminal ?? "PROVIDER_FAILURE" };
+    } catch (caught) {
+      if (stream.forcedTerminal !== undefined) return { outcome: stream.forcedTerminal };
+      if (caught instanceof AudioSttPortError) {
+        if (caught.code === "cancelled") return { outcome: "STREAM_CANCELLED" };
+        if (caught.code === "deadline_exceeded") return { outcome: "DEADLINE_EXCEEDED" };
+        if (caught.code === "policy_denied" || caught.code === "policy_version_mismatch") {
+          return { outcome: "MODEL_POLICY_DENIED" };
+        }
+      }
+      return { outcome: "PROVIDER_FAILURE" };
     } finally {
       stream.queue.clear();
       record.stream = undefined;
     }
   }
 
-  #terminate(
-    record: GrantRecord,
-    terminal: ForcedTerminal,
-    state: GrantRecord["state"],
-  ): void {
+  #terminate(record: GrantRecord, terminal: ForcedTerminal, state: GrantRecord["state"]): void {
     record.state = state;
     const stream = record.stream;
     if (stream === undefined) return;

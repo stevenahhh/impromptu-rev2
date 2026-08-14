@@ -28,6 +28,7 @@
   ],
   "forbiddenContentSignatures": [
     "ANTHROPIC_API_KEY",
+    "AWS_ACCESS_KEY_ID",
     "AZURE_SPEECH_KEY",
     "DEEPGRAM_API_KEY",
     "GOOGLE_GENERATIVE_AI_API_KEY",
