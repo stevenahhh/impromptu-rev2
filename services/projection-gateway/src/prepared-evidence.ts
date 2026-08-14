@@ -304,6 +304,32 @@ function parseDisplaySession(value: unknown): AudienceDisplaySessionRecord | nul
   };
 }
 
+function parseLiveBinding(value: unknown): PublicCardUpsert["liveBinding"] | null {
+  if (
+    !snapshotRecord(value) ||
+    !exactKeys(value, [
+      "presentationSessionEpoch",
+      "publicSlideOccurrence",
+      "publicationPolicyVersion",
+      "cardVersion",
+    ]) ||
+    revisionValue(value.presentationSessionEpoch, "pse_") === null ||
+    !snapshotRecord(value.publicSlideOccurrence) ||
+    !exactKeys(value.publicSlideOccurrence, ["publicSlideKey", "occurrenceSeq"]) ||
+    !validId(value.publicSlideOccurrence.publicSlideKey, "slide_") ||
+    typeof value.publicSlideOccurrence.occurrenceSeq !== "number" ||
+    !Number.isSafeInteger(value.publicSlideOccurrence.occurrenceSeq) ||
+    value.publicSlideOccurrence.occurrenceSeq <= 0 ||
+    typeof value.publicationPolicyVersion !== "string" ||
+    value.publicationPolicyVersion.length === 0 ||
+    typeof value.cardVersion !== "string" ||
+    value.cardVersion.length === 0
+  ) {
+    return null;
+  }
+  return value as PublicCardUpsert["liveBinding"];
+}
+
 function parseStoredCard(value: unknown): PublicCardUpsert | null {
   if (
     !snapshotRecord(value) ||
@@ -313,6 +339,7 @@ function parseStoredCard(value: unknown): PublicCardUpsert | null {
         "status",
         "mode",
         "leaseExpiresAtMs",
+        "liveBinding",
         "offlinePackage",
         "claim",
         "supportSummary",
@@ -344,6 +371,7 @@ function parseStoredCard(value: unknown): PublicCardUpsert | null {
     (value.leaseExpiresAtMs !== undefined &&
       value.leaseExpiresAtMs !== null &&
       !validTimestamp(value.leaseExpiresAtMs)) ||
+    (value.liveBinding !== undefined && parseLiveBinding(value.liveBinding) === null) ||
     (value.offlinePackage !== undefined &&
       (!snapshotRecord(value.offlinePackage) ||
         !exactKeys(value.offlinePackage, [
@@ -842,7 +870,13 @@ export class PreparedEvidenceProjectionGateway {
       (event.leaseExpiresAtMs === undefined ||
         event.leaseExpiresAtMs === null ||
         event.leaseExpiresAtMs <= event.publishedAtMs ||
-        event.leaseExpiresAtMs - event.publishedAtMs > 3_000)
+        event.leaseExpiresAtMs - event.publishedAtMs > 3_000 ||
+        event.liveBinding === undefined ||
+        event.liveBinding.presentationSessionEpoch !==
+          projection.binding.presentationSessionEpoch ||
+        event.liveBinding.publicSlideOccurrence.publicSlideKey !==
+          event.occurrence.publicSlideKey ||
+        event.liveBinding.publicSlideOccurrence.occurrenceSeq !== event.occurrence.occurrenceSeq)
     ) {
       return false;
     }

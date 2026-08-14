@@ -14,6 +14,12 @@ export interface StageCardView {
   readonly status: "PUBLISHED";
   readonly mode: "CURATED" | "LIVE";
   readonly leaseExpiresAtMs: number | null;
+  readonly liveBinding?: Readonly<{
+    presentationSessionEpoch: string;
+    publicSlideOccurrence: Readonly<{ publicSlideKey: string; occurrenceSeq: number }>;
+    publicationPolicyVersion: string;
+    cardVersion: string;
+  }>;
   readonly offlinePackage?: Readonly<{
     readonly offlineDisplayAllowed: boolean;
     readonly localExpiresAtMs: number;
@@ -134,6 +140,28 @@ function record(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+function liveBinding(value: unknown): NonNullable<StageCardView["liveBinding"]> | null {
+  const candidate = record(value);
+  const occurrence = record(candidate?.publicSlideOccurrence);
+  return candidate !== null &&
+    occurrence !== null &&
+    typeof candidate.presentationSessionEpoch === "string" &&
+    typeof occurrence.publicSlideKey === "string" &&
+    typeof occurrence.occurrenceSeq === "number" &&
+    typeof candidate.publicationPolicyVersion === "string" &&
+    typeof candidate.cardVersion === "string"
+    ? {
+        presentationSessionEpoch: candidate.presentationSessionEpoch,
+        publicSlideOccurrence: {
+          publicSlideKey: occurrence.publicSlideKey,
+          occurrenceSeq: occurrence.occurrenceSeq,
+        },
+        publicationPolicyVersion: candidate.publicationPolicyVersion,
+        cardVersion: candidate.cardVersion,
+      }
+    : null;
+}
+
 function displayJoin(value: unknown): DisplayJoinView | null {
   const candidate = record(value);
   if (
@@ -226,13 +254,15 @@ function snapshot(value: unknown): StageSnapshotView | null {
         : typeof card.expiresAtMs === "number" && mode === "LIVE"
           ? card.expiresAtMs
           : null;
-    if (mode === "LIVE" && leaseExpiresAtMs === null) return null;
+    const binding = liveBinding(card.liveBinding);
+    if (mode === "LIVE" && (leaseExpiresAtMs === null || binding === null)) return null;
     const offlinePackage = record(card.offlinePackage);
     cards.push({
       projectionId: card.projectionId,
       status: card.status,
       mode,
       leaseExpiresAtMs,
+      ...(binding === null ? {} : { liveBinding: binding }),
       ...(offlinePackage !== null &&
       typeof offlinePackage.offlineDisplayAllowed === "boolean" &&
       typeof offlinePackage.localExpiresAtMs === "number" &&
@@ -334,13 +364,15 @@ function cardEvent(value: unknown): StageCardEvent | null {
         : typeof candidate.expiresAtMs === "number" && mode === "LIVE"
           ? candidate.expiresAtMs
           : null;
-    if (mode === "LIVE" && leaseExpiresAtMs === null) return null;
+    const binding = liveBinding(candidate.liveBinding);
+    if (mode === "LIVE" && (leaseExpiresAtMs === null || binding === null)) return null;
     const offlinePackage = record(candidate.offlinePackage);
     return {
       projectionId: candidate.projectionId,
       status: candidate.status,
       mode,
       leaseExpiresAtMs,
+      ...(binding === null ? {} : { liveBinding: binding }),
       ...(offlinePackage !== null &&
       typeof offlinePackage.offlineDisplayAllowed === "boolean" &&
       typeof offlinePackage.localExpiresAtMs === "number" &&

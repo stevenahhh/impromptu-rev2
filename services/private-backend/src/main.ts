@@ -198,6 +198,7 @@ const recommendations = new PrivateRecommendationPipeline({
   externalFetch: externalFetcher,
 });
 coordinator = new PreparedEvidenceCoordinator(projection, store, {
+  livePublicEnabled: config.livePublicEnabled,
   liveEvidenceAuthorizer: {
     async authorize(candidate) {
       return await recommendations.authorizeCandidateForPublication(candidate);

@@ -556,6 +556,12 @@ export async function runRealtimeSoak(): Promise<RealtimeSoakEvidence> {
           status: "PUBLISHED",
           mode: "LIVE",
           leaseExpiresAtMs: publishedAtMs + liveLeaseMs,
+          liveBinding: {
+            presentationSessionEpoch: observed.presentationSessionEpoch,
+            publicSlideOccurrence: observed.occurrence,
+            publicationPolicyVersion: "publication-policy-soak-1",
+            cardVersion: "card-version-soak-1",
+          },
           claim: "Leased live card",
           supportSummary: "Real partition probe",
           sourceLabel: "Public source",

@@ -148,6 +148,25 @@ function cardEvent(value: unknown): PublicCardEvent | null {
         ...(typeof value.leaseExpiresAtMs === "number" || value.leaseExpiresAtMs === null
           ? { leaseExpiresAtMs: value.leaseExpiresAtMs }
           : {}),
+        ...(isRecord(value.liveBinding) &&
+        typeof value.liveBinding.presentationSessionEpoch === "string" &&
+        isRecord(value.liveBinding.publicSlideOccurrence) &&
+        typeof value.liveBinding.publicSlideOccurrence.publicSlideKey === "string" &&
+        typeof value.liveBinding.publicSlideOccurrence.occurrenceSeq === "number" &&
+        typeof value.liveBinding.publicationPolicyVersion === "string" &&
+        typeof value.liveBinding.cardVersion === "string"
+          ? {
+              liveBinding: {
+                presentationSessionEpoch: value.liveBinding.presentationSessionEpoch,
+                publicSlideOccurrence: {
+                  publicSlideKey: value.liveBinding.publicSlideOccurrence.publicSlideKey,
+                  occurrenceSeq: value.liveBinding.publicSlideOccurrence.occurrenceSeq,
+                },
+                publicationPolicyVersion: value.liveBinding.publicationPolicyVersion,
+                cardVersion: value.liveBinding.cardVersion,
+              },
+            }
+          : {}),
         ...(isRecord(value.offlinePackage) &&
         typeof value.offlinePackage.offlineDisplayAllowed === "boolean" &&
         typeof value.offlinePackage.localExpiresAtMs === "number" &&

@@ -71,6 +71,7 @@ const publicDeck = {
 async function createBoundFlow(
   nowMs = 1_000,
   liveEvidenceAuthorizer?: { authorize(candidate: EvidenceCandidate): Promise<boolean> },
+  livePublicEnabled = false,
 ) {
   const gateway = new PreparedEvidenceProjectionGateway();
   const store = createPreparedEvidenceStore();
@@ -78,6 +79,7 @@ async function createBoundFlow(
     accountSessionTtlMs: 10_000,
     presentationCapabilityTtlMs: 10_000,
     ...(liveEvidenceAuthorizer === undefined ? {} : { liveEvidenceAuthorizer }),
+    livePublicEnabled,
   });
   const account = coordinator.createAccountSession(
     { accountId: "account_alpha", actorId: "actor_alpha" },
@@ -502,6 +504,286 @@ describe("prepared evidence private coordinator", () => {
     ).toEqual({ outcome: "REJECTED", reason: "EVIDENCE_AUTHORIZATION_DENIED" });
     expect(authorizationChecks).toBe(3);
     expect(flow.gateway.snapshot(flow.bound.audienceDisplaySessionId, 1_004)?.cards).toEqual([]);
+  });
+
+  test("linearizes supervised live approval and retract with durable idempotency", async () => {
+    const flow = await createBoundFlow(
+      1_000,
+      {
+        async authorize() {
+          return true;
+        },
+      },
+      true,
+    );
+    const teammate = flow.coordinator.createAccountSession(
+      { accountId: "account_alpha", actorId: "actor_teammate" },
+      1_001,
+    );
+    expect(
+      flow.coordinator.approvePublicationTeammate(
+        flow.account.accountSessionId,
+        flow.created.lifecycle.presentationSessionId,
+        teammate.actorId,
+        1_001,
+      ).outcome,
+    ).toBe("APPLIED");
+    const candidate = {
+      candidateId: "candidate_live_supervised",
+      candidateVersion: "candidate-version-1",
+      provenance: "LIVE_VERIFIED",
+      verdict: "SUPPORTED",
+      claimText: "Supervised live claim",
+      evidenceExcerpt: "Authoritative live support",
+      privateSourceUri: "private://source/supervised-live",
+      causal: {
+        presentationSessionId: flow.created.lifecycle.presentationSessionId,
+        presentationSessionEpoch: "pse_1",
+        displayBindingEpoch: "dbe_1",
+        deckVersion: publicDeck.deckVersion,
+        manifestHash,
+        occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+        transcriptFinalId: "transcript_supervised_live",
+        source: {
+          sourceId: "source_supervised_live",
+          revision: "source-revision-1",
+          contentHash: sourceHash,
+        },
+        decisions: {
+          acl: "acl-1",
+          publicationPolicy: "publication-policy-1",
+          rights: "rights-1",
+          dlp: "dlp-1",
+        },
+      },
+    } as const;
+    expect(
+      (await flow.coordinator.addLiveCandidate(flow.account.accountSessionId, candidate, 1_002))
+        .outcome,
+    ).toBe("APPLIED");
+    const snapshot = flow.coordinator.readLiveCandidateSnapshot(
+      teammate.accountSessionId,
+      flow.created.lifecycle.presentationSessionId,
+      1_003,
+    );
+    if (snapshot.outcome !== "APPLIED") throw new Error("live snapshot was rejected");
+    expect(snapshot.value.candidates).toHaveLength(1);
+
+    const takeover = flow.coordinator.takeoverPlaybackLease(
+      teammate.accountSessionId,
+      {
+        presentationSessionId: flow.created.lifecycle.presentationSessionId,
+        expectedDisplayBindingEpoch: "dbe_1",
+      },
+      1_003,
+    );
+    expect(takeover.outcome).toBe("APPLIED");
+    expect(
+      flow.coordinator.readLiveCandidateSnapshot(
+        teammate.accountSessionId,
+        flow.created.lifecycle.presentationSessionId,
+        1_003,
+      ),
+    ).toMatchObject({
+      outcome: "APPLIED",
+      value: { authoritativeSnapshotHash: snapshot.value.authoritativeSnapshotHash },
+    });
+
+    const cardEvents: string[] = [];
+    flow.gateway.connectStage(
+      flow.bound.audienceDisplaySessionId,
+      {
+        onPlayback: () => undefined,
+        onCard: (event) => cardEvents.push(`${event.publicCardRevision}:${event.status}`),
+        onClose: () => undefined,
+      },
+      1_003,
+    );
+    const approval = {
+      presentationSessionId: flow.created.lifecycle.presentationSessionId,
+      candidateId: candidate.candidateId,
+      candidateVersion: candidate.candidateVersion,
+      expectedCandidateRevision: "candrev_1",
+      expectedPublicCardRevision: "pcr_0",
+      authorityId: flow.created.authority.authorityId,
+      authoritativeSnapshotHash: snapshot.value.authoritativeSnapshotHash,
+      expiresAtMs: null,
+    } as const;
+    const approvals = await Promise.all([
+      flow.coordinator.approveCandidate(
+        flow.account.accountSessionId,
+        { ...approval, approvalId: "approval_presenter" },
+        1_004,
+      ),
+      flow.coordinator.approveCandidate(
+        teammate.accountSessionId,
+        { ...approval, approvalId: "approval_teammate" },
+        1_004,
+      ),
+    ]);
+    const winners = approvals.filter((result) => result.outcome === "APPLIED");
+    expect(winners).toHaveLength(1);
+    const winner = winners[0];
+    if (winner?.outcome !== "APPLIED") throw new Error("approval race had no winner");
+    expect(winner.value).toMatchObject({
+      mode: "LIVE",
+      leaseExpiresAtMs: 4_004,
+      expiresAtMs: 4_004,
+      liveBinding: {
+        presentationSessionEpoch: "pse_1",
+        publicSlideOccurrence: candidate.causal.occurrence,
+        publicationPolicyVersion: "publication-policy-1",
+      },
+    });
+    const winnerInput =
+      approvals[0]?.outcome === "APPLIED"
+        ? { ...approval, approvalId: "approval_presenter" }
+        : { ...approval, approvalId: "approval_teammate" };
+    expect(
+      (
+        await flow.coordinator.approveCandidate(
+          approvals[0]?.outcome === "APPLIED"
+            ? flow.account.accountSessionId
+            : teammate.accountSessionId,
+          winnerInput,
+          1_005,
+        )
+      ).outcome,
+    ).toBe("APPLIED");
+    expect(cardEvents).toEqual(["pcr_1:PUBLISHED"]);
+
+    const termination = {
+      presentationSessionId: flow.created.lifecycle.presentationSessionId,
+      projectionId: winner.value.projectionId,
+      expectedPublicCardRevision: "pcr_1",
+      authorityId: flow.created.authority.authorityId,
+      operationId: "retract_live_once",
+      status: "RETRACTED" as const,
+    };
+    const retractions = await Promise.all([
+      flow.coordinator.terminateCard(teammate.accountSessionId, termination, 1_006),
+      flow.coordinator.terminateCard(teammate.accountSessionId, termination, 1_006),
+    ]);
+    expect(retractions.every((result) => result.outcome === "APPLIED")).toBe(true);
+    expect(cardEvents).toEqual(["pcr_1:PUBLISHED", "pcr_2:RETRACTED"]);
+    expect(flow.gateway.snapshot(flow.bound.audienceDisplaySessionId, 1_007)?.cards).toEqual([]);
+  });
+
+  test("keeps verified live evidence private when the safety gate is fail-closed", async () => {
+    const flow = await createBoundFlow(1_000, {
+      async authorize() {
+        return true;
+      },
+    });
+    const candidate = {
+      candidateId: "candidate_live_fail_closed",
+      candidateVersion: "candidate-version-1",
+      provenance: "LIVE_VERIFIED",
+      verdict: "SUPPORTED",
+      claimText: "Private recommendation",
+      evidenceExcerpt: "Verified but not public",
+      privateSourceUri: "private://source/fail-closed",
+      causal: {
+        presentationSessionId: flow.created.lifecycle.presentationSessionId,
+        presentationSessionEpoch: "pse_1",
+        displayBindingEpoch: "dbe_1",
+        deckVersion: publicDeck.deckVersion,
+        manifestHash,
+        occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+        transcriptFinalId: "transcript_fail_closed",
+        source: {
+          sourceId: "source_fail_closed",
+          revision: "source-revision-1",
+          contentHash: sourceHash,
+        },
+        decisions: {
+          acl: "acl-1",
+          publicationPolicy: "publication-policy-1",
+          rights: "rights-1",
+          dlp: "dlp-1",
+        },
+      },
+    } as const;
+    expect(
+      (await flow.coordinator.addLiveCandidate(flow.account.accountSessionId, candidate, 1_002))
+        .outcome,
+    ).toBe("APPLIED");
+    const snapshot = flow.coordinator.readLiveCandidateSnapshot(
+      flow.account.accountSessionId,
+      flow.created.lifecycle.presentationSessionId,
+      1_003,
+    );
+    if (snapshot.outcome !== "APPLIED") throw new Error("snapshot failed");
+    expect(snapshot.value).toMatchObject({
+      livePublicEnabled: false,
+      candidates: [{ candidateId: candidate.candidateId }],
+    });
+    expect(
+      await flow.coordinator.approveCandidate(
+        flow.account.accountSessionId,
+        {
+          presentationSessionId: flow.created.lifecycle.presentationSessionId,
+          candidateId: candidate.candidateId,
+          candidateVersion: candidate.candidateVersion,
+          expectedCandidateRevision: "candrev_1",
+          expectedPublicCardRevision: "pcr_0",
+          authorityId: flow.created.authority.authorityId,
+          approvalId: "approval_disabled",
+          authoritativeSnapshotHash: snapshot.value.authoritativeSnapshotHash,
+          expiresAtMs: null,
+        },
+        1_004,
+      ),
+    ).toEqual({ outcome: "REJECTED", reason: "LIVE_PUBLIC_DISABLED" });
+    const join = flow.gateway.createDisplayJoin(
+      {
+        displayId: "display_fail_closed_rebind",
+        deckVersion: publicDeck.deckVersion,
+        displayFingerprint: "fingerprint-fail-closed-rebind",
+      },
+      1_005,
+    );
+    expect(
+      (
+        await flow.coordinator.approveDisplay(
+          flow.account.accountSessionId,
+          {
+            presentationSessionId: flow.created.lifecycle.presentationSessionId,
+            displayJoinId: join.displayJoinId,
+            expectedDisplayBindingEpoch: "dbe_1",
+            expectedDeckVersion: publicDeck.deckVersion,
+            approvedDisplayId: join.displayId,
+            approvedDisplayFingerprint: join.displayFingerprint,
+          },
+          1_005,
+        )
+      ).outcome,
+    ).toBe("APPLIED");
+    expect(
+      flow.coordinator.readLiveCandidateSnapshot(
+        flow.account.accountSessionId,
+        flow.created.lifecycle.presentationSessionId,
+        1_006,
+      ),
+    ).toMatchObject({ outcome: "APPLIED", value: { candidates: [] } });
+    expect(
+      await flow.coordinator.approveCandidate(
+        flow.account.accountSessionId,
+        {
+          presentationSessionId: flow.created.lifecycle.presentationSessionId,
+          candidateId: candidate.candidateId,
+          candidateVersion: candidate.candidateVersion,
+          expectedCandidateRevision: "candrev_1",
+          expectedPublicCardRevision: "pcr_0",
+          authorityId: flow.created.authority.authorityId,
+          approvalId: "approval_stale_rebind",
+          authoritativeSnapshotHash: snapshot.value.authoritativeSnapshotHash,
+          expiresAtMs: null,
+        },
+        1_006,
+      ),
+    ).toEqual({ outcome: "REJECTED", reason: "STALE_CANDIDATE" });
+    expect(flow.gateway.snapshot(flow.bound.audienceDisplaySessionId, 1_007)).toBeNull();
   });
 
   test("rejects approval when a rebind makes the curated candidate stale", async () => {

@@ -7,6 +7,7 @@ export interface PrivateBackendConfig {
   readonly host: string;
   readonly port: number;
   readonly allowedOrigin: ExactOrigin;
+  readonly livePublicEnabled: boolean;
 }
 
 const DEFAULT_HOST = "0.0.0.0";
@@ -57,5 +58,6 @@ export function parsePrivateBackendConfig(environment: Environment): PrivateBack
     host,
     port: parsePort(environment.PRIVATE_BACKEND_PORT),
     allowedOrigin: parseExactOrigin(environment.CONSOLE_ORIGIN),
+    livePublicEnabled: environment.LIVE_PUBLICATION_GATE_STATE === "PASSED",
   };
 }

@@ -233,6 +233,22 @@ export function createPrivateBackendHandler(
             origin,
           );
     }
+    if (request.method === "GET" && url.pathname === "/v1/publications/live-candidates") {
+      const presentationSessionId = url.searchParams.get("presentationSessionId");
+      if (presentationSessionId === null) {
+        return json({ error: "presentation_session_required" }, 400, origin);
+      }
+      const result = dependencies.coordinator.readLiveCandidateSnapshot(
+        accountSessionId,
+        presentationSessionId,
+        dependencies.now(),
+      );
+      return json(
+        result.outcome === "APPLIED" ? result.value : { error: result.reason },
+        result.outcome === "APPLIED" ? 200 : 403,
+        origin,
+      );
+    }
     if (request.method === "DELETE" && url.pathname === "/v1/account-session") {
       const result = dependencies.coordinator.revokeAccountSession(
         accountSessionId,
@@ -363,15 +379,36 @@ export function createPrivateBackendHandler(
         origin,
       );
     }
+    if (request.method === "POST" && url.pathname === "/v1/publications/teammates") {
+      const result = dependencies.coordinator.approvePublicationTeammate(
+        accountSessionId,
+        String(body.presentationSessionId ?? ""),
+        String(body.actorId ?? ""),
+        dependencies.now(),
+      );
+      if (result.outcome === "APPLIED") await dependencies.persist?.();
+      return json(
+        result.outcome === "APPLIED" ? { status: "approved" } : { error: result.reason },
+        result.outcome === "APPLIED" ? 200 : 403,
+        origin,
+      );
+    }
     if (request.method === "POST" && url.pathname === "/v1/publications/approve") {
       const result = await dependencies.coordinator.approveCandidate(
         accountSessionId,
         {
           presentationSessionId: String(body.presentationSessionId ?? ""),
           candidateId: String(body.candidateId ?? ""),
+          ...(typeof body.candidateVersion === "string"
+            ? { candidateVersion: body.candidateVersion }
+            : {}),
           expectedCandidateRevision: String(body.expectedCandidateRevision ?? ""),
           expectedPublicCardRevision: String(body.expectedPublicCardRevision ?? ""),
           authorityId: String(body.authorityId ?? ""),
+          ...(typeof body.approvalId === "string" ? { approvalId: body.approvalId } : {}),
+          ...(typeof body.authoritativeSnapshotHash === "string"
+            ? { authoritativeSnapshotHash: body.authoritativeSnapshotHash }
+            : {}),
           expiresAtMs: typeof body.expiresAtMs === "number" ? body.expiresAtMs : null,
         },
         dependencies.now(),
@@ -395,6 +432,7 @@ export function createPrivateBackendHandler(
           projectionId: String(body.projectionId ?? ""),
           expectedPublicCardRevision: String(body.expectedPublicCardRevision ?? ""),
           authorityId: String(body.authorityId ?? ""),
+          ...(typeof body.operationId === "string" ? { operationId: body.operationId } : {}),
           status,
         },
         dependencies.now(),

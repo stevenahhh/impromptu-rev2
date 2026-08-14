@@ -25,9 +25,11 @@ import {
   DisplayBindingEpochSchema,
   displayBindingEpoch,
   type PublicationTombstone,
+  PublicationTombstoneSchema,
   PublicCardRevisionSchema,
   PublicSlideKeySchema,
   type PublishedAudienceCard,
+  PublishedAudienceCardSchema,
   type PublishedDeckArtifact,
   PublishedDeckArtifactSchema,
   publicCardRevision,
@@ -96,6 +98,11 @@ type CandidateRecord = {
   lifecycle: CandidateLifecycleState;
 };
 
+type IdempotentPublicationRecord = Readonly<{
+  requestHash: string;
+  event: PublishedAudienceCard | PublicationTombstone;
+}>;
+
 type PresentationRecord = {
   lifecycle: PresentationSessionLifecycle;
   readonly privateDeck: PrivateDeckContext;
@@ -103,8 +110,49 @@ type PresentationRecord = {
   playback: PlaybackAuthorityState;
   cards: PublicCardStreamState;
   readonly candidates: Map<string, CandidateRecord>;
+  readonly approvedPublicationActorIds: Set<string>;
+  readonly publicationOperations: Map<string, IdempotentPublicationRecord>;
   audienceDisplaySession: AudienceDisplaySession | null;
 };
+
+export type CandidateApprovalInput = Readonly<{
+  presentationSessionId: string;
+  candidateId: string;
+  candidateVersion?: string;
+  expectedCandidateRevision: string;
+  expectedPublicCardRevision: string;
+  authorityId: string;
+  approvalId?: string;
+  authoritativeSnapshotHash?: string;
+  expiresAtMs: number | null;
+}>;
+
+export type CardTerminationInput = Readonly<{
+  presentationSessionId: string;
+  projectionId: string;
+  expectedPublicCardRevision: string;
+  authorityId: string;
+  operationId?: string;
+  status: "RETRACTED" | "EXPIRED";
+}>;
+
+export type LiveCandidateSnapshot = Readonly<{
+  authoritativeSnapshotHash: string;
+  presentationSessionId: string;
+  presentationSessionEpoch: string;
+  publicationPolicyVersion: string;
+  publicationAuthorityId: string;
+  publicCardRevision: string;
+  livePublicEnabled: boolean;
+  candidates: readonly Readonly<{
+    candidateId: string;
+    candidateVersion: string;
+    candidateRevision: string;
+    claimText: string;
+    evidenceExcerpt: string;
+    occurrence: Readonly<{ publicSlideKey: string; occurrenceSeq: number }>;
+  }>[];
+}>;
 
 export interface LiveEvidenceAuthorizer {
   authorize(candidate: EvidenceCandidate): Promise<boolean>;
@@ -154,6 +202,10 @@ export function snapshotPreparedEvidenceStore(store: PreparedEvidenceStore): unk
       playback: presentation.playback,
       cards: presentation.cards,
       candidates: [...presentation.candidates.values()],
+      approvedPublicationActorIds: [...presentation.approvedPublicationActorIds].sort(),
+      publicationOperations: [...presentation.publicationOperations.entries()].map(
+        ([operationId, operation]) => ({ operationId, ...operation }),
+      ),
       audienceDisplaySession: presentation.audienceDisplaySession,
     })),
   };
@@ -187,9 +239,13 @@ export function restorePreparedEvidenceStore(input: unknown): PreparedEvidenceSt
         "playback",
         "cards",
         "candidates",
+        "approvedPublicationActorIds",
+        "publicationOperations",
         "audienceDisplaySession",
       ]) ||
-      !Array.isArray(presentationInput.candidates)
+      !Array.isArray(presentationInput.candidates) ||
+      !Array.isArray(presentationInput.approvedPublicationActorIds) ||
+      !Array.isArray(presentationInput.publicationOperations)
     ) {
       return { outcome: "INVALID_SNAPSHOT" };
     }
@@ -251,6 +307,40 @@ export function restorePreparedEvidenceStore(input: unknown): PreparedEvidenceSt
         lifecycle: candidateLifecycle.state,
       });
     }
+    const approvedPublicationActorIds = new Set<string>();
+    for (const actorId of presentationInput.approvedPublicationActorIds) {
+      if (typeof actorId !== "string" || approvedPublicationActorIds.has(actorId)) {
+        return { outcome: "INVALID_SNAPSHOT" };
+      }
+      approvedPublicationActorIds.add(actorId);
+    }
+    if (
+      cards.state.authority === null ||
+      !approvedPublicationActorIds.has(cards.state.authority.actorId)
+    ) {
+      return { outcome: "INVALID_SNAPSHOT" };
+    }
+    const publicationOperations = new Map<string, IdempotentPublicationRecord>();
+    for (const operationInput of presentationInput.publicationOperations) {
+      if (
+        !snapshotRecord(operationInput) ||
+        !hasExactKeys(operationInput, ["operationId", "requestHash", "event"]) ||
+        typeof operationInput.operationId !== "string" ||
+        typeof operationInput.requestHash !== "string" ||
+        publicationOperations.has(operationInput.operationId)
+      ) {
+        return { outcome: "INVALID_SNAPSHOT" };
+      }
+      const published = PublishedAudienceCardSchema.safeParse(operationInput.event);
+      const tombstone = PublicationTombstoneSchema.safeParse(operationInput.event);
+      if (!published.success && !tombstone.success) return { outcome: "INVALID_SNAPSHOT" };
+      const event = published.success ? published.data : tombstone.success ? tombstone.data : null;
+      if (event === null) return { outcome: "INVALID_SNAPSHOT" };
+      publicationOperations.set(operationInput.operationId, {
+        requestHash: operationInput.requestHash,
+        event,
+      });
+    }
     store.presentations.set(lifecycle.data.presentationSessionId, {
       lifecycle: lifecycle.data,
       privateDeck: privateDeck.data,
@@ -258,6 +348,8 @@ export function restorePreparedEvidenceStore(input: unknown): PreparedEvidenceSt
       playback: playback.state,
       cards: cards.state,
       candidates,
+      approvedPublicationActorIds,
+      publicationOperations,
       audienceDisplaySession: audienceDisplaySession.data,
     });
   }
@@ -296,6 +388,17 @@ function opaqueHex(byteLength: number): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+function requestHash(value: unknown): string {
+  return new Bun.CryptoHasher("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+function sameOccurrence(
+  left: Readonly<{ publicSlideKey: string; occurrenceSeq: number }>,
+  right: Readonly<{ publicSlideKey: string; occurrenceSeq: number }>,
+): boolean {
+  return left.publicSlideKey === right.publicSlideKey && left.occurrenceSeq === right.occurrenceSeq;
+}
+
 function accountSessionRejection(
   session: AccountSession | undefined,
   nowMs: number,
@@ -312,7 +415,12 @@ export class PreparedEvidenceCoordinator {
   readonly #accountSessionTtlMs: number;
   readonly #presentationCapabilityTtlMs: number;
   readonly #liveEvidenceAuthorizer: LiveEvidenceAuthorizer | undefined;
+  readonly #livePublicEnabled: boolean;
   readonly #controllerSockets = new Map<string, Set<MutableControllerSocket>>();
+  readonly #publicationInFlight = new Map<
+    string,
+    Promise<OperationResult<PublishedAudienceCard | PublicationTombstone>>
+  >();
 
   constructor(
     projection: PreparedEvidenceProjectionPort,
@@ -321,6 +429,7 @@ export class PreparedEvidenceCoordinator {
       readonly accountSessionTtlMs?: number;
       readonly presentationCapabilityTtlMs?: number;
       readonly liveEvidenceAuthorizer?: LiveEvidenceAuthorizer;
+      readonly livePublicEnabled?: boolean;
     } = {},
   ) {
     this.#projection = projection;
@@ -328,6 +437,7 @@ export class PreparedEvidenceCoordinator {
     this.#accountSessionTtlMs = options.accountSessionTtlMs ?? 8 * 60 * 60 * 1_000;
     this.#presentationCapabilityTtlMs = options.presentationCapabilityTtlMs ?? 4 * 60 * 60 * 1_000;
     this.#liveEvidenceAuthorizer = options.liveEvidenceAuthorizer;
+    this.#livePublicEnabled = options.livePublicEnabled === true;
     for (const [id, presentation] of store.presentations) {
       const playback = restorePlaybackAuthority(presentation.playback);
       const cards = restorePublicCardStream(presentation.cards);
@@ -449,6 +559,8 @@ export class PreparedEvidenceCoordinator {
       playback,
       cards,
       candidates: new Map(),
+      approvedPublicationActorIds: new Set([account.value.actorId]),
+      publicationOperations: new Map(),
       audienceDisplaySession: null,
     });
     return { outcome: "APPLIED", value: { lifecycle, lease, authority } };
@@ -784,7 +896,10 @@ export class PreparedEvidenceCoordinator {
         authorized.value.lifecycle.presentationSessionEpoch ||
       candidate.data.causal.deckVersion !== authorized.value.publicDeck.deckVersion ||
       candidate.data.causal.manifestHash !== authorized.value.publicDeck.manifestHash ||
-      candidate.data.causal.displayBindingEpoch !== authorized.value.playback.displayBindingEpoch
+      candidate.data.causal.displayBindingEpoch !== authorized.value.playback.displayBindingEpoch ||
+      !sameOccurrence(candidate.data.causal.occurrence, authorized.value.playback.occurrence) ||
+      candidate.data.causal.decisions.publicationPolicy !==
+        authorized.value.cards.authority?.policyVersion
     )
       return { outcome: "REJECTED", reason: "STALE_CANDIDATE" };
     let lifecycle = createCandidateLifecycle({
@@ -811,16 +926,71 @@ export class PreparedEvidenceCoordinator {
     return { outcome: "APPLIED", value: lifecycle };
   }
 
+  approvePublicationTeammate(
+    accountSessionId: string,
+    presentationSessionId: string,
+    teammateActorId: string,
+    nowMs: number,
+  ): OperationResult<null> {
+    const authorized = this.#authorizedPresentation(accountSessionId, presentationSessionId, nowMs);
+    if (authorized.outcome === "REJECTED") return authorized;
+    const account = this.readAccountSession(accountSessionId, nowMs);
+    if (
+      account.outcome === "REJECTED" ||
+      authorized.value.cards.authority?.actorId !== account.value.actorId ||
+      !/^actor_[A-Za-z0-9._-]+$/.test(teammateActorId)
+    ) {
+      return { outcome: "REJECTED", reason: "UNAUTHORIZED" };
+    }
+    authorized.value.approvedPublicationActorIds.add(teammateActorId);
+    return { outcome: "APPLIED", value: null };
+  }
+
+  readLiveCandidateSnapshot(
+    accountSessionId: string,
+    presentationSessionId: string,
+    nowMs: number,
+  ): OperationResult<LiveCandidateSnapshot> {
+    const authorized = this.#authorizedPresentation(accountSessionId, presentationSessionId, nowMs);
+    if (authorized.outcome === "REJECTED") return authorized;
+    const account = this.readAccountSession(accountSessionId, nowMs);
+    if (
+      account.outcome === "REJECTED" ||
+      !authorized.value.approvedPublicationActorIds.has(account.value.actorId)
+    ) {
+      return { outcome: "REJECTED", reason: "PUBLICATION_AUTHORITY_REQUIRED" };
+    }
+    return { outcome: "APPLIED", value: this.#liveCandidateSnapshot(authorized.value) };
+  }
+
   async approveCandidate(
     accountSessionId: string,
-    input: {
-      readonly presentationSessionId: string;
-      readonly candidateId: string;
-      readonly expectedCandidateRevision: string;
-      readonly expectedPublicCardRevision: string;
-      readonly authorityId: string;
-      readonly expiresAtMs: number | null;
-    },
+    input: CandidateApprovalInput,
+    nowMs: number,
+  ): Promise<OperationResult<PublishedAudienceCard>> {
+    const operationId = input.approvalId;
+    if (operationId === undefined) return this.#approveCandidate(accountSessionId, input, nowMs);
+    const key = `${input.presentationSessionId}:approve:${operationId}`;
+    const pending = this.#publicationInFlight.get(key);
+    if (pending !== undefined) {
+      const replay = await pending;
+      if (replay.outcome === "REJECTED") return replay;
+      return replay.value.status === "PUBLISHED"
+        ? { outcome: "APPLIED", value: replay.value }
+        : { outcome: "REJECTED", reason: "IDEMPOTENCY_CONFLICT" };
+    }
+    const operation = this.#approveCandidate(accountSessionId, input, nowMs);
+    this.#publicationInFlight.set(key, operation);
+    try {
+      return await operation;
+    } finally {
+      this.#publicationInFlight.delete(key);
+    }
+  }
+
+  async #approveCandidate(
+    accountSessionId: string,
+    input: CandidateApprovalInput,
     nowMs: number,
   ): Promise<OperationResult<PublishedAudienceCard>> {
     const authorized = this.#authorizedPresentation(
@@ -829,6 +999,22 @@ export class PreparedEvidenceCoordinator {
       nowMs,
     );
     if (authorized.outcome === "REJECTED") return authorized;
+    const account = this.readAccountSession(accountSessionId, nowMs);
+    if (
+      account.outcome === "REJECTED" ||
+      !authorized.value.approvedPublicationActorIds.has(account.value.actorId)
+    ) {
+      return { outcome: "REJECTED", reason: "PUBLICATION_AUTHORITY_REQUIRED" };
+    }
+    const operationHash = requestHash(input);
+    if (input.approvalId !== undefined) {
+      const prior = authorized.value.publicationOperations.get(input.approvalId);
+      if (prior !== undefined) {
+        return prior.requestHash === operationHash && prior.event.status === "PUBLISHED"
+          ? { outcome: "APPLIED", value: prior.event }
+          : { outcome: "REJECTED", reason: "IDEMPOTENCY_CONFLICT" };
+      }
+    }
     const record = authorized.value.candidates.get(input.candidateId);
     if (record === undefined) return { outcome: "REJECTED", reason: "CANDIDATE_NOT_FOUND" };
     if (
@@ -837,11 +1023,18 @@ export class PreparedEvidenceCoordinator {
       record.candidate.causal.displayBindingEpoch !==
         authorized.value.playback.displayBindingEpoch ||
       record.candidate.causal.deckVersion !== authorized.value.publicDeck.deckVersion ||
-      record.candidate.causal.manifestHash !== authorized.value.publicDeck.manifestHash
+      record.candidate.causal.manifestHash !== authorized.value.publicDeck.manifestHash ||
+      !sameOccurrence(record.candidate.causal.occurrence, authorized.value.playback.occurrence) ||
+      record.candidate.causal.decisions.publicationPolicy !==
+        authorized.value.cards.authority?.policyVersion
     ) {
       return { outcome: "REJECTED", reason: "STALE_CANDIDATE" };
     }
-    if (record.lifecycle.candidateRevision !== input.expectedCandidateRevision) {
+    if (
+      record.lifecycle.candidateRevision !== input.expectedCandidateRevision ||
+      (input.candidateVersion !== undefined &&
+        input.candidateVersion !== record.candidate.candidateVersion)
+    ) {
       return { outcome: "REJECTED", reason: "CANDIDATE_CAS_CONFLICT" };
     }
     if (
@@ -859,14 +1052,28 @@ export class PreparedEvidenceCoordinator {
     }
     const nextRevision = publicCardRevision(Number(expectedPublicCardRevision.data.slice(4)) + 1);
     const projectionId = `projection_${opaqueHex(24)}` as PublishedAudienceCard["projectionId"];
+    const isLive = record.candidate.provenance === "LIVE_VERIFIED";
+    const leaseExpiresAtMs = isLive ? nowMs + 3_000 : input.expiresAtMs;
     const event: PublishedAudienceCard = {
       projectionId,
       status: "PUBLISHED",
+      ...(isLive
+        ? {
+            mode: "LIVE" as const,
+            leaseExpiresAtMs,
+            liveBinding: {
+              presentationSessionEpoch: record.candidate.causal.presentationSessionEpoch,
+              publicSlideOccurrence: record.candidate.causal.occurrence,
+              publicationPolicyVersion: record.candidate.causal.decisions.publicationPolicy,
+              cardVersion: `card-${opaqueHex(12)}`,
+            },
+          }
+        : {}),
       claim: record.candidate.claimText,
       supportSummary: record.candidate.evidenceExcerpt,
       sourceLabel: `Prepared source ${projectionId.slice(-8)}`,
       publishedAtMs: nowMs,
-      expiresAtMs: input.expiresAtMs,
+      expiresAtMs: leaseExpiresAtMs,
       publicCardRevision: nextRevision,
       deckVersion: record.candidate.causal.deckVersion,
       manifestHash: record.candidate.causal.manifestHash,
@@ -904,23 +1111,61 @@ export class PreparedEvidenceCoordinator {
     ) {
       return { outcome: "REJECTED", reason: "EVIDENCE_AUTHORIZATION_DENIED" };
     }
+    if (record.candidate.provenance === "LIVE_VERIFIED") {
+      if (!this.#livePublicEnabled) {
+        return { outcome: "REJECTED", reason: "LIVE_PUBLIC_DISABLED" };
+      }
+      if (
+        input.approvalId === undefined ||
+        input.candidateVersion === undefined ||
+        input.authoritativeSnapshotHash !==
+          this.#liveCandidateSnapshot(authorized.value).authoritativeSnapshotHash
+      ) {
+        return { outcome: "REJECTED", reason: "FRESH_AUTHORITATIVE_SNAPSHOT_REQUIRED" };
+      }
+    }
     if (!(await this.#projection.projectCard(input.presentationSessionId, event))) {
       return { outcome: "REJECTED", reason: "PROJECTION_REJECTED" };
     }
     authorized.value.cards = applied.state;
     record.lifecycle = published.state;
+    if (input.approvalId !== undefined) {
+      authorized.value.publicationOperations.set(input.approvalId, {
+        requestHash: operationHash,
+        event,
+      });
+    }
     return { outcome: "APPLIED", value: event };
   }
 
   async terminateCard(
     accountSessionId: string,
-    input: {
-      readonly presentationSessionId: string;
-      readonly projectionId: string;
-      readonly expectedPublicCardRevision: string;
-      readonly authorityId: string;
-      readonly status: "RETRACTED" | "EXPIRED";
-    },
+    input: CardTerminationInput,
+    nowMs: number,
+  ): Promise<OperationResult<PublicationTombstone>> {
+    const operationId = input.operationId;
+    if (operationId === undefined) return this.#terminateCard(accountSessionId, input, nowMs);
+    const key = `${input.presentationSessionId}:terminate:${operationId}`;
+    const pending = this.#publicationInFlight.get(key);
+    if (pending !== undefined) {
+      const replay = await pending;
+      if (replay.outcome === "REJECTED") return replay;
+      return replay.value.status !== "PUBLISHED"
+        ? { outcome: "APPLIED", value: replay.value }
+        : { outcome: "REJECTED", reason: "IDEMPOTENCY_CONFLICT" };
+    }
+    const operation = this.#terminateCard(accountSessionId, input, nowMs);
+    this.#publicationInFlight.set(key, operation);
+    try {
+      return await operation;
+    } finally {
+      this.#publicationInFlight.delete(key);
+    }
+  }
+
+  async #terminateCard(
+    accountSessionId: string,
+    input: CardTerminationInput,
     nowMs: number,
   ): Promise<OperationResult<PublicationTombstone>> {
     const authorized = this.#authorizedPresentation(
@@ -929,6 +1174,22 @@ export class PreparedEvidenceCoordinator {
       nowMs,
     );
     if (authorized.outcome === "REJECTED") return authorized;
+    const account = this.readAccountSession(accountSessionId, nowMs);
+    if (
+      account.outcome === "REJECTED" ||
+      !authorized.value.approvedPublicationActorIds.has(account.value.actorId)
+    ) {
+      return { outcome: "REJECTED", reason: "PUBLICATION_AUTHORITY_REQUIRED" };
+    }
+    const operationHash = requestHash(input);
+    if (input.operationId !== undefined) {
+      const prior = authorized.value.publicationOperations.get(input.operationId);
+      if (prior !== undefined) {
+        return prior.requestHash === operationHash && prior.event.status !== "PUBLISHED"
+          ? { outcome: "APPLIED", value: prior.event }
+          : { outcome: "REJECTED", reason: "IDEMPOTENCY_CONFLICT" };
+      }
+    }
     if (authorized.value.cards.cards[input.projectionId] === undefined) {
       return { outcome: "REJECTED", reason: "PUBLICATION_NOT_ACTIVE" };
     }
@@ -961,7 +1222,62 @@ export class PreparedEvidenceCoordinator {
       return { outcome: "REJECTED", reason: "PROJECTION_REJECTED" };
     }
     authorized.value.cards = applied.state;
+    if (input.operationId !== undefined) {
+      authorized.value.publicationOperations.set(input.operationId, {
+        requestHash: operationHash,
+        event,
+      });
+    }
     return { outcome: "APPLIED", value: event };
+  }
+
+  #liveCandidateSnapshot(presentation: PresentationRecord): LiveCandidateSnapshot {
+    const candidates = [...presentation.candidates.values()]
+      .filter(
+        (record) =>
+          record.candidate.provenance === "LIVE_VERIFIED" &&
+          record.lifecycle.verdict === "SUPPORTED" &&
+          record.lifecycle.publicationState === "PRIVATE" &&
+          record.lifecycle.freshness === "FRESH" &&
+          record.candidate.causal.presentationSessionEpoch ===
+            presentation.lifecycle.presentationSessionEpoch &&
+          record.candidate.causal.displayBindingEpoch ===
+            presentation.playback.displayBindingEpoch &&
+          record.candidate.causal.deckVersion === presentation.publicDeck.deckVersion &&
+          record.candidate.causal.manifestHash === presentation.publicDeck.manifestHash &&
+          record.candidate.causal.decisions.publicationPolicy ===
+            presentation.cards.authority?.policyVersion &&
+          sameOccurrence(record.candidate.causal.occurrence, presentation.playback.occurrence),
+      )
+      .map((record) => ({
+        candidateId: record.candidate.candidateId,
+        candidateVersion: record.candidate.candidateVersion,
+        candidateRevision: record.lifecycle.candidateRevision,
+        claimText: record.candidate.claimText,
+        evidenceExcerpt: record.candidate.evidenceExcerpt,
+        occurrence: record.candidate.causal.occurrence,
+      }))
+      .sort((left, right) => left.candidateId.localeCompare(right.candidateId));
+    const payload = {
+      presentationSessionId: presentation.lifecycle.presentationSessionId,
+      presentationSessionEpoch: presentation.lifecycle.presentationSessionEpoch,
+      publicationPolicyVersion: presentation.cards.authority?.policyVersion ?? "unavailable",
+      publicationAuthorityId: presentation.cards.authority?.authorityId ?? "unavailable",
+      publicCardRevision: presentation.cards.publicCardRevision,
+      displayBindingEpoch: presentation.playback.displayBindingEpoch,
+      occurrence: presentation.playback.occurrence,
+      candidates,
+    };
+    return {
+      authoritativeSnapshotHash: requestHash(payload),
+      presentationSessionId: payload.presentationSessionId,
+      presentationSessionEpoch: payload.presentationSessionEpoch,
+      publicationPolicyVersion: payload.publicationPolicyVersion,
+      publicationAuthorityId: payload.publicationAuthorityId,
+      publicCardRevision: payload.publicCardRevision,
+      livePublicEnabled: this.#livePublicEnabled,
+      candidates,
+    };
   }
 
   #closeControllerSocket(

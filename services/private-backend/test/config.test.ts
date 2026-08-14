@@ -12,6 +12,22 @@ describe("private backend config", () => {
     expect(config.host).toBe("127.0.0.1");
     expect(config.port).toBe(4101);
     expect(String(config.allowedOrigin)).toBe("https://console.example.test");
+    expect(config.livePublicEnabled).toBe(false);
+  });
+
+  test("enables live publication only for an explicit passed gate", () => {
+    expect(
+      parsePrivateBackendConfig({
+        CONSOLE_ORIGIN: "https://console.example.test",
+        LIVE_PUBLICATION_GATE_STATE: "PASSED",
+      }).livePublicEnabled,
+    ).toBe(true);
+    expect(
+      parsePrivateBackendConfig({
+        CONSOLE_ORIGIN: "https://console.example.test",
+        LIVE_PUBLICATION_GATE_STATE: "FAILED",
+      }).livePublicEnabled,
+    ).toBe(false);
   });
 
   test("rejects missing or non-canonical origins", () => {
