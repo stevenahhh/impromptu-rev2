@@ -733,6 +733,7 @@ async function openAccessibilityRoute(context: BrowserContext, route: Accessibil
     await page.getByRole("navigation", { name: "Private workspace" }).waitFor();
     if (route.path === "/session") {
       await page.getByRole("link", { name: "Session setup" }).click();
+      await page.getByRole("heading", { name: "Session controls" }).waitFor();
     }
   } else {
     await page.goto(`http://127.0.0.1:${surface.port}${route.path}`, {
@@ -787,9 +788,12 @@ async function assertKeyboardFocusOrder(page: Page, route: AccessibilityRoute) {
     document.body.focus();
     const candidates = [
       ...document.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        'a[href], button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])',
       ),
-    ].filter((element) => getComputedStyle(element).visibility !== "hidden");
+    ].filter(
+      (element) =>
+        getComputedStyle(element).visibility !== "hidden" && element.getClientRects().length > 0,
+    );
     candidates.forEach((element, index) => {
       element.dataset.a11yOrder = String(index);
     });
@@ -804,7 +808,15 @@ async function assertKeyboardFocusOrder(page: Page, route: AccessibilityRoute) {
         : undefined,
     );
     if (actual !== String(index)) {
-      throw new Error(`${route.app}/${route.name} focus order diverged at ${index}: ${actual}`);
+      const focusState = await page.evaluate(() => ({
+        active: document.activeElement?.outerHTML,
+        candidates: [...document.querySelectorAll<HTMLElement>("[data-a11y-order]")].map(
+          (element) => element.outerHTML,
+        ),
+      }));
+      throw new Error(
+        `${route.app}/${route.name} focus order diverged at ${index}: ${actual}; ${JSON.stringify(focusState)}`,
+      );
     }
   }
 }
