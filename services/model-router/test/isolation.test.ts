@@ -143,7 +143,7 @@ describe("production adapter process isolation", () => {
   test("rejects in-process registration for non-fake providers", () => {
     const registry = new ModelRoutingRegistry();
 
-    expect(() =>
+    expect(
       registry.registerDeterministicFakeUnary({
         descriptor: {
           adapterId: "unsafe",
@@ -159,7 +159,11 @@ describe("production adapter process isolation", () => {
           return "unsafe";
         },
       }),
-    ).toThrow("must be registered as isolated process modules");
+    ).toMatchObject({
+      ok: false,
+      error: { code: "invalid_request" },
+      metadata: { capability: null },
+    });
   });
 
   test("denies direct network APIs and mediates concurrent outbound bytes in the parent", async () => {

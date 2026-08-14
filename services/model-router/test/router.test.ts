@@ -163,7 +163,10 @@ describe("routing registry", () => {
 
     expect(registry.resolveUnary("llm").descriptor.adapterId).toBe("primary");
     expect(registry.resolveUnary("llm", "secondary").descriptor.adapterId).toBe("secondary");
-    expect(() => registry.registerDeterministicFakeUnary(primary)).toThrow("already registered");
+    expect(registry.registerDeterministicFakeUnary(primary)).toMatchObject({
+      ok: false,
+      error: { code: "invalid_request" },
+    });
     expect(() => registry.resolveUnary("ocr")).toThrow("No unary adapter");
   });
 
@@ -185,7 +188,11 @@ describe("routing registry", () => {
       respond: () => ({ answer: "must not register" }),
     });
 
-    expect(() => registry.registerDeterministicFakeUnary(adapter)).toThrow();
+    expect(registry.registerDeterministicFakeUnary(adapter)).toMatchObject({
+      ok: false,
+      error: { code: "invalid_request" },
+      metadata: { capability: null },
+    });
   });
 
   test("deep-clones and freezes streaming descriptors at registration", () => {
