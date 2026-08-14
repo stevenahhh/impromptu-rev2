@@ -1,0 +1,235 @@
+{
+  "gate": "WP10_RELEASE_AGGREGATE",
+  "livePublicDefaultOff": true,
+  "physicalVenueHardwareExercised": false,
+  "runs": [
+    {
+      "run": 1,
+      "p0Failures": 0,
+      "taskCompletion": {
+        "completed": 4,
+        "total": 4,
+        "percent": 100,
+        "tasks": [
+          "setup",
+          "publish",
+          "retract",
+          "recovery"
+        ]
+      },
+      "privacyCriticalMistakes": 0,
+      "suites": [
+        "full-check",
+        "e2e",
+        "topology",
+        "soak"
+      ]
+    },
+    {
+      "run": 2,
+      "p0Failures": 0,
+      "taskCompletion": {
+        "completed": 4,
+        "total": 4,
+        "percent": 100,
+        "tasks": [
+          "setup",
+          "publish",
+          "retract",
+          "recovery"
+        ]
+      },
+      "privacyCriticalMistakes": 0,
+      "suites": [
+        "full-check",
+        "e2e",
+        "topology",
+        "soak"
+      ]
+    },
+    {
+      "run": 3,
+      "p0Failures": 0,
+      "taskCompletion": {
+        "completed": 4,
+        "total": 4,
+        "percent": 100,
+        "tasks": [
+          "setup",
+          "publish",
+          "retract",
+          "recovery"
+        ]
+      },
+      "privacyCriticalMistakes": 0,
+      "suites": [
+        "full-check",
+        "e2e",
+        "topology",
+        "soak"
+      ]
+    },
+    {
+      "run": 4,
+      "p0Failures": 0,
+      "taskCompletion": {
+        "completed": 4,
+        "total": 4,
+        "percent": 100,
+        "tasks": [
+          "setup",
+          "publish",
+          "retract",
+          "recovery"
+        ]
+      },
+      "privacyCriticalMistakes": 0,
+      "suites": [
+        "full-check",
+        "e2e",
+        "topology",
+        "soak"
+      ]
+    },
+    {
+      "run": 5,
+      "p0Failures": 0,
+      "taskCompletion": {
+        "completed": 4,
+        "total": 4,
+        "percent": 100,
+        "tasks": [
+          "setup",
+          "publish",
+          "retract",
+          "recovery"
+        ]
+      },
+      "privacyCriticalMistakes": 0,
+      "suites": [
+        "full-check",
+        "e2e",
+        "topology",
+        "soak"
+      ]
+    },
+    {
+      "run": 6,
+      "p0Failures": 0,
+      "taskCompletion": {
+        "completed": 4,
+        "total": 4,
+        "percent": 100,
+        "tasks": [
+          "setup",
+          "publish",
+          "retract",
+          "recovery"
+        ]
+      },
+      "privacyCriticalMistakes": 0,
+      "suites": [
+        "full-check",
+        "e2e",
+        "topology",
+        "soak"
+      ]
+    },
+    {
+      "run": 7,
+      "p0Failures": 0,
+      "taskCompletion": {
+        "completed": 4,
+        "total": 4,
+        "percent": 100,
+        "tasks": [
+          "setup",
+          "publish",
+          "retract",
+          "recovery"
+        ]
+      },
+      "privacyCriticalMistakes": 0,
+      "suites": [
+        "full-check",
+        "e2e",
+        "topology",
+        "soak"
+      ]
+    },
+    {
+      "run": 8,
+      "p0Failures": 0,
+      "taskCompletion": {
+        "completed": 4,
+        "total": 4,
+        "percent": 100,
+        "tasks": [
+          "setup",
+          "publish",
+          "retract",
+          "recovery"
+        ]
+      },
+      "privacyCriticalMistakes": 0,
+      "suites": [
+        "full-check",
+        "e2e",
+        "topology",
+        "soak"
+      ]
+    },
+    {
+      "run": 9,
+      "p0Failures": 0,
+      "taskCompletion": {
+        "completed": 4,
+        "total": 4,
+        "percent": 100,
+        "tasks": [
+          "setup",
+          "publish",
+          "retract",
+          "recovery"
+        ]
+      },
+      "privacyCriticalMistakes": 0,
+      "suites": [
+        "full-check",
+        "e2e",
+        "topology",
+        "soak"
+      ]
+    },
+    {
+      "run": 10,
+      "p0Failures": 0,
+      "taskCompletion": {
+        "completed": 4,
+        "total": 4,
+        "percent": 100,
+        "tasks": [
+          "setup",
+          "publish",
+          "retract",
+          "recovery"
+        ]
+      },
+      "privacyCriticalMistakes": 0,
+      "suites": [
+        "full-check",
+        "e2e",
+        "topology",
+        "soak"
+      ]
+    }
+  ],
+  "totals": {
+    "consecutiveRuns": 10,
+    "p0Failures": 0,
+    "completedTasks": 40,
+    "totalTasks": 40,
+    "taskCompletionPercent": 100,
+    "privacyCriticalMistakes": 0
+  }
+}
