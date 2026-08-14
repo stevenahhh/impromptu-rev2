@@ -131,6 +131,7 @@ async function installEventBuffer(context: BrowserContext): Promise<void> {
       "impromptu:channel-close",
       "impromptu:topology-change",
       "impromptu:public-slide-set",
+      "impromptu:controller-background",
       "fullscreenchange",
       "fullscreenerror",
     ]) {
@@ -263,10 +264,24 @@ async function rehearse(
     await enterFullscreen(page);
     const audienceReadyMs = performance.now() - setupStarted;
     let privatePixelCount = await assertAudienceReady(page);
-    const capabilities = await page.evaluate(() => ({
-      windowManagement: "getScreenDetails" in window,
-      changeScreen: "changeScreen" in window,
-    }));
+    const capabilities = await page.evaluate(() => {
+      let recording: MediaRecorder | true = true;
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = 16;
+        canvas.height = 9;
+        const recorder = new MediaRecorder(canvas.captureStream());
+        recorder.start();
+        recording = recorder;
+      } catch {
+        recording = true;
+      }
+      Reflect.set(window, "__wp4ProjectorRecording", recording);
+      return {
+        windowManagement: "getScreenDetails" in window,
+        changeScreen: "changeScreen" in window,
+      };
+    });
     const faults: FaultEvidence[] = [];
 
     const recordFault = async (fault: WindowsTopologyFault, inject: () => Promise<void>) => {
@@ -316,6 +331,10 @@ async function rehearse(
       await clearBufferedEvent(page, "impromptu:topology-change");
       const changed = await prepareEvent(page, "impromptu:topology-change");
       await page.evaluate(async () => {
+        const recording = Reflect.get(window, "__wp4ProjectorRecording") as MediaRecorder | true;
+        if (recording !== true && recording.state !== "recording") {
+          throw new Error("projector recording stopped before topology switch");
+        }
         const candidate = window as typeof window & { changeScreen?: () => Promise<void> };
         if (candidate.changeScreen) await candidate.changeScreen();
         else window.dispatchEvent(new Event("resize"));
@@ -330,9 +349,11 @@ async function rehearse(
     });
 
     await recordFault("controller-background", async () => {
+      const backgrounded = await prepareEvent(controller, "impromptu:controller-background");
       await controller.evaluate(() => {
         window.dispatchEvent(new CustomEvent("impromptu:controller-background"));
       });
+      await backgrounded();
     });
 
     await recordFault("projection-drop", async () => {
