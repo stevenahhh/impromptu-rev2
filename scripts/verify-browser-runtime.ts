@@ -295,7 +295,8 @@ async function readServiceWorkerReleasePin(page: Page) {
       ...pin,
       scriptCohort: new URL(worker.scriptURL).searchParams.get("cohort"),
     };
-
+  });
+}
 
 async function waitForUpdateCoordinator(page: Page) {
   return page.evaluate(async () => {
