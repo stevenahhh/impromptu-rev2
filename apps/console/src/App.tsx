@@ -1,11 +1,18 @@
 import { Badge, Brand, Button, Panel, Shell, StatusDot } from "@impromptu/ui";
 import { createContext, type ReactNode, useContext, useId, useMemo, useState } from "react";
 import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation } from "react-router-dom";
+import {
+  type AccountSessionView,
+  type ConsoleSessionClient,
+  createConsoleSessionClient,
+} from "./session-client";
 
 interface AuthState {
   authenticated: boolean;
-  signIn: () => void;
-  signOut: () => void;
+  pending: boolean;
+  error: string | null;
+  signIn: (authorizationCode: string) => Promise<void>;
+  signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -13,17 +20,57 @@ const AuthContext = createContext<AuthState | null>(null);
 export interface AuthProviderProps {
   children: ReactNode;
   initialAuthenticated?: boolean;
+  client?: ConsoleSessionClient;
 }
 
-export function AuthProvider({ children, initialAuthenticated = false }: AuthProviderProps) {
-  const [authenticated, setAuthenticated] = useState(initialAuthenticated);
+export function AuthProvider({
+  children,
+  initialAuthenticated = false,
+  client,
+}: AuthProviderProps) {
+  const sessionClient = useMemo(() => client ?? createConsoleSessionClient(), [client]);
+  const [session, setSession] = useState<AccountSessionView | null>(
+    initialAuthenticated
+      ? {
+          account: { accountId: "account_preview", actorId: "actor_preview" },
+          expiresAtMs: Number.MAX_SAFE_INTEGER,
+          csrfToken: "preview-csrf",
+        }
+      : null,
+  );
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const value = useMemo(
     () => ({
-      authenticated,
-      signIn: () => setAuthenticated(true),
-      signOut: () => setAuthenticated(false),
+      authenticated: session !== null,
+      pending,
+      error,
+      async signIn(authorizationCode: string) {
+        setPending(true);
+        setError(null);
+        try {
+          setSession(await sessionClient.signIn(authorizationCode));
+        } catch (cause) {
+          setError(cause instanceof Error ? cause.message : "Sign-in failed.");
+        } finally {
+          setPending(false);
+        }
+      },
+      async signOut() {
+        if (session === null) return;
+        setPending(true);
+        setError(null);
+        try {
+          await sessionClient.signOut(session.csrfToken);
+          setSession(null);
+        } catch (cause) {
+          setError(cause instanceof Error ? cause.message : "Sign-out failed.");
+        } finally {
+          setPending(false);
+        }
+      },
     }),
-    [authenticated],
+    [error, pending, session, sessionClient],
   );
 
   return <AuthContext value={value}>{children}</AuthContext>;
@@ -65,7 +112,8 @@ function ConsoleHeader() {
 }
 
 function SignInPage() {
-  const { signIn } = useAuth();
+  const { signIn, pending, error } = useAuth();
+  const [authorizationCode, setAuthorizationCode] = useState("");
 
   return (
     <Shell focused header={<ConsoleHeader />}>
@@ -76,9 +124,22 @@ function SignInPage() {
           Your setup, coaching, and team notes stay here. Nothing on this screen belongs on the
           audience display.
         </p>
-        <Button onClick={signIn}>Enter private workspace</Button>
-        <p className="console-caption">
-          Foundation preview - no account or backend connection yet.
+        <label className="console-field">
+          <span>One-time sign-in code</span>
+          <input
+            autoComplete="one-time-code"
+            value={authorizationCode}
+            onChange={(event) => setAuthorizationCode(event.currentTarget.value)}
+          />
+        </label>
+        <Button
+          disabled={pending || authorizationCode.length === 0}
+          onClick={() => void signIn(authorizationCode)}
+        >
+          {pending ? "Signing in..." : "Enter private workspace"}
+        </Button>
+        <p className="console-caption" aria-live="polite">
+          {error ?? "The code is exchanged server-side and is never stored by this browser."}
         </p>
       </Panel>
     </Shell>
@@ -97,7 +158,7 @@ function PrivateNavigation() {
         </NavLink>
         <NavLink to="/session">Session setup</NavLink>
       </nav>
-      <Button variant="quiet" onClick={signOut}>
+      <Button variant="quiet" onClick={() => void signOut()}>
         Leave workspace
       </Button>
     </aside>
@@ -154,8 +215,8 @@ function SessionPage() {
         <p className="ui-eyebrow">Setup checklist</p>
         <h1 id={titleId}>Session controls</h1>
         <p className="console-lead">
-          This browser-only foundation stops before pairing, transport, capture, or publication
-          protocols.
+          Account authorization creates a presentation-scoped session. Pairing, playback, and
+          publication remain bound to that session.
         </p>
       </div>
       <div className="console-grid">

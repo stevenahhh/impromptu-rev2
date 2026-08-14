@@ -1,6 +1,20 @@
 import type { ExactOrigin, PrivateBackendConfig } from "./config.ts";
+import type { PreparedEvidenceCoordinator } from "./prepared-evidence.ts";
 
-export type PrivateBackendHandler = (request: Request) => Response;
+export type PrivateBackendHandler = (request: Request) => Response | Promise<Response>;
+
+export interface AccountIdentityVerifier {
+  exchangeAuthorizationCode(code: string): Promise<{
+    readonly accountId: string;
+    readonly actorId: string;
+  } | null>;
+}
+
+export interface PrivateBackendHttpDependencies {
+  readonly coordinator: PreparedEvidenceCoordinator;
+  readonly identityVerifier: AccountIdentityVerifier;
+  readonly now: () => number;
+}
 
 function json(body: unknown, status: number, headers?: Headers): Response {
   const responseHeaders = headers ?? new Headers();
@@ -22,20 +36,236 @@ function browserOriginHeaders(request: Request, allowedOrigin: ExactOrigin): Hea
 
   const headers = new Headers();
   headers.set("access-control-allow-origin", allowedOrigin);
+  headers.set("access-control-allow-credentials", "true");
   headers.set("vary", "Origin");
   return headers;
 }
 
-export function createPrivateBackendHandler(config: PrivateBackendConfig): PrivateBackendHandler {
-  return (request) => {
+function opaqueHex(byteLength: number): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(byteLength));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function accountCookie(request: Request): string | null {
+  const cookie = request.headers.get("cookie");
+  if (cookie === null) return null;
+  for (const part of cookie.split(";")) {
+    const [name, ...value] = part.trim().split("=");
+    if (name === "__Host-account") return value.join("=") || null;
+  }
+  return null;
+}
+
+function mutationAllowed(request: Request, allowedOrigin: ExactOrigin): boolean {
+  if (request.headers.get("origin") !== allowedOrigin) return false;
+  const referer = request.headers.get("referer");
+  if (referer === null) return false;
+  try {
+    return new URL(referer).origin === allowedOrigin;
+  } catch {
+    return false;
+  }
+}
+
+async function requestBody(request: Request): Promise<unknown> {
+  try {
+    return await request.json();
+  } catch {
+    return null;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function createPrivateBackendHandler(
+  config: PrivateBackendConfig,
+  dependencies?: PrivateBackendHttpDependencies,
+): PrivateBackendHandler {
+  const csrfByAccountSession = new Map<string, string>();
+
+  return async (request) => {
     const origin = browserOriginHeaders(request, config.allowedOrigin);
-    if (origin instanceof Response) {
-      return origin;
-    }
+    if (origin instanceof Response) return origin;
 
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/health") {
       return json({ service: "private-backend", status: "ok" }, 200, origin);
+    }
+    if (dependencies === undefined) return json({ error: "not_found" }, 404, origin);
+
+    if (request.method !== "GET" && !mutationAllowed(request, config.allowedOrigin)) {
+      return json({ error: "mutation_origin_forbidden" }, 403, origin);
+    }
+
+    if (request.method === "POST" && url.pathname === "/v1/account-sessions") {
+      const body = await requestBody(request);
+      if (!isRecord(body) || typeof body.authorizationCode !== "string") {
+        return json({ error: "invalid_request" }, 400, origin);
+      }
+      const identity = await dependencies.identityVerifier.exchangeAuthorizationCode(
+        body.authorizationCode,
+      );
+      if (identity === null) return json({ error: "authentication_failed" }, 401, origin);
+      const session = dependencies.coordinator.createAccountSession(identity, dependencies.now());
+      const csrfToken = opaqueHex(24);
+      csrfByAccountSession.set(session.accountSessionId, csrfToken);
+      origin.append(
+        "set-cookie",
+        `__Host-account=${session.accountSessionId}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${Math.max(0, Math.floor((session.expiresAtMs - dependencies.now()) / 1_000))}`,
+      );
+      return json(
+        {
+          account: { accountId: session.accountId, actorId: session.actorId },
+          expiresAtMs: session.expiresAtMs,
+          csrfToken,
+        },
+        201,
+        origin,
+      );
+    }
+
+    const accountSessionId = accountCookie(request);
+    if (accountSessionId === null) return json({ error: "account_session_required" }, 401, origin);
+    const account = dependencies.coordinator.readAccountSession(
+      accountSessionId,
+      dependencies.now(),
+    );
+    if (account.outcome === "REJECTED") {
+      return json({ error: account.reason }, 401, origin);
+    }
+    if (request.method !== "GET") {
+      const expectedCsrf = csrfByAccountSession.get(accountSessionId);
+      if (expectedCsrf === undefined || request.headers.get("x-csrf-token") !== expectedCsrf) {
+        return json({ error: "csrf_rejected" }, 403, origin);
+      }
+    }
+
+    if (request.method === "GET" && url.pathname === "/v1/account-session") {
+      return json(
+        {
+          account: { accountId: account.value.accountId, actorId: account.value.actorId },
+          expiresAtMs: account.value.expiresAtMs,
+          csrfToken: csrfByAccountSession.get(accountSessionId) ?? null,
+        },
+        200,
+        origin,
+      );
+    }
+    if (request.method === "DELETE" && url.pathname === "/v1/account-session") {
+      const result = dependencies.coordinator.revokeAccountSession(
+        accountSessionId,
+        dependencies.now(),
+      );
+      csrfByAccountSession.delete(accountSessionId);
+      origin.append(
+        "set-cookie",
+        "__Host-account=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0",
+      );
+      return json(
+        result.outcome === "APPLIED" ? { status: "revoked" } : { error: result.reason },
+        result.outcome === "APPLIED" ? 200 : 401,
+        origin,
+      );
+    }
+
+    const body = await requestBody(request);
+    if (!isRecord(body)) return json({ error: "invalid_request" }, 400, origin);
+    if (request.method === "POST" && url.pathname === "/v1/presentation-sessions") {
+      const result = dependencies.coordinator.createPresentation(
+        accountSessionId,
+        { privateDeck: body.privateDeck, publicDeck: body.publicDeck },
+        dependencies.now(),
+      );
+      return json(
+        result.outcome === "APPLIED" ? result.value : { error: result.reason },
+        result.outcome === "APPLIED" ? 201 : 409,
+        origin,
+      );
+    }
+    if (request.method === "POST" && url.pathname === "/v1/display-bindings") {
+      const result = dependencies.coordinator.approveDisplay(
+        accountSessionId,
+        body,
+        dependencies.now(),
+      );
+      return json(
+        result.outcome === "APPLIED" ? result.value : { error: result.reason },
+        result.outcome === "APPLIED" ? 201 : 409,
+        origin,
+      );
+    }
+    if (request.method === "POST" && url.pathname === "/v1/playback/slide-set") {
+      const result = dependencies.coordinator.setSlide(
+        accountSessionId,
+        {
+          presentationSessionId: String(body.presentationSessionId ?? ""),
+          commandId: String(body.commandId ?? ""),
+          publicSlideKey: String(body.publicSlideKey ?? ""),
+          displayBindingEpoch: String(body.displayBindingEpoch ?? ""),
+          baseRevision: String(body.baseRevision ?? ""),
+        },
+        dependencies.now(),
+      );
+      return json(
+        result.outcome === "APPLIED" ? result.value : { error: result.reason },
+        result.outcome === "APPLIED" ? 202 : 409,
+        origin,
+      );
+    }
+    if (request.method === "POST" && url.pathname === "/v1/candidates/curated") {
+      const result = dependencies.coordinator.addCuratedCandidate(
+        accountSessionId,
+        body,
+        dependencies.now(),
+      );
+      return json(
+        result.outcome === "APPLIED" ? result.value : { error: result.reason },
+        result.outcome === "APPLIED" ? 201 : 409,
+        origin,
+      );
+    }
+    if (request.method === "POST" && url.pathname === "/v1/publications/approve") {
+      const result = dependencies.coordinator.approveCandidate(
+        accountSessionId,
+        {
+          presentationSessionId: String(body.presentationSessionId ?? ""),
+          candidateId: String(body.candidateId ?? ""),
+          expectedCandidateRevision: String(body.expectedCandidateRevision ?? ""),
+          expectedPublicCardRevision: String(body.expectedPublicCardRevision ?? ""),
+          authorityId: String(body.authorityId ?? ""),
+          expiresAtMs: typeof body.expiresAtMs === "number" ? body.expiresAtMs : null,
+        },
+        dependencies.now(),
+      );
+      return json(
+        result.outcome === "APPLIED" ? result.value : { error: result.reason },
+        result.outcome === "APPLIED" ? 201 : 409,
+        origin,
+      );
+    }
+    if (request.method === "POST" && url.pathname === "/v1/publications/terminate") {
+      const status = body.status;
+      if (status !== "RETRACTED" && status !== "EXPIRED") {
+        return json({ error: "invalid_request" }, 400, origin);
+      }
+      const result = dependencies.coordinator.terminateCard(
+        accountSessionId,
+        {
+          presentationSessionId: String(body.presentationSessionId ?? ""),
+          projectionId: String(body.projectionId ?? ""),
+          expectedPublicCardRevision: String(body.expectedPublicCardRevision ?? ""),
+          authorityId: String(body.authorityId ?? ""),
+          status,
+        },
+        dependencies.now(),
+      );
+      return json(
+        result.outcome === "APPLIED" ? result.value : { error: result.reason },
+        result.outcome === "APPLIED" ? 200 : 409,
+        origin,
+      );
     }
 
     return json({ error: "not_found" }, 404, origin);

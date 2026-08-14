@@ -4,10 +4,12 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register();
 afterAll(() => GlobalRegistrator.unregister());
 
-const { cleanup, render, within } = await import("@testing-library/react");
+const { cleanup, fireEvent, render, waitFor, within } = await import("@testing-library/react");
 const { MemoryRouter } = await import("react-router-dom");
 
 const { AuthProvider, ConsoleRoutes } = await import("./App");
+
+import type { ConsoleSessionClient } from "./session-client";
 
 afterEach(cleanup);
 
@@ -47,5 +49,47 @@ describe("Console route boundary", () => {
       within(document.body).getByRole("navigation", { name: "Private workspace" }),
     ).toBeTruthy();
     expect(within(document.body).getByText("Private workspace")).toBeTruthy();
+  });
+
+  test("exchanges the entered code through the typed session client without storage", async () => {
+    const receivedCodes: string[] = [];
+    const client: ConsoleSessionClient = {
+      async signIn(code) {
+        receivedCodes.push(code);
+        return {
+          account: { accountId: "account_alpha", actorId: "actor_alpha" },
+          expiresAtMs: 10_000,
+          csrfToken: "csrf-alpha",
+        };
+      },
+      async readSession() {
+        return null;
+      },
+      async signOut() {},
+      async createPresentation() {
+        throw new Error("not used");
+      },
+    };
+    render(
+      <MemoryRouter initialEntries={["/sign-in"]}>
+        <AuthProvider client={client}>
+          <ConsoleRoutes />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(within(document.body).getByLabelText("One-time sign-in code"), {
+      target: { value: "transient-code" },
+    });
+    fireEvent.click(within(document.body).getByRole("button", { name: "Enter private workspace" }));
+
+    await waitFor(() => {
+      expect(
+        within(document.body).getByRole("heading", { name: "Ready for the room" }),
+      ).toBeTruthy();
+    });
+    expect(receivedCodes).toEqual(["transient-code"]);
+    expect(window.localStorage.length).toBe(0);
+    expect(window.sessionStorage.length).toBe(0);
   });
 });

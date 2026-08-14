@@ -1,7 +1,7 @@
 import {
   CommandIdSchema,
+  ControlRevisionSchema,
   controllerEpoch,
-  controlRevision,
   PlaybackControlLeaseSchema,
   type StageAppliedReceipt,
 } from "@impromptu/contracts/control";
@@ -20,8 +20,11 @@ import {
 import {
   type AudienceDisplaySession,
   AudienceDisplaySessionSchema,
+  DisplayBindingEpochSchema,
   displayBindingEpoch,
   type PublicationTombstone,
+  PublicCardRevisionSchema,
+  PublicSlideKeySchema,
   type PublishedAudienceCard,
   type PublishedDeckArtifact,
   PublishedDeckArtifactSchema,
@@ -352,7 +355,14 @@ export class PreparedEvidenceCoordinator {
     );
     if (authorized.outcome === "REJECTED") return authorized;
     const commandId = CommandIdSchema.safeParse(input.commandId);
-    if (!commandId.success) return { outcome: "REJECTED", reason: "INVALID_COMMAND" };
+    const baseRevision = ControlRevisionSchema.safeParse(input.baseRevision);
+    const bindingEpoch = DisplayBindingEpochSchema.safeParse(input.displayBindingEpoch);
+    const publicSlideKey = PublicSlideKeySchema.safeParse(input.publicSlideKey);
+    if (
+      !(commandId.success && baseRevision.success && bindingEpoch.success && publicSlideKey.success)
+    ) {
+      return { outcome: "REJECTED", reason: "INVALID_COMMAND" };
+    }
     const playback = authorized.value.playback;
     const reduction = reducePlaybackCommand(
       playback,
@@ -364,10 +374,10 @@ export class PreparedEvidenceCoordinator {
         leaseId: playback.activeLease.leaseId,
         controllerEpoch: playback.activeLease.controllerEpoch,
         commandId: commandId.data,
-        baseRevision: controlRevision(Number(input.baseRevision.slice(3))),
+        baseRevision: baseRevision.data,
         delivery: "LIVE",
-        displayBindingEpoch: displayBindingEpoch(Number(input.displayBindingEpoch.slice(4))),
-        publicSlideKey: input.publicSlideKey as PlaybackAuthorityState["initialSlideKey"],
+        displayBindingEpoch: bindingEpoch.data,
+        publicSlideKey: publicSlideKey.data,
       },
       nowMs,
     );
@@ -406,9 +416,11 @@ export class PreparedEvidenceCoordinator {
     if (presentation === undefined)
       return { outcome: "REJECTED", reason: "DISPLAY_SESSION_UNKNOWN" };
     const commandId = CommandIdSchema.safeParse(input.commandId);
-    const epoch = displayBindingEpoch(Number(input.displayBindingEpoch.slice(4)));
-    if (!commandId.success) return { outcome: "REJECTED", reason: "INVALID_RECEIPT" };
-    const result = markStageApplied(presentation.playback, commandId.data, epoch);
+    const epoch = DisplayBindingEpochSchema.safeParse(input.displayBindingEpoch);
+    if (!commandId.success || !epoch.success) {
+      return { outcome: "REJECTED", reason: "INVALID_RECEIPT" };
+    }
+    const result = markStageApplied(presentation.playback, commandId.data, epoch.data);
     if (result.receipt === null) return { outcome: "REJECTED", reason: result.outcome };
     if (
       !this.#projection.recordPlaybackApplied(
@@ -494,7 +506,13 @@ export class PreparedEvidenceCoordinator {
     if (record.lifecycle.candidateRevision !== input.expectedCandidateRevision) {
       return { outcome: "REJECTED", reason: "CANDIDATE_CAS_CONFLICT" };
     }
-    const nextRevision = publicCardRevision(Number(input.expectedPublicCardRevision.slice(4)) + 1);
+    const expectedPublicCardRevision = PublicCardRevisionSchema.safeParse(
+      input.expectedPublicCardRevision,
+    );
+    if (!expectedPublicCardRevision.success) {
+      return { outcome: "REJECTED", reason: "INVALID_PUBLIC_CARD_REVISION" };
+    }
+    const nextRevision = publicCardRevision(Number(expectedPublicCardRevision.data.slice(4)) + 1);
     const projectionId = `projection_${opaqueHex(24)}` as PublishedAudienceCard["projectionId"];
     const event: PublishedAudienceCard = {
       projectionId,
@@ -516,7 +534,7 @@ export class PreparedEvidenceCoordinator {
         presentationSessionId: authorized.value.lifecycle.presentationSessionId,
         presentationSessionEpoch: authorized.value.lifecycle.presentationSessionEpoch,
         authorityId: input.authorityId,
-        expectedRevision: input.expectedPublicCardRevision,
+        expectedRevision: expectedPublicCardRevision.data,
         payload: event,
       },
       nowMs,
@@ -561,10 +579,16 @@ export class PreparedEvidenceCoordinator {
     if (authorized.value.cards.cards[input.projectionId] === undefined) {
       return { outcome: "REJECTED", reason: "PUBLICATION_NOT_ACTIVE" };
     }
+    const expectedPublicCardRevision = PublicCardRevisionSchema.safeParse(
+      input.expectedPublicCardRevision,
+    );
+    if (!expectedPublicCardRevision.success) {
+      return { outcome: "REJECTED", reason: "INVALID_PUBLIC_CARD_REVISION" };
+    }
     const event: PublicationTombstone = {
       projectionId: input.projectionId as PublicationTombstone["projectionId"],
       status: input.status,
-      publicCardRevision: publicCardRevision(Number(input.expectedPublicCardRevision.slice(4)) + 1),
+      publicCardRevision: publicCardRevision(Number(expectedPublicCardRevision.data.slice(4)) + 1),
       occurredAtMs: nowMs,
     };
     const applied = applyAuthorizedPublicCardEvent(
@@ -574,7 +598,7 @@ export class PreparedEvidenceCoordinator {
         presentationSessionId: authorized.value.lifecycle.presentationSessionId,
         presentationSessionEpoch: authorized.value.lifecycle.presentationSessionEpoch,
         authorityId: input.authorityId,
-        expectedRevision: input.expectedPublicCardRevision,
+        expectedRevision: expectedPublicCardRevision.data,
         payload: event,
       },
       nowMs,
