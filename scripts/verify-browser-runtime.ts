@@ -636,6 +636,247 @@ async function verifyStageLayouts(context: BrowserContext) {
   console.log("Stage layout and fullscreen controls fit every required viewport.");
 }
 
+interface AccessibilityRoute {
+  app: AppSurface["app"];
+  authenticated?: boolean;
+  name: string;
+  path: string;
+}
+
+const accessibilityRoutes: readonly AccessibilityRoute[] = [
+  { app: "console", name: "sign-in", path: "/sign-in" },
+  { app: "console", authenticated: true, name: "overview", path: "/" },
+  { app: "console", authenticated: true, name: "session", path: "/session" },
+  { app: "stage", name: "landing", path: "/" },
+  { app: "stage", name: "display", path: "/display/rehearsal" },
+];
+
+async function openAccessibilityRoute(context: BrowserContext, route: AccessibilityRoute) {
+  const surface = surfaces.find((candidate) => candidate.app === route.app);
+  if (!surface) throw new Error(`missing accessibility surface for ${route.app}`);
+  const page = await context.newPage();
+
+  if (route.authenticated) {
+    await page.addInitScript(() => {
+      const networkFetch = window.fetch.bind(window);
+      const fixtureFetch = (input: URL | RequestInfo, init?: RequestInit) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (url.endsWith("/v1/account-sessions") && init?.method === "POST") {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                account: { accountId: "account_a11y", actorId: "actor_a11y" },
+                csrfToken: "a11y-csrf",
+                expiresAtMs: 4_102_444_800_000,
+              }),
+              { headers: { "content-type": "application/json" }, status: 200 },
+            ),
+          );
+        }
+        return networkFetch(input, init);
+      };
+      Object.defineProperty(window, "fetch", { configurable: true, value: fixtureFetch });
+    });
+    await page.goto(`http://127.0.0.1:${surface.port}/sign-in`, {
+      waitUntil: "domcontentloaded",
+    });
+    await page.getByLabel("One-time sign-in code").fill("accessibility-fixture");
+    await page.getByRole("button", { name: "Enter private workspace" }).click();
+    await page.getByRole("navigation", { name: "Private workspace" }).waitFor();
+    if (route.path === "/session") {
+      await page.getByRole("link", { name: "Session setup" }).click();
+    }
+  } else {
+    await page.goto(`http://127.0.0.1:${surface.port}${route.path}`, {
+      waitUntil: "domcontentloaded",
+    });
+  }
+  await page.locator("main").waitFor({ state: "visible" });
+  return page;
+}
+
+async function assertAccessibilityStructure(page: Page, route: AccessibilityRoute) {
+  const structure = await page.evaluate(() => {
+    const nameOf = (element: Element) =>
+      element.getAttribute("aria-label") ??
+      element.getAttribute("alt") ??
+      element.textContent?.trim() ??
+      "";
+    const unlabeledControls = [...document.querySelectorAll("button, a[href], input")]
+      .filter((element) => {
+        if (element instanceof HTMLInputElement && element.labels?.length) return false;
+        return nameOf(element).length === 0;
+      })
+      .map((element) => element.outerHTML);
+    const imagesWithoutAlt = [...document.querySelectorAll("img")]
+      .filter((image) => !image.hasAttribute("alt"))
+      .map((image) => image.outerHTML);
+    return {
+      h1Count: document.querySelectorAll("h1").length,
+      imagesWithoutAlt,
+      mainCount: document.querySelectorAll("main").length,
+      navigationCount: document.querySelectorAll("nav").length,
+      unlabeledControls,
+    };
+  });
+
+  if (
+    structure.mainCount !== 1 ||
+    structure.h1Count !== 1 ||
+    structure.unlabeledControls.length > 0 ||
+    structure.imagesWithoutAlt.length > 0 ||
+    (route.authenticated && structure.navigationCount !== 1)
+  ) {
+    throw new Error(
+      `${route.app}/${route.name} landmark or label failure: ${JSON.stringify(structure)}`,
+    );
+  }
+}
+
+async function assertKeyboardFocusOrder(page: Page, route: AccessibilityRoute) {
+  const focusableCount = await page.evaluate(() => {
+    document.body.tabIndex = -1;
+    document.body.focus();
+    const candidates = [
+      ...document.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    ].filter((element) => getComputedStyle(element).visibility !== "hidden");
+    candidates.forEach((element, index) => {
+      element.dataset.a11yOrder = String(index);
+    });
+    return candidates.length;
+  });
+
+  for (let index = 0; index < focusableCount; index += 1) {
+    await page.keyboard.press("Tab");
+    const actual = await page.evaluate(() =>
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement.dataset.a11yOrder
+        : undefined,
+    );
+    if (actual !== String(index)) {
+      throw new Error(`${route.app}/${route.name} focus order diverged at ${index}: ${actual}`);
+    }
+  }
+}
+
+async function assertComputedContrast(page: Page, route: AccessibilityRoute) {
+  const failures = await page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1;
+    canvas.height = 1;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context) throw new Error("contrast canvas is unavailable");
+
+    const rgba = (color: string) => {
+      context.clearRect(0, 0, 1, 1);
+      context.fillStyle = color;
+      context.fillRect(0, 0, 1, 1);
+      const [red = 0, green = 0, blue = 0, alpha = 0] = context.getImageData(0, 0, 1, 1).data;
+      return [red / 255, green / 255, blue / 255, alpha / 255] as const;
+    };
+    const composite = (foreground: readonly number[], background: readonly number[]) => {
+      const alpha = foreground[3] ?? 1;
+      return [
+        (foreground[0] ?? 0) * alpha + (background[0] ?? 0) * (1 - alpha),
+        (foreground[1] ?? 0) * alpha + (background[1] ?? 0) * (1 - alpha),
+        (foreground[2] ?? 0) * alpha + (background[2] ?? 0) * (1 - alpha),
+        1,
+      ] as const;
+    };
+    const backgroundOf = (element: Element | null): readonly number[] => {
+      if (!element) return [1, 1, 1, 1];
+      const own = rgba(getComputedStyle(element).backgroundColor);
+      return own[3] === 1 ? own : composite(own, backgroundOf(element.parentElement));
+    };
+    const luminance = (color: readonly number[]) => {
+      const linear = color
+        .slice(0, 3)
+        .map((channel) =>
+          channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
+        );
+      return 0.2126 * (linear[0] ?? 0) + 0.7152 * (linear[1] ?? 0) + 0.0722 * (linear[2] ?? 0);
+    };
+
+    return [
+      ...document.querySelectorAll<HTMLElement>(
+        "h1, h2, p, label, button:not([disabled]), a[href]",
+      ),
+    ]
+      .filter(
+        (element) =>
+          element.textContent?.trim() && getComputedStyle(element).visibility !== "hidden",
+      )
+      .flatMap((element) => {
+        const style = getComputedStyle(element);
+        const foreground = composite(rgba(style.color), backgroundOf(element));
+        const background = backgroundOf(element);
+        const lighter = Math.max(luminance(foreground), luminance(background));
+        const darker = Math.min(luminance(foreground), luminance(background));
+        const ratio = (lighter + 0.05) / (darker + 0.05);
+        const fontSize = Number.parseFloat(style.fontSize);
+        const fontWeight = Number.parseInt(style.fontWeight, 10) || 400;
+        const threshold = fontSize >= 24 || (fontSize >= 18.66 && fontWeight >= 700) ? 3 : 4.5;
+        return ratio + 0.01 < threshold
+          ? [
+              `${element.tagName.toLowerCase()}.${element.className}:${ratio.toFixed(2)}<${threshold}`,
+            ]
+          : [];
+      });
+  });
+
+  if (failures.length > 0) {
+    throw new Error(`${route.app}/${route.name} contrast failures: ${failures.join(", ")}`);
+  }
+}
+
+async function assertAccessibilityMedia(page: Page, route: AccessibilityRoute) {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const moving = await page.locator("*").evaluateAll((elements) =>
+    elements.flatMap((element) => {
+      const style = getComputedStyle(element);
+      const durations = [style.animationDuration, style.transitionDuration]
+        .flatMap((value) => value.split(","))
+        .map((value) =>
+          value.trim().endsWith("ms") ? Number.parseFloat(value) : Number.parseFloat(value) * 1_000,
+        );
+      return durations.some((duration) => duration > 1) ? [element.tagName.toLowerCase()] : [];
+    }),
+  );
+  if (moving.length > 0) {
+    throw new Error(`${route.app}/${route.name} reduced-motion failures: ${moving.join(",")}`);
+  }
+
+  await page.emulateMedia({ forcedColors: "active", reducedMotion: "reduce" });
+  const forcedColorFailure = await page
+    .locator(".ui-button, .ui-panel, .ui-brand__mark, .ui-badge")
+    .evaluateAll(
+      (elements) =>
+        elements.length === 0 ||
+        elements.some((element) => {
+          const style = getComputedStyle(element);
+          return style.borderTopStyle === "none" || style.borderTopColor === "rgba(0, 0, 0, 0)";
+        }),
+    );
+  if (forcedColorFailure) {
+    throw new Error(`${route.app}/${route.name} forced-colors border fallback failed`);
+  }
+}
+
+async function verifyAccessibilityMatrix(context: BrowserContext) {
+  for (const route of accessibilityRoutes) {
+    const page = await openAccessibilityRoute(context, route);
+    await assertAccessibilityStructure(page, route);
+    await assertKeyboardFocusOrder(page, route);
+    await assertComputedContrast(page, route);
+    await assertAccessibilityMedia(page, route);
+    await page.screenshot({ path: join(artifactPath, `a11y-${route.app}-${route.name}.png`) });
+    await page.close();
+  }
+  console.log("Console and Stage accessibility route matrix passed.");
+}
+
 async function verifyReducedMotion(context: BrowserContext) {
   for (const surface of surfaces) {
     const page = await context.newPage();
@@ -732,6 +973,7 @@ async function verifyColdOfflineRestart() {
       await installOfflineShell(onlineContext, surface);
     }
     await verifyCrossOriginFrameRejection(onlineContext);
+    await verifyAccessibilityMatrix(onlineContext);
     await verifyReducedMotion(onlineContext);
     await verifyStageLayouts(onlineContext);
 
