@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import { signOfflineCard } from "./offline-signing.test-fixture";
 import {
   createStageSessionClient,
   type EventSourceFactory,
@@ -35,6 +36,27 @@ afterEach(() => {
 });
 
 describe("Stage network client", () => {
+  test("verifies a canonical curated package signed by the pinned key", async () => {
+    const signed = await signOfflineCard({
+      projectionId: "projection_signed",
+      status: "PUBLISHED",
+      mode: "CURATED",
+      leaseExpiresAtMs: null,
+      offlinePackage: {
+        offlineDisplayAllowed: true,
+        localExpiresAtMs: Date.now() + 60_000,
+        signature: "",
+        signatureVerified: false,
+      },
+      claim: "Signed claim",
+      supportSummary: "May persist",
+      sourceLabel: "Public source",
+      publicCardRevision: "pcr_1",
+    });
+    const verified = await verifyOfflinePackage(signed);
+    expect(verified.offlinePackage?.signatureVerified).toBe(true);
+  });
+
   test("fails closed for an unverified curated offline package", async () => {
     const card = await verifyOfflinePackage({
       projectionId: "projection_unsigned",

@@ -430,8 +430,8 @@ function parseStreamMessage(
 const OFFLINE_DISPLAY_PUBLIC_KEY: JsonWebKey = {
   kty: "EC",
   crv: "P-256",
-  x: "bt2abKicLjB_DoIwd8C0nUzPIFcxcGgNm2yEyfu_KQw",
-  y: "vRlUGKUPFAnH1axFaQu-kaNxDMpfj8ZDV1dvFGxH3NU",
+  x: "F3i88NgsJwVGOI-F9iyV35t8q2aDHOM_5-qwXCG2xCg",
+  y: "DSD6ou2ZeGoJ0LZ2GJa2aQ99YI2d5PraViGUpS1PHaI",
   ext: true,
   key_ops: ["verify"],
 };

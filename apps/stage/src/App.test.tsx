@@ -8,6 +8,8 @@ const { act, cleanup, fireEvent, render, within } = await import("@testing-libra
 const { MemoryRouter } = await import("react-router-dom");
 
 const { StageRoutes } = await import("./App");
+const { signOfflineCard } = await import("./offline-signing.test-fixture");
+const { verifyOfflinePackage } = await import("./stage-client");
 
 import type {
   DisplayIdentity,
@@ -206,6 +208,25 @@ describe("public Stage boundary", () => {
     window.addEventListener("impromptu:visible-playback", (event) => {
       visibleEffects.push(event instanceof CustomEvent ? event.detail : null);
     });
+    const verifiedCuratedCard = await verifyOfflinePackage(
+      await signOfflineCard({
+        projectionId: "projection_curated",
+        status: "PUBLISHED",
+        mode: "CURATED",
+        leaseExpiresAtMs: null,
+        offlinePackage: {
+          offlineDisplayAllowed: true,
+          localExpiresAtMs: Date.now() + 60_000,
+          signature: "",
+          signatureVerified: false,
+        },
+        claim: "Verified offline claim",
+        supportSummary: "Signed package",
+        sourceLabel: "Public source",
+        publicCardRevision: "pcr_1",
+      }),
+    );
+    expect(verifiedCuratedCard.offlinePackage?.signatureVerified).toBe(true);
     const snapshot: StageSnapshotView = {
       role: "PUBLIC_STAGE",
       stateHash: "a".repeat(64),
@@ -233,24 +254,7 @@ describe("public Stage boundary", () => {
       publicPlaybackRevision: "pbr_0",
       blackout: false,
       occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
-      cards: [
-        {
-          projectionId: "projection_curated",
-          status: "PUBLISHED",
-          mode: "CURATED",
-          leaseExpiresAtMs: null,
-          offlinePackage: {
-            offlineDisplayAllowed: true,
-            localExpiresAtMs: Date.now() + 60_000,
-            signature: "signed",
-            signatureVerified: true,
-          },
-          claim: "Verified offline claim",
-          supportSummary: "Signed package",
-          sourceLabel: "Public source",
-          publicCardRevision: "pcr_1",
-        },
-      ],
+      cards: [verifiedCuratedCard],
       publicCardRevision: "pcr_1",
       tombstoneWatermark: "pcr_0",
       tombstoneRetentionMs: 60_000,
@@ -420,7 +424,25 @@ describe("public Stage boundary", () => {
   test("hides a verified curated card at local expiry while partitioned", async () => {
     let observer: StageEventObserver | null = null;
     const reconnectSnapshot = deferred<StageSnapshotView>();
-    const localExpiresAtMs = Date.now() + 500;
+    const localExpiresAtMs = Date.now() + 1_000;
+    const verifiedCuratedCard = await verifyOfflinePackage(
+      await signOfflineCard({
+        projectionId: "projection_curated",
+        status: "PUBLISHED",
+        mode: "CURATED",
+        leaseExpiresAtMs: null,
+        offlinePackage: {
+          offlineDisplayAllowed: true,
+          localExpiresAtMs,
+          signature: "",
+          signatureVerified: false,
+        },
+        claim: "Expiring curated claim",
+        supportSummary: "Partition-safe only until expiry",
+        sourceLabel: "Public source",
+        publicCardRevision: "pcr_1",
+      }),
+    );
     const snapshot: StageSnapshotView = {
       role: "PUBLIC_STAGE",
       stateHash: "a".repeat(64),
@@ -433,24 +455,7 @@ describe("public Stage boundary", () => {
       publicPlaybackRevision: "pbr_0",
       blackout: false,
       occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
-      cards: [
-        {
-          projectionId: "projection_curated",
-          status: "PUBLISHED",
-          mode: "CURATED",
-          leaseExpiresAtMs: null,
-          offlinePackage: {
-            offlineDisplayAllowed: true,
-            localExpiresAtMs,
-            signature: "verified-fixture",
-            signatureVerified: true,
-          },
-          claim: "Expiring curated claim",
-          supportSummary: "Partition-safe only until expiry",
-          sourceLabel: "Public source",
-          publicCardRevision: "pcr_1",
-        },
-      ],
+      cards: [verifiedCuratedCard],
       publicCardRevision: "pcr_1",
       tombstoneWatermark: "pcr_0",
       tombstoneRetentionMs: 60_000,
