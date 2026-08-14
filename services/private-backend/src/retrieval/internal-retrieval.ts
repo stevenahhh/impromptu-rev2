@@ -1,4 +1,4 @@
-import type { RetrievedEvidence, RetrievalRequest } from "@impromptu/contracts/retrieval";
+import type { RetrievalRequest, RetrievedEvidence } from "@impromptu/contracts/retrieval";
 import { RetrievalRequestSchema, RetrievedEvidenceSchema } from "@impromptu/contracts/retrieval";
 
 export interface RetrievalPrincipal {
@@ -45,6 +45,7 @@ export interface AuthorizedAnnIndex {
   search(input: {
     readonly tenantId: string;
     readonly query: string;
+    readonly queryVector: readonly number[];
     readonly authorizedObjectIds: readonly string[];
     readonly limit: number;
   }): Promise<readonly AnnCandidate[]>;
@@ -98,14 +99,21 @@ export class InternalRetrievalService {
     this.#objects = dependencies.objects;
   }
 
-  async retrieve(accountSessionId: string, input: unknown): Promise<readonly AuthorizedEvidenceReference[]> {
+  async retrieve(
+    accountSessionId: string,
+    input: unknown,
+    queryVector: readonly number[] = [],
+  ): Promise<readonly AuthorizedEvidenceReference[]> {
     const request = RetrievalRequestSchema.safeParse(input);
     if (!request.success) return [];
     try {
       const principal = await this.#principals.resolve(accountSessionId);
       if (principal === null) return [];
       const snapshot = await this.#policy.prefilter(principal, request.data);
-      if (!snapshot.current || !(await this.#policy.isCurrent(principal.tenantId, snapshot.version))) {
+      if (
+        !snapshot.current ||
+        !(await this.#policy.isCurrent(principal.tenantId, snapshot.version))
+      ) {
         return [];
       }
       const allowed = new Set(snapshot.authorizedObjectIds);
@@ -113,6 +121,7 @@ export class InternalRetrievalService {
       const candidates = await this.#ann.search({
         tenantId: principal.tenantId,
         query: request.data.query,
+        queryVector: [...queryVector],
         authorizedObjectIds: [...allowed],
         limit: request.data.maxResults,
       });
@@ -125,7 +134,8 @@ export class InternalRetrievalService {
           candidate.indexedAuthorizationVersion !== snapshot.version ||
           candidate.indexedDeckVersion !== request.data.deckVersion ||
           candidate.indexedManifestHash !== request.data.manifestHash
-        ) continue;
+        )
+          continue;
         const object = await this.#objects.readMetadata(principal.tenantId, candidate.objectId);
         if (
           object === null ||
@@ -135,8 +145,11 @@ export class InternalRetrievalService {
           object.deckVersion !== request.data.deckVersion ||
           object.manifestHash !== request.data.manifestHash ||
           !(await this.#policy.authorizeObject(principal, object, snapshot.version))
-        ) continue;
-        authorized.push(Object.freeze({ principal, object, authorizationVersion: snapshot.version }));
+        )
+          continue;
+        authorized.push(
+          Object.freeze({ principal, object, authorizationVersion: snapshot.version }),
+        );
       }
       return authorized;
     } catch {
@@ -151,15 +164,22 @@ export class InternalRetrievalService {
       if (
         !(await this.#policy.isCurrent(principal.tenantId, authorizationVersion)) ||
         !(await this.#policy.authorizeObject(principal, object, authorizationVersion))
-      ) return { outcome: "DENIED", reason: "UNAUTHORIZED" };
+      )
+        return { outcome: "DENIED", reason: "UNAUTHORIZED" };
       const current = await this.#objects.readMetadata(principal.tenantId, object.objectId);
       if (current === null || current.tenantId !== principal.tenantId) {
         return { outcome: "DENIED", reason: "UNAUTHORIZED" };
       }
-      if (current.deckVersion !== object.deckVersion || current.manifestHash !== object.manifestHash) {
+      if (
+        current.deckVersion !== object.deckVersion ||
+        current.manifestHash !== object.manifestHash
+      ) {
         return { outcome: "DENIED", reason: "STALE_DECK" };
       }
-      if (current.sourceHash !== object.sourceHash || current.sourceRevision !== object.sourceRevision) {
+      if (
+        current.sourceHash !== object.sourceHash ||
+        current.sourceRevision !== object.sourceRevision
+      ) {
         return { outcome: "DENIED", reason: "STALE_SOURCE" };
       }
       if (!(await this.#policy.authorizeObject(principal, current, authorizationVersion))) {

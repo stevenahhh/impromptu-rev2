@@ -15,8 +15,6 @@ export {
   type ServerModelRouter,
 } from "./ports/server-model-router.ts";
 export * from "./prepared-evidence.ts";
-export * from "./retrieval/external-fetch.ts";
-export * from "./retrieval/internal-retrieval.ts";
 export { ProjectionHttpPort } from "./projection-http-port.ts";
 export {
   createPostgresPrivatePublicationOutbox,
@@ -29,3 +27,7 @@ export {
   type PublicationEventKind,
 } from "./publication/outbox-dispatcher.ts";
 export { createPostgresProjectionDispatchBoundary } from "./publication/postgres-projection-dispatch.ts";
+export * from "./retrieval/external-fetch.ts";
+export * from "./retrieval/internal-retrieval.ts";
+export * from "./verifier/deterministic-evidence.ts";
+export * from "./verifier/recommendation-pipeline.ts";

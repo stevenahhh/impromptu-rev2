@@ -31,7 +31,12 @@ function fixture() {
     principals: {
       async resolve(sessionId) {
         return sessionId === "session-a"
-          ? { tenantId: "tenant-a", principalId: "actor-a", groupIds: ["finance"], attributes: { role: "analyst" } }
+          ? {
+              tenantId: "tenant-a",
+              principalId: "actor-a",
+              groupIds: ["finance"],
+              attributes: { role: "analyst" },
+            }
           : null;
       },
     },
@@ -86,11 +91,24 @@ function fixture() {
   return {
     service,
     annCalls,
-    revoke: () => { allowed = false; },
-    stalePolicy: () => { current = false; },
-    updateMetadata: (next: Partial<RetrievalObjectMetadata>) => { metadata = { ...metadata, ...next }; },
-    updateContent: (next: string) => { storedContent = next; },
+    revoke: () => {
+      allowed = false;
+    },
+    stalePolicy: () => {
+      current = false;
+    },
+    updateMetadata: (next: Partial<RetrievalObjectMetadata>) => {
+      metadata = { ...metadata, ...next };
+    },
+    updateContent: (next: string) => {
+      storedContent = next;
+    },
   };
+}
+
+function required<Value>(value: Value | undefined): Value {
+  if (value === undefined) throw new Error("fixture value is required");
+  return value;
 }
 
 describe("ACL-first internal retrieval", () => {
@@ -98,15 +116,18 @@ describe("ACL-first internal retrieval", () => {
     const flow = fixture();
     const references = await flow.service.retrieve("session-a", request);
     expect(references).toHaveLength(1);
-    expect(flow.annCalls).toEqual([{
-      tenantId: "tenant-a",
-      query: "revenue",
-      authorizedObjectIds: ["object-1"],
-      limit: 3,
-    }]);
+    expect(flow.annCalls).toEqual([
+      {
+        tenantId: "tenant-a",
+        query: "revenue",
+        queryVector: [],
+        authorizedObjectIds: ["object-1"],
+        limit: 3,
+      },
+    ]);
     const reference = references[0];
     expect(reference).toBeDefined();
-    const result = await flow.service.materialize(reference!);
+    const result = await flow.service.materialize(required(reference));
     expect(result.outcome).toBe("MATERIALIZED");
   });
 
@@ -128,29 +149,43 @@ describe("ACL-first internal retrieval", () => {
 
   test("denies ACL revocation between retrieval and materialization or publication", async () => {
     const flow = fixture();
-    const reference = (await flow.service.retrieve("session-a", request))[0]!;
+    const reference = required((await flow.service.retrieve("session-a", request))[0]);
     const materialized = await flow.service.materialize(reference);
     expect(materialized.outcome).toBe("MATERIALIZED");
     if (materialized.outcome !== "MATERIALIZED") throw new Error("expected evidence");
     flow.revoke();
-    expect(await flow.service.authorizeForPublication(reference, materialized.evidence)).toBe(false);
-    expect(await flow.service.materialize(reference)).toEqual({ outcome: "DENIED", reason: "UNAUTHORIZED" });
+    expect(await flow.service.authorizeForPublication(reference, materialized.evidence)).toBe(
+      false,
+    );
+    expect(await flow.service.materialize(reference)).toEqual({
+      outcome: "DENIED",
+      reason: "UNAUTHORIZED",
+    });
   });
 
   test("denies stale deck metadata, source metadata, and content hash", async () => {
     const staleDeck = fixture();
-    const deckRef = (await staleDeck.service.retrieve("session-a", request))[0]!;
+    const deckRef = required((await staleDeck.service.retrieve("session-a", request))[0]);
     staleDeck.updateMetadata({ manifestHash: "b".repeat(64) });
-    expect(await staleDeck.service.materialize(deckRef)).toEqual({ outcome: "DENIED", reason: "STALE_DECK" });
+    expect(await staleDeck.service.materialize(deckRef)).toEqual({
+      outcome: "DENIED",
+      reason: "STALE_DECK",
+    });
 
     const staleSource = fixture();
-    const sourceRef = (await staleSource.service.retrieve("session-a", request))[0]!;
+    const sourceRef = required((await staleSource.service.retrieve("session-a", request))[0]);
     staleSource.updateMetadata({ sourceRevision: "revision-2" });
-    expect(await staleSource.service.materialize(sourceRef)).toEqual({ outcome: "DENIED", reason: "STALE_SOURCE" });
+    expect(await staleSource.service.materialize(sourceRef)).toEqual({
+      outcome: "DENIED",
+      reason: "STALE_SOURCE",
+    });
 
     const changedBytes = fixture();
-    const bytesRef = (await changedBytes.service.retrieve("session-a", request))[0]!;
+    const bytesRef = required((await changedBytes.service.retrieve("session-a", request))[0]);
     changedBytes.updateContent("tampered");
-    expect(await changedBytes.service.materialize(bytesRef)).toEqual({ outcome: "DENIED", reason: "STALE_SOURCE" });
+    expect(await changedBytes.service.materialize(bytesRef)).toEqual({
+      outcome: "DENIED",
+      reason: "STALE_SOURCE",
+    });
   });
 });

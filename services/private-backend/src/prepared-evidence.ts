@@ -106,6 +106,10 @@ type PresentationRecord = {
   audienceDisplaySession: AudienceDisplaySession | null;
 };
 
+export interface LiveEvidenceAuthorizer {
+  authorize(candidate: EvidenceCandidate): Promise<boolean>;
+}
+
 export interface PreparedEvidenceStore {
   readonly accountSessions: Map<string, AccountSession>;
   readonly presentations: Map<string, PresentationRecord>;
@@ -307,6 +311,7 @@ export class PreparedEvidenceCoordinator {
   readonly #projection: PreparedEvidenceProjectionPort;
   readonly #accountSessionTtlMs: number;
   readonly #presentationCapabilityTtlMs: number;
+  readonly #liveEvidenceAuthorizer: LiveEvidenceAuthorizer | undefined;
   readonly #controllerSockets = new Map<string, Set<MutableControllerSocket>>();
 
   constructor(
@@ -315,12 +320,14 @@ export class PreparedEvidenceCoordinator {
     options: {
       readonly accountSessionTtlMs?: number;
       readonly presentationCapabilityTtlMs?: number;
+      readonly liveEvidenceAuthorizer?: LiveEvidenceAuthorizer;
     } = {},
   ) {
     this.#projection = projection;
     this.#store = store;
     this.#accountSessionTtlMs = options.accountSessionTtlMs ?? 8 * 60 * 60 * 1_000;
     this.#presentationCapabilityTtlMs = options.presentationCapabilityTtlMs ?? 4 * 60 * 60 * 1_000;
+    this.#liveEvidenceAuthorizer = options.liveEvidenceAuthorizer;
     for (const [id, presentation] of store.presentations) {
       const playback = restorePlaybackAuthority(presentation.playback);
       const cards = restorePublicCardStream(presentation.cards);
@@ -751,6 +758,59 @@ export class PreparedEvidenceCoordinator {
     return { outcome: "APPLIED", value: lifecycle };
   }
 
+  async addLiveCandidate(
+    accountSessionId: string,
+    candidateInput: unknown,
+    nowMs: number,
+  ): Promise<OperationResult<CandidateLifecycleState>> {
+    const candidate = EvidenceCandidateSchema.safeParse(candidateInput);
+    if (!candidate.success || candidate.data.provenance !== "LIVE_VERIFIED") {
+      return { outcome: "REJECTED", reason: "INVALID_LIVE_CANDIDATE" };
+    }
+    if (
+      this.#liveEvidenceAuthorizer === undefined ||
+      !(await this.#liveEvidenceAuthorizer.authorize(candidate.data))
+    ) {
+      return { outcome: "REJECTED", reason: "EVIDENCE_AUTHORIZATION_DENIED" };
+    }
+    const authorized = this.#authorizedPresentation(
+      accountSessionId,
+      candidate.data.causal.presentationSessionId,
+      nowMs,
+    );
+    if (authorized.outcome === "REJECTED") return authorized;
+    if (
+      candidate.data.causal.presentationSessionEpoch !==
+        authorized.value.lifecycle.presentationSessionEpoch ||
+      candidate.data.causal.deckVersion !== authorized.value.publicDeck.deckVersion ||
+      candidate.data.causal.manifestHash !== authorized.value.publicDeck.manifestHash ||
+      candidate.data.causal.displayBindingEpoch !== authorized.value.playback.displayBindingEpoch
+    )
+      return { outcome: "REJECTED", reason: "STALE_CANDIDATE" };
+    let lifecycle = createCandidateLifecycle({
+      presentationSessionId: candidate.data.causal.presentationSessionId,
+      presentationSessionEpoch: candidate.data.causal.presentationSessionEpoch,
+      candidateId: candidate.data.candidateId,
+      candidateVersion: candidate.data.candidateVersion,
+      contentHash: candidate.data.causal.source.contentHash,
+    });
+    const qualified = reduceCandidateLifecycle(lifecycle, {
+      type: "QUALIFY",
+      presentationSessionId: lifecycle.presentationSessionId,
+      presentationSessionEpoch: lifecycle.presentationSessionEpoch,
+      candidateId: lifecycle.candidateId,
+      candidateVersion: lifecycle.candidateVersion,
+      expectedRevision: lifecycle.candidateRevision,
+    });
+    if (qualified.outcome !== "APPLIED") throw new Error("live qualification invariant failed");
+    lifecycle = qualified.state;
+    authorized.value.candidates.set(candidate.data.candidateId, {
+      candidate: candidate.data,
+      lifecycle,
+    });
+    return { outcome: "APPLIED", value: lifecycle };
+  }
+
   async approveCandidate(
     accountSessionId: string,
     input: {
@@ -783,6 +843,13 @@ export class PreparedEvidenceCoordinator {
     }
     if (record.lifecycle.candidateRevision !== input.expectedCandidateRevision) {
       return { outcome: "REJECTED", reason: "CANDIDATE_CAS_CONFLICT" };
+    }
+    if (
+      record.candidate.provenance === "LIVE_VERIFIED" &&
+      (this.#liveEvidenceAuthorizer === undefined ||
+        !(await this.#liveEvidenceAuthorizer.authorize(record.candidate)))
+    ) {
+      return { outcome: "REJECTED", reason: "EVIDENCE_AUTHORIZATION_DENIED" };
     }
     const expectedPublicCardRevision = PublicCardRevisionSchema.safeParse(
       input.expectedPublicCardRevision,
@@ -829,6 +896,14 @@ export class PreparedEvidenceCoordinator {
       publicCardRevision: nextRevision,
     });
     if (published.outcome !== "APPLIED") throw new Error("publication lifecycle invariant failed");
+    // This second check is intentionally adjacent to the publication side effect.
+    if (
+      record.candidate.provenance === "LIVE_VERIFIED" &&
+      (this.#liveEvidenceAuthorizer === undefined ||
+        !(await this.#liveEvidenceAuthorizer.authorize(record.candidate)))
+    ) {
+      return { outcome: "REJECTED", reason: "EVIDENCE_AUTHORIZATION_DENIED" };
+    }
     if (!(await this.#projection.projectCard(input.presentationSessionId, event))) {
       return { outcome: "REJECTED", reason: "PROJECTION_REJECTED" };
     }

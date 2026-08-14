@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { EvidenceCandidate } from "@impromptu/contracts/private";
 import { PreparedEvidenceProjectionGateway } from "@impromptu/projection-gateway";
 import {
   createPreparedEvidenceStore,
@@ -67,12 +68,16 @@ const publicDeck = {
   ],
 };
 
-async function createBoundFlow(nowMs = 1_000) {
+async function createBoundFlow(
+  nowMs = 1_000,
+  liveEvidenceAuthorizer?: { authorize(candidate: EvidenceCandidate): Promise<boolean> },
+) {
   const gateway = new PreparedEvidenceProjectionGateway();
   const store = createPreparedEvidenceStore();
   const coordinator = new PreparedEvidenceCoordinator(gateway, store, {
     accountSessionTtlMs: 10_000,
     presentationCapabilityTtlMs: 10_000,
+    ...(liveEvidenceAuthorizer === undefined ? {} : { liveEvidenceAuthorizer }),
   });
   const account = coordinator.createAccountSession(
     { accountId: "account_alpha", actorId: "actor_alpha" },
@@ -442,6 +447,61 @@ describe("prepared evidence private coordinator", () => {
     expect(retracted.outcome).toBe("APPLIED");
     expect(cardEvents).toEqual(["pcr_1:PUBLISHED", "pcr_2:RETRACTED"]);
     expect(flow.gateway.snapshot(flow.bound.audienceDisplaySessionId, 1_006)?.cards).toEqual([]);
+  });
+
+  test("denies live publication when ACL is revoked immediately before projection", async () => {
+    let authorizationChecks = 0;
+    const flow = await createBoundFlow(1_000, {
+      async authorize() {
+        authorizationChecks += 1;
+        return authorizationChecks < 3;
+      },
+    });
+    const candidate = {
+      candidateId: "candidate_live_revoked",
+      candidateVersion: "candidate-version-1",
+      provenance: "LIVE_VERIFIED",
+      verdict: "SUPPORTED",
+      claimText: "Live claim",
+      evidenceExcerpt: "Live support",
+      privateSourceUri: "private://source/live",
+      causal: {
+        presentationSessionId: flow.created.lifecycle.presentationSessionId,
+        presentationSessionEpoch: "pse_1",
+        displayBindingEpoch: "dbe_1",
+        deckVersion: publicDeck.deckVersion,
+        manifestHash,
+        occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+        transcriptFinalId: "transcript_live_one",
+        source: { sourceId: "source_live", revision: "source-revision-1", contentHash: sourceHash },
+        decisions: {
+          acl: "acl-1",
+          publicationPolicy: "publication-policy-1",
+          rights: "rights-1",
+          dlp: "dlp-1",
+        },
+      },
+    };
+    expect(
+      (await flow.coordinator.addLiveCandidate(flow.account.accountSessionId, candidate, 1_002))
+        .outcome,
+    ).toBe("APPLIED");
+    expect(
+      await flow.coordinator.approveCandidate(
+        flow.account.accountSessionId,
+        {
+          presentationSessionId: flow.created.lifecycle.presentationSessionId,
+          candidateId: candidate.candidateId,
+          expectedCandidateRevision: "candrev_1",
+          expectedPublicCardRevision: "pcr_0",
+          authorityId: flow.created.authority.authorityId,
+          expiresAtMs: null,
+        },
+        1_003,
+      ),
+    ).toEqual({ outcome: "REJECTED", reason: "EVIDENCE_AUTHORIZATION_DENIED" });
+    expect(authorizationChecks).toBe(3);
+    expect(flow.gateway.snapshot(flow.bound.audienceDisplaySessionId, 1_004)?.cards).toEqual([]);
   });
 
   test("rejects approval when a rebind makes the curated candidate stale", async () => {

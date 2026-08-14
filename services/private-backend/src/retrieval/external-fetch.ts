@@ -1,4 +1,4 @@
-import { RetrievedEvidenceSchema, type RetrievedEvidence } from "@impromptu/contracts/retrieval";
+import { type RetrievedEvidence, RetrievedEvidenceSchema } from "@impromptu/contracts/retrieval";
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const ALLOWED_TYPES = new Set(["text/html", "application/xhtml+xml", "text/plain"]);
@@ -172,7 +172,10 @@ export class SafeExternalEvidenceFetcher {
 }
 
 export function isPublicIpAddress(input: string): boolean {
-  const address = input.trim().toLowerCase().replace(/^\[|\]$/g, "");
+  const address = input
+    .trim()
+    .toLowerCase()
+    .replace(/^\[|\]$/g, "");
   const ipv4 = parseIpv4(address);
   if (ipv4 !== null) return isPublicIpv4(ipv4);
   const mapped = address.match(/(?:^|:)ffff:(\d+\.\d+\.\d+\.\d+)$/)?.[1];
@@ -191,7 +194,8 @@ export function isPublicIpAddress(input: string): boolean {
 function parseIpv4(input: string): readonly number[] | null {
   if (!/^\d+\.\d+\.\d+\.\d+$/.test(input)) return null;
   const parts = input.split(".").map(Number);
-  return parts.length === 4 && parts.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)
+  return parts.length === 4 &&
+    parts.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)
     ? parts
     : null;
 }
@@ -268,7 +272,9 @@ function extractTitle(document: string, mediaType: string): string | null {
 function extractDate(document: string, headers: Readonly<Record<string, string>>): string | null {
   const candidate =
     document.match(/<time\b[^>]*datetime=["']([^"']+)["']/i)?.[1] ??
-    document.match(/<meta\b[^>]*(?:property|name)=["'](?:article:published_time|date)["'][^>]*content=["']([^"']+)["']/i)?.[1] ??
+    document.match(
+      /<meta\b[^>]*(?:property|name)=["'](?:article:published_time|date)["'][^>]*content=["']([^"']+)["']/i,
+    )?.[1] ??
     header(headers, "last-modified");
   if (candidate === undefined || candidate === null) return null;
   const timestamp = Date.parse(candidate);
