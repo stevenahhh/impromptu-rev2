@@ -1,3 +1,4 @@
+import type { EvidenceCandidate } from "@impromptu/contracts/private";
 import {
   type RecommendationOutcome,
   RecommendationOutcomeSchema,
@@ -21,6 +22,8 @@ import type {
   InternalRetrievalService,
 } from "../retrieval/internal-retrieval.ts";
 import { reconcileEvidence } from "./deterministic-evidence.ts";
+
+const TERMINAL_DEADLINE_GUARD_MS = 50;
 
 const embeddingOutputSchema = z
   .object({ vector: z.array(z.number().finite()).min(1).max(8_192) })
@@ -52,6 +55,7 @@ export class PrivateRecommendationPipeline {
   readonly #now: () => number;
   readonly #scheduler: DeadlineScheduler;
   readonly #publicationReferences = new Map<string, AuthorizedEvidenceReference>();
+  readonly #publicationEvidence = new Map<string, RetrievedEvidence>();
 
   constructor(dependencies: {
     readonly router: Pick<ServerModelRouter, "invoke">;
@@ -79,10 +83,13 @@ export class PrivateRecommendationPipeline {
     const deadline = new Promise<RecommendationOutcome>((resolve) => {
       resolveDeadline = resolve;
     });
-    const removeDeadline = this.#scheduler.schedule(deadlineAtMs, () => {
-      controller.abort("private recommendation deadline exceeded");
-      resolveDeadline(abstain("DEADLINE_EXCEEDED", startedAtMs, deadlineAtMs));
-    });
+    const removeDeadline = this.#scheduler.schedule(
+      deadlineAtMs - TERMINAL_DEADLINE_GUARD_MS,
+      () => {
+        controller.abort("private recommendation deadline exceeded");
+        resolveDeadline(abstain("DEADLINE_EXCEEDED", startedAtMs, deadlineAtMs));
+      },
+    );
     try {
       return await Promise.race([
         this.#run(accountSessionId, input, startedAtMs, deadlineAtMs, controller.signal),
@@ -99,6 +106,18 @@ export class PrivateRecommendationPipeline {
     return (
       reference !== undefined && (await this.#internal.authorizeForPublication(reference, evidence))
     );
+  }
+
+  async authorizeCandidateForPublication(candidate: EvidenceCandidate): Promise<boolean> {
+    const evidence = [...this.#publicationEvidence.values()].find(
+      (item) =>
+        item.sourceId === candidate.causal.source.sourceId &&
+        item.sourceRevision === candidate.causal.source.revision &&
+        item.sourceHash === candidate.causal.source.contentHash &&
+        item.deckVersion === candidate.causal.deckVersion &&
+        item.manifestHash === candidate.causal.manifestHash,
+    );
+    return evidence !== undefined && (await this.authorizeEvidenceForPublication(evidence));
   }
 
   async #run(
@@ -264,7 +283,10 @@ export class PrivateRecommendationPipeline {
     }
     for (const item of selected) {
       const reference = referenceByEvidenceId.get(item.evidenceId);
-      if (reference !== undefined) this.#publicationReferences.set(item.evidenceId, reference);
+      if (reference !== undefined) {
+        this.#publicationReferences.set(item.evidenceId, reference);
+        this.#publicationEvidence.set(item.evidenceId, item);
+      }
     }
     return RecommendationOutcomeSchema.parse({
       outcome: "RECOMMEND",

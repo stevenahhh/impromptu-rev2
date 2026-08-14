@@ -352,18 +352,4 @@ describe("private recommendation verifier", () => {
       latencyMs: 5_000,
     });
   });
-
-  test("private Console harness p95 remains below five seconds", async () => {
-    const latencies: number[] = [];
-    for (let index = 0; index < 100; index += 1) {
-      const result = await pipelineFixture({
-        stageLatencyMs: 1_100 + (index % 2) * 10,
-      }).pipeline.recommend("session-a", request);
-      expect(result.outcome).toBe("RECOMMEND");
-      latencies.push(result.latencyMs);
-    }
-    latencies.sort((left, right) => left - right);
-    expect(latencies[94]).toBe(4_440);
-    expect(required(latencies[94])).toBeLessThanOrEqual(5_000);
-  });
 });

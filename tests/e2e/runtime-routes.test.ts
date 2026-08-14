@@ -159,7 +159,9 @@ describe("runnable WP3 service composition", () => {
       ["POST", "/v1/display-bindings", {}],
       ["POST", "/v1/playback/slide-set", {}],
       ["POST", "/v1/playback/lease-takeover", {}],
+      ["POST", "/v1/recommendations", {}],
       ["POST", "/v1/candidates/curated", {}],
+      ["POST", "/v1/candidates/live", {}],
       ["POST", "/v1/publications/approve", {}],
       ["POST", "/v1/publications/terminate", {}],
     ];

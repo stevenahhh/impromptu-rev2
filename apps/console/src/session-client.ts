@@ -1,3 +1,25 @@
+export interface RecommendationRequest {
+  readonly query: string;
+  readonly deckVersion: string;
+  readonly manifestHash: string;
+  readonly maxResults: number;
+}
+
+export type RecommendationOutcome =
+  | Readonly<{
+      outcome: "RECOMMEND";
+      recommendation: unknown;
+      evidence: readonly unknown[];
+      completedAtMs: number;
+      latencyMs: number;
+    }>
+  | Readonly<{
+      outcome: "ABSTAIN";
+      reason: string;
+      completedAtMs: number;
+      latencyMs: number;
+    }>;
+
 export interface AccountSessionView {
   readonly account: { readonly accountId: string; readonly actorId: string };
   readonly expiresAtMs: number;
@@ -21,6 +43,7 @@ export interface ConsoleSessionClient {
     csrfToken: string,
     artifacts: { readonly privateDeck: unknown; readonly publicDeck: unknown },
   ): Promise<PresentationSessionView>;
+  recommend(csrfToken: string, request: RecommendationRequest): Promise<RecommendationOutcome>;
 }
 
 async function responseBody(response: Response): Promise<unknown> {
@@ -43,6 +66,17 @@ function isAccountSessionView(value: unknown): value is AccountSessionView {
     typeof candidate.expiresAtMs === "number" &&
     typeof candidate.csrfToken === "string"
   );
+}
+
+function isRecommendationOutcome(value: unknown): value is RecommendationOutcome {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  if (typeof candidate.completedAtMs !== "number" || typeof candidate.latencyMs !== "number") {
+    return false;
+  }
+  return candidate.outcome === "ABSTAIN"
+    ? typeof candidate.reason === "string"
+    : candidate.outcome === "RECOMMEND" && Array.isArray(candidate.evidence);
 }
 
 function isPresentationSessionView(value: unknown): value is PresentationSessionView {
@@ -90,6 +124,19 @@ export function createConsoleSessionClient(baseUrl = ""): ConsoleSessionClient {
         headers: mutationHeaders(csrfToken),
       });
       if (!response.ok) throw new Error("Sign-out was rejected.");
+    },
+    async recommend(csrfToken, request) {
+      const response = await fetch(`${baseUrl}/v1/recommendations`, {
+        method: "POST",
+        credentials: "include",
+        headers: mutationHeaders(csrfToken),
+        body: JSON.stringify(request),
+      });
+      const body = await responseBody(response);
+      if (!response.ok || !isRecommendationOutcome(body)) {
+        throw new Error("Recommendation request failed.");
+      }
+      return body;
     },
     async createPresentation(csrfToken, artifacts) {
       const response = await fetch(`${baseUrl}/v1/presentation-sessions`, {

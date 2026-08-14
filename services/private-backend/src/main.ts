@@ -1,3 +1,8 @@
+import {
+  ModelRoutingRegistry,
+  ServerModelRouter,
+  StaticPolicyVersionAuthority,
+} from "@impromptu/model-router";
 import { parsePrivateBackendConfig } from "./config.ts";
 import { createPrivateBackendHandler } from "./http.ts";
 import {
@@ -8,6 +13,9 @@ import {
   snapshotPreparedEvidenceStore,
 } from "./prepared-evidence.ts";
 import { ProjectionHttpPort } from "./projection-http-port.ts";
+import { SafeExternalEvidenceFetcher } from "./retrieval/external-fetch.ts";
+import { InternalRetrievalService } from "./retrieval/internal-retrieval.ts";
+import { PrivateRecommendationPipeline } from "./verifier/recommendation-pipeline.ts";
 
 function required(name: string): string {
   const value = Bun.env[name];
@@ -42,7 +50,95 @@ if (await snapshotFile.exists()) {
   }
   store = restored.store;
 }
-const coordinator = new PreparedEvidenceCoordinator(projection, store);
+let coordinator: PreparedEvidenceCoordinator;
+const internalRetrieval = new InternalRetrievalService({
+  principals: {
+    async resolve(accountSessionId) {
+      const session = coordinator.readAccountSession(accountSessionId, Date.now());
+      return session.outcome === "APPLIED"
+        ? {
+            tenantId: session.value.accountId,
+            principalId: session.value.actorId,
+            groupIds: [],
+            attributes: {},
+          }
+        : null;
+    },
+  },
+  policy: {
+    async prefilter() {
+      return { version: "acl-runtime-v1", current: true, authorizedObjectIds: [] };
+    },
+    async authorizeObject() {
+      return false;
+    },
+    async isCurrent(_tenantId, version) {
+      return version === "acl-runtime-v1";
+    },
+  },
+  ann: {
+    async search() {
+      return [];
+    },
+  },
+  objects: {
+    async readMetadata() {
+      return null;
+    },
+    async readContent() {
+      return null;
+    },
+  },
+});
+const externalFetcher = new SafeExternalEvidenceFetcher({
+  dns: {
+    async resolve() {
+      return [];
+    },
+  },
+  transport: {
+    async request() {
+      throw new Error("External retrieval transport is not configured");
+    },
+  },
+});
+const modelRegistry = new ModelRoutingRegistry();
+const modelBudget = {
+  async reserve(request: { readonly estimatedCostUnits: number }) {
+    return { reservationId: crypto.randomUUID(), reservedUnits: request.estimatedCostUnits };
+  },
+  async reconcile() {},
+};
+const modelRouter = new ServerModelRouter({
+  registry: modelRegistry,
+  policyVersionAuthority: new StaticPolicyVersionAuthority("model-policy-v1"),
+  quotaPolicy: { async assertWithinQuota() {} },
+  budget: modelBudget,
+});
+const recommendations = new PrivateRecommendationPipeline({
+  router: modelRouter,
+  contexts: {
+    async resolve(accountSessionId) {
+      const session = coordinator.readAccountSession(accountSessionId, Date.now());
+      return session.outcome === "APPLIED"
+        ? {
+            tenantId: session.value.accountId,
+            principalId: session.value.actorId,
+            policyVersion: "model-policy-v1",
+          }
+        : null;
+    },
+  },
+  internal: internalRetrieval,
+  externalFetch: externalFetcher,
+});
+coordinator = new PreparedEvidenceCoordinator(projection, store, {
+  liveEvidenceAuthorizer: {
+    async authorize(candidate) {
+      return await recommendations.authorizeCandidateForPublication(candidate);
+    },
+  },
+});
 const persist = async () => {
   await Bun.write(snapshotPath, JSON.stringify(snapshotPreparedEvidenceStore(store)));
 };
@@ -61,6 +157,7 @@ const server = Bun.serve({
       },
     },
     now: Date.now,
+    recommendations,
     persist,
   }),
 });

@@ -106,6 +106,9 @@ describe("Console route boundary", () => {
       async createPresentation() {
         throw new Error("not used");
       },
+      async recommend() {
+        throw new Error("not used");
+      },
     };
     render(
       <MemoryRouter initialEntries={["/sign-in"]}>

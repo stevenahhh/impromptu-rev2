@@ -1,3 +1,4 @@
+import type { RecommendationOutcome } from "@impromptu/contracts/retrieval";
 import type { ExactOrigin, PrivateBackendConfig } from "./config.ts";
 import { createPreparedDeckArtifacts } from "./prepared-deck-upload.ts";
 import type { ControllerSocket, PreparedEvidenceCoordinator } from "./prepared-evidence.ts";
@@ -16,6 +17,9 @@ export interface PrivateBackendHttpDependencies {
   readonly identityVerifier: AccountIdentityVerifier;
   readonly internalAuthToken: string;
   readonly now: () => number;
+  readonly recommendations?: {
+    recommend(accountSessionId: string, input: unknown): Promise<RecommendationOutcome>;
+  };
   readonly persist?: () => Promise<void>;
 }
 
@@ -248,6 +252,29 @@ export function createPrivateBackendHandler(
 
     const body = await requestBody(request);
     if (!isRecord(body)) return json({ error: "invalid_request" }, 400, origin);
+    if (request.method === "POST" && url.pathname === "/v1/recommendations") {
+      if (dependencies.recommendations === undefined) {
+        return json({ error: "recommendations_unavailable" }, 503, origin);
+      }
+      return json(
+        await dependencies.recommendations.recommend(accountSessionId, body),
+        200,
+        origin,
+      );
+    }
+    if (request.method === "POST" && url.pathname === "/v1/candidates/live") {
+      const result = await dependencies.coordinator.addLiveCandidate(
+        accountSessionId,
+        body,
+        dependencies.now(),
+      );
+      if (result.outcome === "APPLIED") await dependencies.persist?.();
+      return json(
+        result.outcome === "APPLIED" ? result.value : { error: result.reason },
+        result.outcome === "APPLIED" ? 201 : 409,
+        origin,
+      );
+    }
     if (request.method === "POST" && url.pathname === "/v1/deck-artifacts") {
       if (typeof body.title !== "string" || typeof body.content !== "string") {
         return json({ error: "invalid_request" }, 400, origin);
