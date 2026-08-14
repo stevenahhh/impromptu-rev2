@@ -22,7 +22,10 @@ for (const mode of ["extend", "duplicate", "single"] as const) {
   if (
     modeRuns.length !== 3 ||
     modeRuns.some(
-      (run) => run.faults.length !== 7 || run.observedTransition !== run.requestedTransition,
+      (run) =>
+        run.faults.length !== 7 ||
+        run.observedTransition !== run.requestedTransition ||
+        run.outcome !== "SUCCESS",
     )
   ) {
     throw new Error(`${mode} did not complete three full fault rehearsals`);
@@ -38,6 +41,8 @@ console.log(
           mode,
           {
             rehearsals: runs.length,
+            successfulRehearsals: runs.filter((run) => run.outcome === "SUCCESS").length,
+            failedRehearsals: runs.filter((run) => run.outcome === "FAILURE").length,
             faultRecoveries: runs.reduce((sum, run) => sum + run.faults.length, 0),
             realFaults: runs.reduce(
               (sum, run) =>

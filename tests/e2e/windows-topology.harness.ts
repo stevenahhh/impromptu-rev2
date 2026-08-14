@@ -26,8 +26,8 @@ interface RehearsalArtifact {
   readonly jsonChecksum: string;
   readonly domChecksum: string;
   readonly screenshotChecksum: string;
-  readonly privateContentVerdict: "CLEAN";
-  readonly privatePixelVerdict: "CLEAN";
+  readonly privateContentVerdict: "CLEAN" | "LEAK";
+  readonly privatePixelVerdict: "CLEAN" | "LEAK";
 }
 
 export interface ModeRehearsalEvidence {
@@ -35,6 +35,8 @@ export interface ModeRehearsalEvidence {
   readonly observedMode: WindowsDisplayMode;
   readonly rehearsal: number;
   readonly audienceReadyMs: number;
+  readonly outcome: "SUCCESS" | "FAILURE";
+  readonly failureReasons: readonly string[];
   readonly faults: readonly FaultEvidence[];
   readonly privatePixelCount: number;
   readonly requestedTransition: string;
@@ -255,7 +257,9 @@ async function clearBufferedEvent(page: Page, name: string): Promise<void> {
   }, name);
 }
 
-async function assertAudienceReady(page: Page): Promise<number> {
+async function observeAudienceReady(
+  page: Page,
+): Promise<Readonly<{ privatePixelCount: number; audienceReady: boolean }>> {
   const text = (await page.locator("body").textContent()) ?? "";
   const vocabularyMatches = privateSurfaceVocabulary.filter((value) => text.includes(value));
   const privateControls = await page
@@ -264,15 +268,10 @@ async function assertAudienceReady(page: Page): Promise<number> {
     )
     .count();
   const matches = vocabularyMatches.length + privateControls;
-  if (matches !== 0) {
-    throw new Error(
-      `private content detected on Stage: vocabulary=${vocabularyMatches.join(",")} controls=${privateControls}`,
-    );
-  }
-  if (!text.includes("Public only") || !text.includes("Evidence, without the detour")) {
-    throw new Error("Stage is not audience-ready");
-  }
-  return matches;
+  return {
+    privatePixelCount: matches,
+    audienceReady: text.includes("Public only") && text.includes("Evidence, without the detour"),
+  };
 }
 
 async function enterFullscreen(page: Page): Promise<void> {
@@ -324,8 +323,10 @@ async function persistRehearsalArtifact(
         requestedTransition: evidence.requestedTransition,
         observedTransition: evidence.observedTransition,
         privatePixelCount: evidence.privatePixelCount,
-        privateContentVerdict: "CLEAN",
-        privatePixelVerdict: "CLEAN",
+        outcome: evidence.outcome,
+        failureReasons: evidence.failureReasons,
+        privateContentVerdict: evidence.privatePixelCount === 0 ? "CLEAN" : "LEAK",
+        privatePixelVerdict: evidence.privatePixelCount === 0 ? "CLEAN" : "LEAK",
         domChecksum,
         screenshotChecksum,
       },
@@ -341,8 +342,8 @@ async function persistRehearsalArtifact(
     jsonChecksum: checksum(jsonPath),
     domChecksum,
     screenshotChecksum,
-    privateContentVerdict: "CLEAN",
-    privatePixelVerdict: "CLEAN",
+    privateContentVerdict: evidence.privatePixelCount === 0 ? "CLEAN" : "LEAK",
+    privatePixelVerdict: evidence.privatePixelCount === 0 ? "CLEAN" : "LEAK",
   };
 }
 
@@ -438,7 +439,11 @@ async function rehearse(
     await ready();
     await enterFullscreen(page);
     const audienceReadyMs = performance.now() - setupStarted;
-    let privatePixelCount = await assertAudienceReady(page);
+    const initialObservation = await observeAudienceReady(page);
+    let privatePixelCount = initialObservation.privatePixelCount;
+    const failureReasons: string[] = [];
+    if (!initialObservation.audienceReady) failureReasons.push("INITIAL_NOT_AUDIENCE_READY");
+    if (initialObservation.privatePixelCount > 0) failureReasons.push("INITIAL_PRIVATE_PIXEL");
     const capabilities = await page.evaluate(() => {
       let recording: MediaRecorder | true = true;
       try {
@@ -497,9 +502,12 @@ async function rehearse(
       const startedAt = performance.now();
       await inject();
       await enterFullscreen(page);
-      privatePixelCount += await assertAudienceReady(page);
+      const observation = await observeAudienceReady(page);
+      privatePixelCount += observation.privatePixelCount;
       const recoveryMs = performance.now() - startedAt;
-      if (recoveryMs > 30_000) throw new Error(`${fault} recovery exceeded 30s`);
+      if (recoveryMs > 30_000) failureReasons.push(`${fault}:RECOVERY_DEADLINE_EXCEEDED`);
+      if (!observation.audienceReady) failureReasons.push(`${fault}:NOT_AUDIENCE_READY`);
+      if (observation.privatePixelCount > 0) failureReasons.push(`${fault}:PRIVATE_PIXEL`);
       faults.push({ fault, injectionKind, injectionMechanism, recoveryMs });
     };
 
@@ -602,6 +610,8 @@ async function rehearse(
       observedMode,
       rehearsal,
       audienceReadyMs,
+      outcome: failureReasons.length === 0 ? "SUCCESS" : "FAILURE",
+      failureReasons,
       faults,
       privatePixelCount,
       requestedTransition,
@@ -678,6 +688,8 @@ export async function runWindowsTopologyE2E(): Promise<WindowsTopologyEvidence> 
             rehearsal: result.rehearsal,
             requestedTransition: result.requestedTransition,
             observedTransition: result.observedTransition,
+            outcome: result.outcome,
+            failureReasons: result.failureReasons,
             privateContentVerdict: result.artifact.privateContentVerdict,
             privatePixelVerdict: result.artifact.privatePixelVerdict,
             jsonPath: result.artifact.jsonPath,
@@ -691,11 +703,16 @@ export async function runWindowsTopologyE2E(): Promise<WindowsTopologyEvidence> 
       )}\n`,
       "utf8",
     );
+    const unrecoverableFailureCount = rehearsals.filter(
+      (result) => result.outcome === "FAILURE",
+    ).length;
+    const audienceReadySuccessRate =
+      rehearsals.filter((result) => result.outcome === "SUCCESS").length / rehearsals.length;
     return {
       rehearsals,
-      unrecoverableFailureCount: 0,
+      unrecoverableFailureCount,
       privatePixelCount,
-      audienceReadySuccessRate: rehearsals.length / 9,
+      audienceReadySuccessRate,
       audienceReadyMedianMs: percentile(setupSamples, 0.5),
       audienceReadyP90Ms: percentile(setupSamples, 0.9),
       maxRecoveryMs: Math.max(...recoverySamples),

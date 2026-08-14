@@ -5,6 +5,8 @@ interface TopologyVerifierEvidence {
     string,
     {
       readonly rehearsals: number;
+      readonly successfulRehearsals: number;
+      readonly failedRehearsals: number;
       readonly faultRecoveries: number;
       readonly realFaults: number;
       readonly simulatedFaults: number;
@@ -61,6 +63,8 @@ describe("WP4 Windows topology real-browser E2E", () => {
       const modeEvidence = result.modes[mode];
       if (modeEvidence === undefined) throw new Error(`missing ${mode} evidence`);
       expect(modeEvidence.rehearsals).toBe(3);
+      expect(modeEvidence.successfulRehearsals).toBe(3);
+      expect(modeEvidence.failedRehearsals).toBe(0);
       expect(modeEvidence.faultRecoveries).toBe(21);
       expect(modeEvidence.realFaults).toBe(12);
       expect(modeEvidence.simulatedFaults).toBe(9);
