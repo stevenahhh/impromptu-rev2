@@ -8,6 +8,7 @@ import {
   SystemDeadlineScheduler,
 } from "./deadline.ts";
 import { ModelRouterError, normalizedModelError } from "./errors.ts";
+import type { AdapterIsolate } from "./isolation.ts";
 import {
   type BudgetReservation,
   budgetReconciliationSchema,
@@ -71,6 +72,7 @@ export interface ServerModelRouterOptions {
   readonly policyVersionAuthority: PolicyVersionAuthority;
   readonly quotaPolicy: TenantQuotaPolicy;
   readonly budget: TenantBudget;
+  readonly adapterIsolate?: AdapterIsolate;
   readonly clock?: Clock;
   readonly scheduler?: DeadlineScheduler;
   readonly secretStore?: SecretStore;
@@ -87,6 +89,7 @@ export class ServerModelRouter {
   readonly #policyVersionAuthority: PolicyVersionAuthority;
   readonly #quotaPolicy: TenantQuotaPolicy;
   readonly #budget: TenantBudget;
+  readonly #adapterIsolate: AdapterIsolate | undefined;
   readonly #clock: Clock;
   readonly #scheduler: DeadlineScheduler;
   readonly #secretStore: SecretStore | undefined;
@@ -98,6 +101,7 @@ export class ServerModelRouter {
     this.#policyVersionAuthority = options.policyVersionAuthority;
     this.#quotaPolicy = options.quotaPolicy;
     this.#budget = options.budget;
+    this.#adapterIsolate = options.adapterIsolate;
     this.#clock = options.clock ?? Date.now;
     this.#scheduler = options.scheduler ?? new SystemDeadlineScheduler(this.#clock);
     this.#secretStore = options.secretStore;
@@ -236,9 +240,24 @@ export class ServerModelRouter {
         },
       );
       scope.throwIfCancelled();
-      const rawOutput = await scope.race(() =>
-        adapter.invoke(request.input, invocation(context, scope.signal, lease?.transport)),
-      );
+      const adapterContext = invocation(context, scope.signal, lease?.transport);
+      let rawOutput: unknown;
+      if (adapter.kind === "deterministic-test") {
+        rawOutput = await scope.race(() => adapter.invoke(request.input, adapterContext));
+      } else {
+        if (this.#adapterIsolate === undefined) {
+          throw new ModelRouterError(
+            "provider_error",
+            "No production adapter isolate is configured",
+            false,
+          );
+        }
+        rawOutput = await this.#adapterIsolate.invoke(
+          adapter.module,
+          request.input,
+          adapterContext,
+        );
+      }
       scope.throwIfCancelled();
       let output: unknown;
       try {
@@ -405,10 +424,21 @@ export class ServerModelRouter {
         },
       );
       scope.throwIfCancelled();
-      const stream = adapter.transcribe(
-        validatedChunks(chunks, adapter.chunkSchema, scope.signal),
-        invocation(context, scope.signal, lease?.transport),
-      );
+      const validatedInput = validatedChunks(chunks, adapter.chunkSchema, scope.signal);
+      const adapterContext = invocation(context, scope.signal, lease?.transport);
+      let stream: AsyncIterable<SttStreamEvent>;
+      if (adapter.kind === "deterministic-test") {
+        stream = adapter.transcribe(validatedInput, adapterContext);
+      } else {
+        if (this.#adapterIsolate === undefined) {
+          throw new ModelRouterError(
+            "provider_error",
+            "No production adapter isolate is configured",
+            false,
+          );
+        }
+        stream = this.#adapterIsolate.streamStt(adapter.module, validatedInput, adapterContext);
+      }
       iterator = stream[Symbol.asyncIterator]();
       const activeIterator = iterator;
       let finalTranscript: SttTranscript | undefined;

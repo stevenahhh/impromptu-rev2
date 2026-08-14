@@ -477,8 +477,8 @@ describe("policy-mediated provider transport", () => {
     );
   });
 
-  test("revokes retained transport capabilities after success and cancellation", async () => {
-    for (const terminal of ["success", "cancel"] as const) {
+  test("revokes retained transport capabilities after success, cancellation, and deadline", async () => {
+    for (const terminal of ["success", "cancel", "deadline"] as const) {
       const time = new ManualTime();
       const cancellation = new AbortController();
       const gates = new RecordingPolicyGates();
@@ -492,7 +492,7 @@ describe("policy-mediated provider transport", () => {
         securedAdapter(async (_input, invocation) => {
           retained = invocation.transport;
           invocationStarted?.();
-          if (terminal === "cancel") {
+          if (terminal !== "success") {
             return await new Promise<{ answer: string }>(() => undefined);
           }
           return { answer: "done" };
@@ -508,10 +508,11 @@ describe("policy-mediated provider transport", () => {
 
       const pending = router.invoke(
         { capability: "llm", input: { prompt: terminal } },
-        trustedContext(2_000, cancellation.signal),
+        trustedContext(terminal === "deadline" ? 1_250 : 2_000, cancellation.signal),
       );
       await started;
       if (terminal === "cancel") cancellation.abort();
+      if (terminal === "deadline") time.advanceTo(1_250);
       await pending;
 
       let rejected: unknown;
