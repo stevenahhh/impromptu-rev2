@@ -12,6 +12,8 @@ export interface DisplayJoinView extends DisplayIdentity {
 export interface StageCardView {
   readonly projectionId: string;
   readonly status: "PUBLISHED";
+  readonly mode: "CURATED" | "LIVE";
+  readonly leaseExpiresAtMs: number | null;
   readonly claim: string;
   readonly supportSummary: string;
   readonly sourceLabel: string;
@@ -36,6 +38,15 @@ export interface StageCardTombstone {
 export type StageCardEvent = StageCardView | StageCardTombstone;
 
 export interface StageSnapshotView {
+  readonly role: "PUBLIC_STAGE";
+  readonly stateHash: string;
+  readonly presentationSessionId: string;
+  readonly presentationSessionEpoch: string;
+  readonly displayBindingEpoch: string;
+  readonly deckVersion: string;
+  readonly manifestHash: string;
+  readonly publicPlaybackRevision: string;
+  readonly blackout: boolean;
   readonly occurrence: { readonly publicSlideKey: string; readonly occurrenceSeq: number };
   readonly publicSlideKeys?: readonly string[];
   readonly cards: readonly StageCardView[];
@@ -44,13 +55,24 @@ export interface StageSnapshotView {
   readonly tombstoneRetentionMs: number;
 }
 
+export interface StageAppliedReceiptView {
+  readonly status: "STAGE_APPLIED";
+  readonly commandId: string;
+  readonly presentationSessionEpoch: string;
+  readonly displayBindingEpoch: string;
+  readonly publicPlaybackRevision: string;
+  readonly appliedAtMs: number;
+}
+
 export interface StageSubscription {
   close(): void;
+  recordApplied?(event: StagePlaybackEvent): void;
 }
 
 export interface StageEventObserver {
   onPlayback(event: StagePlaybackEvent): void;
   onCard(event: StageCardEvent): void;
+  onReceipt?(receipt: StageAppliedReceiptView): void;
   onClose(reason: string): void;
   onOpen?(): void;
 }
@@ -67,11 +89,20 @@ interface BrowserEventSource {
 
 export type EventSourceFactory = (url: string) => BrowserEventSource;
 
+interface BrowserWebSocket extends EventTarget {
+  readonly readyState: number;
+  send(data: string): void;
+  close(): void;
+}
+
+export type WebSocketFactory = (url: string) => BrowserWebSocket;
+
 export interface StageSessionClient {
   createJoin(identity: DisplayIdentity, deckVersion: string): Promise<DisplayJoinView>;
   claim(join: DisplayJoinView): Promise<void>;
-  snapshot(): Promise<StageSnapshotView>;
+  snapshot(pins?: StageSnapshotView): Promise<StageSnapshotView>;
   subscribe(observer: StageEventObserver, timeoutMs?: number): Promise<StageSubscription>;
+  subscribeRealtime?(observer: StageEventObserver, timeoutMs?: number): Promise<StageSubscription>;
   recordApplied(event: StagePlaybackEvent): Promise<unknown>;
 }
 
@@ -113,11 +144,22 @@ function displayJoin(value: unknown): DisplayJoinView | null {
 function snapshot(value: unknown): StageSnapshotView | null {
   const candidate = record(value);
   const occurrence = record(candidate?.occurrence);
+  const deck = record(candidate?.deck);
   if (
     candidate === null ||
     occurrence === null ||
     typeof occurrence.publicSlideKey !== "string" ||
     typeof occurrence.occurrenceSeq !== "number" ||
+    candidate.role !== "PUBLIC_STAGE" ||
+    typeof candidate.stateHash !== "string" ||
+    typeof candidate.presentationSessionId !== "string" ||
+    typeof candidate.presentationSessionEpoch !== "string" ||
+    typeof candidate.displayBindingEpoch !== "string" ||
+    typeof candidate.publicPlaybackRevision !== "string" ||
+    typeof candidate.blackout !== "boolean" ||
+    deck === null ||
+    typeof deck.deckVersion !== "string" ||
+    typeof deck.manifestHash !== "string" ||
     !Array.isArray(candidate.cards) ||
     typeof candidate.publicCardRevision !== "string" ||
     typeof candidate.tombstoneWatermark !== "string" ||
@@ -147,9 +189,19 @@ function snapshot(value: unknown): StageSnapshotView | null {
     ) {
       return null;
     }
+    const mode = card.mode === "LIVE" ? "LIVE" : "CURATED";
+    const leaseExpiresAtMs =
+      typeof card.leaseExpiresAtMs === "number"
+        ? card.leaseExpiresAtMs
+        : typeof card.expiresAtMs === "number" && mode === "LIVE"
+          ? card.expiresAtMs
+          : null;
+    if (mode === "LIVE" && leaseExpiresAtMs === null) return null;
     cards.push({
       projectionId: card.projectionId,
       status: card.status,
+      mode,
+      leaseExpiresAtMs,
       claim: card.claim,
       supportSummary: card.supportSummary,
       sourceLabel: card.sourceLabel,
@@ -157,6 +209,15 @@ function snapshot(value: unknown): StageSnapshotView | null {
     });
   }
   return {
+    role: "PUBLIC_STAGE",
+    stateHash: candidate.stateHash,
+    presentationSessionId: candidate.presentationSessionId,
+    presentationSessionEpoch: candidate.presentationSessionEpoch,
+    displayBindingEpoch: candidate.displayBindingEpoch,
+    deckVersion: deck.deckVersion,
+    manifestHash: deck.manifestHash,
+    publicPlaybackRevision: candidate.publicPlaybackRevision,
+    blackout: candidate.blackout,
     occurrence: {
       publicSlideKey: occurrence.publicSlideKey,
       occurrenceSeq: occurrence.occurrenceSeq,
@@ -218,9 +279,19 @@ function cardEvent(value: unknown): StageCardEvent | null {
     typeof candidate.sourceLabel === "string" &&
     typeof candidate.publicCardRevision === "string"
   ) {
+    const mode = candidate.mode === "LIVE" ? "LIVE" : "CURATED";
+    const leaseExpiresAtMs =
+      typeof candidate.leaseExpiresAtMs === "number"
+        ? candidate.leaseExpiresAtMs
+        : typeof candidate.expiresAtMs === "number" && mode === "LIVE"
+          ? candidate.expiresAtMs
+          : null;
+    if (mode === "LIVE" && leaseExpiresAtMs === null) return null;
     return {
       projectionId: candidate.projectionId,
       status: candidate.status,
+      mode,
+      leaseExpiresAtMs,
       claim: candidate.claim,
       supportSummary: candidate.supportSummary,
       sourceLabel: candidate.sourceLabel,
@@ -230,11 +301,32 @@ function cardEvent(value: unknown): StageCardEvent | null {
   return null;
 }
 
+function appliedReceipt(value: unknown): StageAppliedReceiptView | null {
+  const candidate = record(value);
+  return candidate !== null &&
+    candidate.status === "STAGE_APPLIED" &&
+    typeof candidate.commandId === "string" &&
+    typeof candidate.presentationSessionEpoch === "string" &&
+    typeof candidate.displayBindingEpoch === "string" &&
+    typeof candidate.publicPlaybackRevision === "string" &&
+    typeof candidate.appliedAtMs === "number"
+    ? {
+        status: "STAGE_APPLIED",
+        commandId: candidate.commandId,
+        presentationSessionEpoch: candidate.presentationSessionEpoch,
+        displayBindingEpoch: candidate.displayBindingEpoch,
+        publicPlaybackRevision: candidate.publicPlaybackRevision,
+        appliedAtMs: candidate.appliedAtMs,
+      }
+    : null;
+}
+
 function parseStreamMessage(
   event: Event,
 ):
   | Readonly<{ kind: "PLAYBACK"; payload: StagePlaybackEvent }>
   | Readonly<{ kind: "CARD"; payload: StageCardEvent }>
+  | Readonly<{ kind: "RECEIPT"; payload: StageAppliedReceiptView }>
   | Readonly<{ kind: "CLOSE"; reason: string }>
   | null {
   if (!(event instanceof MessageEvent) || typeof event.data !== "string") return null;
@@ -245,9 +337,13 @@ function parseStreamMessage(
     return null;
   }
   const envelope = record(decoded);
-  if (envelope?.kind === "PLAYBACK") {
+  if (envelope?.kind === "PLAYBACK" || envelope?.kind === "COMMAND") {
     const payload = playback(envelope.payload);
     return payload === null ? null : { kind: "PLAYBACK", payload };
+  }
+  if (envelope?.kind === "RECEIPT") {
+    const payload = appliedReceipt(envelope.payload);
+    return payload === null ? null : { kind: "RECEIPT", payload };
   }
   if (envelope?.kind === "CARD") {
     const payload = cardEvent(envelope.payload);
@@ -262,9 +358,26 @@ function parseStreamMessage(
   return null;
 }
 
+async function validSnapshotHash(value: unknown): Promise<boolean> {
+  const candidate = record(value);
+  if (candidate === null || typeof candidate.stateHash !== "string") return false;
+  const expected = candidate.stateHash;
+  const absoluteState = { ...candidate };
+  delete absoluteState.stateHash;
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(JSON.stringify(absoluteState)),
+  );
+  const actual = Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+  return actual === expected;
+}
+
 export function createStageSessionClient(
   baseUrl = "",
   eventSourceFactory: EventSourceFactory = (url) => new EventSource(url),
+  webSocketFactory: WebSocketFactory = (url) => new WebSocket(url),
 ): StageSessionClient {
   const headers = { "content-type": "application/json" };
   return {
@@ -288,10 +401,25 @@ export function createStageSessionClient(
       });
       if (!response.ok) throw new Error("The controller has not approved this display yet.");
     },
-    async snapshot() {
-      const response = await fetch(`${baseUrl}/v1/snapshot`, { credentials: "include" });
-      const body = snapshot(await json(response));
-      if (!response.ok || body === null) throw new Error("Public snapshot is unavailable.");
+    async snapshot(pins) {
+      const query = new URLSearchParams();
+      if (pins !== undefined) {
+        query.set("role", "PUBLIC_STAGE");
+        query.set("presentationSessionEpoch", pins.presentationSessionEpoch);
+        query.set("displayBindingEpoch", pins.displayBindingEpoch);
+        query.set("deckVersion", pins.deckVersion);
+        query.set("manifestHash", pins.manifestHash);
+      }
+      const suffix = query.size === 0 ? "" : `?${query.toString()}`;
+      const response = await fetch(`${baseUrl}/v1/snapshot${suffix}`, {
+        credentials: "include",
+      });
+      const raw = await json(response);
+      const body = snapshot(raw);
+      if (!response.ok || body === null || !(await validSnapshotHash(raw))) {
+        if (response.status === 409) throw new Error("RECONCILE_REQUIRED");
+        throw new Error("Public snapshot is unavailable.");
+      }
       return body;
     },
     async subscribe(observer, timeoutMs = 5_000) {
@@ -322,6 +450,7 @@ export function createStageSessionClient(
         const message = parseStreamMessage(event);
         if (message?.kind === "PLAYBACK") observer.onPlayback(message.payload);
         if (message?.kind === "CARD") observer.onCard(message.payload);
+        if (message?.kind === "RECEIPT") observer.onReceipt?.(message.payload);
         if (message?.kind === "CLOSE") {
           observer.onClose(message.reason);
           close();
@@ -359,6 +488,78 @@ export function createStageSessionClient(
         );
       });
       return { close };
+    },
+    async subscribeRealtime(observer, timeoutMs = 5_000) {
+      const realtimeUrl = new URL(
+        `${baseUrl}/v1/realtime`,
+        globalThis.location?.href ?? "http://localhost/",
+      );
+      realtimeUrl.protocol = realtimeUrl.protocol === "https:" ? "wss:" : "ws:";
+      const source = webSocketFactory(realtimeUrl.href);
+      const timeout = AbortSignal.timeout(timeoutMs);
+      let opened = false;
+      let closed = false;
+      const close = () => {
+        if (closed) return;
+        closed = true;
+        source.close();
+        source.removeEventListener("message", onMessage);
+        source.removeEventListener("error", onError);
+        source.removeEventListener("close", onClose);
+      };
+      const onMessage = (event: Event) => {
+        const message = parseStreamMessage(event);
+        if (message?.kind === "PLAYBACK") observer.onPlayback(message.payload);
+        if (message?.kind === "CARD") observer.onCard(message.payload);
+        if (message?.kind === "RECEIPT") observer.onReceipt?.(message.payload);
+        if (message?.kind === "CLOSE") {
+          observer.onClose(message.reason);
+          close();
+        }
+      };
+      const onError = () => {
+        observer.onClose("NETWORK_ERROR");
+        close();
+      };
+      const onClose = () => {
+        if (!closed) observer.onClose("NETWORK_ERROR");
+        close();
+      };
+      source.addEventListener("message", onMessage);
+      source.addEventListener("error", onError);
+      source.addEventListener("close", onClose);
+      await new Promise<void>((resolve, reject) => {
+        const onOpen = () => {
+          opened = true;
+          resolve();
+        };
+        source.addEventListener("open", onOpen, { once: true });
+        timeout.addEventListener(
+          "abort",
+          () => {
+            if (!opened) {
+              close();
+              reject(new Error(`Stage realtime channel did not open within ${timeoutMs}ms`));
+            }
+          },
+          { once: true },
+        );
+      });
+      return {
+        close,
+        recordApplied(event) {
+          if (source.readyState !== 1) throw new Error("Stage realtime channel is not open.");
+          source.send(
+            JSON.stringify({
+              kind: "STAGE_APPLIED",
+              payload: {
+                commandId: event.commandId,
+                displayBindingEpoch: event.displayBindingEpoch,
+              },
+            }),
+          );
+        },
+      };
     },
     async recordApplied(event) {
       const response = await fetch(`${baseUrl}/v1/stage-applied`, {

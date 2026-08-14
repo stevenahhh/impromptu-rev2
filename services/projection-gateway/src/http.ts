@@ -144,6 +144,22 @@ function cardEvent(value: unknown): PublicCardEvent | null {
     ? {
         projectionId: value.projectionId,
         status: value.status,
+        ...(value.mode === "CURATED" || value.mode === "LIVE" ? { mode: value.mode } : {}),
+        ...(typeof value.leaseExpiresAtMs === "number" || value.leaseExpiresAtMs === null
+          ? { leaseExpiresAtMs: value.leaseExpiresAtMs }
+          : {}),
+        ...(isRecord(value.offlinePackage) &&
+        typeof value.offlinePackage.offlineDisplayAllowed === "boolean" &&
+        typeof value.offlinePackage.localExpiresAtMs === "number" &&
+        typeof value.offlinePackage.signature === "string"
+          ? {
+              offlinePackage: {
+                offlineDisplayAllowed: value.offlinePackage.offlineDisplayAllowed,
+                localExpiresAtMs: value.offlinePackage.localExpiresAtMs,
+                signature: value.offlinePackage.signature,
+              },
+            }
+          : {}),
         claim: value.claim,
         supportSummary: value.supportSummary,
         sourceLabel: value.sourceLabel,

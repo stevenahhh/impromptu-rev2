@@ -1,11 +1,30 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { createStageSessionClient, type EventSourceFactory } from "./stage-client";
+import {
+  createStageSessionClient,
+  type EventSourceFactory,
+  type WebSocketFactory,
+} from "./stage-client";
 
 class FakeEventSource extends EventTarget {
   closed = false;
 
   close() {
     this.closed = true;
+  }
+}
+
+class FakeWebSocket extends EventTarget {
+  closed = false;
+  readyState = 1;
+  readonly sent: string[] = [];
+
+  send(data: string) {
+    this.sent.push(data);
+  }
+
+  close() {
+    this.closed = true;
+    this.readyState = 3;
   }
 }
 
@@ -96,5 +115,76 @@ describe("Stage network client", () => {
     expect(channelEvents).toEqual(["close:NETWORK_ERROR", "open"]);
     subscription.close();
     expect(recoveredSource.closed).toBe(true);
+  });
+
+  test("receives commands and returns typed receipts over the realtime extension", async () => {
+    const source = new FakeWebSocket();
+    const webSocketFactory: WebSocketFactory = () => source;
+    const client = createStageSessionClient(
+      "https://projection.example.test",
+      () => new FakeEventSource(),
+      webSocketFactory,
+    );
+    const commands: string[] = [];
+    const receipts: string[] = [];
+    const subscriptionPromise = client.subscribeRealtime?.({
+      onPlayback(event) {
+        commands.push(event.commandId);
+      },
+      onCard() {},
+      onReceipt(receipt) {
+        receipts.push(receipt.commandId);
+      },
+      onClose() {},
+    });
+    if (subscriptionPromise === undefined) throw new Error("realtime extension missing");
+    source.dispatchEvent(new Event("open"));
+    const subscription = await subscriptionPromise;
+    source.dispatchEvent(
+      new MessageEvent("message", {
+        data: JSON.stringify({
+          kind: "COMMAND",
+          payload: {
+            commandId: "cmd_realtime",
+            presentationSessionEpoch: "pse_1",
+            displayBindingEpoch: "dbe_1",
+            acceptedControlRevision: "cr_1",
+            occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 2 },
+            blackout: false,
+          },
+        }),
+      }),
+    );
+    expect(commands).toEqual(["cmd_realtime"]);
+    subscription.recordApplied?.({
+      commandId: "cmd_realtime",
+      displayBindingEpoch: "dbe_1",
+      acceptedControlRevision: "cr_1",
+      occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 2 },
+      blackout: false,
+    });
+    expect(source.sent).toEqual([
+      JSON.stringify({
+        kind: "STAGE_APPLIED",
+        payload: { commandId: "cmd_realtime", displayBindingEpoch: "dbe_1" },
+      }),
+    ]);
+    source.dispatchEvent(
+      new MessageEvent("message", {
+        data: JSON.stringify({
+          kind: "RECEIPT",
+          payload: {
+            status: "STAGE_APPLIED",
+            commandId: "cmd_realtime",
+            presentationSessionEpoch: "pse_1",
+            displayBindingEpoch: "dbe_1",
+            publicPlaybackRevision: "pbr_1",
+            appliedAtMs: 1_003,
+          },
+        }),
+      }),
+    );
+    expect(receipts).toEqual(["cmd_realtime"]);
+    subscription.close();
   });
 });

@@ -120,6 +120,15 @@ describe("public Stage boundary", () => {
     });
     await act(async () => {
       snapshotSignal.resolve({
+        role: "PUBLIC_STAGE",
+        stateHash: "a".repeat(64),
+        presentationSessionId: "ps_alpha",
+        presentationSessionEpoch: "pse_1",
+        displayBindingEpoch: "dbe_1",
+        deckVersion: "deck_alpha",
+        manifestHash: "b".repeat(64),
+        publicPlaybackRevision: "pbr_0",
+        blackout: false,
         occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
         cards: [],
         publicCardRevision: "pcr_0",

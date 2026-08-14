@@ -18,6 +18,13 @@ export interface PublicDeckArtifact {
 export interface PublicCardUpsert {
   readonly projectionId: string;
   readonly status: "PUBLISHED";
+  readonly mode?: "CURATED" | "LIVE";
+  readonly leaseExpiresAtMs?: number | null;
+  readonly offlinePackage?: Readonly<{
+    readonly offlineDisplayAllowed: boolean;
+    readonly localExpiresAtMs: number;
+    readonly signature: string;
+  }>;
   readonly claim: string;
   readonly supportSummary: string;
   readonly sourceLabel: string;
@@ -282,7 +289,25 @@ function parseDisplaySession(value: unknown): AudienceDisplaySessionRecord | nul
 function parseStoredCard(value: unknown): PublicCardUpsert | null {
   if (
     !snapshotRecord(value) ||
-    !exactKeys(value, [
+    !Object.keys(value).every((key) =>
+      [
+        "projectionId",
+        "status",
+        "mode",
+        "leaseExpiresAtMs",
+        "offlinePackage",
+        "claim",
+        "supportSummary",
+        "sourceLabel",
+        "publishedAtMs",
+        "expiresAtMs",
+        "publicCardRevision",
+        "deckVersion",
+        "manifestHash",
+        "occurrence",
+      ].includes(key),
+    ) ||
+    ![
       "projectionId",
       "status",
       "claim",
@@ -294,9 +319,23 @@ function parseStoredCard(value: unknown): PublicCardUpsert | null {
       "deckVersion",
       "manifestHash",
       "occurrence",
-    ]) ||
+    ].every((key) => key in value) ||
     !validId(value.projectionId, "projection_") ||
     value.status !== "PUBLISHED" ||
+    (value.mode !== undefined && value.mode !== "CURATED" && value.mode !== "LIVE") ||
+    (value.leaseExpiresAtMs !== undefined &&
+      value.leaseExpiresAtMs !== null &&
+      !validTimestamp(value.leaseExpiresAtMs)) ||
+    (value.offlinePackage !== undefined &&
+      (!snapshotRecord(value.offlinePackage) ||
+        !exactKeys(value.offlinePackage, [
+          "offlineDisplayAllowed",
+          "localExpiresAtMs",
+          "signature",
+        ]) ||
+        typeof value.offlinePackage.offlineDisplayAllowed !== "boolean" ||
+        !validTimestamp(value.offlinePackage.localExpiresAtMs) ||
+        typeof value.offlinePackage.signature !== "string")) ||
     typeof value.claim !== "string" ||
     value.claim.length < 1 ||
     value.claim.length > 2_000 ||
@@ -772,6 +811,16 @@ export class PreparedEvidenceProjectionGateway {
   projectCard(presentationSessionId: string, event: PublicCardEvent): boolean {
     const projection = this.#store.projections.get(presentationSessionId);
     if (projection === undefined) return false;
+    if (
+      event.status === "PUBLISHED" &&
+      event.mode === "LIVE" &&
+      (event.leaseExpiresAtMs === undefined ||
+        event.leaseExpiresAtMs === null ||
+        event.leaseExpiresAtMs <= event.publishedAtMs ||
+        event.leaseExpiresAtMs - event.publishedAtMs > 3_000)
+    ) {
+      return false;
+    }
     const current = revisionValue(projection.publicCardRevision, "pcr_");
     const next = revisionValue(event.publicCardRevision, "pcr_");
     if (current === null || next !== current + 1) return false;
@@ -811,7 +860,13 @@ export class PreparedEvidenceProjectionGateway {
       deck: projection.deck,
       occurrence: projection.occurrence,
       blackout: projection.blackout,
-      cards: Array.from(projection.cards.values()),
+      cards: Array.from(projection.cards.values()).filter(
+        (card) =>
+          card.mode !== "LIVE" ||
+          (card.leaseExpiresAtMs !== undefined &&
+            card.leaseExpiresAtMs !== null &&
+            nowMs < card.leaseExpiresAtMs),
+      ),
       tombstones: retainedTombstones,
       tombstoneWatermark: `pcr_${watermark}`,
       tombstoneRetentionMs: this.#tombstoneRetentionMs,

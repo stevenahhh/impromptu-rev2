@@ -1,0 +1,12 @@
+{
+  "profile": "venue-like-exact-event",
+  "commandCount": 500,
+  "reconnectCount": 50,
+  "commandToStageAppliedP95Ms": 0.037,
+  "reconnectToSnapshotP95Ms": 0.052,
+  "duplicateVisibleEffects": 0,
+  "staleEpochAcceptances": 0,
+  "staleCardResurrections": 0,
+  "liveLeaseMs": 3000,
+  "silentPartitionExposureMs": 3000
+}
