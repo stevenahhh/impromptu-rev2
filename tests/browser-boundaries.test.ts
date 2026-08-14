@@ -78,18 +78,12 @@ describe("browser build boundaries", () => {
     expect(consoleManifest.start_url).toBe("/");
     expect(stageManifest.start_url).toBe("/");
 
-    const consoleWorker = readFileSync("apps/console/public/sw.js", "utf8");
-    const stageWorker = readFileSync("apps/stage/public/sw.js", "utf8");
-    const consoleCache = consoleWorker.match(/CACHE_NAME = "([^"]+)"/)?.[1];
-    const stageCache = stageWorker.match(/CACHE_NAME = "([^"]+)"/)?.[1];
-
-    expect(consoleCache).toBeTruthy();
-    expect(stageCache).toBeTruthy();
-    expect(consoleCache).not.toBe(stageCache);
-    expect(consoleWorker).not.toMatch(/https?:\/\//);
-    expect(stageWorker).not.toMatch(/https?:\/\//);
-    expect(consoleWorker).toContain('request.mode === "navigate"');
-    expect(stageWorker).toContain('request.mode === "navigate"');
+    const consoleConfig = readFileSync("apps/console/vite.config.ts", "utf8");
+    const stageConfig = readFileSync("apps/stage/vite.config.ts", "utf8");
+    expect(consoleConfig).toContain('versionedOfflineShell({ appId: "console" })');
+    expect(stageConfig).toContain('versionedOfflineShell({ appId: "stage" })');
+    expect(existsSync("apps/console/public/sw.js")).toBe(false);
+    expect(existsSync("apps/stage/public/sw.js")).toBe(false);
   });
 
   test("keeps application styles on shared design tokens", () => {

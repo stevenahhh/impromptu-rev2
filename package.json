@@ -2,6 +2,7 @@
   "name": "impromptu-r2",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
   "packageManager": "bun@1.3.14",
   "workspaces": [
     "apps/*",
@@ -14,11 +15,12 @@
     "build": "bun run --cwd packages/ui build && bun run --cwd apps/console build && bun run --cwd apps/stage build",
     "check:repo": "bun run scripts/verify-repo.ts",
     "check:browser": "bun run scripts/verify-browser-boundaries.ts",
+    "check:browser-runtime": "node --experimental-strip-types scripts/verify-browser-runtime.ts",
     "lint": "biome check .",
     "typecheck": "tsc --noEmit && bun run --cwd packages/ui typecheck && bun run --cwd apps/console typecheck && bun run --cwd apps/stage typecheck",
     "test": "bun test",
     "test:browser": "bun test tests/browser-boundaries.test.ts apps/console/src/App.test.tsx apps/stage/src/App.test.tsx",
-    "check": "bun run check:repo && bun run lint && bun run typecheck && bun run test && bun run build && bun run check:browser"
+    "check": "bun run check:repo && bun run lint && bun run typecheck && bun run test && bun run build && bun run check:browser && bun run check:browser-runtime"
   },
   "devDependencies": {
     "@biomejs/biome": "2.2.0",
@@ -27,6 +29,8 @@
     "@testing-library/react": "16.3.0",
     "@types/bun": "1.2.20",
     "happy-dom": "18.0.1",
-    "typescript": "5.9.2"
+    "playwright-core": "1.62.1",
+    "typescript": "5.9.2",
+    "vite": "7.1.3"
   }
 }
