@@ -168,101 +168,186 @@ describe("generated CAS and illegal-transition matrices", () => {
     );
   });
 
-  test("covers every publication CAS and terminal stream transition", () => {
+  test("covers concurrent publication, expiry, retry, and terminal linearizations", () => {
     fc.assert(
-      fc.property(fc.integer({ min: 1, max: 10_000 }), (suffix) => {
-        const presentationSessionId = PresentationSessionIdSchema.parse(`ps_publication-${suffix}`);
-        const sessionEpoch = presentationSessionEpoch(suffix);
-        const candidateInitial = createCandidateLifecycle({
-          presentationSessionId,
-          presentationSessionEpoch: sessionEpoch,
-          candidateId: CandidateIdSchema.parse(`candidate_publication-${suffix}`),
-          candidateVersion: `candidate-v${suffix}`,
-          contentHash: hash("d"),
-        });
-        const qualified = reduceCandidateLifecycle(candidateInitial, {
-          type: "QUALIFY",
-          presentationSessionId,
-          presentationSessionEpoch: sessionEpoch,
-          candidateId: candidateInitial.candidateId,
-          candidateVersion: candidateInitial.candidateVersion,
-          expectedRevision: candidateRevision(0),
-        });
-        if (qualified.outcome !== "APPLIED") throw new Error("candidate qualification failed");
-        const authority = PublicationAuthoritySchema.parse({
-          authorityId: `pubauth_matrix-${suffix}`,
-          presentationSessionId,
-          presentationSessionEpoch: sessionEpoch,
-          actorId: `actor_matrix-${suffix}`,
-          policyVersion: "policy-v1",
-          expiresAtMs: 1_800_000_000_000,
-        });
-        const initial = createPublicCardStream({
-          presentationSessionId,
-          presentationSessionEpoch: sessionEpoch,
-          authority,
-        });
-        const card = (revision: number) =>
-          PublishedAudienceCardSchema.parse({
-            projectionId: `projection_matrix-${suffix}`,
-            status: "PUBLISHED",
-            claim: "claim",
-            supportSummary: "support",
-            sourceLabel: "source",
-            publishedAtMs: nowMs,
-            expiresAtMs: null,
-            publicCardRevision: `pcr_${revision}`,
-            deckVersion: "deck_v1",
-            manifestHash: hash("a"),
-            occurrence: { publicSlideKey: "slide_1", occurrenceSeq: 1 },
+      fc.property(
+        fc.integer({ min: 1, max: 10_000 }),
+        fc.constantFrom("RETRACTED" as const, "EXPIRED" as const),
+        fc.integer({ min: 1, max: 12 }),
+        (suffix, tombstoneStatus, retryCount) => {
+          const presentationSessionId = PresentationSessionIdSchema.parse(
+            `ps_publication-${suffix}`,
+          );
+          const sessionEpoch = presentationSessionEpoch(suffix);
+          const candidateInitial = createCandidateLifecycle({
+            presentationSessionId,
+            presentationSessionEpoch: sessionEpoch,
+            candidateId: CandidateIdSchema.parse(`candidate_publication-${suffix}`),
+            candidateVersion: `candidate-v${suffix}`,
+            contentHash: hash("d"),
           });
-        const authorized = (expectedRevision: string, payload: ReturnType<typeof card>) => ({
-          presentationSessionId,
-          presentationSessionEpoch: sessionEpoch,
-          authorityId: authority.authorityId,
-          expectedRevision,
-          payload,
-        });
+          const qualified = reduceCandidateLifecycle(candidateInitial, {
+            type: "QUALIFY",
+            presentationSessionId,
+            presentationSessionEpoch: sessionEpoch,
+            candidateId: candidateInitial.candidateId,
+            candidateVersion: candidateInitial.candidateVersion,
+            expectedRevision: candidateRevision(0),
+          });
+          if (qualified.outcome !== "APPLIED") throw new Error("candidate qualification failed");
+          const authority = PublicationAuthoritySchema.parse({
+            authorityId: `pubauth_matrix-${suffix}`,
+            presentationSessionId,
+            presentationSessionEpoch: sessionEpoch,
+            actorId: `actor_matrix-${suffix}`,
+            policyVersion: "policy-v1",
+            expiresAtMs: 1_800_000_000_000,
+          });
+          const initial = createPublicCardStream({
+            presentationSessionId,
+            presentationSessionEpoch: sessionEpoch,
+            authority,
+          });
+          const card = (revision: number) =>
+            PublishedAudienceCardSchema.parse({
+              projectionId: `projection_matrix-${suffix}`,
+              status: "PUBLISHED",
+              claim: "claim",
+              supportSummary: "support",
+              sourceLabel: "source",
+              publishedAtMs: nowMs,
+              expiresAtMs: null,
+              publicCardRevision: `pcr_${revision}`,
+              deckVersion: "deck_v1",
+              manifestHash: hash("a"),
+              occurrence: { publicSlideKey: "slide_1", occurrenceSeq: 1 },
+            });
+          const terminalEvent = (revision: number, status = tombstoneStatus) =>
+            PublicationTombstoneSchema.parse({
+              projectionId: `projection_matrix-${suffix}`,
+              status,
+              publicCardRevision: `pcr_${revision}`,
+              occurredAtMs: nowMs + revision,
+            });
+          const authorized = (
+            expectedRevision: string,
+            payload: ReturnType<typeof card> | ReturnType<typeof terminalEvent>,
+          ) => ({
+            presentationSessionId,
+            presentationSessionEpoch: sessionEpoch,
+            authorityId: authority.authorityId,
+            expectedRevision,
+            payload,
+          });
 
-        expect(
-          applyAuthorizedPublicCardEvent(
+          expect(
+            applyAuthorizedPublicCardEvent(
+              initial,
+              qualified.state,
+              authorized("pcr_9", card(1)),
+              nowMs,
+            ),
+          ).toMatchObject({ outcome: "REJECTED", reason: "CAS_CONFLICT", state: initial });
+          expect(
+            applyAuthorizedPublicCardEvent(initial, null, authorized("pcr_0", card(1)), nowMs),
+          ).toMatchObject({
+            outcome: "REJECTED",
+            reason: "CANDIDATE_NOT_ELIGIBLE",
+            state: initial,
+          });
+          expect(
+            applyAuthorizedPublicCardEvent(
+              initial,
+              qualified.state,
+              authorized("pcr_0", card(2)),
+              nowMs,
+            ),
+          ).toMatchObject({ outcome: "REJECTED", reason: "GAP_REQUIRES_SNAPSHOT", state: initial });
+
+          expect(
+            applyAuthorizedPublicCardEvent(
+              initial,
+              qualified.state,
+              authorized("pcr_0", card(1)),
+              authority.expiresAtMs,
+            ),
+          ).toMatchObject({ outcome: "REJECTED", reason: "AUTHORITY_EXPIRED", state: initial });
+
+          const approve = authorized("pcr_0", card(1));
+          const retract = authorized("pcr_0", terminalEvent(1));
+          for (const [firstRequest, secondRequest, winningStatus] of [
+            [approve, retract, "PUBLISHED"],
+            [retract, approve, tombstoneStatus],
+          ] as const) {
+            const first = applyAuthorizedPublicCardEvent(
+              initial,
+              qualified.state,
+              firstRequest,
+              nowMs,
+            );
+            expect(first.outcome).toBe("APPLIED");
+            const second = applyAuthorizedPublicCardEvent(
+              first.state,
+              qualified.state,
+              secondRequest,
+              nowMs,
+            );
+            expect(second).toMatchObject({
+              outcome: "REJECTED",
+              reason: "CAS_CONFLICT",
+              state: first.state,
+            });
+            for (let retry = 0; retry < retryCount; retry += 1) {
+              expect(
+                applyAuthorizedPublicCardEvent(second.state, qualified.state, secondRequest, nowMs),
+              ).toMatchObject({
+                outcome: "REJECTED",
+                reason: "CAS_CONFLICT",
+                state: first.state,
+              });
+            }
+            const winner =
+              first.state.cards[`projection_matrix-${suffix}`] ??
+              first.state.tombstones[`projection_matrix-${suffix}`];
+            expect(winner?.status).toBe(winningStatus);
+          }
+
+          const approved = applyAuthorizedPublicCardEvent(
             initial,
             qualified.state,
-            authorized("pcr_9", card(1)),
+            authorized("pcr_0", card(1)),
             nowMs,
-          ),
-        ).toMatchObject({ outcome: "REJECTED", reason: "CAS_CONFLICT", state: initial });
-        expect(
-          applyAuthorizedPublicCardEvent(initial, null, authorized("pcr_0", card(1)), nowMs),
-        ).toMatchObject({ outcome: "REJECTED", reason: "CANDIDATE_NOT_ELIGIBLE", state: initial });
-        expect(
-          applyAuthorizedPublicCardEvent(
-            initial,
+          );
+          expect(approved.outcome).toBe("APPLIED");
+          const terminal = applyAuthorizedPublicCardEvent(
+            approved.state,
             qualified.state,
-            authorized("pcr_0", card(2)),
+            authorized("pcr_1", terminalEvent(2)),
             nowMs,
-          ),
-        ).toMatchObject({ outcome: "REJECTED", reason: "GAP_REQUIRES_SNAPSHOT", state: initial });
-
-        const upserted = applyPublicCardEvent(initial, card(1)).state;
-        const terminal = applyPublicCardEvent(
-          upserted,
-          PublicationTombstoneSchema.parse({
-            projectionId: `projection_matrix-${suffix}`,
-            status: "RETRACTED",
-            publicCardRevision: "pcr_2",
-            occurredAtMs: nowMs + 1,
-          }),
-        ).state;
-        expect(
-          applyAuthorizedPublicCardEvent(
-            terminal,
-            qualified.state,
-            authorized("pcr_2", card(3)),
-            nowMs,
-          ),
-        ).toMatchObject({ outcome: "REJECTED", reason: "TERMINAL_PROJECTION", state: terminal });
-      }),
+          );
+          expect(terminal.outcome).toBe("APPLIED");
+          for (const retryRequest of [
+            authorized("pcr_0", card(1)),
+            authorized("pcr_1", terminalEvent(2)),
+          ]) {
+            expect(
+              applyAuthorizedPublicCardEvent(terminal.state, qualified.state, retryRequest, nowMs),
+            ).toMatchObject({ outcome: "REJECTED", reason: "CAS_CONFLICT", state: terminal.state });
+          }
+          expect(
+            applyAuthorizedPublicCardEvent(
+              terminal.state,
+              qualified.state,
+              authorized("pcr_2", card(3)),
+              nowMs,
+            ),
+          ).toMatchObject({
+            outcome: "REJECTED",
+            reason: "TERMINAL_PROJECTION",
+            state: terminal.state,
+          });
+        },
+      ),
       propertyOptions,
     );
   });
