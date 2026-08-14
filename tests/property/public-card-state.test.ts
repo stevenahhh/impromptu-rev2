@@ -393,6 +393,12 @@ describe("compacted audience card persistence", () => {
     expect(
       restoreAudienceCardSnapshotState({
         ...restored.state,
+        publicCardRevision: "pcr_9007199254740991",
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+    expect(
+      restoreAudienceCardSnapshotState({
+        ...restored.state,
         publicCardRevision: "pcr_9007199254740992",
       }),
     ).toEqual({ outcome: "INVALID_SNAPSHOT" });

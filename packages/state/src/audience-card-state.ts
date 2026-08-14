@@ -40,6 +40,7 @@ export const AudienceCardSnapshotStateSchema = z
     const active = new Set<string>();
     const terminal = new Set<string>();
     const retainedRevisions = new Set<number>();
+    const postWatermarkRevisions = new Set<number>();
     for (const [key, card] of Object.entries(snapshot.cards)) {
       const revision = safeEncodedCounterValue(card.publicCardRevision);
       if (
@@ -58,6 +59,7 @@ export const AudienceCardSnapshotStateSchema = z
       }
       active.add(card.projectionId);
       retainedRevisions.add(revision);
+      postWatermarkRevisions.add(revision);
     }
     for (const [key, tombstone] of Object.entries(snapshot.tombstones)) {
       const revision = safeEncodedCounterValue(tombstone.publicCardRevision);
@@ -78,16 +80,14 @@ export const AudienceCardSnapshotStateSchema = z
       }
       terminal.add(tombstone.projectionId);
       retainedRevisions.add(revision);
+      if (revision > watermark) postWatermarkRevisions.add(revision);
     }
-    for (let revision = watermark + 1; revision <= head; revision += 1) {
-      if (!retainedRevisions.has(revision)) {
-        context.addIssue({
-          code: "custom",
-          path: ["publicCardRevision"],
-          message: "compacted card state has a post-watermark revision gap",
-        });
-        return;
-      }
+    if (postWatermarkRevisions.size !== head - watermark) {
+      context.addIssue({
+        code: "custom",
+        path: ["publicCardRevision"],
+        message: "compacted card state has a post-watermark revision gap",
+      });
     }
   });
 
