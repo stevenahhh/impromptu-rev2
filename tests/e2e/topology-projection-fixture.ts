@@ -12,6 +12,16 @@ const server = Bun.serve({
   port,
   fetch(request) {
     const url = new URL(request.url);
+    if (request.method === "POST" && url.pathname === "/v1/account-sessions") {
+      return json(
+        {
+          account: { accountId: "account_co_resident", actorId: "actor_co_resident" },
+          expiresAtMs: Date.now() + 60_000,
+          csrfToken: "csrf-co-resident",
+        },
+        201,
+      );
+    }
     if (request.method === "POST" && url.pathname === "/v1/display-joins") {
       joinSequence += 1;
       return json(

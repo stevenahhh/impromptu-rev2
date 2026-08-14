@@ -52,7 +52,7 @@ describe("Console route boundary", () => {
     expect(within(document.body).queryByRole("alert")).toBeNull();
   });
 
-  test("suppresses the no-private-pixel claim when explicit co-resident convenience is enabled", () => {
+  test("disables co-resident convenience after the public surface observes a private pixel", async () => {
     render(
       <MemoryRouter initialEntries={["/"]}>
         <AuthProvider initialAuthenticated>
@@ -64,6 +64,16 @@ describe("Console route boundary", () => {
     expect(within(document.body).getByRole("alert").textContent).toContain(
       "No-private-pixel protection does not apply",
     );
+    await act(async () => {
+      window.dispatchEvent(
+        new CustomEvent("impromptu:public-surface-observation", {
+          detail: { privatePixelCount: 1 },
+        }),
+      );
+    });
+    expect(within(document.body).getByText("Co-resident mode disabled")).toBeTruthy();
+    expect(within(document.body).queryByText("Private workspace")).toBeNull();
+    expect(document.querySelector("[data-co-resident-state='DISABLED']")).toBeTruthy();
   });
 
   test("exchanges the entered code through the typed session client without storage", async () => {

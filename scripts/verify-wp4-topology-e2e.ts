@@ -9,6 +9,10 @@ if (
   evidence.audienceReadyMedianMs > 180_000 ||
   evidence.audienceReadyP90Ms > 300_000 ||
   evidence.maxRecoveryMs > 30_000 ||
+  !evidence.coResidentCycle.enabledObserved ||
+  evidence.coResidentCycle.leakPrivatePixelCount <= 0 ||
+  !evidence.coResidentCycle.disabledObserved ||
+  evidence.coResidentCycle.postDisablePrivatePixelCount !== 0 ||
   !evidence.coResidentConvenienceDisabled
 ) {
   throw new Error("WP4 Windows topology gate failed");
@@ -70,6 +74,7 @@ console.log(
     audienceReadyP90Ms: Number(evidence.audienceReadyP90Ms.toFixed(3)),
     maxRecoveryMs: Number(evidence.maxRecoveryMs.toFixed(3)),
     coResidentConvenienceDisabled: evidence.coResidentConvenienceDisabled,
+    coResidentCycle: evidence.coResidentCycle,
     evidenceArtifactPath: evidence.evidenceArtifactPath,
     evidenceArtifactChecksum: evidence.evidenceArtifactChecksum,
     surface: "clean-signed-out-chrome+public-stage+projection-sse-fault-fixture",

@@ -24,6 +24,12 @@ interface TopologyVerifierEvidence {
   readonly audienceReadyP90Ms: number;
   readonly maxRecoveryMs: number;
   readonly coResidentConvenienceDisabled: boolean;
+  readonly coResidentCycle: {
+    readonly enabledObserved: boolean;
+    readonly leakPrivatePixelCount: number;
+    readonly disabledObserved: boolean;
+    readonly postDisablePrivatePixelCount: number;
+  };
   readonly evidenceArtifactPath: string;
   readonly evidenceArtifactChecksum: string;
 }
@@ -73,6 +79,10 @@ describe("WP4 Windows topology real-browser E2E", () => {
     expect(result.audienceReadyMedianMs).toBeLessThanOrEqual(180_000);
     expect(result.audienceReadyP90Ms).toBeLessThanOrEqual(300_000);
     expect(result.maxRecoveryMs).toBeLessThanOrEqual(30_000);
+    expect(result.coResidentCycle.enabledObserved).toBe(true);
+    expect(result.coResidentCycle.leakPrivatePixelCount).toBeGreaterThan(0);
+    expect(result.coResidentCycle.disabledObserved).toBe(true);
+    expect(result.coResidentCycle.postDisablePrivatePixelCount).toBe(0);
     expect(result.coResidentConvenienceDisabled).toBe(true);
     expect(result.evidenceArtifactPath).toBe("artifacts/wp4-topology/manifest.json");
     expect(result.evidenceArtifactChecksum).toMatch(/^[a-f0-9]{64}$/);

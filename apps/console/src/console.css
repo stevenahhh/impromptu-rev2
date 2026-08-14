@@ -53,6 +53,18 @@
   color: var(--text-secondary);
 }
 
+.console-co-resident-shield {
+  display: grid;
+  max-width: var(--size-copy);
+  gap: var(--space-4);
+  align-self: center;
+  justify-self: center;
+  padding: var(--space-8);
+  border: var(--size-hairline) solid var(--color-accent);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+}
+
 .console-hero {
   max-width: var(--size-copy);
   padding-block: var(--space-8) var(--space-12);

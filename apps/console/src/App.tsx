@@ -1,5 +1,13 @@
 import { Badge, Brand, Button, Panel, Shell, StatusDot } from "@impromptu/ui";
-import { createContext, type ReactNode, useContext, useId, useMemo, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+} from "react";
 import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { AudioConsentControl } from "./audio-capture";
 import {
@@ -167,11 +175,51 @@ function PrivateNavigation() {
 }
 
 function PrivateLayout({ coResident }: { readonly coResident: boolean }) {
+  const [coResidentState, setCoResidentState] = useState<"OFF" | "ENABLED" | "DISABLED">(
+    coResident ? "ENABLED" : "OFF",
+  );
+
+  useEffect(() => {
+    const observePublicSurface = (event: Event) => {
+      if (
+        coResidentState !== "ENABLED" ||
+        !(event instanceof CustomEvent) ||
+        typeof event.detail !== "object" ||
+        event.detail === null
+      ) {
+        return;
+      }
+      const detail = event.detail as Record<string, unknown>;
+      if (typeof detail.privatePixelCount !== "number" || detail.privatePixelCount <= 0) return;
+      setCoResidentState("DISABLED");
+      window.dispatchEvent(
+        new CustomEvent("impromptu:co-resident-disabled", {
+          detail: { reason: "PRIVATE_PIXEL_OBSERVED", privatePixelCount: detail.privatePixelCount },
+        }),
+      );
+    };
+    window.addEventListener("impromptu:public-surface-observation", observePublicSurface);
+    return () =>
+      window.removeEventListener("impromptu:public-surface-observation", observePublicSurface);
+  }, [coResidentState]);
+
+  if (coResidentState === "DISABLED") {
+    return (
+      <Shell focused header={<Brand eyebrow="Public safety interlock" />}>
+        <main className="console-co-resident-shield" data-co-resident-state="DISABLED">
+          <p className="ui-eyebrow">Audience surface protected</p>
+          <h1>Co-resident mode disabled</h1>
+          <p>Move presentation control to a separate device before continuing.</p>
+        </main>
+      </Shell>
+    );
+  }
+
   return (
     <Shell header={<ConsoleHeader />}>
       <PrivateNavigation />
-      <div className="console-content">
-        {coResident ? (
+      <div className="console-content" data-co-resident-state={coResidentState}>
+        {coResidentState === "ENABLED" ? (
           <aside className="console-co-resident" role="alert">
             <strong>Co-resident convenience mode</strong>
             <span>

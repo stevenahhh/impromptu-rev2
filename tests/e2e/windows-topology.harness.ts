@@ -55,12 +55,23 @@ export interface WindowsTopologyEvidence {
   readonly coResidentConvenienceDisabled: boolean;
   readonly evidenceArtifactPath: string;
   readonly evidenceArtifactChecksum: string;
+  readonly coResidentCycle: CoResidentCycleEvidence;
+}
+
+interface CoResidentCycleEvidence {
+  readonly enabledObserved: boolean;
+  readonly leakPrivatePixelCount: number;
+  readonly disabledObserved: boolean;
+  readonly postDisablePrivatePixelCount: number;
+  readonly enabledScreenshotChecksum: string;
+  readonly disabledScreenshotChecksum: string;
 }
 
 type ServiceProcess = ChildProcessByStdio<null, Readable, Readable>;
 const chromeExecutable = "C:/Program Files/Google/Chrome/Application/chrome.exe";
 const projectionOrigin = "http://127.0.0.1:44402";
 const stageOrigin = "http://127.0.0.1:44274";
+const consoleOrigin = "http://127.0.0.1:44273";
 const evidenceRoot = resolve(process.env.WP4_EVIDENCE_DIR ?? "artifacts/wp4-topology");
 export const privateSurfaceVocabulary = [
   "PRIVATE_CANARY_WP4",
@@ -151,12 +162,16 @@ async function stop(child: ServiceProcess): Promise<void> {
   await exited;
 }
 
-async function run(command: readonly string[], cwd?: string): Promise<void> {
+async function run(
+  command: readonly string[],
+  cwd?: string,
+  environment = process.env,
+): Promise<void> {
   const executable = command[0];
   if (executable === undefined) throw new Error("empty command");
   const child = spawn(executable, command.slice(1), {
     ...(cwd === undefined ? {} : { cwd }),
-    env: process.env,
+    env: environment,
     stdio: ["ignore", "pipe", "pipe"],
   });
   const [code] = await once(child, "exit", { signal: AbortSignal.timeout(30_000) });
@@ -174,6 +189,7 @@ async function installEventBuffer(context: BrowserContext): Promise<void> {
       "impromptu:channel-close",
       "impromptu:topology-change",
       "impromptu:public-slide-set",
+      "impromptu:co-resident-disabled",
       "fullscreenchange",
       "fullscreenerror",
     ]) {
@@ -328,6 +344,68 @@ async function persistRehearsalArtifact(
     privateContentVerdict: "CLEAN",
     privatePixelVerdict: "CLEAN",
   };
+}
+
+async function countPrivateSurfaceContent(page: Page): Promise<number> {
+  const text = (await page.locator("body").textContent()) ?? "";
+  const vocabularyMatches = privateSurfaceVocabulary.filter((value) => text.includes(value)).length;
+  const privateControls = await page
+    .locator("input, textarea, [aria-label*='Private'], [aria-label*='private']")
+    .count();
+  return vocabularyMatches + privateControls;
+}
+
+async function observeCoResidentCycle(browser: Browser): Promise<CoResidentCycleEvidence> {
+  const context = await browser.newContext();
+  await installEventBuffer(context);
+  const page = await context.newPage();
+  try {
+    await page.goto(`${consoleOrigin}/sign-in`, { waitUntil: "domcontentloaded" });
+    await page.getByLabel("One-time sign-in code").fill("co-resident-code");
+    await page.getByRole("button", { name: "Enter private workspace" }).click();
+    await page.getByRole("heading", { name: "Ready for the room" }).waitFor({ state: "visible" });
+    const enabledObserved =
+      (await page.locator("[data-co-resident-state='ENABLED']").count()) === 1;
+    const leakPrivatePixelCount = await countPrivateSurfaceContent(page);
+    const enabledScreenshotPath = resolve(evidenceRoot, "co-resident-enabled-leak.png");
+    await page.screenshot({ path: enabledScreenshotPath, fullPage: true });
+
+    let disabledObserved = false;
+    if (leakPrivatePixelCount > 0) {
+      const disabled = await prepareEvent(page, "impromptu:co-resident-disabled");
+      await page.evaluate((privatePixelCount) => {
+        window.dispatchEvent(
+          new CustomEvent("impromptu:public-surface-observation", {
+            detail: { privatePixelCount },
+          }),
+        );
+      }, leakPrivatePixelCount);
+      await disabled();
+      await page
+        .locator("[data-co-resident-state='DISABLED']")
+        .waitFor({ state: "visible", timeout: 5_000 });
+      disabledObserved = true;
+    }
+    const postDisablePrivatePixelCount = await countPrivateSurfaceContent(page);
+    const disabledScreenshotPath = resolve(evidenceRoot, "co-resident-after-observation.png");
+    await page.screenshot({ path: disabledScreenshotPath, fullPage: true });
+    const result = {
+      enabledObserved,
+      leakPrivatePixelCount,
+      disabledObserved,
+      postDisablePrivatePixelCount,
+      enabledScreenshotChecksum: checksum(enabledScreenshotPath),
+      disabledScreenshotChecksum: checksum(disabledScreenshotPath),
+    };
+    writeFileSync(
+      resolve(evidenceRoot, "co-resident-cycle.json"),
+      `${JSON.stringify(result, null, 2)}\n`,
+      "utf8",
+    );
+    return result;
+  } finally {
+    await context.close();
+  }
 }
 
 async function rehearse(
@@ -544,6 +622,10 @@ export async function runWindowsTopologyE2E(): Promise<WindowsTopologyEvidence> 
   rmSync(evidenceRoot, { force: true, recursive: true });
   mkdirSync(evidenceRoot, { recursive: true });
   await run(["bun", "run", "build"], "apps/stage");
+  await run(["bun", "run", "build"], "apps/console", {
+    ...process.env,
+    VITE_CO_RESIDENT_CONSOLE: "true",
+  });
   let projection = await start(
     ["bun", "run", "tests/e2e/topology-projection-fixture.ts"],
     "topology-projection-fixture listening",
@@ -552,9 +634,15 @@ export async function runWindowsTopologyE2E(): Promise<WindowsTopologyEvidence> 
     ...process.env,
     PROJECTION_GATEWAY_ORIGIN: projectionOrigin,
   });
+  const console = await start(
+    ["bun", "run", "tests/e2e/console-origin.ts"],
+    "console-origin listening",
+    { ...process.env, PRIVATE_BACKEND_ORIGIN: projectionOrigin },
+  );
   let browser: Browser | null = null;
   try {
     browser = await chromium.launch({ executablePath: chromeExecutable, headless: true });
+    const coResidentCycle = await observeCoResidentCycle(browser);
     const rehearsals: ModeRehearsalEvidence[] = [];
     const restartProjection = async () => {
       await stop(stage);
@@ -584,6 +672,7 @@ export async function runWindowsTopologyE2E(): Promise<WindowsTopologyEvidence> 
       `${JSON.stringify(
         {
           schemaVersion: 1,
+          coResidentCycle,
           rehearsals: rehearsals.map((result) => ({
             mode: result.mode,
             rehearsal: result.rehearsal,
@@ -610,12 +699,14 @@ export async function runWindowsTopologyE2E(): Promise<WindowsTopologyEvidence> 
       audienceReadyMedianMs: percentile(setupSamples, 0.5),
       audienceReadyP90Ms: percentile(setupSamples, 0.9),
       maxRecoveryMs: Math.max(...recoverySamples),
-      coResidentConvenienceDisabled: true,
+      coResidentConvenienceDisabled: coResidentCycle.disabledObserved,
       evidenceArtifactPath: relative(process.cwd(), manifestPath).replaceAll("\\", "/"),
       evidenceArtifactChecksum: checksum(manifestPath),
+      coResidentCycle,
     };
   } finally {
     await browser?.close();
+    await stop(console);
     await stop(stage);
     await stop(projection);
   }
