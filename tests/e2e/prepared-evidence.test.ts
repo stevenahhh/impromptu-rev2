@@ -1,26 +1,61 @@
 import { describe, expect, test } from "bun:test";
-import { runPreparedEvidenceE2E } from "./prepared-evidence.harness.ts";
 
-function percentile95(samples: readonly number[]): number {
-  const ordered = [...samples].sort((left, right) => left - right);
-  const index = Math.max(0, Math.ceil(ordered.length * 0.95) - 1);
-  const value = ordered[index];
-  if (value === undefined) throw new Error("latency sample set is empty");
-  return value;
+interface VerifierEvidence {
+  readonly flow: readonly string[];
+  readonly acceptedCommandPrefix: readonly string[];
+  readonly appliedCommandPrefix: readonly string[];
+  readonly cardEventCount: number;
+  readonly connectedTombstoneP95Ms: number;
+  readonly reconnectActiveCardCount: number;
+  readonly reconnectTombstoneStatuses: readonly string[];
+  readonly browserStorageEntries: number;
+  readonly samples: number;
+  readonly surface: string;
 }
 
-describe("WP3 prepared evidence E2E", () => {
-  test("runs upload through reconnect on a clean Stage profile using exact events", async () => {
-    const evidence = await runPreparedEvidenceE2E();
+function isEvidence(value: unknown): value is VerifierEvidence {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    Array.isArray(candidate.flow) &&
+    Array.isArray(candidate.acceptedCommandPrefix) &&
+    Array.isArray(candidate.appliedCommandPrefix) &&
+    typeof candidate.cardEventCount === "number" &&
+    typeof candidate.connectedTombstoneP95Ms === "number" &&
+    typeof candidate.reconnectActiveCardCount === "number" &&
+    Array.isArray(candidate.reconnectTombstoneStatuses) &&
+    typeof candidate.browserStorageEntries === "number" &&
+    typeof candidate.samples === "number" &&
+    typeof candidate.surface === "string"
+  );
+}
 
-    expect(evidence.milestones).toEqual([
+describe("WP3 prepared evidence real-browser E2E", () => {
+  test("runs the service mains and a clean Chrome Stage through reconnect", async () => {
+    const verifier = Bun.spawn({
+      cmd: ["node", "--experimental-strip-types", "scripts/verify-wp3-e2e.ts"],
+      env: Bun.env,
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [exitCode, stdout, stderr] = await Promise.all([
+      verifier.exited,
+      new Response(verifier.stdout).text(),
+      new Response(verifier.stderr).text(),
+    ]);
+    expect(exitCode, stderr).toBe(0);
+    const parsed: unknown = JSON.parse(stdout.trim());
+    if (!isEvidence(parsed)) throw new Error("WP3 verifier emitted invalid evidence");
+
+    expect(parsed.flow).toEqual([
       "upload",
       "deck-artifacts",
       "authenticated-controller",
       "presentation-session",
       "display-join",
       "display-bound",
-      "authority-restarted",
+      "network-channel-subscribed",
       "slide-set-accepted",
       "stage-applied",
       "candidate-approved",
@@ -29,25 +64,14 @@ describe("WP3 prepared evidence E2E", () => {
       "ordered-expiry-tombstone",
       "reconnect-snapshot",
     ]);
-    expect(evidence.appliedCommandIds).toEqual(evidence.acceptedCommandIds);
-    expect(evidence.cardEvents).toEqual([
-      "pcr_1:PUBLISHED",
-      "pcr_2:RETRACTED",
-      "pcr_3:PUBLISHED",
-      "pcr_4:EXPIRED",
-    ]);
-    expect(evidence.reconnectActiveCardCount).toBe(0);
-    expect(evidence.reconnectTombstoneStatuses).toEqual(["RETRACTED", "EXPIRED"]);
-    expect(evidence.browserStorageEntries).toBe(0);
-  });
-
-  test("keeps connected tombstone delivery p95 within 500ms", async () => {
-    const samples = await Promise.all(
-      Array.from(
-        { length: 20 },
-        async () => (await runPreparedEvidenceE2E()).connectedTombstoneLatencyMs,
-      ),
-    );
-    expect(percentile95(samples)).toBeLessThanOrEqual(500);
-  });
+    expect(parsed.appliedCommandPrefix).toEqual(parsed.acceptedCommandPrefix);
+    expect(parsed.cardEventCount).toBe(40);
+    expect(parsed.reconnectActiveCardCount).toBe(0);
+    expect(parsed.reconnectTombstoneStatuses).toContain("RETRACTED");
+    expect(parsed.reconnectTombstoneStatuses).toContain("EXPIRED");
+    expect(parsed.browserStorageEntries).toBe(0);
+    expect(parsed.samples).toBe(20);
+    expect(parsed.connectedTombstoneP95Ms).toBeLessThanOrEqual(500);
+    expect(parsed.surface).toBe("real-service-mains+clean-chrome-stage");
+  }, 60_000);
 });

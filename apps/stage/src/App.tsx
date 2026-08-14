@@ -10,6 +10,10 @@ import {
   type StageSubscription,
 } from "./stage-client";
 
+function publishStageEvent(name: string, detail: unknown): void {
+  window.dispatchEvent(new CustomEvent(name, { detail }));
+}
+
 function StageHeader() {
   return (
     <>
@@ -32,16 +36,18 @@ function LandingPage({ client }: { readonly client: StageSessionClient }) {
     }),
     [],
   );
+  const deckVersion = new URL(window.location.href).searchParams.get("deck") ?? "deck_alpha";
   const [join, setJoin] = useState<DisplayJoinView | null>(null);
   const [message, setMessage] = useState("Creating a short-lived display code...");
 
   useEffect(() => {
     let active = true;
     void client
-      .createJoin(identity, "deck_alpha")
+      .createJoin(identity, deckVersion)
       .then((created) => {
         if (active) {
           setJoin(created);
+          publishStageEvent("impromptu:display-join", created);
           setMessage("Waiting for an authenticated controller to approve this display.");
         }
       })
@@ -51,7 +57,7 @@ function LandingPage({ client }: { readonly client: StageSessionClient }) {
     return () => {
       active = false;
     };
-  }, [client, identity]);
+  }, [client, deckVersion, identity]);
 
   const claim = async () => {
     if (join === null) return;
@@ -184,12 +190,21 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
             setSnapshot((current) =>
               current === null ? null : { ...current, occurrence: event.occurrence },
             );
-            void client.recordApplied(event);
+            void client
+              .recordApplied(event)
+              .then((receipt) => publishStageEvent("impromptu:playback-applied", receipt))
+              .catch(() =>
+                publishStageEvent("impromptu:channel-close", { reason: "RECEIPT_REJECTED" }),
+              );
           },
           onCard(event) {
-            if (active) setSnapshot((current) => applyCardEvent(current, event));
+            if (active) {
+              setSnapshot((current) => applyCardEvent(current, event));
+              publishStageEvent("impromptu:card-event", event);
+            }
           },
-          onClose() {
+          onClose(reason) {
+            publishStageEvent("impromptu:channel-close", { reason });
             subscription = null;
           },
         });

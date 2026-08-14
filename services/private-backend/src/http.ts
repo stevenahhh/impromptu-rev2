@@ -1,4 +1,5 @@
 import type { ExactOrigin, PrivateBackendConfig } from "./config.ts";
+import { createPreparedDeckArtifacts } from "./prepared-deck-upload.ts";
 import type { PreparedEvidenceCoordinator } from "./prepared-evidence.ts";
 
 export type PrivateBackendHandler = (request: Request) => Response | Promise<Response>;
@@ -190,6 +191,23 @@ export function createPrivateBackendHandler(
 
     const body = await requestBody(request);
     if (!isRecord(body)) return json({ error: "invalid_request" }, 400, origin);
+    if (request.method === "POST" && url.pathname === "/v1/deck-artifacts") {
+      if (typeof body.title !== "string" || typeof body.content !== "string") {
+        return json({ error: "invalid_request" }, 400, origin);
+      }
+      try {
+        return json(
+          createPreparedDeckArtifacts(account.value.accountId, {
+            title: body.title,
+            content: body.content,
+          }),
+          201,
+          origin,
+        );
+      } catch {
+        return json({ error: "invalid_deck_upload" }, 400, origin);
+      }
+    }
     if (request.method === "POST" && url.pathname === "/v1/presentation-sessions") {
       const result = dependencies.coordinator.createPresentation(
         accountSessionId,

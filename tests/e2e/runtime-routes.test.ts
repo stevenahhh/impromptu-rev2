@@ -144,6 +144,7 @@ describe("runnable WP3 service composition", () => {
     }
     const authenticatedHeaders = browserHeaders(consoleOrigin, signInBody.csrfToken, accountCookie);
     const probes: readonly [string, string, unknown][] = [
+      ["POST", "/v1/deck-artifacts", {}],
       ["POST", "/v1/presentation-sessions", {}],
       ["POST", "/v1/display-bindings", {}],
       ["POST", "/v1/playback/slide-set", {}],

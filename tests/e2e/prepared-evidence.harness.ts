@@ -1,9 +1,9 @@
-import { createHash } from "node:crypto";
-import {
-  createPreparedEvidenceStore,
-  PreparedEvidenceCoordinator,
-} from "@impromptu/private-backend";
-import { PreparedEvidenceProjectionGateway } from "@impromptu/projection-gateway";
+import { type ChildProcessByStdio, spawn } from "node:child_process";
+import { once } from "node:events";
+import { rmSync } from "node:fs";
+import { join } from "node:path";
+import type { Readable } from "node:stream";
+import { type Browser, type BrowserContext, chromium, type Page } from "playwright-core";
 
 export interface PreparedEvidenceEvidence {
   readonly milestones: readonly string[];
@@ -14,375 +14,607 @@ export interface PreparedEvidenceEvidence {
   readonly reconnectActiveCardCount: number;
   readonly reconnectTombstoneStatuses: readonly string[];
   readonly browserStorageEntries: number;
+  readonly tombstoneP95Ms: number;
+  readonly latencySamples: number;
 }
 
-class ExactSignal<Value> {
-  readonly #promise: Promise<Value>;
-  #resolve: ((value: Value) => void) | null = null;
+type ServiceProcess = ChildProcessByStdio<null, Readable, Readable>;
+type JsonRecord = Record<string, unknown>;
 
-  constructor(label: string, timeoutMs = 2_000) {
-    const timeout = AbortSignal.timeout(timeoutMs);
-    this.#promise = new Promise<Value>((resolve, reject) => {
-      this.#resolve = resolve;
-      timeout.addEventListener(
-        "abort",
-        () => reject(new Error(`${label} was not observed within ${timeoutMs}ms`)),
-        { once: true },
+const privateOrigin = "http://127.0.0.1:44201";
+const projectionOrigin = "http://127.0.0.1:44202";
+const consoleOrigin = "http://127.0.0.1:44273";
+const stageOrigin = "http://127.0.0.1:44274";
+const serviceToken = "prepared-evidence-real-e2e-token";
+const chromeExecutable = "C:/Program Files/Google/Chrome/Application/chrome.exe";
+
+function trace(message: string): void {
+  if (process.env.DEBUG_WP3_E2E === "true") console.log(`[wp3-e2e] ${message}`);
+}
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+async function waitForOutput(
+  stream: Readable,
+  expected: string,
+  timeoutMs = 10_000,
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    let output = "";
+    const signal = AbortSignal.timeout(timeoutMs);
+    const cleanup = () => {
+      stream.off("data", onData);
+      stream.off("end", onEnd);
+      signal.removeEventListener("abort", onAbort);
+    };
+    const onData = (chunk: Buffer) => {
+      output += chunk.toString("utf8");
+      if (output.includes(expected)) {
+        cleanup();
+        resolve();
+      }
+    };
+    const onEnd = () => {
+      cleanup();
+      reject(new Error(`process exited before emitting ${expected}: ${output}`));
+    };
+    const onAbort = () => {
+      cleanup();
+      reject(new Error(`process did not emit ${expected}: ${output}`));
+    };
+    stream.on("data", onData);
+    stream.once("end", onEnd);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+async function startProcess(
+  command: readonly string[],
+  environment: Record<string, string>,
+  expectedOutput: string,
+  cwd?: string,
+  output: "stdout" | "stderr" = "stdout",
+): Promise<ServiceProcess> {
+  const executable = command[0];
+  if (executable === undefined) throw new Error("empty process command");
+  const process = spawn(executable, command.slice(1), {
+    ...(cwd === undefined ? {} : { cwd }),
+    env: { ...globalThis.process.env, ...environment },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  try {
+    await waitForOutput(output === "stdout" ? process.stdout : process.stderr, expectedOutput);
+    return process;
+  } catch (error) {
+    process.kill();
+    await once(process, "exit", { signal: AbortSignal.timeout(5_000) });
+    throw error;
+  }
+}
+
+async function runCommand(command: readonly string[], cwd?: string): Promise<void> {
+  const executable = command[0];
+  if (executable === undefined) throw new Error("empty command");
+  const child = spawn(executable, command.slice(1), {
+    ...(cwd === undefined ? {} : { cwd }),
+    env: globalThis.process.env,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const [code] = await once(child, "exit", { signal: AbortSignal.timeout(30_000) });
+  if (code !== 0) {
+    throw new Error(`command failed (${String(code)}): ${command.join(" ")}`);
+  }
+}
+
+async function stopProcess(process: ServiceProcess): Promise<void> {
+  if (process.exitCode !== null) return;
+  process.kill();
+  await once(process, "exit", { signal: AbortSignal.timeout(5_000) });
+}
+
+async function jsonRecord(response: Response): Promise<JsonRecord> {
+  const body: unknown = await response.json();
+  if (!isRecord(body)) throw new Error(`expected JSON object from ${response.url}`);
+  return body;
+}
+
+function browserHeaders(csrfToken?: string, cookie?: string): HeadersInit {
+  return {
+    origin: consoleOrigin,
+    referer: `${consoleOrigin}/`,
+    "content-type": "application/json",
+    ...(csrfToken === undefined ? {} : { "x-csrf-token": csrfToken }),
+    ...(cookie === undefined ? {} : { cookie }),
+  };
+}
+
+async function privateMutation(
+  path: string,
+  body: unknown,
+  csrfToken: string,
+  cookie: string,
+): Promise<JsonRecord> {
+  const response = await fetch(`${privateOrigin}${path}`, {
+    method: "POST",
+    headers: browserHeaders(csrfToken, cookie),
+    body: JSON.stringify(body),
+  });
+  const result = await jsonRecord(response);
+  if (!response.ok)
+    throw new Error(`${path} failed (${response.status}): ${JSON.stringify(result)}`);
+  return result;
+}
+
+async function installStageEventBuffer(context: BrowserContext): Promise<void> {
+  await context.addInitScript(() => {
+    const records: Array<{ name: string; detail: unknown }> = [];
+    Reflect.set(window, "__impromptuEventBuffer", records);
+    for (const name of [
+      "impromptu:display-join",
+      "impromptu:playback-applied",
+      "impromptu:card-event",
+      "impromptu:channel-close",
+    ]) {
+      window.addEventListener(name, (event) => {
+        records.push({ name, detail: event instanceof CustomEvent ? event.detail : null });
+      });
+    }
+    Reflect.set(window, "__impromptuEventWaiters", new Map<string, Promise<unknown>>());
+  });
+}
+
+interface BrowserEventCriteria {
+  readonly name: string;
+  readonly status?: string;
+  readonly revision?: string;
+}
+
+async function prepareBrowserEvent(
+  page: Page,
+  criteria: BrowserEventCriteria,
+  timeoutMs = 5_000,
+): Promise<() => Promise<unknown>> {
+  const waiterId = crypto.randomUUID();
+  await page.evaluate(
+    ({ criteria: expected, timeout, waiterId: id }) => {
+      const matches = (detail: unknown) => {
+        if (typeof detail !== "object" || detail === null) {
+          return expected.status === undefined && expected.revision === undefined;
+        }
+        const candidate = detail as Record<string, unknown>;
+        return (
+          (expected.status === undefined || candidate.status === expected.status) &&
+          (expected.revision === undefined || candidate.publicCardRevision === expected.revision)
+        );
+      };
+      const buffered = Reflect.get(window, "__impromptuEventBuffer") as Array<{
+        name: string;
+        detail: unknown;
+      }>;
+      const existing = buffered.find(
+        (candidate) => candidate.name === expected.name && matches(candidate.detail),
       );
-    });
-  }
-
-  emit(value: Value): void {
-    const resolve = this.#resolve;
-    if (resolve === null) throw new Error("exact signal emitted more than once");
-    this.#resolve = null;
-    resolve(value);
-  }
-
-  wait(): Promise<Value> {
-    return this.#promise;
-  }
+      const promise =
+        existing === undefined
+          ? new Promise<unknown>((resolve, reject) => {
+              const signal = AbortSignal.timeout(timeout);
+              const listener = (event: Event) => {
+                const detail = event instanceof CustomEvent ? event.detail : null;
+                if (matches(detail)) {
+                  window.removeEventListener(expected.name, listener);
+                  resolve(detail);
+                }
+              };
+              window.addEventListener(expected.name, listener);
+              signal.addEventListener(
+                "abort",
+                () => {
+                  window.removeEventListener(expected.name, listener);
+                  reject(new Error(`${expected.name} event timeout`));
+                },
+                { once: true },
+              );
+            })
+          : Promise.resolve(existing.detail);
+      const waiters = Reflect.get(window, "__impromptuEventWaiters") as Map<
+        string,
+        Promise<unknown>
+      >;
+      waiters.set(id, promise);
+    },
+    { criteria, timeout: timeoutMs, waiterId },
+  );
+  return () =>
+    page.evaluate((id) => {
+      const waiters = Reflect.get(window, "__impromptuEventWaiters") as Map<
+        string,
+        Promise<unknown>
+      >;
+      const promise = waiters.get(id);
+      if (promise === undefined) throw new Error(`unknown browser waiter ${id}`);
+      waiters.delete(id);
+      return promise;
+    }, waiterId);
 }
 
-function artifactsFromUpload(ownerAccountId: string, bytes: Uint8Array) {
-  const sourceHash = createHash("sha256").update(bytes).digest("hex");
-  const manifestHash = createHash("sha256").update(`prepared-manifest:${sourceHash}`).digest("hex");
-  const imageHash = createHash("sha256").update(`public-slide:${sourceHash}`).digest("hex");
-  return {
-    sourceHash,
-    privateDeck: {
-      deckId: `private_deck_${sourceHash}`,
-      deckVersion: `deck_${sourceHash}`,
-      manifestHash,
-      title: "Prepared evidence E2E",
-      ownerAccountId,
-      aclPolicyVersion: "acl-1",
-      privateObjectPrefix: `private-decks/${ownerAccountId}/${sourceHash}`,
-      slides: [
-        {
-          privateSlideId: `private_slide_${sourceHash}`,
-          publicSlideKey: `slide_${sourceHash}`,
-          ordinal: 1,
-          speakerNotes: "private presenter note",
-          extractedText: "Prepared evidence",
-          sourceAssetIds: [`asset_${sourceHash}`],
-        },
-      ],
+async function prepareTextMutation(
+  page: Page,
+  text: string,
+  visible: boolean,
+  timeoutMs = 5_000,
+): Promise<() => Promise<void>> {
+  const waiterId = crypto.randomUUID();
+  await page.evaluate(
+    ({ expectedText, id, shouldBeVisible, timeout }) => {
+      const present = () => document.body.textContent?.includes(expectedText) === true;
+      const promise =
+        present() === shouldBeVisible
+          ? Promise.resolve()
+          : new Promise<void>((resolve, reject) => {
+              const observer = new MutationObserver(() => {
+                if (present() === shouldBeVisible) {
+                  observer.disconnect();
+                  resolve();
+                }
+              });
+              observer.observe(document.body, {
+                childList: true,
+                characterData: true,
+                subtree: true,
+              });
+              AbortSignal.timeout(timeout).addEventListener(
+                "abort",
+                () => {
+                  observer.disconnect();
+                  reject(new Error(`text mutation timeout: ${expectedText}`));
+                },
+                { once: true },
+              );
+            });
+      const waiters = Reflect.get(window, "__impromptuEventWaiters") as Map<
+        string,
+        Promise<unknown>
+      >;
+      waiters.set(id, promise);
     },
-    publicDeck: {
-      deckVersion: `deck_${sourceHash}`,
-      manifestHash,
-      title: "Prepared evidence E2E",
-      slides: [
-        {
-          publicSlideKey: `slide_${sourceHash}`,
-          ordinal: 1,
-          image: {
-            url: `https://public.example.test/slides/${imageHash}.png`,
-            contentHash: imageHash,
-            width: 1920,
-            height: 1080,
-          },
-          accessibilityLabel: "Prepared evidence slide",
-        },
-      ],
-    },
-  };
+    { expectedText: text, id: waiterId, shouldBeVisible: visible, timeout: timeoutMs },
+  );
+  return () =>
+    page.evaluate((id) => {
+      const waiters = Reflect.get(window, "__impromptuEventWaiters") as Map<
+        string,
+        Promise<unknown>
+      >;
+      const promise = waiters.get(id);
+      if (promise === undefined) throw new Error(`unknown text waiter ${id}`);
+      waiters.delete(id);
+      return promise.then(() => undefined);
+    }, waiterId);
 }
 
-function requireApplied<Value>(
-  result:
-    | Readonly<{ outcome: "APPLIED"; value: Value }>
-    | Readonly<{ outcome: "REJECTED"; reason: string }>,
-  label: string,
-): Value {
-  if (result.outcome !== "APPLIED") throw new Error(`${label}: ${result.reason}`);
-  return result.value;
+function requireString(record: JsonRecord, key: string): string {
+  const value = record[key];
+  if (typeof value !== "string") throw new Error(`${key} is missing`);
+  return value;
 }
 
-function candidate(
-  id: string,
-  presentationSessionId: string,
-  deckVersion: string,
-  manifestHash: string,
-  publicSlideKey: string,
-  sourceHash: string,
-) {
-  return {
-    candidateId: id,
-    candidateVersion: "candidate-version-1",
-    provenance: "CURATED_PREAPPROVED",
-    verdict: "SUPPORTED",
-    claimText: `Prepared claim ${id}`,
-    evidenceExcerpt: "Prepared support with approved rights.",
-    privateSourceUri: `private://curated/${id}`,
-    causal: {
-      presentationSessionId,
-      presentationSessionEpoch: "pse_1",
-      displayBindingEpoch: "dbe_1",
-      deckVersion,
-      manifestHash,
-      occurrence: { publicSlideKey, occurrenceSeq: 1 },
-      transcriptFinalId: null,
-      source: { sourceId: `source_${id}`, revision: "source-revision-1", contentHash: sourceHash },
-      decisions: {
-        acl: "acl-1",
-        publicationPolicy: "publication-policy-1",
-        rights: "rights-1",
-        dlp: "dlp-1",
-      },
-    },
-  };
+function percentile95(samples: readonly number[]): number {
+  const ordered = [...samples].sort((left, right) => left - right);
+  const value = ordered[Math.max(0, Math.ceil(ordered.length * 0.95) - 1)];
+  if (value === undefined) throw new Error("no latency samples");
+  return value;
 }
 
 export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence> {
-  const milestones: string[] = [];
-  const upload = new TextEncoder().encode("clean prepared deck upload");
-  milestones.push("upload");
-  const artifacts = artifactsFromUpload("account_e2e", upload);
-  milestones.push("deck-artifacts");
+  const processes: ServiceProcess[] = [];
+  let browser: Browser | null = null;
+  let context: BrowserContext | null = null;
+  const profilePath = join(process.env.TEMP ?? process.cwd(), "impromptu-r2-wp3-clean-stage");
+  rmSync(profilePath, { force: true, recursive: true });
+  try {
+    processes.push(
+      await startProcess(
+        ["bun", "run", "services/projection-gateway/src/main.ts"],
+        {
+          PRIVATE_BACKEND_ORIGIN: privateOrigin,
+          PROJECTION_GATEWAY_HOST: "127.0.0.1",
+          PROJECTION_GATEWAY_PORT: "44202",
+          SERVICE_AUTH_TOKEN: serviceToken,
+          STAGE_ORIGIN: stageOrigin,
+        },
+        "projection-gateway listening",
+      ),
+    );
+    processes.push(
+      await startProcess(
+        ["bun", "run", "services/private-backend/src/main.ts"],
+        {
+          CONSOLE_ORIGIN: consoleOrigin,
+          CONTROLLER_ACCOUNT_ID: "account_e2e",
+          CONTROLLER_ACTOR_ID: "actor_e2e",
+          CONTROLLER_AUTHORIZATION_CODE: "e2e-code",
+          PRIVATE_BACKEND_HOST: "127.0.0.1",
+          PRIVATE_BACKEND_PORT: "44201",
+          PROJECTION_GATEWAY_ORIGIN: projectionOrigin,
+          SERVICE_AUTH_TOKEN: serviceToken,
+        },
+        "private-backend listening",
+      ),
+    );
+    await runCommand(["bun", "run", "build"], "apps/stage");
+    processes.push(
+      await startProcess(
+        ["bun", "run", "tests/e2e/stage-origin.ts"],
+        { PROJECTION_GATEWAY_ORIGIN: projectionOrigin },
+        "stage-origin listening",
+      ),
+    );
 
-  const gateway = new PreparedEvidenceProjectionGateway(undefined, {
-    tombstoneRetentionMs: 60_000,
-  });
-  const store = createPreparedEvidenceStore();
-  let coordinator = new PreparedEvidenceCoordinator(gateway, store);
-  const account = coordinator.createAccountSession(
-    { accountId: "account_e2e", actorId: "actor_e2e" },
-    1_000,
-  );
-  milestones.push("authenticated-controller");
-  const created = requireApplied(
-    coordinator.createPresentation(account.accountSessionId, artifacts, 1_001),
-    "presentation create",
-  );
-  milestones.push("presentation-session");
+    trace("processes-ready");
+    const signIn = await fetch(`${privateOrigin}/v1/account-sessions`, {
+      method: "POST",
+      headers: browserHeaders(),
+      body: JSON.stringify({ authorizationCode: "e2e-code" }),
+    });
+    const signInBody = await jsonRecord(signIn);
+    const cookie = signIn.headers.get("set-cookie")?.split(";", 1)[0];
+    const csrfToken = requireString(signInBody, "csrfToken");
+    if (!signIn.ok || cookie === undefined) throw new Error("real controller sign-in failed");
 
-  const cleanStageProfile = {
-    storage: new Map<string, string>(),
-    displayId: "display_clean_profile",
-    displayFingerprint: "clean-stage-profile-fingerprint",
-  };
-  const join = gateway.createDisplayJoin(
-    {
-      displayId: cleanStageProfile.displayId,
-      deckVersion: artifacts.publicDeck.deckVersion,
-      displayFingerprint: cleanStageProfile.displayFingerprint,
-    },
-    1_002,
-  );
-  milestones.push("display-join");
-  const bound = requireApplied(
-    await coordinator.approveDisplay(
-      account.accountSessionId,
+    const upload = await privateMutation(
+      "/v1/deck-artifacts",
+      { title: "Prepared evidence browser E2E", content: "clean prepared deck upload" },
+      csrfToken,
+      cookie,
+    );
+    const privateDeck = upload.privateDeck;
+    const publicDeck = upload.publicDeck;
+    if (!isRecord(privateDeck) || !isRecord(publicDeck))
+      throw new Error("upload artifacts missing");
+    const sourceHash = requireString(upload, "sourceHash");
+    const deckVersion = requireString(publicDeck, "deckVersion");
+    const manifestHash = requireString(publicDeck, "manifestHash");
+    const slides = publicDeck.slides;
+    if (!Array.isArray(slides) || !isRecord(slides[0])) throw new Error("public slide missing");
+    const publicSlideKey = requireString(slides[0], "publicSlideKey");
+    trace("upload-ready");
+    const created = await privateMutation(
+      "/v1/presentation-sessions",
+      { privateDeck, publicDeck },
+      csrfToken,
+      cookie,
+    );
+    const lifecycle = created.lifecycle;
+    const authority = created.authority;
+    if (!isRecord(lifecycle) || !isRecord(authority))
+      throw new Error("presentation response invalid");
+    const presentationSessionId = requireString(lifecycle, "presentationSessionId");
+    const authorityId = requireString(authority, "authorityId");
+
+    trace("presentation-ready");
+    processes.push(
+      await startProcess(
+        [
+          chromeExecutable,
+          "--headless=new",
+          "--no-first-run",
+          "--remote-debugging-port=44275",
+          "--remote-allow-origins=*",
+          `--user-data-dir=${profilePath}`,
+          "about:blank",
+        ],
+        {},
+        "DevTools listening",
+        undefined,
+        "stderr",
+      ),
+    );
+    browser = await chromium.connectOverCDP("http://127.0.0.1:44275");
+    context = browser.contexts()[0] ?? null;
+    if (context === null) throw new Error("Chrome did not expose its clean profile context");
+    trace("chrome-ready");
+    await installStageEventBuffer(context);
+    const page = context.pages()[0] ?? (await context.newPage());
+    if (process.env.DEBUG_WP3_E2E === "true") {
+      page.on("console", (message) => trace(`browser-console:${message.type()}:${message.text()}`));
+      page.on("pageerror", (error) => trace(`browser-error:${error.message}`));
+      page.on("requestfailed", (request) => trace(`request-failed:${request.url()}`));
+      page.on("response", (response) => trace(`response:${response.status()}:${response.url()}`));
+    }
+    await page.goto(`${stageOrigin}/?deck=${encodeURIComponent(deckVersion)}`, {
+      waitUntil: "domcontentloaded",
+    });
+    trace("stage-dom-ready");
+    const waitJoin = await prepareBrowserEvent(page, { name: "impromptu:display-join" });
+    const join = await waitJoin();
+    trace("join-ready");
+    if (!isRecord(join)) throw new Error("browser display join event invalid");
+    await privateMutation(
+      "/v1/display-bindings",
       {
-        presentationSessionId: created.lifecycle.presentationSessionId,
-        displayJoinId: join.displayJoinId,
+        presentationSessionId,
+        displayJoinId: requireString(join, "displayJoinId"),
         expectedDisplayBindingEpoch: "dbe_0",
-        expectedDeckVersion: artifacts.publicDeck.deckVersion,
-        approvedDisplayId: cleanStageProfile.displayId,
-        approvedDisplayFingerprint: cleanStageProfile.displayFingerprint,
+        expectedDeckVersion: deckVersion,
+        approvedDisplayId: requireString(join, "displayId"),
+        approvedDisplayFingerprint: requireString(join, "displayFingerprint"),
       },
-      1_003,
-    ),
-    "display bind",
-  );
-  const displaySession = gateway.claimDisplaySession(
-    {
-      displayJoinId: join.displayJoinId,
-      displayId: cleanStageProfile.displayId,
-      displayFingerprint: cleanStageProfile.displayFingerprint,
-    },
-    1_004,
-  );
-  if (displaySession === null) throw new Error("Stage could not claim approved binding");
-  milestones.push("display-bound");
+      csrfToken,
+      cookie,
+    );
 
-  coordinator = new PreparedEvidenceCoordinator(gateway, store);
-  milestones.push("authority-restarted");
-  const acceptedCommandIds: string[] = [];
-  const appliedCommandIds: string[] = [];
-  const cardEvents: string[] = [];
-  const playbackSignal = new ExactSignal<string>("ordered Stage applied prefix");
-  const publishedSignal = new ExactSignal<string>("published card visibility");
-  let publishedObserved = false;
-  let tombstoneSignal = new ExactSignal<string>("connected retract tombstone");
-  const socket = gateway.connectStage(
-    displaySession.audienceDisplaySessionId,
-    {
-      onPlayback: async (event) => {
-        const receipt = requireApplied(
-          await coordinator.recordStageApplied({
-            audienceDisplaySessionId: displaySession.audienceDisplaySessionId,
-            commandId: event.commandId,
-            displayBindingEpoch: event.displayBindingEpoch,
-          }),
-          "Stage applied receipt",
-        );
-        appliedCommandIds.push(receipt.commandId);
-        playbackSignal.emit(receipt.commandId);
-      },
-      onCard: (event) => {
-        cardEvents.push(`${event.publicCardRevision}:${event.status}`);
-        if (event.status === "PUBLISHED" && !publishedObserved) {
-          publishedObserved = true;
-          publishedSignal.emit(event.projectionId);
-        } else if (event.status !== "PUBLISHED") {
-          tombstoneSignal.emit(event.status);
-        }
-      },
-      onClose: () => undefined,
-    },
-    1_005,
-  );
-  if (socket === null) throw new Error("Stage socket did not connect");
-
-  const accepted = requireApplied(
-    await coordinator.setSlide(
-      account.accountSessionId,
+    const eventChannel = page.waitForResponse(
+      (response) => response.url().endsWith("/v1/events") && response.status() === 200,
+      { timeout: 5_000 },
+    );
+    await page.getByRole("button", { name: "Continue after approval" }).click();
+    await eventChannel;
+    trace("event-channel-ready");
+    const waitApplied = await prepareBrowserEvent(page, { name: "impromptu:playback-applied" });
+    const slideSet = await privateMutation(
+      "/v1/playback/slide-set",
       {
-        presentationSessionId: created.lifecycle.presentationSessionId,
+        presentationSessionId,
         commandId: "cmd_e2e_absolute",
-        publicSlideKey: artifacts.publicDeck.slides[0]?.publicSlideKey ?? "",
+        publicSlideKey,
         displayBindingEpoch: "dbe_1",
         baseRevision: "cr_0",
       },
-      1_006,
-    ),
-    "absolute slide.set",
-  );
-  acceptedCommandIds.push(accepted.commandId);
-  await playbackSignal.wait();
-  milestones.push("slide-set-accepted", "stage-applied");
+      csrfToken,
+      cookie,
+    );
+    const appliedReceipt = await waitApplied();
+    trace("playback-applied");
+    if (!isRecord(appliedReceipt)) throw new Error("browser applied receipt invalid");
 
-  const curated = candidate(
-    "candidate_e2e_retract",
-    created.lifecycle.presentationSessionId,
-    artifacts.publicDeck.deckVersion,
-    artifacts.publicDeck.manifestHash,
-    artifacts.publicDeck.slides[0]?.publicSlideKey ?? "",
-    artifacts.sourceHash,
-  );
-  requireApplied(
-    coordinator.addCuratedCandidate(account.accountSessionId, curated, 1_007),
-    "curated candidate",
-  );
-  const published = requireApplied(
-    await coordinator.approveCandidate(
-      account.accountSessionId,
-      {
-        presentationSessionId: created.lifecycle.presentationSessionId,
-        candidateId: curated.candidateId,
-        expectedCandidateRevision: "candrev_1",
-        expectedPublicCardRevision: "pcr_0",
-        authorityId: created.authority.authorityId,
-        expiresAtMs: null,
-      },
-      1_008,
-    ),
-    "candidate approval",
-  );
-  await publishedSignal.wait();
-  const visible = gateway.snapshot(bound.audienceDisplaySessionId, 1_009);
-  if (visible?.cards[0]?.projectionId !== published.projectionId) {
-    throw new Error("published card was not visible on Stage");
+    const cardEvents: string[] = [];
+    const tombstoneLatencies: number[] = [];
+    const tombstoneStatuses: string[] = [];
+    for (let index = 0; index < 20; index += 1) {
+      trace(`card-${index}-start`);
+      const candidateId = `candidate_e2e_${index}`;
+      const claim = `Prepared browser claim ${index}`;
+      await privateMutation(
+        "/v1/candidates/curated",
+        {
+          candidateId,
+          candidateVersion: "candidate-version-1",
+          provenance: "CURATED_PREAPPROVED",
+          verdict: "SUPPORTED",
+          claimText: claim,
+          evidenceExcerpt: "Prepared support with approved rights.",
+          privateSourceUri: `private://curated/${candidateId}`,
+          causal: {
+            presentationSessionId,
+            presentationSessionEpoch: "pse_1",
+            displayBindingEpoch: "dbe_1",
+            deckVersion,
+            manifestHash,
+            occurrence: { publicSlideKey, occurrenceSeq: 1 },
+            transcriptFinalId: null,
+            source: {
+              sourceId: `source_private_${index}`,
+              revision: "source-revision-1",
+              contentHash: sourceHash,
+            },
+            decisions: {
+              acl: "acl-1",
+              publicationPolicy: "publication-policy-1",
+              rights: "rights-1",
+              dlp: "dlp-1",
+            },
+          },
+        },
+        csrfToken,
+        cookie,
+      );
+      const publishedRevision = `pcr_${index * 2 + 1}`;
+      const tombstoneRevision = `pcr_${index * 2 + 2}`;
+      const waitPublished = await prepareBrowserEvent(page, {
+        name: "impromptu:card-event",
+        revision: publishedRevision,
+        status: "PUBLISHED",
+      });
+      const waitVisible = index === 0 ? await prepareTextMutation(page, claim, true) : null;
+      const published = await privateMutation(
+        "/v1/publications/approve",
+        {
+          presentationSessionId,
+          candidateId,
+          expectedCandidateRevision: "candrev_1",
+          expectedPublicCardRevision: `pcr_${index * 2}`,
+          authorityId,
+          expiresAtMs: null,
+        },
+        csrfToken,
+        cookie,
+      );
+      await waitPublished();
+      await waitVisible?.();
+      cardEvents.push(`${publishedRevision}:PUBLISHED`);
+      const projectionId = requireString(published, "projectionId");
+      const status = index === 19 ? "EXPIRED" : "RETRACTED";
+      const waitTombstone = await prepareBrowserEvent(page, {
+        name: "impromptu:card-event",
+        revision: tombstoneRevision,
+        status,
+      });
+      const waitHidden = index === 0 ? await prepareTextMutation(page, claim, false) : null;
+      const startedAt = performance.now();
+      await privateMutation(
+        "/v1/publications/terminate",
+        {
+          presentationSessionId,
+          projectionId,
+          expectedPublicCardRevision: publishedRevision,
+          authorityId,
+          status,
+        },
+        csrfToken,
+        cookie,
+      );
+      await waitTombstone();
+      await waitHidden?.();
+      tombstoneLatencies.push(performance.now() - startedAt);
+      tombstoneStatuses.push(status);
+      cardEvents.push(`${tombstoneRevision}:${status}`);
+      trace(`card-${index}-done`);
+    }
+
+    const reconnectSnapshot = page.waitForResponse(
+      (response) => response.url().endsWith("/v1/snapshot") && response.status() === 200,
+      { timeout: 5_000 },
+    );
+    await page.reload({ waitUntil: "domcontentloaded" });
+    const snapshotBody = await (await reconnectSnapshot).json();
+    if (
+      !isRecord(snapshotBody) ||
+      !Array.isArray(snapshotBody.cards) ||
+      !Array.isArray(snapshotBody.tombstones)
+    ) {
+      throw new Error("reconnect snapshot invalid");
+    }
+    trace("reconnect-ready");
+    const browserStorageEntries = await page.evaluate(
+      () => window.localStorage.length + window.sessionStorage.length,
+    );
+    const acceptedCommandId = requireString(slideSet, "commandId");
+    const appliedCommandId = requireString(appliedReceipt, "commandId");
+    const p95 = percentile95(tombstoneLatencies);
+    return {
+      milestones: [
+        "upload",
+        "deck-artifacts",
+        "authenticated-controller",
+        "presentation-session",
+        "display-join",
+        "display-bound",
+        "network-channel-subscribed",
+        "slide-set-accepted",
+        "stage-applied",
+        "candidate-approved",
+        "published-card-visible",
+        "ordered-retract-tombstone",
+        "ordered-expiry-tombstone",
+        "reconnect-snapshot",
+      ],
+      acceptedCommandIds: [acceptedCommandId],
+      appliedCommandIds: [appliedCommandId],
+      cardEvents,
+      connectedTombstoneLatencyMs: tombstoneLatencies[0] ?? p95,
+      reconnectActiveCardCount: snapshotBody.cards.length,
+      reconnectTombstoneStatuses: tombstoneStatuses,
+      browserStorageEntries,
+      tombstoneP95Ms: p95,
+      latencySamples: tombstoneLatencies.length,
+    };
+  } finally {
+    trace("cleanup-start");
+    await context?.close();
+    await browser?.close();
+    for (const process of processes.toReversed()) await stopProcess(process);
+    rmSync(profilePath, { force: true, recursive: true });
   }
-  if (published.projectionId.includes(curated.candidateId)) {
-    throw new Error("public projection ID correlates to private candidate ID");
-  }
-  milestones.push("candidate-approved", "published-card-visible");
-
-  const retractStartedAt = performance.now();
-  requireApplied(
-    await coordinator.terminateCard(
-      account.accountSessionId,
-      {
-        presentationSessionId: created.lifecycle.presentationSessionId,
-        projectionId: published.projectionId,
-        expectedPublicCardRevision: "pcr_1",
-        authorityId: created.authority.authorityId,
-        status: "RETRACTED",
-      },
-      1_010,
-    ),
-    "publication retract",
-  );
-  await tombstoneSignal.wait();
-  const connectedTombstoneLatencyMs = performance.now() - retractStartedAt;
-  milestones.push("ordered-retract-tombstone");
-
-  const expiring = candidate(
-    "candidate_e2e_expire",
-    created.lifecycle.presentationSessionId,
-    artifacts.publicDeck.deckVersion,
-    artifacts.publicDeck.manifestHash,
-    artifacts.publicDeck.slides[0]?.publicSlideKey ?? "",
-    artifacts.sourceHash,
-  );
-  requireApplied(
-    coordinator.addCuratedCandidate(account.accountSessionId, expiring, 1_011),
-    "expiring curated candidate",
-  );
-  const expirePublishedSignal = new ExactSignal<string>("expiring card publication");
-  tombstoneSignal = new ExactSignal<string>("connected expiry tombstone");
-  const secondSocket = gateway.connectStage(
-    displaySession.audienceDisplaySessionId,
-    {
-      onPlayback: () => undefined,
-      onCard: (event) => {
-        if (event.status === "PUBLISHED") expirePublishedSignal.emit(event.projectionId);
-      },
-      onClose: () => undefined,
-    },
-    1_011,
-  );
-  if (secondSocket === null) throw new Error("second exact-event subscriber failed");
-  const expiringPublished = requireApplied(
-    await coordinator.approveCandidate(
-      account.accountSessionId,
-      {
-        presentationSessionId: created.lifecycle.presentationSessionId,
-        candidateId: expiring.candidateId,
-        expectedCandidateRevision: "candrev_1",
-        expectedPublicCardRevision: "pcr_2",
-        authorityId: created.authority.authorityId,
-        expiresAtMs: 1_013,
-      },
-      1_012,
-    ),
-    "expiring candidate approval",
-  );
-  await expirePublishedSignal.wait();
-  requireApplied(
-    await coordinator.terminateCard(
-      account.accountSessionId,
-      {
-        presentationSessionId: created.lifecycle.presentationSessionId,
-        projectionId: expiringPublished.projectionId,
-        expectedPublicCardRevision: "pcr_3",
-        authorityId: created.authority.authorityId,
-        status: "EXPIRED",
-      },
-      1_013,
-    ),
-    "publication expiry",
-  );
-  await tombstoneSignal.wait();
-  milestones.push("ordered-expiry-tombstone");
-
-  socket.close();
-  secondSocket.close();
-  const reconnect = gateway.snapshot(displaySession.audienceDisplaySessionId, 1_014);
-  if (reconnect === null) throw new Error("reconnect snapshot unavailable");
-  milestones.push("reconnect-snapshot");
-  return {
-    milestones,
-    acceptedCommandIds,
-    appliedCommandIds,
-    cardEvents,
-    connectedTombstoneLatencyMs,
-    reconnectActiveCardCount: reconnect.cards.length,
-    reconnectTombstoneStatuses: reconnect.tombstones.map((event) => event.status),
-    browserStorageEntries: cleanStageProfile.storage.size,
-  };
 }

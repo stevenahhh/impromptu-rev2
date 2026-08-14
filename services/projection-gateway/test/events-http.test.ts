@@ -25,18 +25,21 @@ const deck = {
 
 async function nextServerEvent(reader: ReadableStreamDefaultReader<Uint8Array>, timeoutMs = 2_000) {
   const timeout = AbortSignal.timeout(timeoutMs);
-  const next = await Promise.race([
-    reader.read(),
-    new Promise<never>((_resolve, reject) => {
-      timeout.addEventListener("abort", () => reject(new Error("SSE event timeout")), {
-        once: true,
-      });
-    }),
-  ]);
-  if (next.done) throw new Error("SSE stream closed before event");
-  const line = new TextDecoder().decode(next.value).trim();
-  if (!line.startsWith("data: ")) throw new Error(`invalid SSE frame: ${line}`);
-  return JSON.parse(line.slice(6));
+  while (true) {
+    const next = await Promise.race([
+      reader.read(),
+      new Promise<never>((_resolve, reject) => {
+        timeout.addEventListener("abort", () => reject(new Error("SSE event timeout")), {
+          once: true,
+        });
+      }),
+    ]);
+    if (next.done) throw new Error("SSE stream closed before event");
+    const line = new TextDecoder().decode(next.value).trim();
+    if (line.startsWith(":")) continue;
+    if (!line.startsWith("data: ")) throw new Error(`invalid SSE frame: ${line}`);
+    return JSON.parse(line.slice(6));
+  }
 }
 
 function boundGateway() {

@@ -189,6 +189,7 @@ function eventStream(
   let cancelled = false;
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
+      controller.enqueue(new TextEncoder().encode(": ready\n\n"));
       socket = dependencies.gateway.connectStage(
         audienceDisplaySessionId,
         {
