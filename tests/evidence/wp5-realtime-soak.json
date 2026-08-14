@@ -1,12 +1,14 @@
 {
-  "profile": "venue-like-exact-event",
+  "profile": "venue-like-real-network-exact-event",
+  "transport": "private-http+projection-wss+snapshot-http",
   "commandCount": 500,
   "reconnectCount": 50,
-  "commandToStageAppliedP95Ms": 0.037,
-  "reconnectToSnapshotP95Ms": 0.052,
+  "commandToStageAppliedP95Ms": 22.707,
+  "reconnectToSnapshotP95Ms": 2.691,
+  "observedVisibleEffects": 499,
   "duplicateVisibleEffects": 0,
   "staleEpochAcceptances": 0,
   "staleCardResurrections": 0,
-  "liveLeaseMs": 3000,
-  "silentPartitionExposureMs": 3000
+  "liveLeaseMs": 250,
+  "silentPartitionExposureMs": 255.503
 }
