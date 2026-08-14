@@ -1,9 +1,9 @@
 import { existsSync, mkdirSync, rmSync } from "node:fs";
-import { createServer, type Server } from "node:http";
+import { createServer as createHttpServer, type Server } from "node:http";
 import { join } from "node:path";
 
 import { type BrowserContext, chromium, type Page } from "playwright-core";
-import { preview } from "vite";
+import { createServer as createViteServer, preview } from "vite";
 
 const chromeExecutable = "C:/Program Files/Google/Chrome/Application/chrome.exe";
 const chromeHeadless = process.env.BROWSER_HEADED !== "true";
@@ -43,8 +43,30 @@ function address(surface: AppSurface) {
   return `http://127.0.0.1:${surface.port}${surface.route}`;
 }
 
+async function verifyDevResponseHeaders() {
+  for (const [index, surface] of surfaces.entries()) {
+    const port = 43176 + index;
+    const server = await createViteServer({
+      optimizeDeps: { noDiscovery: true },
+      root: `apps/${surface.app}`,
+      server: { host: "127.0.0.1", port, strictPort: true },
+    });
+    await server.listen();
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/`);
+      const policy = response.headers.get("content-security-policy");
+      if (!policy?.includes("frame-ancestors 'none'")) {
+        throw new Error(`${surface.app} dev response is missing frame-ancestors denial`);
+      }
+    } finally {
+      await server.close();
+    }
+  }
+  console.log("Console and Stage dev responses enforce frame-ancestors denial.");
+}
+
 async function startEmbedOrigin(): Promise<Server> {
-  const server = createServer((_request, response) => {
+  const server = createHttpServer((_request, response) => {
     response.writeHead(200, { "Content-Type": "text/html" });
     response.end(
       '<!doctype html><title>Embed verifier</title><iframe src="http://127.0.0.1:43174/"></iframe>',
@@ -336,6 +358,7 @@ mkdirSync(runtimeRoot, { recursive: true });
 mkdirSync(artifactPath, { recursive: true });
 
 try {
+  await verifyDevResponseHeaders();
   await verifyColdOfflineRestart();
   console.log(`Chrome runtime verified; artifacts: ${artifactPath}`);
 } finally {
