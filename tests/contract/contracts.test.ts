@@ -104,7 +104,7 @@ describe("closed public contracts", () => {
       EvidenceCandidateSchema.safeParse({
         ...curated,
         provenance: "LIVE_VERIFIED",
-        causal: { ...curated.causal, transcriptFinalId: "transcript-final-1" },
+        causal: { ...curated.causal, transcriptFinalId: "transcript_final-1" },
       }).success,
     ).toBe(true);
   });

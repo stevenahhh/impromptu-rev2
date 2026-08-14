@@ -2,6 +2,7 @@ import { z } from "zod";
 import { TimestampMsSchema, VersionIdSchema } from "./common.ts";
 import { ControllerSessionSchema, ControllerSnapshotSchema } from "./control.ts";
 import { ActorIdSchema } from "./control-identifiers.ts";
+import { EvidenceCandidateSchema } from "./private-evidence.ts";
 import {
   CaptureDeviceIdSchema,
   CaptureGrantIdSchema,
@@ -10,7 +11,6 @@ import {
 } from "./private-identifiers.ts";
 import { PublicCardRevisionSchema } from "./public-identifiers.ts";
 import { AudienceSnapshotSchema, PublicStageSessionSchema } from "./public-protocol.ts";
-import { EvidenceCandidateSchema } from "./publication.ts";
 import {
   PresentationSessionEpochSchema,
   PresentationSessionIdSchema,

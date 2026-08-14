@@ -1,5 +1,5 @@
 {
-  "candidateId": "candidate-private-1",
+  "candidateId": "candidate_private-1",
   "candidateVersion": "candidate-v1",
   "provenance": "CURATED_PREAPPROVED",
   "verdict": "SUPPORTED",
@@ -7,9 +7,9 @@
   "evidenceExcerpt": "The projected machine runs a public-only Stage profile.",
   "privateSourceUri": "private-decks/account-1/source-1",
   "causal": {
-    "presentationSessionId": "session-1",
-    "presentationSessionEpoch": 3,
-    "displayBindingEpoch": 4,
+    "presentationSessionId": "ps_session-1",
+    "presentationSessionEpoch": "pse_3",
+    "displayBindingEpoch": "dbe_4",
     "deckVersion": "deck_v7",
     "manifestHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "occurrence": {
@@ -18,7 +18,7 @@
     },
     "transcriptFinalId": null,
     "source": {
-      "sourceId": "source-private-1",
+      "sourceId": "source_private-1",
       "revision": "source-v5",
       "contentHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     },
