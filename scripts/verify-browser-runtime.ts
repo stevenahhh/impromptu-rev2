@@ -645,7 +645,7 @@ async function closePersistentContext(context: BrowserContext): Promise<void> {
   const disconnected = browser?.isConnected()
     ? new Promise<void>((resolve, reject) => {
         const signal = AbortSignal.timeout(5_000);
-        browser.once("disconnected", resolve);
+        browser.once("disconnected", () => resolve());
         signal.addEventListener(
           "abort",
           () => reject(new Error("persistent Chrome process did not disconnect")),
