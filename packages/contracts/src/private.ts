@@ -1,3 +1,4 @@
+export * from "./prepared-evidence.ts";
 export * from "./private-deck.ts";
 export * from "./private-evidence.ts";
 export * from "./private-identifiers.ts";

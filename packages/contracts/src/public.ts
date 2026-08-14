@@ -5,6 +5,8 @@ export {
   TimestampMsSchema,
 } from "./common.ts";
 export * from "./handshake.ts";
+export type { DisplayJoin, DisplayJoinId } from "./prepared-evidence.ts";
+export { DisplayJoinIdSchema, DisplayJoinSchema } from "./prepared-evidence.ts";
 export * from "./public-deck.ts";
 export * from "./public-identifiers.ts";
 export * from "./public-protocol.ts";
