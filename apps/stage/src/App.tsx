@@ -186,6 +186,7 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
     let sseSubscription: StageSubscription | null = null;
     let latestSnapshot: StageSnapshotView | null = null;
     let realtimeReconnectAttempts = 0;
+    const appliedCommandIds = new Set<string>();
     const leaseTimers = new Map<string, number>();
 
     const scheduleLease = (card: StageSnapshotView["cards"][number]) => {
@@ -225,12 +226,29 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
         const observer: StageEventObserver = {
           onPlayback(event) {
             if (!active) return;
-            setSnapshot((current) => {
-              if (current === null) return null;
-              const next = { ...current, occurrence: event.occurrence };
-              latestSnapshot = next;
-              return next;
-            });
+            const staleBinding =
+              latestSnapshot !== null &&
+              event.displayBindingEpoch !== latestSnapshot.displayBindingEpoch;
+            const duplicate = appliedCommandIds.has(event.commandId);
+            if (staleBinding) {
+              setSnapshot((current) => {
+                if (current === null) return null;
+                const next = { ...current, cards: [] };
+                latestSnapshot = next;
+                return next;
+              });
+              publishStageEvent("impromptu:card-hidden", { reason: "STALE_EVENT" });
+              return;
+            }
+            if (!duplicate) {
+              appliedCommandIds.add(event.commandId);
+              setSnapshot((current) => {
+                if (current === null) return null;
+                const next = { ...current, occurrence: event.occurrence };
+                latestSnapshot = next;
+                return next;
+              });
+            }
             const recordOverHttp = () =>
               client
                 .recordApplied(event)
