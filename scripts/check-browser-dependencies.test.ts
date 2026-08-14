@@ -6,26 +6,65 @@ import {
 } from "./check-browser-dependencies.ts";
 
 describe("browser forbidden dependency checker", () => {
-  test("accepts the configured browser roots when no forbidden import exists", () => {
+  test("accepts a non-empty browser fixture with a provider-blocking CSP", () => {
     const manifest = loadBrowserDependencyManifest();
 
-    expect(scanBrowserDependencies(manifest)).toEqual([]);
+    expect(scanBrowserDependencies(manifest, ["scripts/fixtures/browser-boundary-clean"])).toEqual(
+      [],
+    );
   });
 
-  test("rejects the checked-in negative fixture", () => {
+  test("fails closed when configured frontend roots are missing", () => {
     const manifest = loadBrowserDependencyManifest();
-    const violations = scanBrowserDependencies(manifest, [
-      "scripts/fixtures/browser-forbidden-import.ts.fixture",
-    ]);
+    const violations = scanBrowserDependencies(manifest);
 
     expect(violations).toEqual([
       {
-        file: "scripts/fixtures/browser-forbidden-import.ts.fixture",
-        kind: "forbidden-import",
-        specifier: "@impromptu/model-router",
-        rule: "@impromptu/model-router",
+        file: "apps/console",
+        kind: "missing-root",
+        specifier: "apps/console",
+        rule: "browser root must exist",
+      },
+      {
+        file: "apps/stage",
+        kind: "missing-root",
+        specifier: "apps/stage",
+        rule: "browser root must exist",
       },
     ]);
+  });
+
+  test("fails closed when a browser root has no scannable files", () => {
+    const manifest = loadBrowserDependencyManifest();
+
+    expect(scanBrowserDependencies(manifest, ["scripts/fixtures/browser-boundary-empty"])).toEqual([
+      {
+        file: "scripts/fixtures/browser-boundary-empty",
+        kind: "empty-root",
+        specifier: "scripts/fixtures/browser-boundary-empty",
+        rule: "browser root must contain scannable files",
+      },
+    ]);
+  });
+
+  test("scans manifests, imports, bundles, source maps, artifacts, signatures, and CSP", () => {
+    const manifest = loadBrowserDependencyManifest();
+    const violations = scanBrowserDependencies(manifest, [
+      "scripts/fixtures/browser-boundary-negative",
+    ]);
+
+    expect(violations.map(({ kind }) => kind).sort()).toEqual([
+      "forbidden-artifact",
+      "forbidden-content-signature",
+      "forbidden-content-signature",
+      "forbidden-content-signature",
+      "forbidden-csp-origin",
+      "forbidden-import",
+      "forbidden-manifest-dependency",
+    ]);
+    expect(violations.map(({ file }) => file)).toContain(
+      "scripts/fixtures/browser-boundary-negative/app.js.map",
+    );
   });
 
   test("matches only exact packages or package subpaths", () => {

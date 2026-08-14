@@ -1,3 +1,0 @@
-import { ServerModelRouter } from "@impromptu/model-router";
-
-export const forbiddenInBrowser = ServerModelRouter;

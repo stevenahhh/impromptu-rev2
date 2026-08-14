@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["app.ts"],
+  "names": [],
+  "mappings": "",
+  "sourcesContent": ["fetch('https://api.deepgram.com/v1/listen')"]
+}
