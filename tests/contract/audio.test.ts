@@ -47,6 +47,8 @@ describe("audio contracts", () => {
   test("types device clock references and final word timing without unknown fields", () => {
     const clock = DeviceClockReferenceSchema.parse({
       mappingVersion: "clock-v1",
+      presentationSessionId: "ps_alpha",
+      presentationSessionEpoch: "pse_1",
       deviceId: "device_microphone",
       anchorDeviceMs: 10_000,
       anchorSessionMs: 10_125,

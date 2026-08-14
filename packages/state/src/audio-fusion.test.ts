@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  PresentationSessionEpochSchema,
   SlideOccurrenceWindowSchema,
   type TimedTranscript,
   TimedTranscriptSchema,
@@ -15,6 +16,8 @@ function transcript(overrides: Partial<TimedTranscript> = {}): TimedTranscript {
     audioEndDeviceMs: 1_500,
     clock: {
       mappingVersion: "clock-v1",
+      presentationSessionId: "ps_alpha",
+      presentationSessionEpoch: "pse_1",
       deviceId: "device_microphone",
       anchorDeviceMs: 1_000,
       anchorSessionMs: 1_120,
@@ -45,9 +48,24 @@ const slides = [
 const firstSlide = slides[0];
 if (firstSlide === undefined) throw new Error("slide fixture is required");
 
+const authority = {
+  presentationSessionId: "ps_alpha",
+  presentationSessionEpoch: "pse_1",
+  mappingVersion: "clock-v1",
+  deviceId: "device_microphone",
+  anchorDeviceMs: 1_000,
+  anchorSessionMs: 1_120,
+  maxClockOffsetMs: 500,
+} as const;
+
 describe("cross-device clock mapping", () => {
   test("maps injected device offset and expands by bounded uncertainty", () => {
-    expect(mapDeviceIntervalToSession(transcript(), 1_100, 1_500, 50)).toEqual({
+    expect(
+      mapDeviceIntervalToSession(transcript(), 1_100, 1_500, {
+        authority,
+        maxClockUncertaintyMs: 50,
+      }),
+    ).toEqual({
       outcome: "MAPPED",
       mappingVersion: "clock-v1",
       startSessionMs: 1_210,
@@ -56,12 +74,54 @@ describe("cross-device clock mapping", () => {
     });
   });
 
+  test("rejects forged anchors, unauthorized epochs, and non-finite runtime values", () => {
+    expect(
+      mapDeviceIntervalToSession(
+        transcript({
+          clock: { ...transcript().clock, anchorSessionMs: 9_999 },
+        }),
+        1_100,
+        1_500,
+        { authority, maxClockUncertaintyMs: 50 },
+      ),
+    ).toEqual({ outcome: "AMBIGUOUS", reason: "CLOCK_REFERENCE_UNAUTHORIZED" });
+    expect(
+      mapDeviceIntervalToSession(
+        transcript({
+          clock: {
+            ...transcript().clock,
+            presentationSessionEpoch: PresentationSessionEpochSchema.parse("pse_2"),
+          },
+        }),
+        1_100,
+        1_500,
+        { authority, maxClockUncertaintyMs: 50 },
+      ),
+    ).toEqual({ outcome: "AMBIGUOUS", reason: "CLOCK_REFERENCE_UNAUTHORIZED" });
+    expect(
+      mapDeviceIntervalToSession(transcript() as TimedTranscript, Number.NaN, 1_500, {
+        authority,
+        maxClockUncertaintyMs: 50,
+      }),
+    ).toEqual({ outcome: "AMBIGUOUS", reason: "CLOCK_VALUE_INVALID" });
+  });
+
   test("abstains for excessive skew and spoofed timestamps outside the calibrated range", () => {
-    expect(mapDeviceIntervalToSession(transcript(), 1_100, 1_500, 5)).toEqual({
+    expect(
+      mapDeviceIntervalToSession(transcript(), 1_100, 1_500, {
+        authority,
+        maxClockUncertaintyMs: 5,
+      }),
+    ).toEqual({
       outcome: "AMBIGUOUS",
       reason: "CLOCK_UNCERTAINTY_EXCEEDED",
     });
-    expect(mapDeviceIntervalToSession(transcript(), 899, 1_500, 50)).toEqual({
+    expect(
+      mapDeviceIntervalToSession(transcript(), 899, 1_500, {
+        authority,
+        maxClockUncertaintyMs: 50,
+      }),
+    ).toEqual({
       outcome: "AMBIGUOUS",
       reason: "CLOCK_REFERENCE_OUT_OF_RANGE",
     });
@@ -70,7 +130,10 @@ describe("cross-device clock mapping", () => {
 
 describe("slide occurrence STT fusion", () => {
   test("attributes an utterance only when one immutable occurrence covers its expanded interval", () => {
-    const result = fuseTranscriptToSlide(transcript(), slides, { maxClockUncertaintyMs: 50 });
+    const result = fuseTranscriptToSlide(transcript(), slides, {
+      clockAuthority: authority,
+      maxClockUncertaintyMs: 50,
+    });
     expect(result).toEqual({
       outcome: "ATTRIBUTED",
       transcriptFinalId: "transcript_alpha",
@@ -88,8 +151,24 @@ describe("slide occurrence STT fusion", () => {
     });
   });
 
+  test("rejects open slide occurrence input before constructing a closed attribution", () => {
+    const openWindows = [
+      {
+        ...firstSlide,
+        occurrence: { ...firstSlide.occurrence, unexpectedPrivateField: "secret" },
+      },
+    ];
+    expect(fuseTranscriptToSlide(transcript(), openWindows, { clockAuthority: authority })).toEqual(
+      { outcome: "AMBIGUOUS", reason: "SLIDE_WINDOW_INVALID" },
+    );
+  });
+
   test("abstains deterministically for silence, boundary overlap, and late words", () => {
-    expect(fuseTranscriptToSlide(transcript({ text: "", words: [] }), slides)).toEqual({
+    expect(
+      fuseTranscriptToSlide(transcript({ text: "", words: [] }), slides, {
+        clockAuthority: authority,
+      }),
+    ).toEqual({
       outcome: "AMBIGUOUS",
       reason: "SILENCE",
     });
@@ -100,12 +179,14 @@ describe("slide occurrence STT fusion", () => {
           words: [{ text: "경계", startDeviceMs: 1_650, endDeviceMs: 1_690 }],
         }),
         slides,
+        { clockAuthority: authority },
       ),
     ).toEqual({ outcome: "AMBIGUOUS", reason: "SLIDE_BOUNDARY_CROSSED" });
     expect(
       fuseTranscriptToSlide(
         transcript({ words: [{ text: "늦음", startDeviceMs: 1_450, endDeviceMs: 1_510 }] }),
         slides,
+        { clockAuthority: authority },
       ),
     ).toEqual({ outcome: "AMBIGUOUS", reason: "WORD_OUTSIDE_AUDIO_INTERVAL" });
   });

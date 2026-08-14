@@ -37,6 +37,8 @@ export const AudioCaptureConsentSchema = z
 export const DeviceClockReferenceSchema = z
   .object({
     mappingVersion: VersionIdSchema,
+    presentationSessionId: PresentationSessionIdSchema,
+    presentationSessionEpoch: PresentationSessionEpochSchema,
     deviceId: CaptureDeviceIdSchema,
     anchorDeviceMs: TimestampMsSchema,
     anchorSessionMs: TimestampMsSchema,

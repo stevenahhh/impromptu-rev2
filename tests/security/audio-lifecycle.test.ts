@@ -162,6 +162,8 @@ describe("audio lifecycle security", () => {
       audioEndDeviceMs: 50_100,
       clock: {
         mappingVersion: "clock-security",
+        presentationSessionId: "ps_security",
+        presentationSessionEpoch: "pse_1",
         deviceId: "device_security",
         anchorDeviceMs: 1_000,
         anchorSessionMs: 1_020,
@@ -171,7 +173,19 @@ describe("audio lifecycle security", () => {
       },
       words: [{ text: "위조", startDeviceMs: 50_000, endDeviceMs: 50_100 }],
     });
-    expect(fuseTranscriptToSlide(transcript, [])).toEqual({
+    expect(
+      fuseTranscriptToSlide(transcript, [], {
+        clockAuthority: {
+          presentationSessionId: "ps_security",
+          presentationSessionEpoch: "pse_1",
+          mappingVersion: "clock-security",
+          deviceId: "device_security",
+          anchorDeviceMs: 1_000,
+          anchorSessionMs: 1_020,
+          maxClockOffsetMs: 100,
+        },
+      }),
+    ).toEqual({
       outcome: "AMBIGUOUS",
       reason: "CLOCK_REFERENCE_OUT_OF_RANGE",
     });
