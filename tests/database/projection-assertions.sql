@@ -31,6 +31,16 @@ SELECT pg_temp.assert_true(
   'private relation names and size-bearing catalog rows must not be present'
 );
 SELECT pg_temp.assert_true(
+  (
+    SELECT count(*) = 2 AND bool_and(relrowsecurity) AND bool_and(relforcerowsecurity)
+    FROM pg_class AS relation
+    JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+    WHERE namespace.nspname = 'public_projection'
+      AND relation.relname IN ('publication_inbox', 'applied_publications')
+  ),
+  'projection publication inbox tables must force row-level security'
+);
+SELECT pg_temp.assert_true(
   NOT has_table_privilege(
     'projection_app',
     'public_projection.projection_sessions',
@@ -57,10 +67,31 @@ SELECT pg_temp.assert_true(
   'only currently published, non-retracted, non-expired cards may be visible'
 );
 SELECT pg_temp.assert_true(
+  NOT has_table_privilege(
+    'publication_dispatcher',
+    'public_projection.publication_inbox',
+    'SELECT,INSERT,UPDATE,DELETE'
+  )
+    AND NOT has_table_privilege(
+      'publication_dispatcher',
+      'public_projection.applied_publications',
+      'SELECT,INSERT,UPDATE,DELETE'
+    )
+    AND has_function_privilege(
+      'publication_dispatcher',
+      'public_projection.dispatch_publication(uuid,uuid,uuid,text,jsonb)',
+      'EXECUTE'
+    ),
+  'publication_dispatcher must write only through the idempotent function'
+);
+SELECT pg_temp.assert_true(
   (
-    SELECT count(*) = 1
+    SELECT count(*) = 2
     FROM _migrations.applied_migrations
-    WHERE migration_name = '0001_projection_foundation.sql'
+    WHERE migration_name IN (
+      '0001_projection_foundation.sql',
+      '0002_publication_inbox.sql'
+    )
       AND checksum ~ '^[0-9a-f]{64}$'
   ),
   'projection migration must be recorded with a checksum'

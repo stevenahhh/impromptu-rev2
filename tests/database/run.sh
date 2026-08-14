@@ -218,7 +218,8 @@ run_migrations
 rerun_output="$(run_migrations)"
 if [[ "$rerun_output" != *"SKIP private/0001_private_foundation.sql"* \
   || "$rerun_output" != *"SKIP private/0002_publication_dispatcher.sql"* \
-  || "$rerun_output" != *"SKIP projection/0001_projection_foundation.sql"* ]]; then
+  || "$rerun_output" != *"SKIP projection/0001_projection_foundation.sql"* \
+  || "$rerun_output" != *"SKIP projection/0002_publication_inbox.sql"* ]]; then
   echo "migration assertion failed: rerun did not skip applied migrations" >&2
   echo "$rerun_output" >&2
   exit 1
@@ -237,6 +238,7 @@ psql_file "$BOOTSTRAP_ROLE" "$PRIVATE_DATABASE" "$REPO_ROOT/tests/database/priva
 psql_file "$BOOTSTRAP_ROLE" "$PROJECTION_DATABASE" "$REPO_ROOT/tests/database/projection-assertions.sql"
 psql_file "$PRIVATE_ROLE" "$PRIVATE_DATABASE" "$REPO_ROOT/tests/database/private-app.sql"
 psql_file "$PROJECTION_ROLE" "$PROJECTION_DATABASE" "$REPO_ROOT/tests/database/projection-app.sql"
+psql_file "$DISPATCHER_ROLE" "$PROJECTION_DATABASE" "$REPO_ROOT/tests/database/dispatcher-app.sql"
 
 expect_connection_denied "$PROJECTION_ROLE" "$PRIVATE_DATABASE"
 expect_connection_denied "$PROJECTION_ROLE" "$DEFAULT_DATABASE"
@@ -277,6 +279,16 @@ expect_denied \
   "create a PostgreSQL large object from bytes" \
   "SELECT pg_catalog.lo_from_bytea(0, decode('00', 'hex'))" \
   "permission denied for function lo_from_bytea"
+expect_denied \
+  "$DISPATCHER_ROLE" "$PROJECTION_DATABASE" \
+  "reuse a dispatch key with conflicting content" \
+  "SELECT public_projection.dispatch_publication('70000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'publish_card', '{\"title\":\"Conflicting publication\"}'::jsonb)" \
+  "dispatch key conflicts with the accepted publication"
+expect_denied \
+  "$DISPATCHER_ROLE" "$PROJECTION_DATABASE" \
+  "write the projection inbox directly" \
+  "INSERT INTO public_projection.publication_inbox (dispatch_key, tenant_id, projection_id, event_kind, public_payload) VALUES ('70000000-0000-4000-8000-000000000099', '10000000-0000-4000-8000-000000000001', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'publish_card', '{}'::jsonb)" \
+  "permission denied for table publication_inbox"
 expect_denied \
   "$DISPATCHER_ROLE" "$PRIVATE_DATABASE" \
   "read private presentation sessions" \
@@ -328,6 +340,46 @@ if [[ "$receipt_count" != "1" ]]; then
   exit 1
 fi
 echo "Concurrent idempotent receipt writes verified."
+
+compose exec --no-TTY postgres sh -eu -c '
+  pids=""
+  for worker in 1 2 3 4 5 6 7 8; do
+    psql --username publication_dispatcher --dbname impromptu_projection --no-psqlrc \
+      --set ON_ERROR_STOP=1 --tuples-only --no-align \
+      --command "SELECT public_projection.dispatch_publication(
+        '\''70000000-0000-4000-8000-000000000020'\'',
+        '\''10000000-0000-4000-8000-000000000001'\'',
+        '\''aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'\'',
+        '\''publish_card'\'',
+        '\''{\"title\":\"Concurrent publication\"}'\''::jsonb
+      )" > "/tmp/dispatch-$worker.out" &
+    pids="$pids $!"
+  done
+  for pid in $pids; do wait "$pid"; done
+  applied=0
+  duplicate=0
+  for worker in 1 2 3 4 5 6 7 8; do
+    if grep -qx APPLIED "/tmp/dispatch-$worker.out"; then
+      applied=$((applied + 1))
+    elif grep -qx DUPLICATE "/tmp/dispatch-$worker.out"; then
+      duplicate=$((duplicate + 1))
+    else
+      cat "/tmp/dispatch-$worker.out" >&2
+      exit 1
+    fi
+  done
+  test "$applied" -eq 1
+  test "$duplicate" -eq 7
+'
+inbox_count="$(psql_value "$BOOTSTRAP_ROLE" "$PROJECTION_DATABASE" \
+  "SELECT count(*) FROM public_projection.publication_inbox WHERE dispatch_key = '70000000-0000-4000-8000-000000000020'")"
+applied_count="$(psql_value "$BOOTSTRAP_ROLE" "$PROJECTION_DATABASE" \
+  "SELECT count(*) FROM public_projection.applied_publications WHERE dispatch_key = '70000000-0000-4000-8000-000000000020'")"
+if [[ "$inbox_count" != "1" || "$applied_count" != "1" ]]; then
+  echo "publication concurrency assertion failed: inbox=$inbox_count applied=$applied_count" >&2
+  exit 1
+fi
+echo "Concurrent projection dispatch deduplication verified."
 
 readonly DRIFT_ROOT="/tmp/migrations-drift-$$"
 compose exec --no-TTY postgres sh -eu -c \

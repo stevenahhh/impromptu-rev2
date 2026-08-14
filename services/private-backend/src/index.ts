@@ -23,3 +23,4 @@ export {
   type PublicationDispatchBatchResult,
   type PublicationEventKind,
 } from "./publication/outbox-dispatcher.ts";
+export { createPostgresProjectionDispatchBoundary } from "./publication/postgres-projection-dispatch.ts";
