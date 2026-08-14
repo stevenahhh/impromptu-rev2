@@ -139,10 +139,11 @@ export function createScriptedSttAdapter(options: ScriptedSttAdapterOptions): Sc
     return cloneAndFreeze(transcript);
   };
   const transcribe = async function* (
-    _chunks: AsyncIterable<SttAudioChunk>,
+    chunks: AsyncIterable<SttAudioChunk>,
     context: ModelInvocationContext,
   ): AsyncIterable<SttStreamEvent> {
     try {
+      for await (const _chunk of chunks) throwIfAborted(context.signal);
       for (const event of events) {
         throwIfAborted(context.signal);
         yield cloneAndFreeze(event);

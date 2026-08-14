@@ -778,11 +778,22 @@ async function* validatedChunks(
   schema: { parse(value: unknown): SttAudioChunk },
   signal: AbortSignal,
 ): AsyncIterable<SttAudioChunk> {
+  let expectedSequence = 0;
   for await (const chunk of chunks) {
     if (signal.aborted) throw signal.reason;
     try {
-      yield schema.parse(chunk);
-    } catch {
+      const parsed = schema.parse(chunk);
+      if (parsed.sequence !== expectedSequence) {
+        throw new ModelRouterError(
+          "invalid_request",
+          "Streaming STT chunk sequence is not contiguous",
+          false,
+        );
+      }
+      expectedSequence += 1;
+      yield parsed;
+    } catch (caught) {
+      if (caught instanceof ModelRouterError) throw caught;
       throw new ModelRouterError(
         "invalid_request",
         "Streaming STT input did not match the audio chunk schema",

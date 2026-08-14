@@ -613,6 +613,32 @@ describe("server model router", () => {
     }
   });
 
+  test("rejects replayed audio chunk sequences with one typed terminal", async () => {
+    const time = new ManualTime();
+    const registry = new ModelRoutingRegistry();
+    const transcript = { text: "확정", language: "ko", durationMs: 100 };
+    registry.registerDeterministicFakeStreamingStt(
+      createScriptedSttAdapter({
+        transcript,
+        events: [{ kind: "final", sequence: 0, transcript }],
+      }),
+    );
+    const router = createRouter(registry, time);
+    async function* replayedAudio() {
+      yield { sequence: 0, audio: new Uint8Array([1]) };
+      yield { sequence: 0, audio: new Uint8Array([2]) };
+    }
+
+    const routed = [];
+    for await (const item of router.streamStt(replayedAudio(), context(2_000))) routed.push(item);
+    const completion = routed.at(-1);
+    expect(completion?.kind).toBe("complete");
+    if (completion?.kind === "complete") {
+      expect(completion.result.ok).toBe(false);
+      if (!completion.result.ok) expect(completion.result.error.code).toBe("invalid_request");
+    }
+  });
+
   test("rejects unknown final transcript fields even with a permissive adapter schema", async () => {
     const time = new ManualTime();
     const registry = new ModelRoutingRegistry();

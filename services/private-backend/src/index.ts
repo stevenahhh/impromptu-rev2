@@ -1,3 +1,4 @@
+export * from "./audio-capture.ts";
 export type { ExactOrigin, PrivateBackendConfig } from "./config.ts";
 export { parsePrivateBackendConfig } from "./config.ts";
 export {
