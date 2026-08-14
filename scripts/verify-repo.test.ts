@@ -14,8 +14,12 @@ describe("repository policy", () => {
     });
   });
 
-  test("ships the approved plan and server-only AI boundary", () => {
+  test("ships the application, approved plan, research, and server-only AI boundary", () => {
+    expect(existsSync("docs/신청서.pdf")).toBe(true);
+    expect(existsSync("docs/PWA-구현-최적화-연구보고서.md")).toBe(true);
+    expect(existsSync("docs/PWA-구현-최적화-연구보고서.html")).toBe(true);
     expect(existsSync(".omo/plans/impromptu-r2-hyperplan.md")).toBe(true);
+    expect(existsSync(".omo/ulw-research/20260814-040838/sources-ledger.md")).toBe(true);
 
     const boundary = readFileSync("docs/AI-BOUNDARY.md", "utf8");
     expect(boundary).toContain("All model execution");

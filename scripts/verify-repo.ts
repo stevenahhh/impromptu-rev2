@@ -5,7 +5,12 @@ const requiredFiles = [
   "CONTRIBUTING.md",
   "docs/AI-BOUNDARY.md",
   "docs/DEMO-SCOPE.md",
+  "docs/PWA-구현-최적화-연구보고서.md",
+  "docs/PWA-구현-최적화-연구보고서.html",
+  "docs/신청서.pdf",
+  ".omo/hyperplan/pwa-presentation-debate.md",
   ".omo/plans/impromptu-r2-hyperplan.md",
+  ".omo/ulw-research/20260814-040838/sources-ledger.md",
 ] as const;
 
 const missingFiles = requiredFiles.filter((path) => !existsSync(path));
