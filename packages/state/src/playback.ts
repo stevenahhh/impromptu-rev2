@@ -10,9 +10,14 @@ import type {
   StageAppliedReceipt,
 } from "@impromptu/contracts/control";
 import {
+  AcceptedCommandReceiptSchema,
+  CommandIdSchema,
+  ControlRevisionSchema,
   controlRevision,
   controlRevisionValue,
   nextControlRevision,
+  PlaybackControlLeaseSchema,
+  StageAppliedReceiptSchema,
 } from "@impromptu/contracts/control";
 import type {
   DisplayBindingEpoch,
@@ -22,7 +27,18 @@ import type {
   PublicSlideKey,
   PublicSlideOccurrence,
 } from "@impromptu/contracts/public";
-import { nextPublicPlaybackRevision, publicPlaybackRevision } from "@impromptu/contracts/public";
+import {
+  DisplayBindingEpochSchema,
+  nextPublicPlaybackRevision,
+  PresentationSessionEpochSchema,
+  PresentationSessionIdSchema,
+  PublicPlaybackRevisionSchema,
+  PublicSlideKeySchema,
+  PublicSlideOccurrenceSchema,
+  publicPlaybackRevision,
+  Sha256Schema,
+} from "@impromptu/contracts/public";
+import { z } from "zod";
 
 export type StageStatus = "READY" | "DISCONNECTED" | "UNBOUND";
 
@@ -57,6 +73,39 @@ export type PlaybackAuthorityState = Readonly<{
 
 export type PlaybackAuthoritySnapshot = PlaybackAuthorityState;
 
+const PlaybackEffectSchema = z
+  .object({
+    commandId: CommandIdSchema,
+    acceptedControlRevision: ControlRevisionSchema,
+    occurrence: PublicSlideOccurrenceSchema,
+    blackout: z.boolean(),
+  })
+  .strict();
+const AcceptedCommandRecordSchema = z
+  .object({
+    requestHash: Sha256Schema,
+    receipt: AcceptedCommandReceiptSchema,
+    effect: PlaybackEffectSchema,
+    appliedReceipt: StageAppliedReceiptSchema.nullable(),
+  })
+  .strict();
+const PlaybackAuthoritySnapshotSchema = z
+  .object({
+    presentationSessionId: PresentationSessionIdSchema,
+    presentationSessionEpoch: PresentationSessionEpochSchema,
+    activeLease: PlaybackControlLeaseSchema,
+    displayBindingEpoch: DisplayBindingEpochSchema,
+    controlRevision: ControlRevisionSchema,
+    publicPlaybackRevision: PublicPlaybackRevisionSchema,
+    stageStatus: z.enum(["READY", "DISCONNECTED", "UNBOUND"]),
+    slideOrder: z.array(PublicSlideKeySchema),
+    occurrence: PublicSlideOccurrenceSchema,
+    nextOccurrenceSeq: z.number().int().positive(),
+    blackout: z.boolean(),
+    acceptedCommands: z.record(z.string(), AcceptedCommandRecordSchema),
+  })
+  .strict();
+
 export type CreatePlaybackAuthorityState = Readonly<{
   presentationSessionId: PresentationSessionId;
   presentationSessionEpoch: PresentationSessionEpoch;
@@ -83,7 +132,11 @@ export function createPlaybackAuthorityState(
     throw new Error("slide order must contain unique public slide keys");
   }
   return {
-    ...input,
+    presentationSessionId: input.presentationSessionId,
+    presentationSessionEpoch: input.presentationSessionEpoch,
+    activeLease: input.activeLease,
+    displayBindingEpoch: input.displayBindingEpoch,
+    stageStatus: input.stageStatus,
     slideOrder: [...input.slideOrder],
     controlRevision: controlRevision(0),
     publicPlaybackRevision: publicPlaybackRevision(0),
@@ -360,8 +413,6 @@ export function snapshotPlaybackAuthority(
   return structuredClone(state);
 }
 
-export function restorePlaybackAuthority(
-  snapshot: PlaybackAuthoritySnapshot,
-): PlaybackAuthorityState {
-  return structuredClone(snapshot);
+export function restorePlaybackAuthority(snapshot: unknown): PlaybackAuthorityState {
+  return PlaybackAuthoritySnapshotSchema.parse(snapshot);
 }

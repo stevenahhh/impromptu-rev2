@@ -246,6 +246,12 @@ describe("playback authority reducer", () => {
     const duplicate = reducePlaybackCommand(restored, command({ type: "SLIDE_NEXT" }), nowMs);
     expect(String(duplicate.state.controlRevision)).toBe("cr_1");
     expect(duplicate.receipt).toEqual(accepted.receipt);
+    expect(() =>
+      restorePlaybackAuthority({
+        ...snapshotPlaybackAuthority(accepted.state),
+        controlRevision: "pbr_1",
+      }),
+    ).toThrow();
   });
 });
 

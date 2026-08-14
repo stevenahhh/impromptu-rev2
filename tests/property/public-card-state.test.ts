@@ -303,6 +303,15 @@ describe("runtime role snapshot restore", () => {
     expect(conflict.outcome).toBe("CONFLICTING_SNAPSHOT");
     expect(conflict.playback).toEqual(current);
 
+    const hashConflict = restoreAudienceRoleStreams(
+      current,
+      stream(),
+      audienceSnapshot({ deck: { ...parsed.deck, manifestHash: hash("d") } }),
+      "PUBLIC_STAGE",
+    );
+    expect(hashConflict.outcome).toBe("CONFLICTING_SNAPSHOT");
+    expect(hashConflict.playback).toEqual(current);
+
     const cardsAtTwo = applyPublicCardEvent(
       applyPublicCardEvent(stream(), card(1, "projection_live")).state,
       tombstone(2, "projection_other"),
