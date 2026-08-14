@@ -1,0 +1,16 @@
+name: impromptu-r2-database-test
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: impromptu
+      POSTGRES_USER: impromptu_bootstrap
+      POSTGRES_PASSWORD: local-test-only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready --username impromptu_bootstrap --dbname impromptu"]
+      interval: 1s
+      timeout: 5s
+      retries: 30
+    tmpfs:
+      - /var/lib/postgresql/data

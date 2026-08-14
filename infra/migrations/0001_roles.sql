@@ -1,0 +1,53 @@
+\set ON_ERROR_STOP 1
+
+BEGIN;
+
+CREATE ROLE impromptu_owner
+  NOLOGIN
+  NOSUPERUSER
+  NOCREATEDB
+  NOCREATEROLE
+  NOINHERIT
+  NOREPLICATION
+  NOBYPASSRLS;
+
+CREATE ROLE migration
+  LOGIN
+  NOSUPERUSER
+  NOCREATEDB
+  NOCREATEROLE
+  NOINHERIT
+  NOREPLICATION
+  NOBYPASSRLS;
+
+CREATE ROLE private_app
+  LOGIN
+  NOSUPERUSER
+  NOCREATEDB
+  NOCREATEROLE
+  NOINHERIT
+  NOREPLICATION
+  NOBYPASSRLS;
+
+CREATE ROLE projection_app
+  LOGIN
+  NOSUPERUSER
+  NOCREATEDB
+  NOCREATEROLE
+  NOINHERIT
+  NOREPLICATION
+  NOBYPASSRLS;
+
+GRANT impromptu_owner TO migration;
+
+ALTER DATABASE impromptu OWNER TO impromptu_owner;
+REVOKE ALL PRIVILEGES ON DATABASE impromptu FROM PUBLIC;
+GRANT CONNECT ON DATABASE impromptu TO migration, private_app, projection_app;
+
+REVOKE ALL PRIVILEGES ON SCHEMA public FROM PUBLIC;
+
+ALTER ROLE migration SET search_path = pg_catalog;
+ALTER ROLE private_app SET search_path = private_app, public_projection, pg_catalog;
+ALTER ROLE projection_app SET search_path = public_projection, pg_catalog;
+
+COMMIT;
