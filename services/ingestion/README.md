@@ -11,8 +11,9 @@ uv run --project services/ingestion impromptu-ingestion ingest deck.pdf --output
 
 The installed executable is `impromptu-ingestion`. The worker copies one stable source snapshot
 into a private temporary directory, hashes and validates that staged copy, and parses exactly those
-bytes. Source replacement during staging is rejected. Completed output is fsynced to a unique
-sibling temporary file and atomically published without overwriting an existing path.
+bytes. Source replacement during staging is rejected. Completed output is written and fsynced
+through its original `mkstemp` descriptor, identity/link-count checked, and atomically published
+from a unique sibling path without replacing an existing regular path or symlink.
 
 PPTX extraction includes public slide text, tables, images, and chart series; speaker notes are
 never read into the manifest. PDF extraction includes positioned text and embedded images. PDF

@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import stat
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -64,11 +65,102 @@ def _absolute_without_resolving(path: Path) -> Path:
     return path if path.is_absolute() else Path.cwd() / path
 
 
-def _write_and_sync(path: Path, payload: bytes) -> None:
-    with path.open("wb") as stream:
-        stream.write(payload)
-        stream.flush()
-        os.fsync(stream.fileno())
+def _write_and_sync(descriptor: int, payload: bytes) -> None:
+    remaining = memoryview(payload)
+    while remaining:
+        written = os.write(descriptor, remaining)
+        if written <= 0:
+            raise OSError("output write made no progress")
+        remaining = remaining[written:]
+    os.fsync(descriptor)
+
+
+def _same_file(left: os.stat_result, right: os.stat_result) -> bool:
+    return left.st_dev == right.st_dev and left.st_ino == right.st_ino
+
+
+def _verify_temporary_identity(descriptor: int, temporary: Path) -> os.stat_result:
+    descriptor_status = os.fstat(descriptor)
+    try:
+        path_status = temporary.lstat()
+    except OSError as error:
+        raise CliOperationError(
+            "output_tampered", "output temporary path disappeared before publication"
+        ) from error
+
+    if (
+        not stat.S_ISREG(descriptor_status.st_mode)
+        or not stat.S_ISREG(path_status.st_mode)
+        or not _same_file(descriptor_status, path_status)
+        or descriptor_status.st_nlink != 1
+        or path_status.st_nlink != 1
+    ):
+        raise CliOperationError(
+            "output_tampered", "output temporary path identity or link count changed"
+        )
+    return descriptor_status
+
+
+def _verify_published_identity(
+    descriptor: int, output: Path, expected_links: int
+) -> os.stat_result:
+    descriptor_status = os.fstat(descriptor)
+    try:
+        output_status = output.lstat()
+    except OSError as error:
+        raise CliOperationError("output_tampered", "published output path disappeared") from error
+    if (
+        not stat.S_ISREG(output_status.st_mode)
+        or not _same_file(descriptor_status, output_status)
+        or descriptor_status.st_nlink != expected_links
+        or output_status.st_nlink != expected_links
+    ):
+        raise CliOperationError(
+            "output_tampered", "published output identity or link count changed"
+        )
+    return descriptor_status
+
+
+def _unlink_if_same_file(path: Path, identity: os.stat_result) -> None:
+    try:
+        current = path.lstat()
+    except FileNotFoundError:
+        return
+    if stat.S_ISREG(current.st_mode) and _same_file(current, identity):
+        path.unlink()
+
+
+def _publish_no_replace(descriptor: int, temporary: Path, output: Path) -> os.stat_result:
+    identity = _verify_temporary_identity(descriptor, temporary)
+    try:
+        os.link(temporary, output, follow_symlinks=False)
+    except FileExistsError as error:
+        raise CliOperationError("output_exists", "refusing to overwrite existing output") from error
+    except OSError as error:
+        raise CliOperationError(
+            "output_unwritable", "output file could not be atomically published"
+        ) from error
+
+    try:
+        return _verify_published_identity(descriptor, output, expected_links=2)
+    except BaseException:
+        _unlink_if_same_file(output, identity)
+        raise
+
+
+def _verify_completed_output(output: Path, identity: os.stat_result) -> None:
+    try:
+        output_status = output.lstat()
+    except OSError as error:
+        raise CliOperationError("output_tampered", "completed output path disappeared") from error
+    if (
+        not stat.S_ISREG(output_status.st_mode)
+        or not _same_file(identity, output_status)
+        or output_status.st_nlink != 1
+    ):
+        raise CliOperationError(
+            "output_tampered", "completed output identity or link count changed"
+        )
 
 
 def _write_new_output(path: Path, result: CompletedIngestion) -> None:
@@ -79,27 +171,30 @@ def _write_new_output(path: Path, result: CompletedIngestion) -> None:
             prefix=f".{output.name}.",
             suffix=".tmp",
         )
-        os.close(descriptor)
     except OSError as error:
         raise CliOperationError(
             "output_unwritable", "output temporary file could not be created"
         ) from error
 
     temporary = Path(temporary_name)
+    published_identity: os.stat_result | None = None
     try:
-        _write_and_sync(temporary, _json_bytes(result.model_dump(mode="json")))
         try:
-            os.link(temporary, output)
-        except FileExistsError as error:
-            raise CliOperationError(
-                "output_exists", "refusing to overwrite existing output"
-            ) from error
+            _write_and_sync(descriptor, _json_bytes(result.model_dump(mode="json")))
+            published_identity = _publish_no_replace(descriptor, temporary, output)
+        except CliOperationError:
+            raise
         except OSError as error:
             raise CliOperationError(
-                "output_unwritable", "output file could not be atomically published"
+                "output_unwritable", "output file could not be completed"
             ) from error
     finally:
-        temporary.unlink(missing_ok=True)
+        try:
+            os.close(descriptor)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    _verify_completed_output(output, published_identity)
 
 
 def _run_doctor(as_json: bool) -> int:
