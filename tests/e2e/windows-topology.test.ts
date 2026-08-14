@@ -6,6 +6,8 @@ interface TopologyVerifierEvidence {
     {
       readonly rehearsals: number;
       readonly faultRecoveries: number;
+      readonly realFaults: number;
+      readonly simulatedFaults: number;
       readonly privatePixelCount: number;
       readonly maxRecoveryMs: number;
     }
@@ -45,6 +47,8 @@ describe("WP4 Windows topology real-browser E2E", () => {
     for (const mode of ["extend", "duplicate", "single"]) {
       expect(result.modes[mode]?.rehearsals).toBe(3);
       expect(result.modes[mode]?.faultRecoveries).toBe(21);
+      expect(result.modes[mode]?.realFaults).toBe(12);
+      expect(result.modes[mode]?.simulatedFaults).toBe(9);
       expect(result.modes[mode]?.privatePixelCount).toBe(0);
       expect(result.modes[mode]?.maxRecoveryMs).toBeLessThanOrEqual(30_000);
     }

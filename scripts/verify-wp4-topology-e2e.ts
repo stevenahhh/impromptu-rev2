@@ -30,6 +30,16 @@ console.log(
           {
             rehearsals: runs.length,
             faultRecoveries: runs.reduce((sum, run) => sum + run.faults.length, 0),
+            realFaults: runs.reduce(
+              (sum, run) =>
+                sum + run.faults.filter((fault) => fault.injectionKind === "REAL").length,
+              0,
+            ),
+            simulatedFaults: runs.reduce(
+              (sum, run) =>
+                sum + run.faults.filter((fault) => fault.injectionKind === "SIMULATED").length,
+              0,
+            ),
             maxRecoveryMs: Number(
               Math.max(
                 ...runs.flatMap((run) => run.faults.map((fault) => fault.recoveryMs)),

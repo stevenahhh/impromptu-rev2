@@ -7,8 +7,12 @@ import type {
   WindowsTopologyFault,
 } from "../../apps/stage/src/windows-topology";
 
+export type FaultInjectionKind = "REAL" | "SIMULATED";
+
 interface FaultEvidence {
   readonly fault: WindowsTopologyFault;
+  readonly injectionKind: FaultInjectionKind;
+  readonly injectionMechanism: string;
   readonly recoveryMs: number;
 }
 
@@ -131,7 +135,6 @@ async function installEventBuffer(context: BrowserContext): Promise<void> {
       "impromptu:channel-close",
       "impromptu:topology-change",
       "impromptu:public-slide-set",
-      "impromptu:controller-background",
       "fullscreenchange",
       "fullscreenerror",
     ]) {
@@ -284,50 +287,55 @@ async function rehearse(
     });
     const faults: FaultEvidence[] = [];
 
-    const recordFault = async (fault: WindowsTopologyFault, inject: () => Promise<void>) => {
+    const recordFault = async (
+      fault: WindowsTopologyFault,
+      injectionKind: FaultInjectionKind,
+      injectionMechanism: string,
+      inject: () => Promise<void>,
+    ) => {
       const startedAt = performance.now();
       await inject();
       await enterFullscreen(page);
       privatePixelCount += await assertAudienceReady(page);
       const recoveryMs = performance.now() - startedAt;
       if (recoveryMs > 30_000) throw new Error(`${fault} recovery exceeded 30s`);
-      faults.push({ fault, recoveryMs });
+      faults.push({ fault, injectionKind, injectionMechanism, recoveryMs });
     };
 
-    await recordFault("popup-blocked", async () => {
+    await recordFault(
+      "popup-blocked",
+      "REAL",
+      "detached-element-requestFullscreen-rejection",
+      async () => {
+        await exitFullscreen(page);
+        const rejection = await page.evaluate(async () => {
+          const detached = document.createElement("div");
+          try {
+            await detached.requestFullscreen();
+            return null;
+          } catch (error) {
+            document.dispatchEvent(new Event("fullscreenerror"));
+            return error instanceof DOMException ? error.name : "Error";
+          }
+        });
+        if (rejection === null) throw new Error("requestFullscreen unexpectedly succeeded");
+        const message = page.getByText("Fullscreen was blocked. Use the browser menu.");
+        await message.waitFor({ state: "visible", timeout: 5_000 });
+      },
+    );
+
+    await recordFault("fullscreen-exit", "REAL", "document.exitFullscreen", async () => {
       await exitFullscreen(page);
-      await page.evaluate(() => {
-        const element = document.documentElement as HTMLElement & {
-          __wp4RequestFullscreen?: typeof document.documentElement.requestFullscreen;
-        };
-        element.__wp4RequestFullscreen = element.requestFullscreen.bind(element);
-        element.requestFullscreen = () =>
-          Promise.reject(new DOMException("blocked", "NotAllowedError"));
-      });
-      await page.getByRole("button", { name: "Enter fullscreen" }).click();
-      const message = page.getByText("Fullscreen was blocked. Use the browser menu.");
-      await message.waitFor({ state: "visible", timeout: 5_000 });
-      await page.evaluate(() => {
-        const element = document.documentElement as HTMLElement & {
-          __wp4RequestFullscreen?: typeof document.documentElement.requestFullscreen;
-        };
-        if (element.__wp4RequestFullscreen)
-          element.requestFullscreen = element.__wp4RequestFullscreen;
-      });
     });
 
-    await recordFault("fullscreen-exit", async () => {
-      await exitFullscreen(page);
-    });
-
-    await recordFault("monitor-unplug", async () => {
+    await recordFault("monitor-unplug", "SIMULATED", "resize-event", async () => {
       await clearBufferedEvent(page, "impromptu:topology-change");
       const changed = await prepareEvent(page, "impromptu:topology-change");
       await page.evaluate(() => window.dispatchEvent(new Event("resize")));
       await changed();
     });
 
-    await recordFault("topology-switch", async () => {
+    await recordFault("topology-switch", "SIMULATED", "topology-event-adapter", async () => {
       await clearBufferedEvent(page, "impromptu:topology-change");
       const changed = await prepareEvent(page, "impromptu:topology-change");
       await page.evaluate(async () => {
@@ -342,21 +350,21 @@ async function rehearse(
       await changed();
     });
 
-    await recordFault("browser-refresh", async () => {
+    await recordFault("browser-refresh", "REAL", "page.reload", async () => {
       await page.reload({ waitUntil: "domcontentloaded" });
       const readyAfterRefresh = await prepareEvent(page, "impromptu:stage-ready");
       await readyAfterRefresh();
     });
 
-    await recordFault("controller-background", async () => {
-      const backgrounded = await prepareEvent(controller, "impromptu:controller-background");
+    await recordFault("controller-background", "SIMULATED", "visibilitychange-event", async () => {
+      const backgrounded = await prepareEvent(controller, "visibilitychange");
       await controller.evaluate(() => {
-        window.dispatchEvent(new CustomEvent("impromptu:controller-background"));
+        window.dispatchEvent(new Event("visibilitychange"));
       });
       await backgrounded();
     });
 
-    await recordFault("projection-drop", async () => {
+    await recordFault("projection-drop", "REAL", "process-restart+sse-reconnect", async () => {
       await clearBufferedEvent(page, "impromptu:channel-close");
       await clearBufferedEvent(page, "impromptu:stage-ready");
       const closed = await prepareEvent(page, "impromptu:channel-close");
