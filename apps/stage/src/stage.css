@@ -1,14 +1,32 @@
+.stage-shell {
+  display: grid;
+  height: var(--size-viewport);
+  grid-template-rows: auto var(--track-fluid);
+  overflow: hidden;
+}
+
+.stage-shell .ui-shell__header {
+  padding-block-end: var(--space-stage);
+}
+
+.stage-shell .ui-shell__body {
+  min-height: var(--space-0);
+}
+
 .stage-welcome {
   display: grid;
-  gap: var(--space-5);
-  padding-block: var(--space-8);
+  height: var(--size-full);
+  align-content: center;
+  gap: var(--space-stage);
+  overflow: hidden;
+  padding-block: var(--space-0);
 }
 
 .stage-welcome h1,
 .stage-claim h1 {
   margin: var(--space-0);
   font-family: var(--font-display);
-  font-size: var(--text-display);
+  font-size: var(--text-stage-display);
   font-weight: var(--weight-regular);
   line-height: var(--line-tight);
   letter-spacing: var(--tracking-tight);
@@ -27,7 +45,7 @@
   gap: var(--space-6);
   align-items: center;
   justify-content: space-between;
-  margin-block-start: var(--space-6);
+  margin-block-start: var(--space-2);
 }
 
 .stage-code {
@@ -40,14 +58,18 @@
 
 .stage-note {
   max-width: var(--size-copy);
+  margin: var(--space-0);
   color: var(--text-secondary);
   font-size: var(--text-small);
 }
 
 .stage-display {
+  display: grid;
   width: var(--size-full);
-  min-height: var(--size-viewport);
-  padding: clamp(var(--space-4), var(--fluid-page), var(--space-8));
+  height: var(--size-viewport);
+  grid-template-rows: auto var(--track-fluid);
+  overflow: hidden;
+  padding: var(--space-stage);
 }
 
 .stage-display__bar,
@@ -65,10 +87,11 @@
       auto-fit,
       minmax(min(var(--size-full), var(--size-card-min)), var(--fraction-full))
     );
-  gap: clamp(var(--space-6), var(--fluid-gap), var(--space-16));
+  min-height: var(--space-0);
+  gap: var(--space-stage);
   align-items: center;
-  min-height: calc(var(--size-viewport) - var(--space-20));
-  padding-block: var(--space-8);
+  overflow: hidden;
+  padding-block: var(--space-stage);
 }
 
 .stage-claim {
@@ -82,7 +105,7 @@
 }
 
 .stage-evidence blockquote {
-  margin: var(--space-8) var(--space-0);
+  margin: var(--space-stage) var(--space-0);
   font-family: var(--font-display);
   font-size: var(--text-title);
   line-height: var(--line-title);

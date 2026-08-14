@@ -128,6 +128,92 @@ async function installOfflineShell(context: BrowserContext, surface: AppSurface)
   console.log(`Installed ${surface.app} offline shell (${shell.urls.length} entries).`);
 }
 
+async function assertStageFitsViewport(page: Page, label: string, selectors: string[]) {
+  const result = await page.evaluate((criticalSelectors) => {
+    const viewport = { height: window.innerHeight, width: window.innerWidth };
+    const clipped = criticalSelectors.flatMap((selector) =>
+      [...document.querySelectorAll(selector)].flatMap((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.top < 0 ||
+          rect.left < 0 ||
+          rect.bottom > viewport.height ||
+          rect.right > viewport.width
+          ? [selector]
+          : [];
+      }),
+    );
+    return {
+      clipped,
+      documentHeight: document.documentElement.scrollHeight,
+      viewport,
+    };
+  }, selectors);
+
+  if (result.documentHeight > result.viewport.height || result.clipped.length > 0) {
+    throw new Error(
+      `${label} overflowed ${result.viewport.width}x${result.viewport.height}: ` +
+        `document=${result.documentHeight}, clipped=${result.clipped.join(",")}`,
+    );
+  }
+}
+
+async function verifyStageLayouts(context: BrowserContext) {
+  const viewports = [
+    { height: 900, label: "1440x900", width: 1440 },
+    { height: 900, label: "768x900", width: 768 },
+    { height: 800, label: "320x800", width: 320 },
+    { height: 450, label: "200-percent-equivalent", width: 720 },
+  ] as const;
+  const routes = [
+    {
+      critical: [".ui-shell__header", ".stage-welcome", ".stage-join", ".stage-join .ui-button"],
+      name: "landing",
+      path: "/",
+    },
+    {
+      critical: [
+        ".stage-display__bar",
+        ".stage-display__actions",
+        ".stage-display__actions .ui-button",
+        ".stage-display__content",
+        ".stage-claim",
+        ".stage-evidence",
+      ],
+      name: "display",
+      path: "/display/rehearsal",
+    },
+  ] as const;
+
+  for (const viewport of viewports) {
+    for (const route of routes) {
+      const page = await context.newPage();
+      await page.setViewportSize({ height: viewport.height, width: viewport.width });
+      await page.goto(`http://127.0.0.1:43174${route.path}`, { waitUntil: "networkidle" });
+      await assertStageFitsViewport(page, `${route.name}-${viewport.label}`, [...route.critical]);
+      await page.screenshot({
+        path: join(artifactPath, `stage-${route.name}-${viewport.label}.png`),
+      });
+      await page.close();
+    }
+  }
+
+  const fullscreenPage = await context.newPage();
+  await fullscreenPage.setViewportSize({ height: 900, width: 1440 });
+  await fullscreenPage.goto("http://127.0.0.1:43174/display/rehearsal", {
+    waitUntil: "networkidle",
+  });
+  const enterFullscreen = fullscreenPage.waitForFunction(() => document.fullscreenElement !== null);
+  await fullscreenPage.getByRole("button", { name: "Enter fullscreen" }).click();
+  await enterFullscreen;
+  await assertStageFitsViewport(fullscreenPage, "physical-fullscreen", routes[1].critical.slice());
+  await fullscreenPage.screenshot({ path: join(artifactPath, "stage-physical-fullscreen.png") });
+  const exitFullscreen = fullscreenPage.waitForFunction(() => document.fullscreenElement === null);
+  await fullscreenPage.getByRole("button", { name: "Exit fullscreen" }).click();
+  await exitFullscreen;
+  await fullscreenPage.close();
+  console.log("Stage layout and fullscreen controls fit every required viewport.");
+}
+
 async function verifyReducedMotion(context: BrowserContext) {
   for (const surface of surfaces) {
     const page = await context.newPage();
@@ -204,6 +290,7 @@ async function verifyColdOfflineRestart() {
     }
     await verifyCrossOriginFrameRejection(onlineContext);
     await verifyReducedMotion(onlineContext);
+    await verifyStageLayouts(onlineContext);
   } finally {
     console.log("Closing online Chrome and preview origins...");
     await onlineContext.close();

@@ -18,7 +18,7 @@ function LandingPage() {
   const titleId = useId();
 
   return (
-    <Shell focused header={<StageHeader />}>
+    <Shell className="stage-shell" focused header={<StageHeader />}>
       <section className="stage-welcome ui-reveal" aria-labelledby={titleId}>
         <p className="ui-eyebrow">Display setup</p>
         <h1 id={titleId}>A clean screen for the room</h1>
