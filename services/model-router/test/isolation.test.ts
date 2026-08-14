@@ -36,6 +36,16 @@ class ManualTime implements DeadlineScheduler {
     this.#scheduled.add(scheduled);
     return () => this.#scheduled.delete(scheduled);
   }
+
+  advanceTo(nowMs: number): void {
+    this.nowMs = nowMs;
+    for (const scheduled of [...this.#scheduled]) {
+      if (scheduled.atMs <= nowMs) {
+        this.#scheduled.delete(scheduled);
+        scheduled.run();
+      }
+    }
+  }
 }
 
 class AllowGates implements PolicyVersionAuthority, TenantQuotaPolicy, TenantBudget {
@@ -111,7 +121,7 @@ function isolatedRouter(
   });
 }
 
-function registerIsolatedUnary(registry: ModelRoutingRegistry): void {
+function registerIsolatedUnary(registry: ModelRoutingRegistry, exportName = "invoke"): void {
   registry.registerIsolatedUnary({
     descriptor: {
       adapterId: "isolated",
@@ -126,16 +136,19 @@ function registerIsolatedUnary(registry: ModelRoutingRegistry): void {
       },
     },
     inputSchema: z.object({ id: z.string().min(1), pending: z.boolean().optional() }).strict(),
-    outputSchema: z
-      .object({
-        id: z.string(),
-        fetchBlocked: z.literal(true),
-        webSocketBlocked: z.literal(true),
-        dnsBlocked: z.literal(true),
-        status: z.literal(202),
-      })
-      .strict(),
-    module: { modulePath, exportName: "invoke", allowedReadPaths: [] },
+    outputSchema:
+      exportName === "invoke"
+        ? z
+            .object({
+              id: z.string(),
+              fetchBlocked: z.literal(true),
+              webSocketBlocked: z.literal(true),
+              dnsBlocked: z.literal(true),
+              status: z.literal(202),
+            })
+            .strict()
+        : z.unknown(),
+    module: { modulePath, exportName, allowedReadPaths: [] },
   });
 }
 
@@ -223,6 +236,66 @@ describe("production adapter process isolation", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("cancelled");
     expect(transport.requests).toHaveLength(1);
+    expect(isolate.activeIsolates).toBe(0);
+  }, 2_000);
+
+  test("fails closed and promptly cleans unary isolates without exactly one result", async () => {
+    for (const exportName of ["exitWithoutResult", "emitDuplicateResults"]) {
+      const registry = new ModelRoutingRegistry();
+      registerIsolatedUnary(registry, exportName);
+      const isolate = new NodePermissionAdapterIsolate();
+      const router = isolatedRouter(registry, isolate, new RecordingEgressTransport());
+
+      const result = await router.invoke(
+        { capability: "llm", input: { id: exportName } },
+        context(),
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.code).toBe("provider_error");
+      expect(isolate.activeIsolates).toBe(0);
+    }
+  }, 2_000);
+
+  test("cleans concurrent no-result unary isolates", async () => {
+    const registry = new ModelRoutingRegistry();
+    registerIsolatedUnary(registry, "exitWithoutResult");
+    const isolate = new NodePermissionAdapterIsolate();
+    const router = isolatedRouter(registry, isolate, new RecordingEgressTransport());
+
+    const results = await Promise.all(
+      Array.from({ length: 8 }, (_, index) =>
+        router.invoke({ capability: "llm", input: { id: `no-result-${index}` } }, context()),
+      ),
+    );
+
+    expect(results.every((result) => !result.ok && result.error.code === "provider_error")).toBe(
+      true,
+    );
+    expect(isolate.activeIsolates).toBe(0);
+  }, 3_000);
+
+  test("terminates and cleans a pending isolate at its deadline", async () => {
+    const registry = new ModelRoutingRegistry();
+    registerIsolatedUnary(registry);
+    const isolate = new NodePermissionAdapterIsolate();
+    const transport = new RecordingEgressTransport();
+    const observed = new Promise<void>((resolve) => {
+      transport.onRequest = resolve;
+    });
+    const time = new ManualTime();
+    const router = isolatedRouter(registry, isolate, transport, time);
+
+    const pending = router.invoke(
+      { capability: "llm", input: { id: "deadline", pending: true } },
+      context(),
+    );
+    await observed;
+    time.advanceTo(2_000);
+    const result = await pending;
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("deadline_exceeded");
     expect(isolate.activeIsolates).toBe(0);
   }, 2_000);
 

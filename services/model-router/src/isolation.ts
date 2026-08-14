@@ -155,7 +155,7 @@ export class NodePermissionAdapterIsolate implements AdapterIsolate {
       windowsHide: true,
     });
     this.#activeIsolates += 1;
-    return new IsolateSession(child, context, () => {
+    return new IsolateSession(child, mode, context, () => {
       this.#activeIsolates -= 1;
     });
   }
@@ -166,7 +166,9 @@ class IsolateSession {
   readonly unaryResult: Promise<unknown>;
   readonly #child: ChildProcessWithoutNullStreams;
   readonly #readline: ReadlineInterface;
+  readonly #mode: "stream" | "unary";
   readonly #context: ModelInvocationContext;
+  readonly #onAbort: () => void;
   readonly #onClosed: () => void;
   readonly #closed: Promise<void>;
   #resolveUnary: (value: unknown) => void = () => undefined;
@@ -178,11 +180,14 @@ class IsolateSession {
 
   constructor(
     child: ChildProcessWithoutNullStreams,
+    mode: "stream" | "unary",
     context: ModelInvocationContext,
     onClosed: () => void,
   ) {
     this.#child = child;
+    this.#mode = mode;
     this.#context = context;
+    this.#onAbort = () => this.fail(context.signal.reason);
     this.#onClosed = onClosed;
     this.unaryResult = new Promise<unknown>((resolve, reject) => {
       this.#resolveUnary = resolve;
@@ -196,22 +201,22 @@ class IsolateSession {
       child.once("close", (code) => {
         this.#notifyClosed();
         if (!this.#settled) {
-          if (code === 0 && this.#resultReceived) {
+          if (code !== 0) {
+            this.fail(new Error(`Adapter isolate exited with code ${code ?? "unknown"}`));
+          } else if (this.#mode === "unary" && this.#resultReceived) {
             this.#settled = true;
             this.#resolveUnary(this.#result);
-          } else if (code === 0) {
+          } else if (this.#mode === "unary") {
+            this.fail(new Error("Adapter isolate exited without one result"));
+          } else {
             this.#settled = true;
             this.events.end();
-          } else {
-            this.fail(new Error(`Adapter isolate exited with code ${code ?? "unknown"}`));
           }
         }
         resolve();
       });
     });
-    context.signal.addEventListener("abort", () => this.fail(context.signal.reason), {
-      once: true,
-    });
+    context.signal.addEventListener("abort", this.#onAbort, { once: true });
   }
 
   send(message: RpcRecord): void {
@@ -250,16 +255,18 @@ class IsolateSession {
     }
     if (message.type === "transport") {
       void this.#handleTransport(message);
-    } else if (message.type === "event") {
+    } else if (message.type === "event" && this.#mode === "stream") {
       this.events.push(decodeRpc(message.event) as SttStreamEvent);
-    } else if (message.type === "complete") {
+    } else if (message.type === "complete" && this.#mode === "stream") {
       this.#settled = true;
       this.events.end();
-    } else if (message.type === "result") {
+    } else if (message.type === "result" && this.#mode === "unary" && !this.#resultReceived) {
       this.#result = decodeRpc(message.output);
       this.#resultReceived = true;
-    } else {
+    } else if (message.type === "error") {
       this.fail(new Error(message.message));
+    } else {
+      this.fail(new Error("Unexpected adapter isolate message"));
     }
   }
 
@@ -280,6 +287,7 @@ class IsolateSession {
   #notifyClosed(): void {
     if (this.#closedNotified) return;
     this.#closedNotified = true;
+    this.#context.signal.removeEventListener("abort", this.#onAbort);
     this.#onClosed();
   }
 }

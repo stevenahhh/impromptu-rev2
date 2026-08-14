@@ -20,6 +20,15 @@ export async function invoke(input, { transport }) {
   };
 }
 
+export function exitWithoutResult() {
+  process.exit(0);
+}
+
+export function emitDuplicateResults() {
+  process.stdout.write(`${JSON.stringify({ type: "result", output: { duplicate: 1 } })}\n`);
+  return { duplicate: 2 };
+}
+
 export async function* transcribe(chunks) {
   let sequence = 0;
   for await (const chunk of chunks) {
