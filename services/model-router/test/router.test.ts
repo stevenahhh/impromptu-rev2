@@ -6,25 +6,24 @@ import {
   type BudgetReservation,
   createTrustedModelContext,
   type DeadlineScheduler,
-  DeterministicFakeSttAdapter,
-  DeterministicFakeUnaryAdapter,
   type ModelDispatchRequest,
-  type ModelInvocationContext,
   ModelRoutingRegistry,
+  modelFailureSchema,
   type PolicyVersionAuthority,
   type ProviderEgressTransport,
   type ProviderTransportResponse,
   type SecretStore,
   ServerModelRouter,
   StaticExactEgressPolicy,
-  type StreamingSttAdapter,
-  type SttStreamEvent,
-  sttAudioChunkSchema,
-  sttStreamEventSchema,
   type TenantBudget,
   type TenantQuotaPolicy,
   type TrustedModelContext,
 } from "../src/index.ts";
+import {
+  createScriptedSttAdapter,
+  createScriptedUnaryAdapter,
+  type ScriptedUnaryStep,
+} from "../src/testing.ts";
 
 class ManualTime implements DeadlineScheduler {
   nowMs = 1_000;
@@ -130,13 +129,10 @@ function createRouter(
 
 function unaryAdapter(
   adapterId: string,
-  respond: (
-    input: { prompt: string },
-    invocation: ModelInvocationContext,
-  ) => { answer: string } | Promise<{ answer: string }>,
+  step: ScriptedUnaryStep<{ answer: string }>,
   requirement?: AdapterRequirement,
 ) {
-  return new DeterministicFakeUnaryAdapter({
+  return createScriptedUnaryAdapter({
     descriptor: {
       adapterId,
       capability: "llm",
@@ -148,15 +144,18 @@ function unaryAdapter(
     },
     inputSchema: z.object({ prompt: z.string() }),
     outputSchema: z.object({ answer: z.string() }),
-    respond,
+    steps: [step],
   });
 }
 
 describe("routing registry", () => {
   test("resolves one deterministic default and explicit alternatives", () => {
     const registry = new ModelRoutingRegistry();
-    const primary = unaryAdapter("primary", ({ prompt }) => ({ answer: prompt }));
-    const secondary = unaryAdapter("secondary", ({ prompt }) => ({ answer: prompt }));
+    const primary = unaryAdapter("primary", { kind: "output", output: { answer: "primary" } });
+    const secondary = unaryAdapter("secondary", {
+      kind: "output",
+      output: { answer: "secondary" },
+    });
 
     registry.registerDeterministicFakeUnary(primary, { default: true });
     registry.registerDeterministicFakeUnary(secondary);
@@ -181,11 +180,11 @@ describe("routing registry", () => {
       estimatedCostUnits: 1,
       unexpected: true,
     };
-    const adapter = new DeterministicFakeUnaryAdapter({
+    const adapter = createScriptedUnaryAdapter({
       descriptor,
       inputSchema: z.object({}).strict(),
       outputSchema: z.object({ answer: z.string() }).strict(),
-      respond: () => ({ answer: "must not register" }),
+      steps: [{ kind: "output", output: { answer: "must not register" } }],
     });
 
     expect(registry.registerDeterministicFakeUnary(adapter)).toMatchObject({
@@ -201,17 +200,13 @@ describe("routing registry", () => {
       secretId: "fixture/secret",
       egressOrigin: "https://api.vendor.example",
     };
-    const adapter = new DeterministicFakeSttAdapter({
+    const adapter = createScriptedSttAdapter({
       transcript: { text: "final", language: "ko", durationMs: 100 },
       events: [],
+      requirement,
     });
-    const mutableAdapter: StreamingSttAdapter = {
-      ...adapter,
-      descriptor: { ...adapter.descriptor, requirement },
-      transcribe: (chunks, invocation) => adapter.transcribe(chunks, invocation),
-    };
 
-    registry.registerDeterministicFakeStreamingStt(mutableAdapter);
+    registry.registerDeterministicFakeStreamingStt(adapter);
     requirement.secretId = "mutated";
     const registered = registry.resolveStreamingStt();
 
@@ -222,7 +217,7 @@ describe("routing registry", () => {
 
   test("registers streaming STT independently from unary STT", () => {
     const registry = new ModelRoutingRegistry();
-    const stt = new DeterministicFakeSttAdapter({
+    const stt = createScriptedSttAdapter({
       transcript: { text: "final", language: "ko", durationMs: 100 },
       events: [],
     });
@@ -233,6 +228,98 @@ describe("routing registry", () => {
     expect(registry.resolveUnary("stt")).toBeDefined();
     expect(registry.resolveStreamingStt().descriptor.adapterId).toBe("deterministic-fake-stt");
   });
+
+  test("fails registration transactionally for malformed and throwing boundaries", () => {
+    const registry = new ModelRoutingRegistry();
+    const baselineUnary = unaryAdapter("baseline", {
+      kind: "output",
+      output: { answer: "stable" },
+    });
+    const baselineStt = createScriptedSttAdapter({
+      adapterId: "baseline-stt",
+      transcript: { text: "stable", language: "ko", durationMs: 1 },
+      events: [],
+    });
+    registry.registerDeterministicFakeUnary(baselineUnary);
+    registry.registerDeterministicFakeStreamingStt(baselineStt);
+
+    const hostileRegistration = new Proxy(
+      {},
+      {
+        get() {
+          throw new Error("hostile registration getter");
+        },
+      },
+    );
+    const hostileOptions = new Proxy(
+      {},
+      {
+        ownKeys() {
+          throw new Error("hostile options reflection");
+        },
+      },
+    );
+    const malformedDescriptor = {
+      adapterId: "malformed-fake",
+      capability: "llm" as const,
+      provider: "fake",
+      model: "fixed-output",
+      modelVersion: "1",
+      estimatedCostUnits: 1,
+      unexpected: true,
+    };
+    const malformedFake = createScriptedUnaryAdapter({
+      descriptor: malformedDescriptor,
+      inputSchema: z.object({ prompt: z.string() }).strict(),
+      outputSchema: z.object({ answer: z.string() }).strict(),
+      steps: [{ kind: "output", output: { answer: "never" } }],
+    });
+
+    const failures = [
+      registry.registerDeterministicFakeUnary(malformedFake),
+      registry.registerDeterministicFakeUnary(baselineUnary, hostileOptions),
+      registry.registerIsolatedUnary(hostileRegistration),
+      registry.registerIsolatedStreamingStt(hostileRegistration),
+      registry.registerIsolatedUnary({
+        descriptor: {
+          ...baselineUnary.descriptor,
+          adapterId: "partial-isolated",
+          provider: "provider",
+        },
+        inputSchema: z.object({}).strict(),
+        outputSchema: z.object({}).strict(),
+        module: { modulePath: "relative.mjs", exportName: "invoke", allowedReadPaths: [] },
+      }),
+    ];
+
+    for (const failure of failures) {
+      expect(modelFailureSchema.parse(failure).error.code).toBe("invalid_request");
+      expect(Object.isFrozen(failure)).toBe(true);
+    }
+    expect(registry.resolveUnary("llm").descriptor.adapterId).toBe("baseline");
+    expect(registry.resolveStreamingStt().descriptor.adapterId).toBe("baseline-stt");
+    expect(() => registry.resolveUnary("llm", "malformed-fake")).toThrow();
+    expect(() => registry.resolveUnary("llm", "partial-isolated")).toThrow();
+  });
+
+  test("rejects structurally forged deterministic fakes", () => {
+    const registry = new ModelRoutingRegistry();
+    const genuine = unaryAdapter("genuine", {
+      kind: "output",
+      output: { answer: "genuine" },
+    });
+    const forged = {
+      descriptor: genuine.descriptor,
+      inputSchema: genuine.inputSchema,
+      outputSchema: genuine.outputSchema,
+      invoke: genuine.invoke,
+    };
+
+    const failure = registry.registerDeterministicFakeUnary(forged);
+
+    expect(modelFailureSchema.parse(failure).error.code).toBe("invalid_request");
+    expect(() => registry.resolveUnary("llm", "genuine")).toThrow();
+  });
 });
 
 describe("server model router", () => {
@@ -240,7 +327,7 @@ describe("server model router", () => {
     const time = new ManualTime();
     const registry = new ModelRoutingRegistry();
     registry.registerDeterministicFakeUnary(
-      unaryAdapter("primary", ({ prompt }) => ({ answer: prompt })),
+      unaryAdapter("primary", { kind: "output", output: { answer: "blocked" } }),
     );
     const router = createRouter(registry, time);
 
@@ -268,7 +355,7 @@ describe("server model router", () => {
     const time = new ManualTime();
     const registry = new ModelRoutingRegistry();
     registry.registerDeterministicFakeUnary(
-      unaryAdapter("primary", ({ prompt }) => ({ answer: prompt.toUpperCase() })),
+      unaryAdapter("primary", { kind: "output", output: { answer: "TYPED" } }),
     );
     const router = createRouter(registry, time);
 
@@ -307,16 +394,9 @@ describe("server model router", () => {
     const time = new ManualTime();
     const cancellation = new AbortController();
     const registry = new ModelRoutingRegistry();
-    let invocationStarted: (() => void) | undefined;
-    const started = new Promise<void>((resolve) => {
-      invocationStarted = resolve;
-    });
-    registry.registerDeterministicFakeUnary(
-      unaryAdapter("pending", async () => {
-        invocationStarted?.();
-        return await new Promise<{ answer: string }>(() => undefined);
-      }),
-    );
+    const adapter = unaryAdapter("pending", { kind: "pending" });
+    const started = adapter.waitForInvocation();
+    registry.registerDeterministicFakeUnary(adapter);
     const router = createRouter(registry, time);
 
     const pending = router.invoke(
@@ -334,9 +414,7 @@ describe("server model router", () => {
   test("ends at an injected deadline without sleeps", async () => {
     const time = new ManualTime();
     const registry = new ModelRoutingRegistry();
-    registry.registerDeterministicFakeUnary(
-      unaryAdapter("pending", async () => await new Promise<{ answer: string }>(() => undefined)),
-    );
+    registry.registerDeterministicFakeUnary(unaryAdapter("pending", { kind: "pending" }));
     const router = createRouter(registry, time);
 
     const pending = router.invoke(
@@ -356,7 +434,10 @@ describe("server model router", () => {
   test("does not invoke an adapter after the deadline has already elapsed", async () => {
     const time = new ManualTime();
     const registry = new ModelRoutingRegistry();
-    const adapter = unaryAdapter("never-started", () => ({ answer: "too late" }));
+    const adapter = unaryAdapter("never-started", {
+      kind: "output",
+      output: { answer: "too late" },
+    });
     registry.registerDeterministicFakeUnary(adapter);
     const router = createRouter(registry, time);
 
@@ -377,10 +458,14 @@ describe("server model router", () => {
       { adapterId: "secured", origin: "https://api.vendor.example" },
     ]);
     const registry = new ModelRoutingRegistry();
-    const secured = unaryAdapter("secured", () => ({ answer: "authorized" }), {
-      secretId: "vendor/stt/service",
-      egressOrigin: "https://api.vendor.example",
-    });
+    const secured = unaryAdapter(
+      "secured",
+      { kind: "output", output: { answer: "authorized" } },
+      {
+        secretId: "vendor/stt/service",
+        egressOrigin: "https://api.vendor.example",
+      },
+    );
     registry.registerDeterministicFakeUnary(secured);
     const router = createRouter(registry, time, {
       secretStore: secrets,
@@ -409,10 +494,14 @@ describe("server model router", () => {
     const time = new ManualTime();
     const secrets = new RecordingSecretStore();
     const registry = new ModelRoutingRegistry();
-    const secured = unaryAdapter("secured", () => ({ answer: "must not run" }), {
-      secretId: "vendor/stt/service",
-      egressOrigin: "https://api.vendor.example/v1",
-    });
+    const secured = unaryAdapter(
+      "secured",
+      { kind: "output", output: { answer: "must not run" } },
+      {
+        secretId: "vendor/stt/service",
+        egressOrigin: "https://api.vendor.example/v1",
+      },
+    );
     registry.registerDeterministicFakeUnary(secured);
     const router = createRouter(registry, time, {
       secretStore: secrets,
@@ -437,7 +526,7 @@ describe("server model router", () => {
     const registry = new ModelRoutingRegistry();
     const transcript = { text: "확정", language: "ko", durationMs: 100 };
     registry.registerDeterministicFakeStreamingStt(
-      new DeterministicFakeSttAdapter({
+      createScriptedSttAdapter({
         transcript,
         events: [
           { kind: "partial", sequence: 0, transcript: { ...transcript, text: "확" } },
@@ -472,26 +561,12 @@ describe("server model router", () => {
         unexpected: "must fail",
       },
     };
-    const permissiveSchema = {
-      parse(): SttStreamEvent {
-        return event;
-      },
-    };
-    const adapter: StreamingSttAdapter = {
-      descriptor: {
-        adapterId: "permissive-stt",
-        capability: "stt",
-        provider: "fake",
-        model: "permissive",
-        modelVersion: "1",
-        estimatedCostUnits: 1,
-      },
-      chunkSchema: sttAudioChunkSchema,
-      eventSchema: permissiveSchema,
-      async *transcribe() {
-        yield event;
-      },
-    };
+    const adapter = createScriptedSttAdapter({
+      adapterId: "permissive-stt",
+      transcript: { text: "fallback", language: "ko", durationMs: 0 },
+      events: [event],
+      acceptUnvalidatedEvents: true,
+    });
     registry.registerDeterministicFakeStreamingStt(adapter);
     const router = createRouter(registry, time);
 
@@ -509,45 +584,13 @@ describe("server model router", () => {
   test("aborts the internal scope and returns the inner iterator when its consumer returns", async () => {
     const time = new ManualTime();
     const registry = new ModelRoutingRegistry();
-    let innerReturnCalled = false;
-    let signalAbortedAtReturn = false;
     const transcript = { text: "partial", language: "ko", durationMs: 50 };
-    const adapter: StreamingSttAdapter = {
-      descriptor: {
-        adapterId: "cleanup-stt",
-        capability: "stt",
-        provider: "fake",
-        model: "cleanup",
-        modelVersion: "1",
-        estimatedCostUnits: 1,
-      },
-      chunkSchema: sttAudioChunkSchema,
-      eventSchema: sttStreamEventSchema,
-      transcribe(_chunks, invocation) {
-        let emitted = false;
-        return {
-          [Symbol.asyncIterator]() {
-            return {
-              async next() {
-                if (!emitted) {
-                  emitted = true;
-                  return {
-                    done: false as const,
-                    value: { kind: "partial" as const, sequence: 0, transcript },
-                  };
-                }
-                return await new Promise<never>(() => undefined);
-              },
-              async return() {
-                innerReturnCalled = true;
-                signalAbortedAtReturn = invocation.signal.aborted;
-                return { done: true as const, value: undefined };
-              },
-            };
-          },
-        };
-      },
-    };
+    const adapter = createScriptedSttAdapter({
+      adapterId: "cleanup-stt",
+      transcript,
+      events: [{ kind: "partial", sequence: 0, transcript }],
+      pendingAfterEvents: true,
+    });
     registry.registerDeterministicFakeStreamingStt(adapter);
     const router = createRouter(registry, time);
     const outer = router.streamStt(emptyAudio(), context(2_000))[Symbol.asyncIterator]();
@@ -555,8 +598,8 @@ describe("server model router", () => {
     expect((await outer.next()).value?.kind).toBe("transcript");
     await outer.return?.();
 
-    expect(innerReturnCalled).toBe(true);
-    expect(signalAbortedAtReturn).toBe(true);
+    expect(adapter.streamReturnCount).toBe(1);
+    expect(adapter.signalAbortedAtReturn).toBe(true);
   });
 
   test("cancels a streaming STT iterator before another event is requested", async () => {
@@ -565,7 +608,7 @@ describe("server model router", () => {
     const registry = new ModelRoutingRegistry();
     const transcript = { text: "final", language: "ko", durationMs: 100 };
     registry.registerDeterministicFakeStreamingStt(
-      new DeterministicFakeSttAdapter({
+      createScriptedSttAdapter({
         transcript,
         events: [
           { kind: "partial", sequence: 0, transcript: { ...transcript, text: "part" } },

@@ -1,9 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { z } from "zod";
+import * as productionApi from "../src/index.ts";
 import {
   createTrustedModelContext,
-  DeterministicFakeSttAdapter,
-  DeterministicFakeUnaryAdapter,
   isTrustedModelContext,
   MODEL_CAPABILITIES,
   modelFailureSchema,
@@ -11,6 +10,7 @@ import {
   modelSuccessSchema,
   sttTranscriptSchema,
 } from "../src/index.ts";
+import { createScriptedSttAdapter, createScriptedUnaryAdapter } from "../src/testing.ts";
 
 const trustedContextInput = {
   tenantId: "tenant-1",
@@ -141,8 +141,13 @@ describe("model-router contracts", () => {
 });
 
 describe("deterministic fake adapters", () => {
+  test("keeps test-only factories out of the production API", () => {
+    expect("createScriptedUnaryAdapter" in productionApi).toBe(false);
+    expect("createScriptedSttAdapter" in productionApi).toBe(false);
+  });
+
   test("returns a scripted unary output without provider dependencies", async () => {
-    const adapter = new DeterministicFakeUnaryAdapter({
+    const adapter = createScriptedUnaryAdapter({
       descriptor: {
         adapterId: "fake-llm",
         capability: "llm",
@@ -153,7 +158,7 @@ describe("deterministic fake adapters", () => {
       },
       inputSchema: z.object({ prompt: z.string() }),
       outputSchema: z.object({ answer: z.string() }),
-      respond: ({ prompt }) => ({ answer: prompt.toUpperCase() }),
+      steps: [{ kind: "output", output: { answer: "REPEATABLE" } }],
     });
     const context = createTrustedModelContext(trustedContextInput);
 
@@ -165,7 +170,7 @@ describe("deterministic fake adapters", () => {
 
   test("clones and freezes outputs so caller mutation cannot alter later calls", async () => {
     const scripted = { nested: { values: ["stable"] } };
-    const adapter = new DeterministicFakeUnaryAdapter({
+    const adapter = createScriptedUnaryAdapter({
       descriptor: {
         adapterId: "fake-clone",
         capability: "llm",
@@ -178,7 +183,7 @@ describe("deterministic fake adapters", () => {
       outputSchema: z
         .object({ nested: z.object({ values: z.array(z.string()) }).strict() })
         .strict(),
-      respond: () => scripted,
+      steps: [{ kind: "output", output: scripted }],
     });
     const context = createTrustedModelContext(trustedContextInput);
     const invocation = { trustedContext: context, signal: context.signal };
@@ -192,7 +197,7 @@ describe("deterministic fake adapters", () => {
 
   test("replays scripted unary and streaming STT results in order", async () => {
     const transcript = { text: "안녕하세요", language: "ko", durationMs: 420 };
-    const adapter = new DeterministicFakeSttAdapter({
+    const adapter = createScriptedSttAdapter({
       transcript,
       events: [
         { kind: "partial", sequence: 0, transcript: { ...transcript, text: "안녕" } },

@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { getStreamingFake, getUnaryFake } from "./fake-provenance.ts";
 import { type IsolatedAdapterModule, isolatedAdapterModuleSchema } from "./isolation.ts";
 import {
   type ModelAdapterDescriptor,
@@ -6,8 +8,34 @@ import {
   type Schema,
   type UnaryModelAdapter,
 } from "./ports.ts";
-import type { ModelCapability, ModelFailure } from "./schemas.ts";
+import { type ModelCapability, type ModelFailure, modelFailureSchema } from "./schemas.ts";
 import type { StreamingSttAdapter, SttAudioChunk, SttStreamEvent } from "./stt.ts";
+
+const registrationOptionsSchema = z.object({ default: z.boolean().optional() }).strict();
+const frozenRegistrationFailure = deepFreeze(
+  modelFailureSchema.parse({
+    ok: false,
+    error: {
+      code: "invalid_request",
+      message: "Model adapter registration is invalid",
+      retryable: false,
+    },
+    metadata: {
+      capability: null,
+      adapterId: null,
+      provider: null,
+      model: null,
+      modelVersion: null,
+      policyVersion: "registration",
+      requestId: "registration",
+      traceId: "registration",
+      startedAtMs: 0,
+      completedAtMs: 0,
+      latencyMs: 0,
+      cacheStatus: "bypass",
+    },
+  }),
+);
 
 interface RegisteredUnaryAdapterBase {
   readonly descriptor: UnaryModelAdapter<unknown, unknown>["descriptor"];
@@ -71,24 +99,30 @@ export interface RegistrationOptions {
 export class ModelRoutingRegistry {
   readonly #unary = new Map<ModelCapability, Map<string, RegisteredUnaryAdapter>>();
   readonly #unaryDefaults = new Map<ModelCapability, string>();
-  readonly #streamingStt = new Map<string, RegisteredStreamingSttAdapter>();
+  #streamingStt = new Map<string, RegisteredStreamingSttAdapter>();
   #streamingSttDefault: string | undefined;
 
-  registerDeterministicFakeUnary<Input, Output>(
-    adapter: UnaryModelAdapter<Input, Output>,
-    options: RegistrationOptions = {},
+  registerDeterministicFakeUnary(
+    untrustedAdapter: unknown,
+    untrustedOptions: unknown = {},
   ): ModelFailure | undefined {
     try {
-      const descriptor = cloneAndFreezeDescriptor(adapter.descriptor);
-      assertDeterministicTestProvider(descriptor);
+      const fake = getUnaryFake(untrustedAdapter);
+      if (fake === undefined) return registrationFailure();
+      const options = parseRegistrationOptions(untrustedOptions);
+      const descriptor = cloneAndFreezeDescriptor(fake.descriptor);
+      if (descriptor.provider !== "fake") return registrationFailure();
+      const inputSchema = validatedSchema(fake.inputSchema);
+      const outputSchema = validatedSchema(fake.outputSchema);
+      if (typeof fake.invoke !== "function") return registrationFailure();
       return this.#registerUnary(
         Object.freeze({
           kind: "deterministic-test" as const,
           descriptor,
-          parseInput: (input: unknown) => adapter.inputSchema.parse(input),
-          parseOutput: (output: unknown) => adapter.outputSchema.parse(output),
+          parseInput: (input: unknown) => inputSchema.parse(input),
+          parseOutput: (output: unknown) => outputSchema.parse(output),
           invoke: async (input: unknown, context: ModelInvocationContext) =>
-            await adapter.invoke(adapter.inputSchema.parse(input), context),
+            await fake.invoke(inputSchema.parse(input), context),
         }),
         options,
       );
@@ -97,19 +131,24 @@ export class ModelRoutingRegistry {
     }
   }
 
-  registerIsolatedUnary<Input, Output>(
-    registration: IsolatedUnaryAdapterRegistration<Input, Output>,
-    options: RegistrationOptions = {},
+  registerIsolatedUnary(
+    untrustedRegistration: unknown,
+    untrustedOptions: unknown = {},
   ): ModelFailure | undefined {
     try {
+      const registration = objectRecord(untrustedRegistration);
+      const options = parseRegistrationOptions(untrustedOptions);
       const descriptor = cloneAndFreezeDescriptor(registration.descriptor);
+      const module = cloneAndFreezeModule(registration.module);
+      const inputSchema = validatedSchema(registration.inputSchema);
+      const outputSchema = validatedSchema(registration.outputSchema);
       return this.#registerUnary(
         Object.freeze({
           kind: "isolated-process" as const,
           descriptor,
-          module: cloneAndFreezeModule(registration.module),
-          parseInput: (input: unknown) => registration.inputSchema.parse(input),
-          parseOutput: (output: unknown) => registration.outputSchema.parse(output),
+          module,
+          parseInput: (input: unknown) => inputSchema.parse(input),
+          parseOutput: (output: unknown) => outputSchema.parse(output),
         }),
         options,
       );
@@ -133,20 +172,26 @@ export class ModelRoutingRegistry {
   }
 
   registerDeterministicFakeStreamingStt(
-    adapter: StreamingSttAdapter,
-    options: RegistrationOptions = {},
+    untrustedAdapter: unknown,
+    untrustedOptions: unknown = {},
   ): ModelFailure | undefined {
     try {
-      const descriptor = sttDescriptor(adapter.descriptor);
-      assertDeterministicTestProvider(descriptor);
+      const fake = getStreamingFake(untrustedAdapter);
+      if (fake === undefined) return registrationFailure();
+      const options = parseRegistrationOptions(untrustedOptions);
+      const descriptor = sttDescriptor(fake.descriptor);
+      if (descriptor.provider !== "fake") return registrationFailure();
+      const chunkSchema = validatedSchema<SttAudioChunk>(fake.chunkSchema);
+      const eventSchema = validatedSchema<SttStreamEvent>(fake.eventSchema);
+      if (typeof fake.transcribe !== "function") return registrationFailure();
       return this.#registerStreamingStt(
         Object.freeze({
           kind: "deterministic-test" as const,
           descriptor,
-          chunkSchema: adapter.chunkSchema,
-          eventSchema: adapter.eventSchema,
+          chunkSchema,
+          eventSchema,
           transcribe: (chunks: AsyncIterable<SttAudioChunk>, context: ModelInvocationContext) =>
-            adapter.transcribe(chunks, context),
+            fake.transcribe(chunks, context),
         }),
         options,
       );
@@ -156,18 +201,23 @@ export class ModelRoutingRegistry {
   }
 
   registerIsolatedStreamingStt(
-    registration: IsolatedStreamingSttAdapterRegistration,
-    options: RegistrationOptions = {},
+    untrustedRegistration: unknown,
+    untrustedOptions: unknown = {},
   ): ModelFailure | undefined {
     try {
+      const registration = objectRecord(untrustedRegistration);
+      const options = parseRegistrationOptions(untrustedOptions);
       const descriptor = sttDescriptor(registration.descriptor);
+      const module = cloneAndFreezeModule(registration.module);
+      const chunkSchema = validatedSchema<SttAudioChunk>(registration.chunkSchema);
+      const eventSchema = validatedSchema<SttStreamEvent>(registration.eventSchema);
       return this.#registerStreamingStt(
         Object.freeze({
           kind: "isolated-process" as const,
           descriptor,
-          module: cloneAndFreezeModule(registration.module),
-          chunkSchema: registration.chunkSchema,
-          eventSchema: registration.eventSchema,
+          module,
+          chunkSchema,
+          eventSchema,
         }),
         options,
       );
@@ -194,13 +244,13 @@ export class ModelRoutingRegistry {
     options: RegistrationOptions,
   ): ModelFailure | undefined {
     const { adapterId, capability } = adapter.descriptor;
-    const adapters = this.#unary.get(capability) ?? new Map<string, RegisteredUnaryAdapter>();
-    if (adapters.has(adapterId)) return registrationFailure();
-    adapters.set(adapterId, adapter);
-    this.#unary.set(capability, adapters);
-    if (options.default === true || !this.#unaryDefaults.has(capability)) {
-      this.#unaryDefaults.set(capability, adapterId);
-    }
+    const current = this.#unary.get(capability) ?? new Map<string, RegisteredUnaryAdapter>();
+    if (current.has(adapterId)) return registrationFailure();
+    const next = new Map(current);
+    next.set(adapterId, adapter);
+    const shouldDefault = options.default === true || !this.#unaryDefaults.has(capability);
+    this.#unary.set(capability, next);
+    if (shouldDefault) this.#unaryDefaults.set(capability, adapterId);
     return undefined;
   }
 
@@ -210,50 +260,22 @@ export class ModelRoutingRegistry {
   ): ModelFailure | undefined {
     const { adapterId } = adapter.descriptor;
     if (this.#streamingStt.has(adapterId)) return registrationFailure();
-    this.#streamingStt.set(adapterId, adapter);
-    if (options.default === true || this.#streamingSttDefault === undefined) {
-      this.#streamingSttDefault = adapterId;
-    }
+    const next = new Map(this.#streamingStt);
+    next.set(adapterId, adapter);
+    const shouldDefault = options.default === true || this.#streamingSttDefault === undefined;
+    this.#streamingStt = next;
+    if (shouldDefault) this.#streamingSttDefault = adapterId;
     return undefined;
   }
 }
 
 function registrationFailure(): ModelFailure {
-  return {
-    ok: false,
-    error: {
-      code: "invalid_request",
-      message: "Model adapter registration is invalid",
-      retryable: false,
-    },
-    metadata: {
-      capability: null,
-      adapterId: null,
-      provider: null,
-      model: null,
-      modelVersion: null,
-      policyVersion: "registration",
-      requestId: "registration",
-      traceId: "registration",
-      startedAtMs: 0,
-      completedAtMs: 0,
-      latencyMs: 0,
-      cacheStatus: "bypass",
-    },
-  };
-}
-
-function assertDeterministicTestProvider(descriptor: ModelAdapterDescriptor): void {
-  if (descriptor.provider !== "fake") {
-    throw new TypeError("Production adapters must be registered as isolated process modules");
-  }
+  return frozenRegistrationFailure;
 }
 
 function sttDescriptor(value: unknown): StreamingSttAdapter["descriptor"] {
   const descriptor = cloneAndFreezeDescriptor(value);
-  if (descriptor.capability !== "stt") {
-    throw new TypeError("Streaming STT adapters must declare the stt capability");
-  }
+  if (descriptor.capability !== "stt") throw new TypeError("Invalid STT capability");
   return Object.freeze({ ...descriptor, capability: "stt" as const });
 }
 
@@ -267,4 +289,31 @@ function cloneAndFreezeModule(value: unknown): IsolatedAdapterModule {
   const module = isolatedAdapterModuleSchema.parse(structuredClone(value));
   Object.freeze(module.allowedReadPaths);
   return Object.freeze(module);
+}
+
+function parseRegistrationOptions(value: unknown): RegistrationOptions {
+  const parsed = registrationOptionsSchema.parse(value);
+  return parsed.default === undefined ? {} : { default: parsed.default };
+}
+
+function validatedSchema<Value = unknown>(value: unknown): Schema<Value> {
+  const record = objectRecord(value);
+  const parse = record.parse;
+  if (typeof parse !== "function") throw new TypeError("Schema parse must be a function");
+  return Object.freeze({
+    parse: (input: unknown) => Reflect.apply(parse, value, [input]) as Value,
+  });
+}
+
+function objectRecord(value: unknown): Readonly<Record<string, unknown>> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new TypeError("Expected object");
+  }
+  return value as Readonly<Record<string, unknown>>;
+}
+
+function deepFreeze<Value>(value: Value): Value {
+  if (typeof value !== "object" || value === null) return value;
+  for (const child of Object.values(value)) deepFreeze(child);
+  return Object.freeze(value);
 }

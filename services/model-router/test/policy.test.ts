@@ -5,19 +5,15 @@ import {
   type BudgetReservation,
   createTrustedModelContext,
   type DeadlineScheduler,
-  DeterministicFakeSttAdapter,
-  DeterministicFakeUnaryAdapter,
   type ExactEgressGrant,
   type ExactEgressPolicy,
   type ExactEgressRequest,
   type ModelDispatchRequest,
-  type ModelInvocationContext,
   ModelRouterError,
   ModelRoutingRegistry,
   type PolicyVersionAuthority,
   type ProviderEgressTransport,
   type ProviderEgressTransportRequest,
-  type ProviderTransport,
   type ProviderTransportResponse,
   type SecretStore,
   ServerModelRouter,
@@ -26,6 +22,11 @@ import {
   type TenantQuotaPolicy,
   type TrustedModelContext,
 } from "../src/index.ts";
+import {
+  createScriptedSttAdapter,
+  createScriptedUnaryAdapter,
+  type ScriptedUnaryStep,
+} from "../src/testing.ts";
 
 class ManualTime implements DeadlineScheduler {
   nowMs = 1_000;
@@ -150,13 +151,8 @@ function trustedContext(
   });
 }
 
-function securedAdapter(
-  respond: (
-    input: { prompt: string },
-    context: ModelInvocationContext,
-  ) => { answer: string } | Promise<{ answer: string }>,
-) {
-  return new DeterministicFakeUnaryAdapter({
+function securedAdapter(step: ScriptedUnaryStep<{ answer: string }>) {
+  return createScriptedUnaryAdapter({
     descriptor: {
       adapterId: "secured",
       capability: "llm",
@@ -171,7 +167,7 @@ function securedAdapter(
     },
     inputSchema: z.object({ prompt: z.string() }).strict(),
     outputSchema: z.object({ answer: z.string() }).strict(),
-    respond,
+    steps: [step],
   });
 }
 
@@ -212,16 +208,14 @@ describe("dispatch policy gates", () => {
     const time = new ManualTime();
     const gates = new RecordingPolicyGates();
     const registry = new ModelRoutingRegistry();
-    const adapter = securedAdapter(() => {
-      gates.events.push("provider");
-      return { answer: "ok" };
-    });
+    const adapter = securedAdapter({ kind: "output", output: { answer: "ok" } });
     registry.registerDeterministicFakeUnary(adapter);
+    const providerTransport = new RecordingTransport();
     const router = new ServerModelRouter(
       routerOptions(registry, time, gates, {
         secretStore: fixedSecretStore,
         egressPolicy: new CountingEgressPolicy(),
-        providerTransport: new RecordingTransport(),
+        providerTransport,
       }),
     );
 
@@ -231,7 +225,9 @@ describe("dispatch policy gates", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(gates.events).toEqual(["policy", "quota", "reserve", "provider", "reconcile"]);
+    expect(gates.events).toEqual(["policy", "quota", "reserve", "reconcile"]);
+    expect(adapter.invocationCount).toBe(1);
+    expect(providerTransport.requests).toEqual([]);
     expect(gates.reconciliations).toEqual([
       {
         reservationId: "reservation-tenant-1",
@@ -278,7 +274,7 @@ describe("dispatch policy gates", () => {
       const gates = new RecordingPolicyGates();
       entry.configure(gates);
       const registry = new ModelRoutingRegistry();
-      const adapter = securedAdapter(() => ({ answer: "must not run" }));
+      const adapter = securedAdapter({ kind: "output", output: { answer: "must not run" } });
       registry.registerDeterministicFakeUnary(adapter);
       const router = new ServerModelRouter(
         routerOptions(registry, time, gates, {
@@ -315,7 +311,7 @@ describe("dispatch policy gates", () => {
         if (gate === "budget") gates.onBudgetReserved = stop;
         if (gate === "egress") egress.onAuthorized = stop;
         const registry = new ModelRoutingRegistry();
-        const adapter = securedAdapter(() => ({ answer: "must not run" }));
+        const adapter = securedAdapter({ kind: "output", output: { answer: "must not run" } });
         registry.registerDeterministicFakeUnary(adapter);
         const router = new ServerModelRouter(
           routerOptions(registry, time, gates, {
@@ -353,7 +349,7 @@ describe("dispatch policy gates", () => {
       return await new Promise<BudgetReservation>(() => undefined);
     };
     const registry = new ModelRoutingRegistry();
-    const adapter = securedAdapter(() => ({ answer: "must not run" }));
+    const adapter = securedAdapter({ kind: "output", output: { answer: "must not run" } });
     registry.registerDeterministicFakeUnary(adapter);
     const router = new ServerModelRouter(routerOptions(registry, time, gates));
 
@@ -376,7 +372,7 @@ describe("dispatch policy gates", () => {
       const cancellation = new AbortController();
       const gates = new RecordingPolicyGates();
       const registry = new ModelRoutingRegistry();
-      const adapter = securedAdapter(() => ({ answer: "must not run" }));
+      const adapter = securedAdapter({ kind: "output", output: { answer: "must not run" } });
       registry.registerDeterministicFakeUnary(adapter);
       const secretStore: SecretStore = {
         async read() {
@@ -413,7 +409,7 @@ describe("dispatch policy gates", () => {
     const registry = new ModelRoutingRegistry();
     const transcript = { text: "final", language: "ko", durationMs: 100 };
     registry.registerDeterministicFakeStreamingStt(
-      new DeterministicFakeSttAdapter({
+      createScriptedSttAdapter({
         transcript,
         events: [{ kind: "final", sequence: 0, transcript }],
       }),
@@ -442,11 +438,13 @@ describe("policy-mediated provider transport", () => {
     const transport = new RecordingTransport();
     const registry = new ModelRoutingRegistry();
     registry.registerDeterministicFakeUnary(
-      securedAdapter(async (_input, invocation) => {
-        expect("providerAccess" in invocation).toBe(false);
-        await invocation.transport?.request({ method: "POST", path: "/v1/first" });
-        await invocation.transport?.request({ method: "GET", path: "/v1/second" });
-        return { answer: "transported" };
+      securedAdapter({
+        kind: "transport",
+        requests: [
+          { method: "POST", path: "/v1/first" },
+          { method: "GET", path: "/v1/second" },
+        ],
+        output: { answer: "transported" },
       }),
     );
     const router = new ServerModelRouter(
@@ -483,21 +481,13 @@ describe("policy-mediated provider transport", () => {
       const cancellation = new AbortController();
       const gates = new RecordingPolicyGates();
       const registry = new ModelRoutingRegistry();
-      let retained: ProviderTransport | undefined;
-      let invocationStarted: (() => void) | undefined;
-      const started = new Promise<void>((resolve) => {
-        invocationStarted = resolve;
-      });
-      registry.registerDeterministicFakeUnary(
-        securedAdapter(async (_input, invocation) => {
-          retained = invocation.transport;
-          invocationStarted?.();
-          if (terminal !== "success") {
-            return await new Promise<{ answer: string }>(() => undefined);
-          }
-          return { answer: "done" };
-        }),
+      const adapter = securedAdapter(
+        terminal === "success"
+          ? { kind: "output", output: { answer: "done" } }
+          : { kind: "pending" },
       );
+      const started = adapter.waitForInvocation();
+      registry.registerDeterministicFakeUnary(adapter);
       const router = new ServerModelRouter(
         routerOptions(registry, time, gates, {
           secretStore: fixedSecretStore,
@@ -515,6 +505,7 @@ describe("policy-mediated provider transport", () => {
       if (terminal === "deadline") time.advanceTo(1_250);
       await pending;
 
+      const retained = adapter.retainedTransports[0];
       let rejected: unknown;
       try {
         await retained?.request({ method: "GET", path: "/after-terminal" });
@@ -533,12 +524,10 @@ describe("policy-mediated provider transport", () => {
     const transport = new RecordingTransport();
     const registry = new ModelRoutingRegistry();
     registry.registerDeterministicFakeUnary(
-      securedAdapter(async (_input, invocation) => {
-        await invocation.transport?.request({
-          method: "POST",
-          path: "https://other.example/v1",
-        });
-        return { answer: "must not complete" };
+      securedAdapter({
+        kind: "transport",
+        requests: [{ method: "POST", path: "https://other.example/v1" }],
+        output: { answer: "must not complete" },
       }),
     );
     const router = new ServerModelRouter(
