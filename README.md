@@ -16,6 +16,8 @@
 apps/       Browser PWAs
 services/   Server deployables and the Python ingestion worker
 packages/   Shared contracts, reducers, and test helpers
+infra/      Database migrations and local infrastructure harnesses
+tests/      Cross-cutting contract, security, and end-to-end checks
 docs/       Product, security, research, and operating documentation
 .omo/       Approved implementation plan and research evidence
 ```
@@ -35,6 +37,14 @@ bun run check
 ```
 
 Python services are added in their own verified increment and use `uv sync`.
+
+Run the disposable PostgreSQL migration and role-isolation harness with Docker:
+
+```bash
+bun run test:db
+```
+
+See [`infra/database/README.md`](infra/database/README.md) for its role and migration contract.
 
 ## Work plan
 
