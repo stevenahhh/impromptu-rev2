@@ -15,6 +15,7 @@ import {
   type SecretStore,
   ServerModelRouter,
   StaticExactEgressPolicy,
+  type SttAudioChunk,
   type TenantBudget,
   type TenantQuotaPolicy,
   type TrustedModelContext,
@@ -693,6 +694,54 @@ describe("server model router", () => {
     expect(adapter.signalAbortedAtReturn).toBe(true);
   });
 
+  test("returns cancellation without waiting for a non-cooperative upstream next", async () => {
+    const time = new ManualTime();
+    const cancellation = new AbortController();
+    const registry = new ModelRoutingRegistry();
+    const transcript = { text: "unused", language: "ko", durationMs: 0 };
+    registry.registerDeterministicFakeStreamingStt(
+      createScriptedSttAdapter({
+        transcript,
+        events: [{ kind: "final", sequence: 0, transcript }],
+      }),
+    );
+    let signalNextStarted: () => void = () => undefined;
+    const nextStarted = new Promise<void>((resolve) => {
+      signalNextStarted = resolve;
+    });
+    let returnCount = 0;
+    const source: AsyncIterable<SttAudioChunk> = {
+      [Symbol.asyncIterator]() {
+        return {
+          next() {
+            signalNextStarted();
+            return new Promise<IteratorResult<SttAudioChunk>>(() => undefined);
+          },
+          async return() {
+            returnCount += 1;
+            return { done: true, value: undefined };
+          },
+        };
+      },
+    };
+    const stream = routerStream(
+      createRouter(registry, time),
+      source,
+      context(2_000, cancellation.signal),
+    );
+
+    await nextStarted;
+    cancellation.abort();
+    const routed = await stream;
+
+    expect(routed).toHaveLength(1);
+    expect(routed[0]?.kind).toBe("complete");
+    if (routed[0]?.kind === "complete" && !routed[0].result.ok) {
+      expect(routed[0].result.error.code).toBe("cancelled");
+    }
+    expect(returnCount).toBe(1);
+  });
+
   test("cancels a streaming STT iterator before another event is requested", async () => {
     const time = new ManualTime();
     const cancellation = new AbortController();
@@ -724,5 +773,15 @@ describe("server model router", () => {
     expect((await stream.next()).done).toBe(true);
   });
 });
+
+async function routerStream(
+  router: ServerModelRouter,
+  chunks: AsyncIterable<SttAudioChunk>,
+  trustedContext: TrustedModelContext,
+) {
+  const routed = [];
+  for await (const item of router.streamStt(chunks, trustedContext)) routed.push(item);
+  return routed;
+}
 
 async function* emptyAudio(): AsyncIterable<never> {}

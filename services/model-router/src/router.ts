@@ -496,7 +496,9 @@ export class ServerModelRouter {
       }
       if (!innerDone) scope.abort();
       try {
-        if (!innerDone && iterator?.return !== undefined) await iterator.return();
+        if (!innerDone && iterator?.return !== undefined) {
+          void Promise.resolve(iterator.return()).catch(() => undefined);
+        }
       } finally {
         lease?.revoke();
         scope.dispose();
@@ -779,27 +781,41 @@ async function* validatedChunks(
   signal: AbortSignal,
 ): AsyncIterable<SttAudioChunk> {
   let expectedSequence = 0;
-  for await (const chunk of chunks) {
-    if (signal.aborted) throw signal.reason;
-    try {
-      const parsed = schema.parse(chunk);
-      if (parsed.sequence !== expectedSequence) {
+  const iterator = chunks[Symbol.asyncIterator]();
+  const stopUpstream = () => {
+    if (iterator.return !== undefined) {
+      void Promise.resolve(iterator.return()).catch(() => undefined);
+    }
+  };
+  signal.addEventListener("abort", stopUpstream, { once: true });
+  try {
+    while (true) {
+      const next = await iterator.next();
+      if (next.done) return;
+      if (signal.aborted) throw signal.reason;
+      try {
+        const parsed = schema.parse(next.value);
+        if (parsed.sequence !== expectedSequence) {
+          throw new ModelRouterError(
+            "invalid_request",
+            "Streaming STT chunk sequence is not contiguous",
+            false,
+          );
+        }
+        expectedSequence += 1;
+        yield parsed;
+      } catch (caught) {
+        if (caught instanceof ModelRouterError) throw caught;
         throw new ModelRouterError(
           "invalid_request",
-          "Streaming STT chunk sequence is not contiguous",
+          "Streaming STT input did not match the audio chunk schema",
           false,
         );
       }
-      expectedSequence += 1;
-      yield parsed;
-    } catch (caught) {
-      if (caught instanceof ModelRouterError) throw caught;
-      throw new ModelRouterError(
-        "invalid_request",
-        "Streaming STT input did not match the audio chunk schema",
-        false,
-      );
     }
+  } finally {
+    signal.removeEventListener("abort", stopUpstream);
+    stopUpstream();
   }
 }
 

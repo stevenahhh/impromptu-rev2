@@ -125,13 +125,15 @@ export class NodePermissionAdapterIsolate implements AdapterIsolate {
         session.fail(caught);
       }
     })();
+    void pump.catch(() => undefined);
     session.send({ type: "init", context: publicContext(context) });
     try {
       for await (const event of session.events) yield event;
-      await pump;
     } finally {
-      if (iterator.return !== undefined) await iterator.return();
       await session.close();
+      if (iterator.return !== undefined) {
+        void Promise.resolve(iterator.return()).catch(() => undefined);
+      }
     }
   }
 
