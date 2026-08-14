@@ -10,10 +10,11 @@
   ],
   "scripts": {
     "check:repo": "bun run scripts/verify-repo.ts",
+    "check:boundaries": "bun run services/projection-gateway/test/check-architecture.ts",
     "lint": "biome check .",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "check": "bun run check:repo && bun run lint && bun run typecheck && bun run test"
+    "check": "bun run check:repo && bun run check:boundaries && bun run lint && bun run typecheck && bun run test"
   },
   "devDependencies": {
     "@biomejs/biome": "2.2.0",

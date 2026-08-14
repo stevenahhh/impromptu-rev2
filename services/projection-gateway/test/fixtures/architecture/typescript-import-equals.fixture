@@ -1,0 +1,2 @@
+import PrivateBackend = require("../../private-backend/src/index.ts");
+void PrivateBackend;

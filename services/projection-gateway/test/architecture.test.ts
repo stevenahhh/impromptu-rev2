@@ -1,83 +1,122 @@
 import { describe, expect, test } from "bun:test";
-import { readdirSync, readFileSync } from "node:fs";
-import { dirname, relative, resolve } from "node:path";
-import ts from "typescript";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import {
+  type ArchitectureViolationCode,
+  scanPackageManifest,
+  scanProjectionArchitecture,
+  scanSourceText,
+} from "./support/architecture-scanner.ts";
 
 const serviceRoot = resolve(import.meta.dir, "..");
 const sourceRoot = resolve(serviceRoot, "src");
+const fixtureRoot = resolve(import.meta.dir, "fixtures/architecture");
 
-function sourceFiles(directory: string): readonly string[] {
-  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    const path = resolve(directory, entry.name);
-    return entry.isDirectory() ? sourceFiles(path) : path.endsWith(".ts") ? [path] : [];
-  });
+function fixture(name: string): string {
+  return readFileSync(resolve(fixtureRoot, `${name}.fixture`), "utf8");
 }
 
-function importsFrom(path: string): readonly string[] {
-  const source = ts.createSourceFile(
-    path,
-    readFileSync(path, "utf8"),
-    ts.ScriptTarget.ESNext,
-    true,
-    ts.ScriptKind.TS,
-  );
-  const imports: string[] = [];
-
-  function visit(node: ts.Node): void {
-    if (
-      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
-      node.moduleSpecifier !== undefined &&
-      ts.isStringLiteral(node.moduleSpecifier)
-    ) {
-      imports.push(node.moduleSpecifier.text);
-    }
-    if (
-      ts.isCallExpression(node) &&
-      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
-      node.arguments.length === 1
-    ) {
-      const argument = node.arguments[0];
-      if (argument !== undefined && ts.isStringLiteral(argument)) {
-        imports.push(argument.text);
-      }
-    }
-    ts.forEachChild(node, visit);
-  }
-
-  visit(source);
-  return imports;
+function violationCodes(name: string): readonly ArchitectureViolationCode[] {
+  return scanSourceText(resolve(sourceRoot, `${name}.ts`), fixture(name), {
+    sourceRoot,
+    aliases: [],
+  }).map((violation) => violation.code);
 }
 
 describe("projection gateway architecture", () => {
-  test("production imports stay inside the projection gateway", () => {
-    const violations: string[] = [];
-
-    for (const path of sourceFiles(sourceRoot)) {
-      for (const specifier of importsFrom(path)) {
-        if (!specifier.startsWith(".")) {
-          violations.push(`${relative(serviceRoot, path)} imports external module ${specifier}`);
-          continue;
-        }
-
-        const target = resolve(dirname(path), specifier);
-        if (relative(sourceRoot, target).startsWith("..")) {
-          violations.push(
-            `${relative(serviceRoot, path)} escapes service boundary via ${specifier}`,
-          );
-        }
-      }
-    }
-
-    expect(violations).toEqual([]);
+  test("production sources and manifests stay inside the public service boundary", () => {
+    expect(scanProjectionArchitecture(serviceRoot)).toEqual([]);
   });
 
   test("publishes one root entrypoint and no private subpath", () => {
     const manifest = JSON.parse(readFileSync(resolve(serviceRoot, "package.json"), "utf8")) as {
       exports?: unknown;
-      dependencies?: Record<string, string>;
     };
 
     expect(manifest.exports).toEqual({ ".": "./src/index.ts" });
-    expect(manifest.dependencies?.["@impromptu/private-backend"]).toBeUndefined();
+  });
+
+  test("fails closed on non-literal dynamic imports", () => {
+    expect(violationCodes("non-literal-dynamic-import")).toContain("NON_LITERAL_DYNAMIC_IMPORT");
+  });
+
+  test("fails closed on type-asserted dynamic imports", () => {
+    expect(violationCodes("type-asserted-dynamic-import")).toContain("NON_LITERAL_DYNAMIC_IMPORT");
+  });
+
+  test("rejects CommonJS require", () => {
+    expect(violationCodes("commonjs-require")).toContain("COMMONJS_REQUIRE");
+  });
+
+  test("rejects TypeScript import-equals", () => {
+    expect(violationCodes("typescript-import-equals")).toContain("IMPORT_EQUALS");
+  });
+
+  test("rejects relative path escapes", () => {
+    expect(violationCodes("path-escape")).toContain("BOUNDARY_ESCAPE");
+  });
+
+  test("resolves configured aliases before checking the boundary", () => {
+    const violations = scanSourceText(
+      resolve(sourceRoot, "alias-escape.ts"),
+      fixture("alias-escape"),
+      {
+        sourceRoot,
+        aliases: [
+          {
+            pattern: "@private/*",
+            targets: [resolve(sourceRoot, "../../private-backend/src/*")],
+          },
+        ],
+      },
+    );
+
+    expect(violations.map((violation) => violation.code)).toContain("ALIAS_ESCAPE");
+  });
+
+  test("rejects private backend references in every dependency group", () => {
+    const objectGroups = [
+      "dependencies",
+      "devDependencies",
+      "peerDependencies",
+      "optionalDependencies",
+      "trustedDependencies",
+    ] as const;
+    const arrayGroups = ["bundleDependencies", "bundledDependencies"] as const;
+
+    for (const group of objectGroups) {
+      const violations = scanPackageManifest(
+        "package.json",
+        JSON.stringify({ [group]: { "@impromptu/private-backend": "workspace:*" } }),
+      );
+
+      expect(violations.map((violation) => [violation.code, violation.group])).toContainEqual([
+        "FORBIDDEN_PRIVATE_DEPENDENCY",
+        group,
+      ]);
+    }
+
+    for (const group of arrayGroups) {
+      const violations = scanPackageManifest(
+        "package.json",
+        JSON.stringify({ [group]: ["@impromptu/private-backend"] }),
+      );
+
+      expect(violations.map((violation) => [violation.code, violation.group])).toContainEqual([
+        "FORBIDDEN_PRIVATE_DEPENDENCY",
+        group,
+      ]);
+    }
+  });
+
+  test("rejects aliased private backend dependency values", () => {
+    const violations = scanPackageManifest(
+      "package.json",
+      JSON.stringify({
+        dependencies: { "public-looking-name": "npm:@impromptu/private-backend@0.0.0" },
+      }),
+    );
+
+    expect(violations.map((violation) => violation.code)).toContain("FORBIDDEN_PRIVATE_DEPENDENCY");
   });
 });

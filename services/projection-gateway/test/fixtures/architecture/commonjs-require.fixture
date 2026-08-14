@@ -1,0 +1,1 @@
+require("../../private-backend/src/index.ts");

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "bun run src/main.ts",
     "start": "bun run src/main.ts",
+    "check:architecture": "bun run test/check-architecture.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },

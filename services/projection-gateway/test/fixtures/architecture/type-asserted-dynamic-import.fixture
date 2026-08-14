@@ -1,0 +1,1 @@
+void import("../../private-backend/src/index.ts" as string);

@@ -1,0 +1,2 @@
+import type { PrivateBackendConfig } from "@private/index";
+export type Escaped = PrivateBackendConfig;

@@ -1,0 +1,2 @@
+const modulePath = "../../private-backend/src/index.ts";
+void import(modulePath);
