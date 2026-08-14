@@ -7,16 +7,11 @@ export {
   type PrivateBackendHttpDependencies,
 } from "./http.ts";
 export type {
-  ProjectionTombstone,
-  PublicProjectionWriter,
-  PublishedProjection,
-} from "./ports/public-projection-writer.ts";
-export {
-  type ModelExecution,
-  type ModelOperation,
+  ModelExecution,
+  ModelOperation,
   SERVER_MODEL_CAPABILITIES,
-  type ServerModelCapability,
-  type ServerModelRouter,
+  ServerModelCapability,
+  ServerModelRouter,
 } from "./ports/server-model-router.ts";
 export * from "./prepared-evidence.ts";
 export { ProjectionHttpPort } from "./projection-http-port.ts";
