@@ -337,6 +337,8 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
   const processes: ServiceProcess[] = [];
   let browser: Browser | null = null;
   let context: BrowserContext | null = null;
+  let chromeProcess: ServiceProcess | null = null;
+  let chromeExited: Promise<unknown[]> | null = null;
   const temporaryRoot = process.env.TEMP ?? process.cwd();
   const profilePath = join(temporaryRoot, "impromptu-r2-wp3-clean-stage");
   const privateSnapshotPath = join(temporaryRoot, "impromptu-r2-wp3-private-snapshot.json");
@@ -429,23 +431,23 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
     const authorityId = requireString(authority, "authorityId");
 
     trace("presentation-ready");
-    processes.push(
-      await startProcess(
-        [
-          chromeExecutable,
-          "--headless=new",
-          "--no-first-run",
-          "--remote-debugging-port=44275",
-          "--remote-allow-origins=*",
-          `--user-data-dir=${profilePath}`,
-          "about:blank",
-        ],
-        {},
-        "DevTools listening",
-        undefined,
-        "stderr",
-      ),
+    chromeProcess = await startProcess(
+      [
+        chromeExecutable,
+        "--headless=new",
+        "--no-first-run",
+        "--remote-debugging-port=44275",
+        "--remote-allow-origins=*",
+        `--user-data-dir=${profilePath}`,
+        "about:blank",
+      ],
+      {},
+      "DevTools listening",
+      undefined,
+      "stderr",
     );
+    chromeExited = once(chromeProcess, "exit");
+    processes.push(chromeProcess);
     browser = await chromium.connectOverCDP("http://127.0.0.1:44275");
     context = browser.contexts()[0] ?? null;
     if (context === null) throw new Error("Chrome did not expose its clean profile context");
@@ -833,6 +835,29 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
       const session = await activeBrowser.newBrowserCDPSession();
       await session.send("Browser.close");
       await disconnected;
+    } else if (
+      chromeProcess !== null &&
+      chromeProcess.exitCode === null &&
+      chromeProcess.signalCode === null
+    ) {
+      chromeProcess.kill();
+    }
+    if (chromeProcess !== null && chromeExited !== null) {
+      if (chromeProcess.exitCode === null && chromeProcess.signalCode === null) {
+        const timeout = AbortSignal.timeout(5_000);
+        await Promise.race([
+          chromeExited,
+          new Promise<never>((_resolve, reject) => {
+            timeout.addEventListener(
+              "abort",
+              () => reject(new Error("Chrome process exit timeout")),
+              { once: true },
+            );
+          }),
+        ]);
+      } else {
+        await chromeExited;
+      }
     }
     for (const process of processes.toReversed()) await stopProcess(process);
     rmSync(profilePath, { force: true, recursive: true });
