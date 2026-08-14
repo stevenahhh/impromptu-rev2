@@ -325,6 +325,55 @@ describe("playback authority reducer", () => {
     ).toMatchObject({ status: "REJECTED", reason: "STALE_DISPLAY_BINDING" });
   });
 
+  test("rejects a forged active lease change that leaves an old command pending", () => {
+    const accepted = reducePlaybackCommand(authority(), command({ type: "SLIDE_NEXT" }), nowMs);
+    const replacement = PlaybackControlLeaseSchema.parse({
+      ...accepted.state.activeLease,
+      leaseId: "lease_replacement",
+      actorId: "actor_controller-2",
+      controllerEpoch: "ce_8",
+    });
+    expect(
+      restorePlaybackAuthority({
+        ...snapshotPlaybackAuthority(accepted.state),
+        activeLease: replacement,
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+  });
+
+  test("repeating the same takeover is an idempotent no-op for its pending commands", () => {
+    const acceptedOld = reducePlaybackCommand(authority(), command({ type: "SLIDE_NEXT" }), nowMs);
+    const replacement = PlaybackControlLeaseSchema.parse({
+      ...acceptedOld.state.activeLease,
+      leaseId: "lease_replacement",
+      actorId: "actor_controller-2",
+      controllerEpoch: "ce_8",
+    });
+    const takenOver = replacePlaybackLease(acceptedOld.state, replacement);
+    const acceptedNew = reducePlaybackCommand(
+      takenOver,
+      command({
+        type: "BLACKOUT_SET",
+        actorId: "actor_controller-2",
+        leaseId: "lease_replacement",
+        controllerEpoch: "ce_8",
+        commandId: "cmd_2",
+        baseRevision: 1,
+      }),
+      nowMs,
+    );
+    const repeated = replacePlaybackLease(acceptedNew.state, replacement);
+    expect(repeated).toBe(acceptedNew.state);
+    const newRecord = Object.values(repeated.acceptedCommands).find(
+      ({ receipt }) => receipt.leaseId === replacement.leaseId,
+    );
+    expect(newRecord?.supersededReceipt).toBeNull();
+    expect(restorePlaybackAuthority(snapshotPlaybackAuthority(repeated))).toEqual({
+      outcome: "RESTORED",
+      state: repeated,
+    });
+  });
+
   test("supersedes old pending commands during lease takeover without blocking the new lease", () => {
     const acceptedOld = reducePlaybackCommand(authority(), command({ type: "SLIDE_NEXT" }), nowMs);
     const replacement = PlaybackControlLeaseSchema.parse({
@@ -340,6 +389,24 @@ describe("playback authority reducer", () => {
       supersededByLeaseId: "lease_replacement",
       supersededByControllerEpoch: "ce_8",
     });
+    const oldEntry = Object.entries(takenOver.acceptedCommands)[0];
+    if (oldEntry === undefined || oldEntry[1].supersededReceipt === null) {
+      throw new Error("old pending command was not superseded");
+    }
+    expect(
+      restorePlaybackAuthority({
+        ...takenOver,
+        acceptedCommands: {
+          [oldEntry[0]]: {
+            ...oldEntry[1],
+            supersededReceipt: {
+              ...oldEntry[1].supersededReceipt,
+              supersededByLeaseId: "lease_forged",
+            },
+          },
+        },
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
     const acceptedNew = reducePlaybackCommand(
       takenOver,
       command({

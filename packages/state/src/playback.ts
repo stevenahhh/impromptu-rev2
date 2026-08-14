@@ -170,6 +170,10 @@ const PlaybackAuthoritySnapshotSchema = z
         command.controllerEpoch === receipt.controllerEpoch &&
         command.commandId === receipt.commandId &&
         command.displayBindingEpoch === receipt.displayBindingEpoch;
+      const ownedByActiveLease =
+        receipt.actorId === snapshot.activeLease.actorId &&
+        receipt.leaseId === snapshot.activeLease.leaseId &&
+        receipt.controllerEpoch === snapshot.activeLease.controllerEpoch;
       const acceptanceMatches =
         acceptedLease.presentationSessionId === command.presentationSessionId &&
         acceptedLease.presentationSessionEpoch === command.presentationSessionEpoch &&
@@ -192,7 +196,12 @@ const PlaybackAuthoritySnapshotSchema = z
         acceptedRevision >= 1 &&
         acceptedRevision <= controlHead &&
         !recordsByRevision.has(acceptedRevision ?? -1) &&
-        !(record.appliedReceipt !== null && record.supersededReceipt !== null);
+        !(record.appliedReceipt !== null && record.supersededReceipt !== null) &&
+        !(
+          record.appliedReceipt === null &&
+          record.supersededReceipt === null &&
+          !ownedByActiveLease
+        );
 
       if (record.appliedReceipt !== null) {
         const applied = record.appliedReceipt;
@@ -229,8 +238,9 @@ const PlaybackAuthoritySnapshotSchema = z
           superseded.requestHash === receipt.requestHash &&
           superseded.displayBindingEpoch === receipt.displayBindingEpoch &&
           superseded.acceptedControlRevision === receipt.acceptedControlRevision &&
-          (superseded.supersededByLeaseId !== receipt.leaseId ||
-            superseded.supersededByControllerEpoch !== receipt.controllerEpoch);
+          !ownedByActiveLease &&
+          superseded.supersededByLeaseId === snapshot.activeLease.leaseId &&
+          superseded.supersededByControllerEpoch === snapshot.activeLease.controllerEpoch;
       }
       if (acceptedRevision !== null) recordsByRevision.set(acceptedRevision, record);
       if (!valid) {
@@ -703,6 +713,12 @@ export function replacePlaybackLease(
     activeLease.presentationSessionEpoch !== state.presentationSessionEpoch
   ) {
     throw new Error("replacement lease belongs to a different presentation session");
+  }
+  if (
+    activeLease.leaseId === state.activeLease.leaseId &&
+    activeLease.controllerEpoch === state.activeLease.controllerEpoch
+  ) {
+    return state;
   }
   const acceptedCommands = Object.fromEntries(
     Object.entries(state.acceptedCommands).map(([key, record]) => {

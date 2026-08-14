@@ -99,7 +99,8 @@ describe("generated playback fault schedules", () => {
         fc.integer({ min: 1, max: 20 }),
         fc.nat(),
         fc.integer({ min: 2, max: 1_000 }),
-        (acceptedCount, prefixSelector, nextEpoch) => {
+        fc.integer({ min: 0, max: 10 }),
+        (acceptedCount, prefixSelector, nextEpoch, repeatedTakeovers) => {
           const appliedPrefix = prefixSelector % (acceptedCount + 1);
           const commands = Array.from({ length: acceptedCount }, (_, index) =>
             playbackCommandFixture(index + 1, {
@@ -130,8 +131,16 @@ describe("generated playback fault schedules", () => {
               displayBindingEpoch: displayBindingEpoch(1),
             })),
             { type: "TAKEOVER", lease: replacement },
+            ...Array.from({ length: repeatedTakeovers }, () => ({
+              type: "TAKEOVER" as const,
+              lease: replacement,
+            })),
             { type: "RESTART" },
             { type: "COMMAND", command: replacementCommand },
+            ...Array.from({ length: repeatedTakeovers }, () => ({
+              type: "TAKEOVER" as const,
+              lease: replacement,
+            })),
             {
               type: "STAGE_APPLY",
               commandId: replacementCommand.commandId,
