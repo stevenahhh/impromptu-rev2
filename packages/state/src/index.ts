@@ -5,3 +5,4 @@ export * from "./playback.ts";
 export * from "./public-card-stream.ts";
 export * from "./public-projection.ts";
 export * from "./snapshot-restore.ts";
+export * from "./realtime-reconcile.ts";
