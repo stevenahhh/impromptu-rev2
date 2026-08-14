@@ -192,6 +192,7 @@ async function installEventBuffer(context: BrowserContext): Promise<void> {
       "impromptu:topology-change",
       "impromptu:public-slide-set",
       "impromptu:co-resident-disabled",
+      "impromptu:controller-lifecycle",
       "fullscreenchange",
       "fullscreenerror",
     ]) {
@@ -418,7 +419,12 @@ async function rehearse(
   const context = await browser.newContext();
   await installEventBuffer(context);
   const controller = await context.newPage();
-  await controller.goto("about:blank");
+  await controller.goto(`${consoleOrigin}/sign-in`, { waitUntil: "domcontentloaded" });
+  await controller.getByLabel("One-time sign-in code").fill(`controller-${mode}-${rehearsal}`);
+  await controller.getByRole("button", { name: "Enter private workspace" }).click();
+  await controller
+    .getByRole("heading", { name: "Ready for the room" })
+    .waitFor({ state: "visible" });
   const page = await context.newPage();
   if (process.env.DEBUG_WP4_E2E === "true") {
     page.on("console", (message) => console.error(`[browser:${message.type()}] ${message.text()}`));
@@ -573,11 +579,21 @@ async function rehearse(
     });
 
     await recordFault("controller-background", "SIMULATED", "visibilitychange-event", async () => {
-      const backgrounded = await prepareEvent(controller, "visibilitychange");
+      await clearBufferedEvent(controller, "impromptu:controller-lifecycle");
+      const backgrounded = await prepareEvent(controller, "impromptu:controller-lifecycle");
       await controller.evaluate(() => {
-        window.dispatchEvent(new Event("visibilitychange"));
+        document.dispatchEvent(
+          new CustomEvent("visibilitychange", { detail: { state: "BACKGROUND" } }),
+        );
       });
-      await backgrounded();
+      const detail = await backgrounded();
+      if (
+        typeof detail !== "object" ||
+        detail === null ||
+        (detail as Record<string, unknown>).state !== "BACKGROUND"
+      ) {
+        throw new Error("controller app did not observe background lifecycle");
+      }
     });
 
     await recordFault("projection-drop", "REAL", "process-restart+sse-reconnect", async () => {

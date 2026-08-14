@@ -178,6 +178,25 @@ function PrivateLayout({ coResident }: { readonly coResident: boolean }) {
   const [coResidentState, setCoResidentState] = useState<"OFF" | "ENABLED" | "DISABLED">(
     coResident ? "ENABLED" : "OFF",
   );
+  const [controllerLifecycle, setControllerLifecycle] = useState<"ACTIVE" | "BACKGROUND">("ACTIVE");
+
+  useEffect(() => {
+    const observeVisibility = (event: Event) => {
+      const detail = event instanceof CustomEvent ? event.detail : null;
+      const next =
+        typeof detail === "object" && detail !== null && detail.state === "BACKGROUND"
+          ? "BACKGROUND"
+          : document.visibilityState === "hidden"
+            ? "BACKGROUND"
+            : "ACTIVE";
+      setControllerLifecycle(next);
+      window.dispatchEvent(
+        new CustomEvent("impromptu:controller-lifecycle", { detail: { state: next } }),
+      );
+    };
+    document.addEventListener("visibilitychange", observeVisibility);
+    return () => document.removeEventListener("visibilitychange", observeVisibility);
+  }, []);
 
   useEffect(() => {
     const observePublicSurface = (event: Event) => {
@@ -206,7 +225,11 @@ function PrivateLayout({ coResident }: { readonly coResident: boolean }) {
   if (coResidentState === "DISABLED") {
     return (
       <Shell focused header={<Brand eyebrow="Public safety interlock" />}>
-        <main className="console-co-resident-shield" data-co-resident-state="DISABLED">
+        <main
+          className="console-co-resident-shield"
+          data-co-resident-state="DISABLED"
+          data-controller-lifecycle={controllerLifecycle}
+        >
           <p className="ui-eyebrow">Audience surface protected</p>
           <h1>Co-resident mode disabled</h1>
           <p>Move presentation control to a separate device before continuing.</p>
@@ -218,7 +241,11 @@ function PrivateLayout({ coResident }: { readonly coResident: boolean }) {
   return (
     <Shell header={<ConsoleHeader />}>
       <PrivateNavigation />
-      <div className="console-content" data-co-resident-state={coResidentState}>
+      <div
+        className="console-content"
+        data-co-resident-state={coResidentState}
+        data-controller-lifecycle={controllerLifecycle}
+      >
         {coResidentState === "ENABLED" ? (
           <aside className="console-co-resident" role="alert">
             <strong>Co-resident convenience mode</strong>

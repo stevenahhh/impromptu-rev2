@@ -76,6 +76,16 @@ describe("Console route boundary", () => {
     expect(document.querySelector("[data-co-resident-state='DISABLED']")).toBeTruthy();
   });
 
+  test("observes controller background through the real visibility listener", async () => {
+    renderConsole("/", true);
+    await act(async () => {
+      document.dispatchEvent(
+        new CustomEvent("visibilitychange", { detail: { state: "BACKGROUND" } }),
+      );
+    });
+    expect(document.querySelector("[data-controller-lifecycle='BACKGROUND']")).toBeTruthy();
+  });
+
   test("exchanges the entered code through the typed session client without storage", async () => {
     const receivedCodes: string[] = [];
     let resolveSignIn: (session: AccountSessionView) => void = () => {
