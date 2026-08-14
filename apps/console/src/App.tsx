@@ -297,6 +297,10 @@ function OverviewPage() {
   );
 }
 
+function publishApprovalLoadEvent(detail: Readonly<Record<string, unknown>>): void {
+  window.dispatchEvent(new CustomEvent("impromptu:approval-load", { detail }));
+}
+
 function LivePublicationPage() {
   const titleId = useId();
   const { client, session } = useAuth();
@@ -310,6 +314,7 @@ function LivePublicationPage() {
     try {
       const next = await client.readLiveCandidates(presentationSessionId);
       setSnapshot(next);
+      publishApprovalLoadEvent({ type: "SNAPSHOT_LOADED", atMs: performance.now() });
       setMessage(
         next.livePublicEnabled
           ? `${next.candidates.length} fresh live candidate${next.candidates.length === 1 ? "" : "s"}.`
@@ -325,13 +330,16 @@ function LivePublicationPage() {
     if (snapshot === null || session === null) return;
     setPendingCandidateId(candidate.candidateId);
     setMessage("Submitting explicit approval...");
+    const approvalId = crypto.randomUUID();
+    publishApprovalLoadEvent({
+      type: "APPROVAL_REQUESTED",
+      approvalId,
+      atMs: performance.now(),
+    });
+    let outcome = "REJECTED";
     try {
-      await client.approveLiveCandidate(
-        session.csrfToken,
-        snapshot,
-        candidate,
-        crypto.randomUUID(),
-      );
+      await client.approveLiveCandidate(session.csrfToken, snapshot, candidate, approvalId);
+      outcome = "PUBLISHED";
       setSnapshot(null);
       setMessage("Published. Load a new authoritative snapshot for any further approval.");
     } catch (cause) {
@@ -342,6 +350,12 @@ function LivePublicationPage() {
           : "Approval was rejected. Load a new authoritative snapshot.",
       );
     } finally {
+      publishApprovalLoadEvent({
+        type: "APPROVAL_SETTLED",
+        approvalId,
+        outcome,
+        atMs: performance.now(),
+      });
       setPendingCandidateId(null);
     }
   };

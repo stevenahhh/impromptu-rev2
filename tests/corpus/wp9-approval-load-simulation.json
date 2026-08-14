@@ -1,0 +1,188 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "DETERMINISTIC_VENUE_LENGTH_APPROVAL_SIMULATION",
+  "sessionDurationMs": 3600000,
+  "baselineControlActions": 70,
+  "events": [
+    {
+      "type": "SNAPSHOT_LOADED",
+      "atMs": 265000
+    },
+    {
+      "type": "APPROVAL_REQUESTED",
+      "approvalId": "approval-01",
+      "atMs": 270000
+    },
+    {
+      "type": "APPROVAL_SETTLED",
+      "approvalId": "approval-01",
+      "atMs": 270900
+    },
+    {
+      "type": "SNAPSHOT_LOADED",
+      "atMs": 535000
+    },
+    {
+      "type": "APPROVAL_REQUESTED",
+      "approvalId": "approval-02",
+      "atMs": 540000
+    },
+    {
+      "type": "APPROVAL_SETTLED",
+      "approvalId": "approval-02",
+      "atMs": 541100
+    },
+    {
+      "type": "SNAPSHOT_LOADED",
+      "atMs": 805000
+    },
+    {
+      "type": "APPROVAL_REQUESTED",
+      "approvalId": "approval-03",
+      "atMs": 810000
+    },
+    {
+      "type": "APPROVAL_SETTLED",
+      "approvalId": "approval-03",
+      "atMs": 811200
+    },
+    {
+      "type": "PRESENTER_SPEECH_PAUSE",
+      "atMs": 901500
+    },
+    {
+      "type": "SNAPSHOT_LOADED",
+      "atMs": 1075000
+    },
+    {
+      "type": "APPROVAL_REQUESTED",
+      "approvalId": "approval-04",
+      "atMs": 1080000
+    },
+    {
+      "type": "APPROVAL_SETTLED",
+      "approvalId": "approval-04",
+      "atMs": 1081300
+    },
+    {
+      "type": "SNAPSHOT_LOADED",
+      "atMs": 1345000
+    },
+    {
+      "type": "APPROVAL_REQUESTED",
+      "approvalId": "approval-05",
+      "atMs": 1350000
+    },
+    {
+      "type": "APPROVAL_SETTLED",
+      "approvalId": "approval-05",
+      "atMs": 1351400
+    },
+    {
+      "type": "SNAPSHOT_LOADED",
+      "atMs": 1615000
+    },
+    {
+      "type": "APPROVAL_REQUESTED",
+      "approvalId": "approval-06",
+      "atMs": 1620000
+    },
+    {
+      "type": "APPROVAL_SETTLED",
+      "approvalId": "approval-06",
+      "atMs": 1621500
+    },
+    {
+      "type": "PRESENTER_SPEECH_PAUSE",
+      "atMs": 1801700
+    },
+    {
+      "type": "SNAPSHOT_LOADED",
+      "atMs": 1885000
+    },
+    {
+      "type": "APPROVAL_REQUESTED",
+      "approvalId": "approval-07",
+      "atMs": 1890000
+    },
+    {
+      "type": "APPROVAL_SETTLED",
+      "approvalId": "approval-07",
+      "atMs": 1891600
+    },
+    {
+      "type": "SNAPSHOT_LOADED",
+      "atMs": 2155000
+    },
+    {
+      "type": "APPROVAL_REQUESTED",
+      "approvalId": "approval-08",
+      "atMs": 2160000
+    },
+    {
+      "type": "APPROVAL_SETTLED",
+      "approvalId": "approval-08",
+      "atMs": 2161700
+    },
+    {
+      "type": "SNAPSHOT_LOADED",
+      "atMs": 2425000
+    },
+    {
+      "type": "APPROVAL_REQUESTED",
+      "approvalId": "approval-09",
+      "atMs": 2430000
+    },
+    {
+      "type": "APPROVAL_SETTLED",
+      "approvalId": "approval-09",
+      "atMs": 2431900
+    },
+    {
+      "type": "SNAPSHOT_LOADED",
+      "atMs": 2695000
+    },
+    {
+      "type": "APPROVAL_REQUESTED",
+      "approvalId": "approval-10",
+      "atMs": 2700000
+    },
+    {
+      "type": "PRESENTER_SPEECH_PAUSE",
+      "atMs": 2701900
+    },
+    {
+      "type": "APPROVAL_SETTLED",
+      "approvalId": "approval-10",
+      "atMs": 2702200
+    },
+    {
+      "type": "SNAPSHOT_LOADED",
+      "atMs": 2965000
+    },
+    {
+      "type": "APPROVAL_REQUESTED",
+      "approvalId": "approval-11",
+      "atMs": 2970000
+    },
+    {
+      "type": "APPROVAL_SETTLED",
+      "approvalId": "approval-11",
+      "atMs": 2972800
+    },
+    {
+      "type": "SNAPSHOT_LOADED",
+      "atMs": 3235000
+    },
+    {
+      "type": "APPROVAL_REQUESTED",
+      "approvalId": "approval-12",
+      "atMs": 3240000
+    },
+    {
+      "type": "APPROVAL_SETTLED",
+      "approvalId": "approval-12",
+      "atMs": 3243600
+    }
+  ]
+}

@@ -145,6 +145,17 @@ describe("Console route boundary", () => {
 
   test("approves a live candidate only from the loaded authoritative snapshot", async () => {
     const approvals: Array<{ candidateId: string; snapshotHash: string }> = [];
+    const loadEvents: Array<Record<string, unknown>> = [];
+    const observeLoad = (event: Event) => {
+      if (
+        event instanceof CustomEvent &&
+        typeof event.detail === "object" &&
+        event.detail !== null
+      ) {
+        loadEvents.push(event.detail as Record<string, unknown>);
+      }
+    };
+    window.addEventListener("impromptu:approval-load", observeLoad);
     let loadedSnapshot: (() => void) | undefined;
     const loaded = new Promise<void>((resolve) => {
       loadedSnapshot = resolve;
@@ -221,5 +232,13 @@ describe("Console route boundary", () => {
     ]);
     expect(within(document.body).queryByText("Fresh verified claim")).toBeNull();
     expect(within(document.body).getByText(/Load a new authoritative snapshot/)).toBeTruthy();
+    expect(loadEvents.map(({ type }) => type)).toEqual([
+      "SNAPSHOT_LOADED",
+      "APPROVAL_REQUESTED",
+      "APPROVAL_SETTLED",
+    ]);
+    expect(loadEvents[1]?.approvalId).toBe(loadEvents[2]?.approvalId);
+    expect(loadEvents[2]?.outcome).toBe("PUBLISHED");
+    window.removeEventListener("impromptu:approval-load", observeLoad);
   });
 });

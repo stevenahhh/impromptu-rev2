@@ -1,0 +1,566 @@
+{
+  "schemaVersion": 1,
+  "registrationId": "wp9-product-validation-deterministic-v1",
+  "evidenceKind": "OFFLINE_FIXED_FIXTURE_SIMULATION",
+  "claimBoundary": {
+    "evidenceKind": "OFFLINE_FIXED_FIXTURE_SIMULATION",
+    "wp0CollectionStatus": "NOT_COLLECTED",
+    "wp0GateStatus": "BLOCKED",
+    "productAcceptanceEligible": false,
+    "superiorityClaimPermitted": false,
+    "livePublicationRuntimeDefault": "OFF_UNLESS_LIVE_PUBLICATION_GATE_STATE_PASSED"
+  },
+  "runtimeGateState": "UNSET_DEFAULT_OFF",
+  "inputs": {
+    "registration": {
+      "path": "tests/corpus/wp9-product-validation-registration.json",
+      "sha256": "a988ddfabc64e8dd694c051579b2a3c95612487267acb37a7569822b1aef641c"
+    },
+    "audienceFixture": {
+      "path": "tests/corpus/wp9-audience-simulation.json",
+      "sha256": "528fea73010ba41a0c8e91053f341a7c4eb5d267e909a8e57f299bfa3279824d"
+    },
+    "wp8GateManifest": {
+      "path": "tests/corpus/wp8-gate-manifest.json",
+      "sha256": "155b9a232fa940516c92b4348458b36228f018b76c7a6e1a007980d7115fb34f"
+    },
+    "approvalLoadFixture": {
+      "path": "tests/corpus/wp9-approval-load-simulation.json",
+      "sha256": "56fc47270e78aad6226a7a7119c284d92bb5081ac787ec3f51448b6cb88019e8"
+    }
+  },
+  "audience": {
+    "machineThresholdsPassed": true,
+    "productAcceptanceEligible": false,
+    "collectionStatus": "NOT_COLLECTED",
+    "gateStatus": "BLOCKED",
+    "arms": {
+      "CURATED": {
+        "caseCount": 25,
+        "eligibleYield": 0.6,
+        "usefulness": 0.8333333333333334,
+        "abstention": 1
+      },
+      "SUPERVISED_LIVE": {
+        "caseCount": 25,
+        "eligibleYield": 0.7,
+        "usefulness": 0.8571428571428571,
+        "abstention": 1
+      }
+    },
+    "cases": [
+      {
+        "caseId": "curated-answerable-01",
+        "arm": "CURATED",
+        "answerable": true,
+        "eligible": true,
+        "useful": true,
+        "abstained": false,
+        "observedPublication": "CURATED_PUBLISHED",
+        "gateManifestState": "CURATED_AVAILABLE"
+      },
+      {
+        "caseId": "curated-answerable-02",
+        "arm": "CURATED",
+        "answerable": true,
+        "eligible": true,
+        "useful": true,
+        "abstained": false,
+        "observedPublication": "CURATED_PUBLISHED",
+        "gateManifestState": "CURATED_AVAILABLE"
+      },
+      {
+        "caseId": "curated-answerable-03",
+        "arm": "CURATED",
+        "answerable": true,
+        "eligible": true,
+        "useful": true,
+        "abstained": false,
+        "observedPublication": "CURATED_PUBLISHED",
+        "gateManifestState": "CURATED_AVAILABLE"
+      },
+      {
+        "caseId": "curated-answerable-04",
+        "arm": "CURATED",
+        "answerable": true,
+        "eligible": true,
+        "useful": true,
+        "abstained": false,
+        "observedPublication": "CURATED_PUBLISHED",
+        "gateManifestState": "CURATED_AVAILABLE"
+      },
+      {
+        "caseId": "curated-answerable-05",
+        "arm": "CURATED",
+        "answerable": true,
+        "eligible": true,
+        "useful": true,
+        "abstained": false,
+        "observedPublication": "CURATED_PUBLISHED",
+        "gateManifestState": "CURATED_AVAILABLE"
+      },
+      {
+        "caseId": "curated-answerable-06",
+        "arm": "CURATED",
+        "answerable": true,
+        "eligible": true,
+        "useful": true,
+        "abstained": false,
+        "observedPublication": "CURATED_PUBLISHED",
+        "gateManifestState": "CURATED_AVAILABLE"
+      },
+      {
+        "caseId": "curated-answerable-07",
+        "arm": "CURATED",
+        "answerable": true,
+        "eligible": true,
+        "useful": true,
+        "abstained": false,
+        "observedPublication": "CURATED_PUBLISHED",
+        "gateManifestState": "CURATED_AVAILABLE"
+      },
+      {
+        "caseId": "curated-answerable-08",
+        "arm": "CURATED",
+        "answerable": true,
+        "eligible": true,
+        "useful": true,
+        "abstained": false,
+        "observedPublication": "CURATED_PUBLISHED",
+        "gateManifestState": "CURATED_AVAILABLE"
+      },
+      {
+        "caseId": "curated-answerable-09",
+        "arm": "CURATED",
+        "answerable": true,
+        "eligible": true,
+        "useful": true,
+        "abstained": false,
+        "observedPublication": "CURATED_PUBLISHED",
+        "gateManifestState": "CURATED_AVAILABLE"
+      },
+      {
+        "caseId": "curated-answerable-10",
+        "arm": "CURATED",
+        "answerable": true,
+        "eligible": true,
+        "useful": true,
+        "abstained": false,
+        "observedPublication": "CURATED_PUBLISHED",
+        "gateManifestState": "CURATED_AVAILABLE"
+      },
+      {
+        "caseId": "curated-answerable-11",
+        "arm": "CURATED",
+        "answerable": true,
+        "eligible": true,
+        "useful": false,
+        "abstained": false,
+        "observedPublication": "CURATED_PUBLISHED",
+        "gateManifestState": "CURATED_AVAILABLE"
+      },
+      {
+        "caseId": "curated-answerable-12",
+        "arm": "CURATED",
+        "answerable": true,
+        "eligible": true,
+        "useful": false,
+        "abstained": false,
+        "observedPublication": "CURATED_PUBLISHED",
+        "gateManifestState": "CURATED_AVAILABLE"
+      },
+      {
+        "caseId": "curated-answerable-13",
+        "arm": "CURATED",
+        "answerable": true,
+        "eligible": false,
+        "useful": null,
+        "abstained": false,
+        "observedPublication": "ABSTAINED",
+        "gateManifestState": "CURATED_AVAILABLE"
+      },
+      {
+        "caseId": "curated-answerable-14",
+        "arm": "CURATED",
+        "answerable": true,
+        "eligible": false,
+        "useful": null,
+        "abstained": false,
+        "observedPublication": "ABSTAINED",
+        "gateManifestState": "CURATED_AVAILABLE"
+      },
+      {
+        "caseId": "curated-answerable-15",
+        "arm": "CURATED",
+        "answerable": true,
+        "eligible": false,
+        "useful": null,
+        "abstained": false,
+        "observedPublication": "ABSTAINED",
+        "gateManifestState": "CURATED_AVAILABLE"
+      },
+      {
+        "caseId": "curated-answerable-16",
+        "arm": "CURATED",
+        "answerable": true,
+        "eligible": false,
+        "useful": null,
+        "abstained": false,
+        "observedPublication": "ABSTAINED",
+        "gateManifestState": "CURATED_AVAILABLE"
+      },
+      {
+        "caseId": "curated-answerable-17",
+        "arm": "CURATED",
+        "answerable": true,
+        "eligible": false,
+        "useful": null,
+        "abstained": false,
+        "observedPublication": "ABSTAINED",
+        "gateManifestState": "CURATED_AVAILABLE"
+      },
+      {
+        "caseId": "curated-answerable-18",
+        "arm": "CURATED",
+        "answerable": true,
+        "eligible": false,
+        "useful": null,
+        "abstained": false,
+        "observedPublication": "ABSTAINED",
+        "gateManifestState": "CURATED_AVAILABLE"
+      },
+      {
+        "caseId": "curated-answerable-19",
+        "arm": "CURATED",
+        "answerable": true,
+        "eligible": false,
+        "useful": null,
+        "abstained": false,
+        "observedPublication": "ABSTAINED",
+        "gateManifestState": "CURATED_AVAILABLE"
+      },
+      {
+        "caseId": "curated-answerable-20",
+        "arm": "CURATED",
+        "answerable": true,
+        "eligible": false,
+        "useful": null,
+        "abstained": false,
+        "observedPublication": "ABSTAINED",
+        "gateManifestState": "CURATED_AVAILABLE"
+      },
+      {
+        "caseId": "curated-unanswerable-01",
+        "arm": "CURATED",
+        "answerable": false,
+        "eligible": false,
+        "useful": null,
+        "abstained": true,
+        "observedPublication": "ABSTAINED",
+        "gateManifestState": "CURATED_AVAILABLE"
+      },
+      {
+        "caseId": "curated-unanswerable-02",
+        "arm": "CURATED",
+        "answerable": false,
+        "eligible": false,
+        "useful": null,
+        "abstained": true,
+        "observedPublication": "ABSTAINED",
+        "gateManifestState": "CURATED_AVAILABLE"
+      },
+      {
+        "caseId": "curated-unanswerable-03",
+        "arm": "CURATED",
+        "answerable": false,
+        "eligible": false,
+        "useful": null,
+        "abstained": true,
+        "observedPublication": "ABSTAINED",
+        "gateManifestState": "CURATED_AVAILABLE"
+      },
+      {
+        "caseId": "curated-unanswerable-04",
+        "arm": "CURATED",
+        "answerable": false,
+        "eligible": false,
+        "useful": null,
+        "abstained": true,
+        "observedPublication": "ABSTAINED",
+        "gateManifestState": "CURATED_AVAILABLE"
+      },
+      {
+        "caseId": "curated-unanswerable-05",
+        "arm": "CURATED",
+        "answerable": false,
+        "eligible": false,
+        "useful": null,
+        "abstained": true,
+        "observedPublication": "ABSTAINED",
+        "gateManifestState": "CURATED_AVAILABLE"
+      },
+      {
+        "caseId": "live-answerable-01",
+        "arm": "SUPERVISED_LIVE",
+        "answerable": true,
+        "eligible": true,
+        "useful": true,
+        "abstained": false,
+        "observedPublication": "BLOCKED_BY_DEFAULT_OFF",
+        "gateManifestState": "WP0_BLOCKED_LIVE_DEFAULT_OFF"
+      },
+      {
+        "caseId": "live-answerable-02",
+        "arm": "SUPERVISED_LIVE",
+        "answerable": true,
+        "eligible": true,
+        "useful": true,
+        "abstained": false,
+        "observedPublication": "BLOCKED_BY_DEFAULT_OFF",
+        "gateManifestState": "WP0_BLOCKED_LIVE_DEFAULT_OFF"
+      },
+      {
+        "caseId": "live-answerable-03",
+        "arm": "SUPERVISED_LIVE",
+        "answerable": true,
+        "eligible": true,
+        "useful": true,
+        "abstained": false,
+        "observedPublication": "BLOCKED_BY_DEFAULT_OFF",
+        "gateManifestState": "WP0_BLOCKED_LIVE_DEFAULT_OFF"
+      },
+      {
+        "caseId": "live-answerable-04",
+        "arm": "SUPERVISED_LIVE",
+        "answerable": true,
+        "eligible": true,
+        "useful": true,
+        "abstained": false,
+        "observedPublication": "BLOCKED_BY_DEFAULT_OFF",
+        "gateManifestState": "WP0_BLOCKED_LIVE_DEFAULT_OFF"
+      },
+      {
+        "caseId": "live-answerable-05",
+        "arm": "SUPERVISED_LIVE",
+        "answerable": true,
+        "eligible": true,
+        "useful": true,
+        "abstained": false,
+        "observedPublication": "BLOCKED_BY_DEFAULT_OFF",
+        "gateManifestState": "WP0_BLOCKED_LIVE_DEFAULT_OFF"
+      },
+      {
+        "caseId": "live-answerable-06",
+        "arm": "SUPERVISED_LIVE",
+        "answerable": true,
+        "eligible": true,
+        "useful": true,
+        "abstained": false,
+        "observedPublication": "BLOCKED_BY_DEFAULT_OFF",
+        "gateManifestState": "WP0_BLOCKED_LIVE_DEFAULT_OFF"
+      },
+      {
+        "caseId": "live-answerable-07",
+        "arm": "SUPERVISED_LIVE",
+        "answerable": true,
+        "eligible": true,
+        "useful": true,
+        "abstained": false,
+        "observedPublication": "BLOCKED_BY_DEFAULT_OFF",
+        "gateManifestState": "WP0_BLOCKED_LIVE_DEFAULT_OFF"
+      },
+      {
+        "caseId": "live-answerable-08",
+        "arm": "SUPERVISED_LIVE",
+        "answerable": true,
+        "eligible": true,
+        "useful": true,
+        "abstained": false,
+        "observedPublication": "BLOCKED_BY_DEFAULT_OFF",
+        "gateManifestState": "WP0_BLOCKED_LIVE_DEFAULT_OFF"
+      },
+      {
+        "caseId": "live-answerable-09",
+        "arm": "SUPERVISED_LIVE",
+        "answerable": true,
+        "eligible": true,
+        "useful": true,
+        "abstained": false,
+        "observedPublication": "BLOCKED_BY_DEFAULT_OFF",
+        "gateManifestState": "WP0_BLOCKED_LIVE_DEFAULT_OFF"
+      },
+      {
+        "caseId": "live-answerable-10",
+        "arm": "SUPERVISED_LIVE",
+        "answerable": true,
+        "eligible": true,
+        "useful": true,
+        "abstained": false,
+        "observedPublication": "BLOCKED_BY_DEFAULT_OFF",
+        "gateManifestState": "WP0_BLOCKED_LIVE_DEFAULT_OFF"
+      },
+      {
+        "caseId": "live-answerable-11",
+        "arm": "SUPERVISED_LIVE",
+        "answerable": true,
+        "eligible": true,
+        "useful": true,
+        "abstained": false,
+        "observedPublication": "BLOCKED_BY_DEFAULT_OFF",
+        "gateManifestState": "WP0_BLOCKED_LIVE_DEFAULT_OFF"
+      },
+      {
+        "caseId": "live-answerable-12",
+        "arm": "SUPERVISED_LIVE",
+        "answerable": true,
+        "eligible": true,
+        "useful": true,
+        "abstained": false,
+        "observedPublication": "BLOCKED_BY_DEFAULT_OFF",
+        "gateManifestState": "WP0_BLOCKED_LIVE_DEFAULT_OFF"
+      },
+      {
+        "caseId": "live-answerable-13",
+        "arm": "SUPERVISED_LIVE",
+        "answerable": true,
+        "eligible": true,
+        "useful": false,
+        "abstained": false,
+        "observedPublication": "BLOCKED_BY_DEFAULT_OFF",
+        "gateManifestState": "WP0_BLOCKED_LIVE_DEFAULT_OFF"
+      },
+      {
+        "caseId": "live-answerable-14",
+        "arm": "SUPERVISED_LIVE",
+        "answerable": true,
+        "eligible": true,
+        "useful": false,
+        "abstained": false,
+        "observedPublication": "BLOCKED_BY_DEFAULT_OFF",
+        "gateManifestState": "WP0_BLOCKED_LIVE_DEFAULT_OFF"
+      },
+      {
+        "caseId": "live-answerable-15",
+        "arm": "SUPERVISED_LIVE",
+        "answerable": true,
+        "eligible": false,
+        "useful": null,
+        "abstained": false,
+        "observedPublication": "ABSTAINED",
+        "gateManifestState": "WP0_BLOCKED_LIVE_DEFAULT_OFF"
+      },
+      {
+        "caseId": "live-answerable-16",
+        "arm": "SUPERVISED_LIVE",
+        "answerable": true,
+        "eligible": false,
+        "useful": null,
+        "abstained": false,
+        "observedPublication": "ABSTAINED",
+        "gateManifestState": "WP0_BLOCKED_LIVE_DEFAULT_OFF"
+      },
+      {
+        "caseId": "live-answerable-17",
+        "arm": "SUPERVISED_LIVE",
+        "answerable": true,
+        "eligible": false,
+        "useful": null,
+        "abstained": false,
+        "observedPublication": "ABSTAINED",
+        "gateManifestState": "WP0_BLOCKED_LIVE_DEFAULT_OFF"
+      },
+      {
+        "caseId": "live-answerable-18",
+        "arm": "SUPERVISED_LIVE",
+        "answerable": true,
+        "eligible": false,
+        "useful": null,
+        "abstained": false,
+        "observedPublication": "ABSTAINED",
+        "gateManifestState": "WP0_BLOCKED_LIVE_DEFAULT_OFF"
+      },
+      {
+        "caseId": "live-answerable-19",
+        "arm": "SUPERVISED_LIVE",
+        "answerable": true,
+        "eligible": false,
+        "useful": null,
+        "abstained": false,
+        "observedPublication": "ABSTAINED",
+        "gateManifestState": "WP0_BLOCKED_LIVE_DEFAULT_OFF"
+      },
+      {
+        "caseId": "live-answerable-20",
+        "arm": "SUPERVISED_LIVE",
+        "answerable": true,
+        "eligible": false,
+        "useful": null,
+        "abstained": false,
+        "observedPublication": "ABSTAINED",
+        "gateManifestState": "WP0_BLOCKED_LIVE_DEFAULT_OFF"
+      },
+      {
+        "caseId": "live-unanswerable-01",
+        "arm": "SUPERVISED_LIVE",
+        "answerable": false,
+        "eligible": false,
+        "useful": null,
+        "abstained": true,
+        "observedPublication": "ABSTAINED",
+        "gateManifestState": "WP0_BLOCKED_LIVE_DEFAULT_OFF"
+      },
+      {
+        "caseId": "live-unanswerable-02",
+        "arm": "SUPERVISED_LIVE",
+        "answerable": false,
+        "eligible": false,
+        "useful": null,
+        "abstained": true,
+        "observedPublication": "ABSTAINED",
+        "gateManifestState": "WP0_BLOCKED_LIVE_DEFAULT_OFF"
+      },
+      {
+        "caseId": "live-unanswerable-03",
+        "arm": "SUPERVISED_LIVE",
+        "answerable": false,
+        "eligible": false,
+        "useful": null,
+        "abstained": true,
+        "observedPublication": "ABSTAINED",
+        "gateManifestState": "WP0_BLOCKED_LIVE_DEFAULT_OFF"
+      },
+      {
+        "caseId": "live-unanswerable-04",
+        "arm": "SUPERVISED_LIVE",
+        "answerable": false,
+        "eligible": false,
+        "useful": null,
+        "abstained": true,
+        "observedPublication": "ABSTAINED",
+        "gateManifestState": "WP0_BLOCKED_LIVE_DEFAULT_OFF"
+      },
+      {
+        "caseId": "live-unanswerable-05",
+        "arm": "SUPERVISED_LIVE",
+        "answerable": false,
+        "eligible": false,
+        "useful": null,
+        "abstained": true,
+        "observedPublication": "ABSTAINED",
+        "gateManifestState": "WP0_BLOCKED_LIVE_DEFAULT_OFF"
+      }
+    ]
+  },
+  "approvalLoad": {
+    "passed": true,
+    "sessionDurationMs": 3600000,
+    "approvalCount": 12,
+    "latenciesMs": [900, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1900, 2200, 2800, 3600],
+    "approvalP50Ms": 1500,
+    "approvalP90Ms": 2800,
+    "effortProxy": 0.17142857142857143,
+    "inducedPauseCount": 3,
+    "inducedPauseRatePerTenMinutes": 0.5,
+    "timedOutApprovalIds": []
+  }
+}

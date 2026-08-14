@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "registrationId": "wp9-product-validation-deterministic-v1",
+  "registeredBeforeExecution": true,
+  "claimBoundary": {
+    "evidenceKind": "OFFLINE_FIXED_FIXTURE_SIMULATION",
+    "wp0CollectionStatus": "NOT_COLLECTED",
+    "wp0GateStatus": "BLOCKED",
+    "productAcceptanceEligible": false,
+    "superiorityClaimPermitted": false,
+    "livePublicationRuntimeDefault": "OFF_UNLESS_LIVE_PUBLICATION_GATE_STATE_PASSED"
+  },
+  "audienceValue": {
+    "fixture": {
+      "path": "tests/corpus/wp9-audience-simulation.json",
+      "sha256": "528fea73010ba41a0c8e91053f341a7c4eb5d267e909a8e57f299bfa3279824d"
+    },
+    "wp8GateManifest": {
+      "path": "tests/corpus/wp8-gate-manifest.json",
+      "sha256": "155b9a232fa940516c92b4348458b36228f018b76c7a6e1a007980d7115fb34f"
+    },
+    "thresholds": {
+      "CURATED": {
+        "eligibleYieldMinimum": 0.6,
+        "usefulnessMinimum": 0.8,
+        "abstentionMinimum": 0.95
+      },
+      "SUPERVISED_LIVE": {
+        "eligibleYieldMinimum": 0.6,
+        "usefulnessMinimum": 0.8,
+        "abstentionMinimum": 0.95
+      }
+    }
+  },
+  "presenterApprovalLoad": {
+    "fixture": {
+      "path": "tests/corpus/wp9-approval-load-simulation.json",
+      "sha256": "56fc47270e78aad6226a7a7119c284d92bb5081ac787ec3f51448b6cb88019e8"
+    },
+    "sessionDurationMs": 3600000,
+    "exactEvents": [
+      "SNAPSHOT_LOADED",
+      "APPROVAL_REQUESTED",
+      "APPROVAL_SETTLED",
+      "PRESENTER_SPEECH_PAUSE"
+    ],
+    "thresholds": {
+      "approvalCountMaximum": 15,
+      "approvalP50MaximumMs": 2000,
+      "approvalP90MaximumMs": 5000,
+      "effortProxyMaximum": 0.2,
+      "inducedPauseRateMaximumPerTenMinutes": 1,
+      "approvalTimeoutMs": 5000
+    }
+  }
+}
