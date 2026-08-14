@@ -91,6 +91,13 @@
         "react-dom": "^19.1.1",
       },
     },
+    "services/model-router": {
+      "name": "@impromptu/model-router",
+      "version": "0.0.0",
+      "dependencies": {
+        "zod": "4.0.17",
+      },
+    },
     "services/private-backend": {
       "name": "@impromptu/private-backend",
       "version": "0.0.0",
@@ -216,6 +223,8 @@
     "@impromptu/console": ["@impromptu/console@workspace:apps/console"],
 
     "@impromptu/contracts": ["@impromptu/contracts@workspace:packages/contracts"],
+
+    "@impromptu/model-router": ["@impromptu/model-router@workspace:services/model-router"],
 
     "@impromptu/private-backend": ["@impromptu/private-backend@workspace:services/private-backend"],
 
@@ -428,6 +437,8 @@
     "yallist": ["yallist@3.1.1", "", {}, "sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g=="],
 
     "zod": ["zod@4.1.5", "", {}, "sha512-rcUUZqlLJgBC33IT3PNMgsCq6TzLQEG/Ei/KTCU0PedSWRMAXoOUN+4t/0H+Q8bdnLPdqUYnvboJT0bn/229qg=="],
+
+    "@impromptu/model-router/zod": ["zod@4.0.17", "", {}, "sha512-1PHjlYRevNxxdy2JZ8JcNAw7rX8V9P1AKkP+x/xZfxB0K5FYfuV+Ug6P/6NVSR2jHQ+FzDDoDHS04nYUsOIyLQ=="],
 
     "bun-types/@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
 
