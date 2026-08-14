@@ -19,7 +19,7 @@ Use this runbook at the venue with the approved emergency public PDF/URL already
 5. Open the public Stage URL in its clean browser profile, complete display approval from Console, and click **Enter fullscreen** on Stage.
 6. Confirm the recovery criteria above before leaving the emergency artifact.
 
-**Verified timing:** the WP4 exact-event browser harness simulated monitor unplug and restoration nine times with a maximum UI recovery of **18.311 ms**. This is measured from injected topology loss through audience-ready observation; it does **not** include physical projector power-up, cable replacement, or operator reaction time. Those physical times must be measured during venue rehearsal.
+**Verified timing:** the WP4 exact-event browser harness simulated monitor unplug and restoration nine times with a maximum UI recovery of **11.298 ms**. This is measured from injected topology loss through audience-ready observation; it does **not** include physical projector power-up, cable replacement, or operator reaction time. Those physical times must be measured during venue rehearsal.
 
 ## 2. Windows topology or fullscreen fault
 
@@ -30,7 +30,7 @@ Use this runbook at the venue with the approved emergency public PDF/URL already
 5. If Duplicate would expose Console, move Console to a separate device. The co-resident interlock must remain disabled after any private-pixel observation.
 6. Confirm the requested and observed modes match and check all recovery criteria.
 
-**Verified timing:** on 2026-08-14, nine rehearsals in each of Extend, Duplicate, and Single completed 63/63 fault recoveries with zero private pixels. Exact maximums were **8.145 ms** for topology switch, **37.887 ms** for fullscreen exit, **219.336 ms** for blocked fullscreen recovery, and **103.230 ms** for browser refresh. The maximum across every WP4 fault, including server restart, was **308.489 ms**. Command: `node --experimental-strip-types scripts/verify-wp4-topology-e2e.ts`; manifest checksum: `a4159f6f2f0ae54369a6449ee8979e0d280fa4bc8ad50fe317c15754025b1677`.
+**Verified timing:** on 2026-08-14, 9 rehearsals total (3 each in Extend, Duplicate, and Single) completed 63/63 fault recoveries (21 per mode) with zero private pixels. Exact maximums were **11.062 ms** for topology switch, **39.377 ms** for fullscreen exit, **227.521 ms** for blocked fullscreen recovery, and **109.503 ms** for browser refresh. The maximum across every WP4 fault, including server restart, was **290.714 ms**. Command: `node --experimental-strip-types scripts/verify-wp4-topology-e2e.ts`; manifest checksum: `f933d0df1f1d9a3f7c75455092e1069bdd21ba7194a8f31b5d49349963a425c1`.
 
 ## 3. Venue network partition
 
@@ -53,7 +53,7 @@ Use this runbook at the venue with the approved emergency public PDF/URL already
 6. Send one absolute slide-set command and wait for the matching Stage-applied receipt before resuming normal control.
 7. If either health check, snapshot, tombstone check, or receipt fails, stay on the emergency public artifact and escalate; do not rebuild state by republishing old cards.
 
-**Verified timing:** the WP4 real process-restart plus SSE-reconnect fault ran nine times with a maximum projection-drop recovery of **308.489 ms**. A separate WP3 run on 2026-08-14 restarted both service mains, restored all 20 tombstones, applied the exact post-restart command prefix, and reported zero active-card resurrection. The harness does not include production supervisor startup or database failover time; measure those at the venue.
+**Verified timing:** the WP4 real process-restart plus SSE-reconnect fault ran nine times with a maximum projection-drop recovery of **290.714 ms**. A separate WP3 run on 2026-08-14 restarted both service mains, restored all 20 tombstones, applied the exact post-restart command prefix, and reported zero active-card resurrection. The harness does not include production supervisor startup or database failover time; measure those at the venue.
 
 ## 5. AI provider failure, timeout, or quota exhaustion
 
