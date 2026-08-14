@@ -18,7 +18,7 @@ function parsePort(value: string | undefined): number {
   }
 
   const port = Number(value);
-  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+  if (!/^[1-9]\d{0,4}$/.test(value) || port > 65_535) {
     throw new Error("PROJECTION_GATEWAY_PORT must be an integer between 1 and 65535");
   }
 
@@ -48,6 +48,9 @@ export function parseProjectionGatewayConfig(environment: Environment): Projecti
   const host = environment.PROJECTION_GATEWAY_HOST ?? DEFAULT_HOST;
   if (host.length === 0) {
     throw new Error("PROJECTION_GATEWAY_HOST must not be empty");
+  }
+  if (/\s/.test(host)) {
+    throw new Error("PROJECTION_GATEWAY_HOST must not contain whitespace");
   }
 
   return {
