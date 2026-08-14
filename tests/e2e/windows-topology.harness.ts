@@ -472,7 +472,10 @@ async function rehearse(
   browser: Browser,
   mode: WindowsDisplayMode,
   rehearsal: number,
-  restartProjection: () => Promise<void>,
+  restartProjection: (
+    channelClosed: () => Promise<unknown>,
+    signalRecovery: () => Promise<void>,
+  ) => Promise<void>,
 ): Promise<ModeRehearsalEvidence> {
   const context = await browser.newContext();
   await installEventBuffer(context);
