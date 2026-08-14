@@ -18,6 +18,23 @@ export interface StageCardView {
   readonly publicCardRevision: string;
 }
 
+export interface StagePlaybackEvent {
+  readonly commandId: string;
+  readonly displayBindingEpoch: string;
+  readonly acceptedControlRevision: string;
+  readonly occurrence: { readonly publicSlideKey: string; readonly occurrenceSeq: number };
+  readonly blackout: boolean;
+}
+
+export interface StageCardTombstone {
+  readonly projectionId: string;
+  readonly status: "RETRACTED" | "EXPIRED";
+  readonly publicCardRevision: string;
+  readonly occurredAtMs: number;
+}
+
+export type StageCardEvent = StageCardView | StageCardTombstone;
+
 export interface StageSnapshotView {
   readonly occurrence: { readonly publicSlideKey: string; readonly occurrenceSeq: number };
   readonly cards: readonly StageCardView[];
@@ -26,10 +43,34 @@ export interface StageSnapshotView {
   readonly tombstoneRetentionMs: number;
 }
 
+export interface StageSubscription {
+  close(): void;
+}
+
+export interface StageEventObserver {
+  onPlayback(event: StagePlaybackEvent): void;
+  onCard(event: StageCardEvent): void;
+  onClose(reason: string): void;
+}
+
+interface BrowserEventSource {
+  close(): void;
+  addEventListener(
+    type: string,
+    listener: (event: Event) => void,
+    options?: AddEventListenerOptions,
+  ): void;
+  removeEventListener(type: string, listener: (event: Event) => void): void;
+}
+
+export type EventSourceFactory = (url: string) => BrowserEventSource;
+
 export interface StageSessionClient {
   createJoin(identity: DisplayIdentity, deckVersion: string): Promise<DisplayJoinView>;
   claim(join: DisplayJoinView): Promise<void>;
   snapshot(): Promise<StageSnapshotView>;
+  subscribe(observer: StageEventObserver, timeoutMs?: number): Promise<StageSubscription>;
+  recordApplied(event: StagePlaybackEvent): Promise<unknown>;
 }
 
 async function json(response: Response): Promise<unknown> {
@@ -117,7 +158,103 @@ function snapshot(value: unknown): StageSnapshotView | null {
   };
 }
 
-export function createStageSessionClient(baseUrl = ""): StageSessionClient {
+function playback(value: unknown): StagePlaybackEvent | null {
+  const candidate = record(value);
+  const occurrence = record(candidate?.occurrence);
+  return candidate !== null &&
+    occurrence !== null &&
+    typeof candidate.commandId === "string" &&
+    typeof candidate.displayBindingEpoch === "string" &&
+    typeof candidate.acceptedControlRevision === "string" &&
+    typeof occurrence.publicSlideKey === "string" &&
+    typeof occurrence.occurrenceSeq === "number" &&
+    typeof candidate.blackout === "boolean"
+    ? {
+        commandId: candidate.commandId,
+        displayBindingEpoch: candidate.displayBindingEpoch,
+        acceptedControlRevision: candidate.acceptedControlRevision,
+        occurrence: {
+          publicSlideKey: occurrence.publicSlideKey,
+          occurrenceSeq: occurrence.occurrenceSeq,
+        },
+        blackout: candidate.blackout,
+      }
+    : null;
+}
+
+function cardEvent(value: unknown): StageCardEvent | null {
+  const candidate = record(value);
+  if (
+    candidate !== null &&
+    (candidate.status === "RETRACTED" || candidate.status === "EXPIRED") &&
+    typeof candidate.projectionId === "string" &&
+    typeof candidate.publicCardRevision === "string" &&
+    typeof candidate.occurredAtMs === "number"
+  ) {
+    return {
+      projectionId: candidate.projectionId,
+      status: candidate.status,
+      publicCardRevision: candidate.publicCardRevision,
+      occurredAtMs: candidate.occurredAtMs,
+    };
+  }
+  if (
+    candidate !== null &&
+    candidate.status === "PUBLISHED" &&
+    typeof candidate.projectionId === "string" &&
+    typeof candidate.claim === "string" &&
+    typeof candidate.supportSummary === "string" &&
+    typeof candidate.sourceLabel === "string" &&
+    typeof candidate.publicCardRevision === "string"
+  ) {
+    return {
+      projectionId: candidate.projectionId,
+      status: candidate.status,
+      claim: candidate.claim,
+      supportSummary: candidate.supportSummary,
+      sourceLabel: candidate.sourceLabel,
+      publicCardRevision: candidate.publicCardRevision,
+    };
+  }
+  return null;
+}
+
+function parseStreamMessage(
+  event: Event,
+):
+  | Readonly<{ kind: "PLAYBACK"; payload: StagePlaybackEvent }>
+  | Readonly<{ kind: "CARD"; payload: StageCardEvent }>
+  | Readonly<{ kind: "CLOSE"; reason: string }>
+  | null {
+  if (!(event instanceof MessageEvent) || typeof event.data !== "string") return null;
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(event.data);
+  } catch {
+    return null;
+  }
+  const envelope = record(decoded);
+  if (envelope?.kind === "PLAYBACK") {
+    const payload = playback(envelope.payload);
+    return payload === null ? null : { kind: "PLAYBACK", payload };
+  }
+  if (envelope?.kind === "CARD") {
+    const payload = cardEvent(envelope.payload);
+    return payload === null ? null : { kind: "CARD", payload };
+  }
+  if (envelope?.kind === "CLOSE") {
+    const payload = record(envelope.payload);
+    return payload !== null && typeof payload.reason === "string"
+      ? { kind: "CLOSE", reason: payload.reason }
+      : null;
+  }
+  return null;
+}
+
+export function createStageSessionClient(
+  baseUrl = "",
+  eventSourceFactory: EventSourceFactory = (url) => new EventSource(url),
+): StageSessionClient {
   const headers = { "content-type": "application/json" };
   return {
     async createJoin(identity, deckVersion) {
@@ -144,6 +281,68 @@ export function createStageSessionClient(baseUrl = ""): StageSessionClient {
       const response = await fetch(`${baseUrl}/v1/snapshot`, { credentials: "include" });
       const body = snapshot(await json(response));
       if (!response.ok || body === null) throw new Error("Public snapshot is unavailable.");
+      return body;
+    },
+    async subscribe(observer, timeoutMs = 5_000) {
+      const source = eventSourceFactory(`${baseUrl}/v1/events`);
+      const timeout = AbortSignal.timeout(timeoutMs);
+      let opened = false;
+      let closed = false;
+      const close = () => {
+        if (closed) return;
+        closed = true;
+        source.close();
+        source.removeEventListener("message", onMessage);
+        source.removeEventListener("error", onError);
+      };
+      const onMessage = (event: Event) => {
+        const message = parseStreamMessage(event);
+        if (message?.kind === "PLAYBACK") observer.onPlayback(message.payload);
+        if (message?.kind === "CARD") observer.onCard(message.payload);
+        if (message?.kind === "CLOSE") {
+          observer.onClose(message.reason);
+          close();
+        }
+      };
+      const onError = () => {
+        if (opened) {
+          observer.onClose("NETWORK_ERROR");
+          close();
+        }
+      };
+      source.addEventListener("message", onMessage);
+      source.addEventListener("error", onError);
+      await new Promise<void>((resolve, reject) => {
+        const onOpen = () => {
+          opened = true;
+          resolve();
+        };
+        source.addEventListener("open", onOpen, { once: true });
+        timeout.addEventListener(
+          "abort",
+          () => {
+            if (!opened) {
+              close();
+              reject(new Error(`Stage event channel did not open within ${timeoutMs}ms`));
+            }
+          },
+          { once: true },
+        );
+      });
+      return { close };
+    },
+    async recordApplied(event) {
+      const response = await fetch(`${baseUrl}/v1/stage-applied`, {
+        method: "POST",
+        credentials: "include",
+        headers,
+        body: JSON.stringify({
+          commandId: event.commandId,
+          displayBindingEpoch: event.displayBindingEpoch,
+        }),
+      });
+      const body = await json(response);
+      if (!response.ok) throw new Error("Stage applied receipt was rejected.");
       return body;
     },
   };

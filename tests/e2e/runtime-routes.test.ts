@@ -78,6 +78,7 @@ describe("runnable WP3 service composition", () => {
       {
         PROJECTION_GATEWAY_HOST: "127.0.0.1",
         PROJECTION_GATEWAY_PORT: "44102",
+        PRIVATE_BACKEND_ORIGIN: "http://127.0.0.1:44101",
         SERVICE_AUTH_TOKEN: serviceToken,
         STAGE_ORIGIN: stageOrigin,
       },
@@ -119,6 +120,16 @@ describe("runnable WP3 service composition", () => {
       headers: { origin: stageOrigin },
     });
     expect(snapshot.status).not.toBe(404);
+    const events = await fetch("http://127.0.0.1:44102/v1/events", {
+      headers: { origin: stageOrigin },
+    });
+    expect(events.status).not.toBe(404);
+    const applied = await fetch("http://127.0.0.1:44102/v1/stage-applied", {
+      method: "POST",
+      headers: browserHeaders(stageOrigin),
+      body: JSON.stringify({}),
+    });
+    expect(applied.status).not.toBe(404);
 
     const signIn = await fetch("http://127.0.0.1:44101/v1/account-sessions", {
       method: "POST",

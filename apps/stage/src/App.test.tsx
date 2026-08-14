@@ -86,6 +86,14 @@ describe("public Stage boundary", () => {
         actions.push("snapshot-read");
         return snapshotSignal.promise;
       },
+      async subscribe() {
+        actions.push("events-subscribed");
+        return { close() {} };
+      },
+      async recordApplied() {
+        actions.push("receipt-recorded");
+        return null;
+      },
     };
     render(
       <MemoryRouter initialEntries={["/"]}>
@@ -123,7 +131,12 @@ describe("public Stage boundary", () => {
     expect(
       within(document.body).getByRole("heading", { name: "Evidence, without the detour" }),
     ).toBeTruthy();
-    expect(actions).toEqual(["join-created", "display-claimed", "snapshot-read"]);
+    expect(actions).toEqual([
+      "join-created",
+      "display-claimed",
+      "events-subscribed",
+      "snapshot-read",
+    ]);
   });
 
   test("enters and exits fullscreen only from a Stage-local action", () => {

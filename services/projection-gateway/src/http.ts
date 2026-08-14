@@ -4,14 +4,24 @@ import type {
   PreparedEvidenceProjectionGateway,
   PublicCardEvent,
   PublicDeckArtifact,
+  StageSocket,
 } from "./prepared-evidence.ts";
 
 export type ProjectionGatewayHandler = (request: Request) => Response | Promise<Response>;
+
+export interface StageReceiptWriter {
+  recordApplied(input: {
+    readonly audienceDisplaySessionId: string;
+    readonly commandId: string;
+    readonly displayBindingEpoch: string;
+  }): Promise<unknown | null>;
+}
 
 export interface ProjectionGatewayHttpDependencies {
   readonly gateway: PreparedEvidenceProjectionGateway;
   readonly internalAuthToken: string;
   readonly now: () => number;
+  readonly stageReceiptWriter: StageReceiptWriter;
 }
 
 function json(body: unknown, status: number, headers?: Headers): Response {
@@ -166,6 +176,46 @@ function displayCookie(request: Request): string | null {
   return null;
 }
 
+function serverEvent(kind: "PLAYBACK" | "CARD" | "CLOSE", payload: unknown): Uint8Array {
+  return new TextEncoder().encode(`data: ${JSON.stringify({ kind, payload })}\n\n`);
+}
+
+function eventStream(
+  dependencies: ProjectionGatewayHttpDependencies,
+  audienceDisplaySessionId: string,
+  headers: Headers,
+): Response {
+  let socket: StageSocket | null = null;
+  let cancelled = false;
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      socket = dependencies.gateway.connectStage(
+        audienceDisplaySessionId,
+        {
+          onPlayback: (event) => controller.enqueue(serverEvent("PLAYBACK", event)),
+          onCard: (event) => controller.enqueue(serverEvent("CARD", event)),
+          onClose: (reason) => {
+            if (!cancelled) {
+              controller.enqueue(serverEvent("CLOSE", { reason }));
+              controller.close();
+            }
+          },
+        },
+        dependencies.now(),
+      );
+      if (socket === null) controller.error(new Error("display session is unavailable"));
+    },
+    cancel() {
+      cancelled = true;
+      socket?.close();
+    },
+  });
+  headers.set("content-type", "text/event-stream; charset=utf-8");
+  headers.set("cache-control", "no-store");
+  headers.set("connection", "keep-alive");
+  return new Response(body, { status: socket === null ? 401 : 200, headers });
+}
+
 function validMutationOrigin(request: Request, origin: ExactOrigin): boolean {
   const referer = request.headers.get("referer");
   if (request.headers.get("origin") !== origin || referer === null) return false;
@@ -314,6 +364,35 @@ export function createProjectionGatewayHandler(
         `__Host-display=${session.audienceDisplaySessionId}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${Math.max(0, Math.floor((session.expiresAtMs - dependencies.now()) / 1_000))}`,
       );
       return json(session, 201, origin);
+    }
+    if (request.method === "GET" && url.pathname === "/v1/events") {
+      const audienceDisplaySessionId = displayCookie(request);
+      if (audienceDisplaySessionId === null) {
+        return json({ error: "display_session_required" }, 401, origin);
+      }
+      return eventStream(dependencies, audienceDisplaySessionId, origin);
+    }
+    if (request.method === "POST" && url.pathname === "/v1/stage-applied") {
+      const audienceDisplaySessionId = displayCookie(request);
+      if (audienceDisplaySessionId === null) {
+        return json({ error: "display_session_required" }, 401, origin);
+      }
+      const body = await requestBody(request);
+      if (
+        body === null ||
+        typeof body.commandId !== "string" ||
+        typeof body.displayBindingEpoch !== "string"
+      ) {
+        return json({ error: "invalid_request" }, 400, origin);
+      }
+      const receipt = await dependencies.stageReceiptWriter.recordApplied({
+        audienceDisplaySessionId,
+        commandId: body.commandId,
+        displayBindingEpoch: body.displayBindingEpoch,
+      });
+      return receipt === null
+        ? json({ error: "receipt_rejected" }, 409, origin)
+        : json(receipt, 200, origin);
     }
     if (request.method === "GET" && url.pathname === "/v1/snapshot") {
       const audienceDisplaySessionId = displayCookie(request);

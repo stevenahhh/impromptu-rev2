@@ -43,6 +43,11 @@ describe("Stage display session HTTP boundary", () => {
         gateway,
         internalAuthToken: "internal-test-token-alpha",
         now: () => 1_000,
+        stageReceiptWriter: {
+          async recordApplied() {
+            return null;
+          },
+        },
       },
     );
     const joinResponse = await handler(

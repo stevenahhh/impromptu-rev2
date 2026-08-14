@@ -4,8 +4,10 @@ import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import {
   createStageSessionClient,
   type DisplayJoinView,
+  type StageCardEvent,
   type StageSessionClient,
   type StageSnapshotView,
+  type StageSubscription,
 } from "./stage-client";
 
 function StageHeader() {
@@ -141,6 +143,31 @@ function useStageFullscreen() {
   return { ...state, toggle };
 }
 
+function cardRevisionValue(revision: string): number {
+  const value = Number(revision.slice(4));
+  return Number.isSafeInteger(value) && value >= 0 ? value : -1;
+}
+
+function applyCardEvent(
+  snapshot: StageSnapshotView | null,
+  event: StageCardEvent,
+): StageSnapshotView | null {
+  if (
+    snapshot === null ||
+    cardRevisionValue(event.publicCardRevision) <= cardRevisionValue(snapshot.publicCardRevision)
+  ) {
+    return snapshot;
+  }
+  return {
+    ...snapshot,
+    publicCardRevision: event.publicCardRevision,
+    cards:
+      event.status === "PUBLISHED"
+        ? [...snapshot.cards.filter((card) => card.projectionId !== event.projectionId), event]
+        : snapshot.cards.filter((card) => card.projectionId !== event.projectionId),
+  };
+}
+
 function DisplayPage({ client }: { readonly client: StageSessionClient }) {
   const titleId = useId();
   const fullscreen = useStageFullscreen();
@@ -148,14 +175,45 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
 
   useEffect(() => {
     let active = true;
-    void client
-      .snapshot()
-      .then((next) => {
-        if (active) setSnapshot(next);
-      })
-      .catch(() => undefined);
+    let subscription: StageSubscription | null = null;
+    void (async () => {
+      try {
+        subscription = await client.subscribe({
+          onPlayback(event) {
+            if (!active) return;
+            setSnapshot((current) =>
+              current === null ? null : { ...current, occurrence: event.occurrence },
+            );
+            void client.recordApplied(event);
+          },
+          onCard(event) {
+            if (active) setSnapshot((current) => applyCardEvent(current, event));
+          },
+          onClose() {
+            subscription = null;
+          },
+        });
+        if (!active) {
+          subscription.close();
+          return;
+        }
+        const next = await client.snapshot();
+        if (active) {
+          setSnapshot((current) =>
+            current !== null &&
+            cardRevisionValue(current.publicCardRevision) >
+              cardRevisionValue(next.publicCardRevision)
+              ? current
+              : next,
+          );
+        }
+      } catch {
+        subscription?.close();
+      }
+    })();
     return () => {
       active = false;
+      subscription?.close();
     };
   }, [client]);
 
