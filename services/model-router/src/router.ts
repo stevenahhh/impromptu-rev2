@@ -37,11 +37,19 @@ import {
   createPolicyMediatedTransport,
   type ExactEgressPolicy,
   type ProviderEgressTransport,
+  type RevocableTransportLease,
   type SecretStore,
 } from "./security.ts";
-import type { SttAudioChunk, SttStreamEvent, SttTranscript } from "./stt.ts";
+import {
+  type SttAudioChunk,
+  type SttStreamEvent,
+  type SttTranscript,
+  sttStreamEventSchema,
+  sttTranscriptSchema,
+} from "./stt.ts";
 
 const terminalResultSchema = modelResultSchema(z.unknown());
+const sttTerminalResultSchema = modelResultSchema(sttTranscriptSchema);
 
 export const modelInvocationRequestSchema = z
   .object({
@@ -51,6 +59,12 @@ export const modelInvocationRequestSchema = z
   })
   .strict();
 export type ModelInvocationRequest = z.infer<typeof modelInvocationRequestSchema>;
+
+interface ResultContext {
+  readonly policyVersion: string;
+  readonly requestId: string;
+  readonly traceId: string;
+}
 
 export interface ServerModelRouterOptions {
   readonly registry: ModelRoutingRegistry;
@@ -93,11 +107,42 @@ export class ServerModelRouter {
 
   async invoke(
     untrustedRequest: unknown,
-    context: TrustedModelContext,
+    untrustedContext: unknown,
   ): Promise<ModelResult<unknown>> {
-    assertTrustedContext(context);
-    const request = parseInvocationRequest(untrustedRequest);
-    const startedAtMs = this.#clock();
+    const startedAtMs = this.#now();
+    const resultContext = resultContextFrom(untrustedContext);
+    const requestResult = modelInvocationRequestSchema.safeParse(untrustedRequest);
+    if (!requestResult.success) {
+      return this.#validatedResult(
+        this.#failure(
+          null,
+          null,
+          resultContext,
+          startedAtMs,
+          normalizedModelError("invalid_request", "Model invocation request is invalid", false),
+        ),
+        null,
+        resultContext,
+        startedAtMs,
+      );
+    }
+    const request = requestResult.data;
+    if (!isTrustedModelContext(untrustedContext)) {
+      return this.#validatedResult(
+        this.#failure(
+          request.capability,
+          null,
+          resultContext,
+          startedAtMs,
+          normalizedModelError("policy_denied", "Trusted model context is required", false),
+        ),
+        request.capability,
+        resultContext,
+        startedAtMs,
+      );
+    }
+    const context = untrustedContext;
+
     let adapter: RegisteredUnaryAdapter;
     try {
       adapter = this.#registry.resolveUnary(request.capability, request.adapterId);
@@ -114,10 +159,13 @@ export class ServerModelRouter {
             false,
           ),
         ),
+        request.capability,
+        context,
+        startedAtMs,
       );
     }
 
-    const initialCancellation = cancellationError(context, this.#clock());
+    const initialCancellation = cancellationError(context, this.#now());
     if (initialCancellation !== undefined) {
       return this.#validatedResult(
         this.#failure(
@@ -127,6 +175,9 @@ export class ServerModelRouter {
           startedAtMs,
           initialCancellation.modelError,
         ),
+        request.capability,
+        context,
+        startedAtMs,
       );
     }
 
@@ -145,15 +196,37 @@ export class ServerModelRouter {
             false,
           ),
         ),
+        request.capability,
+        context,
+        startedAtMs,
       );
     }
 
     const scope = new CancellationScope(context, this.#clock, this.#scheduler);
-    const dispatch = createDispatchRequest(adapter.descriptor, context, scope.signal);
+    let dispatch: ModelDispatchRequest;
+    try {
+      dispatch = createDispatchRequest(adapter.descriptor, context, scope.signal);
+    } catch {
+      scope.dispose();
+      return this.#validatedResult(
+        this.#failure(
+          request.capability,
+          null,
+          context,
+          startedAtMs,
+          normalizedModelError("invalid_request", "Model adapter descriptor is invalid", false),
+        ),
+        request.capability,
+        context,
+        startedAtMs,
+      );
+    }
+
     let reservation: BudgetReservation | undefined;
+    let lease: RevocableTransportLease | undefined;
     let result: ModelResult<unknown>;
     try {
-      const transport = await this.#prepareDispatch(
+      lease = await this.#prepareDispatch(
         dispatch,
         adapter.descriptor,
         context,
@@ -164,7 +237,7 @@ export class ServerModelRouter {
       );
       scope.throwIfCancelled();
       const rawOutput = await scope.race(() =>
-        adapter.invoke(request.input, invocation(context, scope.signal, transport)),
+        adapter.invoke(request.input, invocation(context, scope.signal, lease?.transport)),
       );
       scope.throwIfCancelled();
       let output: unknown;
@@ -191,6 +264,7 @@ export class ServerModelRouter {
         classifyError(caught),
       );
     } finally {
+      lease?.revoke();
       scope.dispose();
     }
 
@@ -202,23 +276,59 @@ export class ServerModelRouter {
       startedAtMs,
       adapter.descriptor,
     );
-    return this.#validatedResult(result);
+    return this.#validatedResult(result, request.capability, context, startedAtMs);
   }
 
   async *streamStt(
     chunks: AsyncIterable<SttAudioChunk>,
-    context: TrustedModelContext,
+    untrustedContext: unknown,
     adapterId?: string,
   ): AsyncIterable<RoutedSttItem> {
-    assertTrustedContext(context);
-    const startedAtMs = this.#clock();
+    const startedAtMs = this.#now();
+    const resultContext = resultContextFrom(untrustedContext);
+    if (!isTrustedModelContext(untrustedContext)) {
+      yield {
+        kind: "complete",
+        result: this.#validatedSttResult(
+          this.#failure(
+            "stt",
+            null,
+            resultContext,
+            startedAtMs,
+            normalizedModelError("policy_denied", "Trusted model context is required", false),
+          ),
+          resultContext,
+          startedAtMs,
+        ),
+      };
+      return;
+    }
+    const context = untrustedContext;
+    if (adapterId !== undefined && !z.string().min(1).safeParse(adapterId).success) {
+      yield {
+        kind: "complete",
+        result: this.#validatedSttResult(
+          this.#failure(
+            "stt",
+            null,
+            context,
+            startedAtMs,
+            normalizedModelError("invalid_request", "Streaming STT request is invalid", false),
+          ),
+          context,
+          startedAtMs,
+        ),
+      };
+      return;
+    }
+
     let adapter: RegisteredStreamingSttAdapter;
     try {
       adapter = this.#registry.resolveStreamingStt(adapterId);
     } catch {
       yield {
         kind: "complete",
-        result: this.#validatedResult(
+        result: this.#validatedSttResult(
           this.#failure(
             "stt",
             null,
@@ -230,16 +340,18 @@ export class ServerModelRouter {
               false,
             ),
           ),
-        ) as ModelResult<SttTranscript>,
+          context,
+          startedAtMs,
+        ),
       };
       return;
     }
 
-    const initialCancellation = cancellationError(context, this.#clock());
+    const initialCancellation = cancellationError(context, this.#now());
     if (initialCancellation !== undefined) {
       yield {
         kind: "complete",
-        result: this.#validatedResult(
+        result: this.#validatedSttResult(
           this.#failure(
             "stt",
             adapter.descriptor,
@@ -247,19 +359,43 @@ export class ServerModelRouter {
             startedAtMs,
             initialCancellation.modelError,
           ),
-        ) as ModelResult<SttTranscript>,
+          context,
+          startedAtMs,
+        ),
       };
       return;
     }
 
     const scope = new CancellationScope(context, this.#clock, this.#scheduler);
-    const dispatch = createDispatchRequest(adapter.descriptor, context, scope.signal);
+    let dispatch: ModelDispatchRequest;
+    try {
+      dispatch = createDispatchRequest(adapter.descriptor, context, scope.signal);
+    } catch {
+      scope.dispose();
+      yield {
+        kind: "complete",
+        result: this.#validatedSttResult(
+          this.#failure(
+            "stt",
+            null,
+            context,
+            startedAtMs,
+            normalizedModelError("invalid_request", "Streaming STT descriptor is invalid", false),
+          ),
+          context,
+          startedAtMs,
+        ),
+      };
+      return;
+    }
+
     let reservation: BudgetReservation | undefined;
+    let lease: RevocableTransportLease | undefined;
     let iterator: AsyncIterator<SttStreamEvent> | undefined;
     let innerDone = false;
     let terminalResult: ModelResult<SttTranscript> | undefined;
     try {
-      const transport = await this.#prepareDispatch(
+      lease = await this.#prepareDispatch(
         dispatch,
         adapter.descriptor,
         context,
@@ -271,7 +407,7 @@ export class ServerModelRouter {
       scope.throwIfCancelled();
       const stream = adapter.transcribe(
         validatedChunks(chunks, adapter.chunkSchema, scope.signal),
-        invocation(context, scope.signal, transport),
+        invocation(context, scope.signal, lease?.transport),
       );
       iterator = stream[Symbol.asyncIterator]();
       const activeIterator = iterator;
@@ -285,11 +421,11 @@ export class ServerModelRouter {
         }
         let event: SttStreamEvent;
         try {
-          event = adapter.eventSchema.parse(next.value);
+          event = sttStreamEventSchema.parse(adapter.eventSchema.parse(next.value));
         } catch {
           throw new ModelRouterError(
             "provider_error",
-            "Streaming STT output did not match the adapter schema",
+            "Streaming STT output did not match the canonical schema",
             false,
           );
         }
@@ -303,17 +439,19 @@ export class ServerModelRouter {
           false,
         );
       }
-      terminalResult = this.#validatedResult({
+      terminalResult = {
         ok: true,
         output: finalTranscript,
         metadata: this.#metadata("stt", adapter.descriptor, context, startedAtMs),
-      }) as ModelResult<SttTranscript>;
-      yield { kind: "complete", result: terminalResult };
+      };
     } catch (caught) {
-      terminalResult = this.#validatedResult(
-        this.#failure("stt", adapter.descriptor, context, startedAtMs, classifyError(caught)),
-      ) as ModelResult<SttTranscript>;
-      yield { kind: "complete", result: terminalResult };
+      terminalResult = this.#failure(
+        "stt",
+        adapter.descriptor,
+        context,
+        startedAtMs,
+        classifyError(caught),
+      );
     } finally {
       if (terminalResult === undefined) {
         scope.abort();
@@ -325,9 +463,11 @@ export class ServerModelRouter {
           normalizedModelError("cancelled", "Streaming STT consumer ended", false),
         );
       }
+      if (!innerDone) scope.abort();
       try {
         if (!innerDone && iterator?.return !== undefined) await iterator.return();
       } finally {
+        lease?.revoke();
         scope.dispose();
         terminalResult = (await this.#reconcile(
           reservation,
@@ -337,9 +477,13 @@ export class ServerModelRouter {
           startedAtMs,
           adapter.descriptor,
         )) as ModelResult<SttTranscript>;
-        this.#validatedResult(terminalResult);
       }
     }
+
+    yield {
+      kind: "complete",
+      result: this.#validatedSttResult(terminalResult, context, startedAtMs),
+    };
   }
 
   async #prepareDispatch(
@@ -348,7 +492,7 @@ export class ServerModelRouter {
     context: TrustedModelContext,
     scope: CancellationScope,
     onReserved: (reservation: BudgetReservation) => void,
-  ): Promise<ProviderTransport | undefined> {
+  ): Promise<RevocableTransportLease | undefined> {
     await guardedStep(
       scope,
       () => this.#policyVersionAuthority.assertCurrent(dispatch, context),
@@ -364,7 +508,13 @@ export class ServerModelRouter {
 
     let reservation: BudgetReservation;
     try {
-      reservation = budgetReservationSchema.parse(await this.#budget.reserve(dispatch, context));
+      const untrustedReservation = await guardedStep(
+        scope,
+        () => this.#budget.reserve(dispatch, context),
+        "budget_exceeded",
+        "Tenant model budget could not be reserved",
+      );
+      reservation = budgetReservationSchema.parse(untrustedReservation);
     } catch (caught) {
       if (caught instanceof ModelRouterError) throw caught;
       throw new ModelRouterError(
@@ -436,21 +586,21 @@ export class ServerModelRouter {
   ): Promise<ModelResult<Output>> {
     if (reservation === undefined) return result;
     const errorCode = result.ok ? null : result.error.code;
-    const reconciliation = budgetReconciliationSchema.parse({
-      reservationId: reservation.reservationId,
-      tenantId: dispatch.tenantId,
-      capability: dispatch.capability,
-      adapterId: dispatch.adapterId,
-      reservedUnits: reservation.reservedUnits,
-      usedUnits: result.ok ? reservation.reservedUnits : 0,
-      outcome: result.ok
-        ? "success"
-        : errorCode === "cancelled" || errorCode === "deadline_exceeded"
-          ? "cancelled"
-          : "failure",
-      errorCode,
-    });
     try {
+      const reconciliation = budgetReconciliationSchema.parse({
+        reservationId: reservation.reservationId,
+        tenantId: dispatch.tenantId,
+        capability: dispatch.capability,
+        adapterId: dispatch.adapterId,
+        reservedUnits: reservation.reservedUnits,
+        usedUnits: result.ok ? reservation.reservedUnits : 0,
+        outcome: result.ok
+          ? "success"
+          : errorCode === "cancelled" || errorCode === "deadline_exceeded"
+            ? "cancelled"
+            : "failure",
+        errorCode,
+      });
       await this.#budget.reconcile(reconciliation, context);
       return result;
     } catch {
@@ -466,9 +616,9 @@ export class ServerModelRouter {
   }
 
   #failure(
-    capability: ModelCapability,
+    capability: ModelCapability | null,
     descriptor: ModelAdapterDescriptor | null,
-    context: TrustedModelContext,
+    context: ResultContext,
     startedAtMs: number,
     modelError: ModelError,
   ): ModelFailure {
@@ -480,12 +630,12 @@ export class ServerModelRouter {
   }
 
   #metadata(
-    capability: ModelCapability,
+    capability: ModelCapability | null,
     descriptor: ModelAdapterDescriptor | null,
-    context: TrustedModelContext,
+    context: ResultContext,
     startedAtMs: number,
   ): ModelResultMetadata {
-    const completedAtMs = Math.max(startedAtMs, this.#clock());
+    const completedAtMs = Math.max(startedAtMs, this.#now());
     return {
       capability,
       adapterId: descriptor?.adapterId ?? null,
@@ -502,8 +652,46 @@ export class ServerModelRouter {
     };
   }
 
-  #validatedResult(result: ModelResult<unknown>): ModelResult<unknown> {
-    return terminalResultSchema.parse(result) as ModelResult<unknown>;
+  #validatedResult(
+    result: ModelResult<unknown>,
+    capability: ModelCapability | null,
+    context: ResultContext,
+    startedAtMs: number,
+  ): ModelResult<unknown> {
+    const parsed = terminalResultSchema.safeParse(result);
+    if (parsed.success) return parsed.data as ModelResult<unknown>;
+    return this.#failure(
+      capability,
+      null,
+      context,
+      startedAtMs,
+      normalizedModelError("provider_error", "Model terminal result was invalid", false),
+    );
+  }
+
+  #validatedSttResult(
+    result: ModelResult<unknown>,
+    context: ResultContext,
+    startedAtMs: number,
+  ): ModelResult<SttTranscript> {
+    const parsed = sttTerminalResultSchema.safeParse(result);
+    if (parsed.success) return parsed.data as ModelResult<SttTranscript>;
+    return this.#failure(
+      "stt",
+      null,
+      context,
+      startedAtMs,
+      normalizedModelError("provider_error", "Streaming STT terminal result was invalid", false),
+    );
+  }
+
+  #now(): number {
+    try {
+      const value = this.#clock();
+      return Number.isFinite(value) && value >= 0 ? value : 0;
+    } catch {
+      return 0;
+    }
   }
 }
 
@@ -567,12 +755,23 @@ async function* validatedChunks(
   }
 }
 
-function parseInvocationRequest(value: unknown): ModelInvocationRequest {
-  try {
-    return modelInvocationRequestSchema.parse(value);
-  } catch {
-    throw new ModelRouterError("invalid_request", "Model invocation request is invalid", false);
-  }
+function resultContextFrom(value: unknown): ResultContext {
+  if (isTrustedModelContext(value)) return value;
+  if (typeof value !== "object" || value === null) return untrustedResultContext();
+  const candidate = value as Readonly<Record<string, unknown>>;
+  return {
+    policyVersion: nonemptyString(candidate.policyVersion) ?? "untrusted",
+    requestId: nonemptyString(candidate.requestId) ?? "untrusted",
+    traceId: nonemptyString(candidate.traceId) ?? "untrusted",
+  };
+}
+
+function untrustedResultContext(): ResultContext {
+  return { policyVersion: "untrusted", requestId: "untrusted", traceId: "untrusted" };
+}
+
+function nonemptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 function classifyError(caught: unknown): ModelError {
@@ -581,10 +780,4 @@ function classifyError(caught: unknown): ModelError {
     return normalizedModelError("cancelled", "Model invocation was cancelled", false);
   }
   return normalizedModelError("provider_error", "Model adapter failed", true);
-}
-
-function assertTrustedContext(context: TrustedModelContext): void {
-  if (!isTrustedModelContext(context)) {
-    throw new ModelRouterError("policy_denied", "Trusted model context is required", false);
-  }
 }

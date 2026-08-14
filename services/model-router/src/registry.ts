@@ -38,19 +38,22 @@ export class ModelRoutingRegistry {
     adapter: UnaryModelAdapter<Input, Output>,
     options: RegistrationOptions = {},
   ): void {
-    const descriptor = Object.freeze(modelAdapterDescriptorSchema.parse(adapter.descriptor));
+    const descriptor = cloneAndFreezeDescriptor(adapter.descriptor);
     const { adapterId, capability } = descriptor;
     const adapters = this.#unary.get(capability) ?? new Map<string, RegisteredUnaryAdapter>();
     if (adapters.has(adapterId)) {
       throw new Error(`Unary adapter ${adapterId} is already registered for ${capability}`);
     }
-    adapters.set(adapterId, {
-      descriptor,
-      parseInput: (input) => adapter.inputSchema.parse(input),
-      parseOutput: (output) => adapter.outputSchema.parse(output),
-      invoke: async (input, context) =>
-        await adapter.invoke(adapter.inputSchema.parse(input), context),
-    });
+    adapters.set(
+      adapterId,
+      Object.freeze({
+        descriptor,
+        parseInput: (input: unknown) => adapter.inputSchema.parse(input),
+        parseOutput: (output: unknown) => adapter.outputSchema.parse(output),
+        invoke: async (input: unknown, context: ModelInvocationContext) =>
+          await adapter.invoke(adapter.inputSchema.parse(input), context),
+      }),
+    );
     this.#unary.set(capability, adapters);
     if (options.default === true || !this.#unaryDefaults.has(capability)) {
       this.#unaryDefaults.set(capability, adapterId);
@@ -72,7 +75,7 @@ export class ModelRoutingRegistry {
   }
 
   registerStreamingStt(adapter: StreamingSttAdapter, options: RegistrationOptions = {}): void {
-    const descriptor = Object.freeze(modelAdapterDescriptorSchema.parse(adapter.descriptor));
+    const descriptor = cloneAndFreezeDescriptor(adapter.descriptor);
     if (descriptor.capability !== "stt") {
       throw new TypeError("Streaming STT adapters must declare the stt capability");
     }
@@ -80,12 +83,16 @@ export class ModelRoutingRegistry {
     if (this.#streamingStt.has(adapterId)) {
       throw new Error(`Streaming STT adapter ${adapterId} is already registered`);
     }
-    this.#streamingStt.set(adapterId, {
-      descriptor: { ...descriptor, capability: "stt" },
-      chunkSchema: adapter.chunkSchema,
-      eventSchema: adapter.eventSchema,
-      transcribe: (chunks, context) => adapter.transcribe(chunks, context),
-    });
+    this.#streamingStt.set(
+      adapterId,
+      Object.freeze({
+        descriptor: Object.freeze({ ...descriptor, capability: "stt" as const }),
+        chunkSchema: adapter.chunkSchema,
+        eventSchema: adapter.eventSchema,
+        transcribe: (chunks: AsyncIterable<SttAudioChunk>, context: ModelInvocationContext) =>
+          adapter.transcribe(chunks, context),
+      }),
+    );
     if (options.default === true || this.#streamingSttDefault === undefined) {
       this.#streamingSttDefault = adapterId;
     }
@@ -103,4 +110,10 @@ export class ModelRoutingRegistry {
     }
     return adapter;
   }
+}
+
+function cloneAndFreezeDescriptor(value: unknown) {
+  const descriptor = modelAdapterDescriptorSchema.parse(structuredClone(value));
+  if (descriptor.requirement !== undefined) Object.freeze(descriptor.requirement);
+  return Object.freeze(descriptor);
 }

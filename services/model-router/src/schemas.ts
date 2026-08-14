@@ -43,7 +43,7 @@ export type ModelError = z.infer<typeof modelErrorSchema>;
 
 export const modelResultMetadataSchema = z
   .object({
-    capability: modelCapabilitySchema,
+    capability: modelCapabilitySchema.nullable(),
     adapterId: z.string().min(1).nullable(),
     provider: z.string().min(1).nullable(),
     model: z.string().min(1).nullable(),

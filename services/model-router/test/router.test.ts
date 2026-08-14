@@ -18,6 +18,7 @@ import {
   ServerModelRouter,
   StaticExactEgressPolicy,
   type StreamingSttAdapter,
+  type SttStreamEvent,
   sttAudioChunkSchema,
   sttStreamEventSchema,
   type TenantBudget,
@@ -187,6 +188,31 @@ describe("routing registry", () => {
     expect(() => registry.registerUnary(adapter)).toThrow();
   });
 
+  test("deep-clones and freezes streaming descriptors at registration", () => {
+    const registry = new ModelRoutingRegistry();
+    const requirement = {
+      secretId: "fixture/secret",
+      egressOrigin: "https://api.vendor.example",
+    };
+    const adapter = new DeterministicFakeSttAdapter({
+      transcript: { text: "final", language: "ko", durationMs: 100 },
+      events: [],
+    });
+    const mutableAdapter: StreamingSttAdapter = {
+      ...adapter,
+      descriptor: { ...adapter.descriptor, requirement },
+      transcribe: (chunks, invocation) => adapter.transcribe(chunks, invocation),
+    };
+
+    registry.registerStreamingStt(mutableAdapter);
+    requirement.secretId = "mutated";
+    const registered = registry.resolveStreamingStt();
+
+    expect(registered.descriptor.requirement?.secretId).toBe("fixture/secret");
+    expect(Object.isFrozen(registered.descriptor)).toBe(true);
+    expect(Object.isFrozen(registered.descriptor.requirement)).toBe(true);
+  });
+
   test("registers streaming STT independently from unary STT", () => {
     const registry = new ModelRoutingRegistry();
     const stt = new DeterministicFakeSttAdapter({
@@ -203,22 +229,29 @@ describe("routing registry", () => {
 });
 
 describe("server model router", () => {
-  test("fails closed on an invalid runtime capability request", async () => {
+  test("returns schema-valid failures for malformed request and context boundaries", async () => {
     const time = new ManualTime();
     const registry = new ModelRoutingRegistry();
     registry.registerUnary(unaryAdapter("primary", ({ prompt }) => ({ answer: prompt })));
     const router = createRouter(registry, time);
 
-    let caught: unknown;
-    try {
-      await router.invoke({ capability: "not-a-capability", input: {} }, context(2_000));
-    } catch (error) {
-      caught = error;
-    }
+    const malformedRequest = await router.invoke(
+      { capability: "not-a-capability", input: {} },
+      context(2_000),
+    );
+    const malformedContext = await router.invoke(
+      { capability: "llm", input: { prompt: "blocked" } },
+      { requestId: "forged" },
+    );
 
-    expect(caught).toBeInstanceOf(Error);
-    expect(caught).toMatchObject({
-      modelError: { code: "invalid_request", retryable: false },
+    expect(malformedRequest).toMatchObject({
+      ok: false,
+      error: { code: "invalid_request", retryable: false },
+      metadata: { capability: null },
+    });
+    expect(malformedContext).toMatchObject({
+      ok: false,
+      error: { code: "policy_denied", retryable: false },
     });
   });
 
@@ -414,6 +447,53 @@ describe("server model router", () => {
     if (completion?.kind === "complete") {
       expect(completion.result.ok).toBe(true);
       if (completion.result.ok) expect(completion.result.output).toEqual(transcript);
+    }
+  });
+
+  test("rejects unknown final transcript fields even with a permissive adapter schema", async () => {
+    const time = new ManualTime();
+    const registry = new ModelRoutingRegistry();
+    const event = {
+      kind: "final" as const,
+      sequence: 0,
+      transcript: {
+        text: "smuggled",
+        language: "ko",
+        durationMs: 50,
+        unexpected: "must fail",
+      },
+    };
+    const permissiveSchema = {
+      parse(): SttStreamEvent {
+        return event;
+      },
+    };
+    const adapter: StreamingSttAdapter = {
+      descriptor: {
+        adapterId: "permissive-stt",
+        capability: "stt",
+        provider: "fake",
+        model: "permissive",
+        modelVersion: "1",
+        estimatedCostUnits: 1,
+      },
+      chunkSchema: sttAudioChunkSchema,
+      eventSchema: permissiveSchema,
+      async *transcribe() {
+        yield event;
+      },
+    };
+    registry.registerStreamingStt(adapter);
+    const router = createRouter(registry, time);
+
+    const routed = [];
+    for await (const item of router.streamStt(emptyAudio(), context(2_000))) routed.push(item);
+    const completion = routed.at(-1);
+
+    expect(completion?.kind).toBe("complete");
+    if (completion?.kind === "complete") {
+      expect(completion.result.ok).toBe(false);
+      if (!completion.result.ok) expect(completion.result.error.code).toBe("provider_error");
     }
   });
 

@@ -5,6 +5,7 @@ import {
   type BudgetReservation,
   createTrustedModelContext,
   type DeadlineScheduler,
+  DeterministicFakeSttAdapter,
   DeterministicFakeUnaryAdapter,
   type ExactEgressGrant,
   type ExactEgressPolicy,
@@ -16,6 +17,7 @@ import {
   type PolicyVersionAuthority,
   type ProviderEgressTransport,
   type ProviderEgressTransportRequest,
+  type ProviderTransport,
   type ProviderTransportResponse,
   type SecretStore,
   ServerModelRouter,
@@ -53,6 +55,7 @@ class RecordingPolicyGates implements PolicyVersionAuthority, TenantQuotaPolicy,
   readonly reconciliations: BudgetReconciliation[] = [];
   quotaError: ModelRouterError | undefined;
   budgetError: ModelRouterError | undefined;
+  reconcileError: Error | undefined;
   onPolicyChecked: (() => void) | undefined;
   onQuotaChecked: (() => void) | undefined;
   onBudgetReserved: (() => void) | undefined;
@@ -100,6 +103,7 @@ class RecordingPolicyGates implements PolicyVersionAuthority, TenantQuotaPolicy,
   ): Promise<void> {
     this.events.push("reconcile");
     this.reconciliations.push(reconciliation);
+    if (this.reconcileError !== undefined) throw this.reconcileError;
   }
 }
 
@@ -331,10 +335,40 @@ describe("dispatch policy gates", () => {
           expect(result.error.code).toBe(mode === "cancel" ? "cancelled" : "deadline_exceeded");
         }
         expect(adapter.invocationCount).toBe(0);
-        expect(gates.reconciliations.length).toBe(gate === "budget" || gate === "egress" ? 1 : 0);
+        expect(gates.reconciliations.length).toBe(gate === "egress" ? 1 : 0);
       }
     }
   });
+
+  test("settles cancellation while a deferred budget reservation never resolves", async () => {
+    const time = new ManualTime();
+    const cancellation = new AbortController();
+    const gates = new RecordingPolicyGates();
+    let reservationStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      reservationStarted = resolve;
+    });
+    gates.reserve = async () => {
+      reservationStarted?.();
+      return await new Promise<BudgetReservation>(() => undefined);
+    };
+    const registry = new ModelRoutingRegistry();
+    const adapter = securedAdapter(() => ({ answer: "must not run" }));
+    registry.registerUnary(adapter);
+    const router = new ServerModelRouter(routerOptions(registry, time, gates));
+
+    const pending = router.invoke(
+      { capability: "llm", input: { prompt: "deferred" } },
+      trustedContext(2_000, cancellation.signal),
+    );
+    await started;
+    cancellation.abort();
+    const result = await pending;
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("cancelled");
+    expect(adapter.invocationCount).toBe(0);
+  }, 1_000);
 
   test("checks cancellation and deadline after an awaited secret read before dispatch", async () => {
     for (const mode of ["cancel", "deadline"] as const) {
@@ -370,6 +404,32 @@ describe("dispatch policy gates", () => {
       }
       expect(adapter.invocationCount).toBe(0);
       expect(gates.reconciliations).toHaveLength(1);
+    }
+  });
+  test("buffers streaming success until budget reconciliation succeeds", async () => {
+    const time = new ManualTime();
+    const gates = new RecordingPolicyGates();
+    gates.reconcileError = new Error("accounting unavailable");
+    const registry = new ModelRoutingRegistry();
+    const transcript = { text: "final", language: "ko", durationMs: 100 };
+    registry.registerStreamingStt(
+      new DeterministicFakeSttAdapter({
+        transcript,
+        events: [{ kind: "final", sequence: 0, transcript }],
+      }),
+    );
+    const router = new ServerModelRouter(routerOptions(registry, time, gates));
+
+    const routed = [];
+    for await (const item of router.streamStt(emptyAudio(), trustedContext(2_000))) {
+      routed.push(item);
+    }
+    const completions = routed.filter((item) => item.kind === "complete");
+
+    expect(completions).toHaveLength(1);
+    expect(completions[0]?.result.ok).toBe(false);
+    if (completions[0] !== undefined && !completions[0].result.ok) {
+      expect(completions[0].result.error.code).toBe("budget_exceeded");
     }
   });
 });
@@ -417,6 +477,55 @@ describe("policy-mediated provider transport", () => {
     );
   });
 
+  test("revokes retained transport capabilities after success and cancellation", async () => {
+    for (const terminal of ["success", "cancel"] as const) {
+      const time = new ManualTime();
+      const cancellation = new AbortController();
+      const gates = new RecordingPolicyGates();
+      const registry = new ModelRoutingRegistry();
+      let retained: ProviderTransport | undefined;
+      let invocationStarted: (() => void) | undefined;
+      const started = new Promise<void>((resolve) => {
+        invocationStarted = resolve;
+      });
+      registry.registerUnary(
+        securedAdapter(async (_input, invocation) => {
+          retained = invocation.transport;
+          invocationStarted?.();
+          if (terminal === "cancel") {
+            return await new Promise<{ answer: string }>(() => undefined);
+          }
+          return { answer: "done" };
+        }),
+      );
+      const router = new ServerModelRouter(
+        routerOptions(registry, time, gates, {
+          secretStore: fixedSecretStore,
+          egressPolicy: new CountingEgressPolicy(),
+          providerTransport: new RecordingTransport(),
+        }),
+      );
+
+      const pending = router.invoke(
+        { capability: "llm", input: { prompt: terminal } },
+        trustedContext(2_000, cancellation.signal),
+      );
+      await started;
+      if (terminal === "cancel") cancellation.abort();
+      await pending;
+
+      let rejected: unknown;
+      try {
+        await retained?.request({ method: "GET", path: "/after-terminal" });
+      } catch (caught) {
+        rejected = caught;
+      }
+      expect(rejected).toMatchObject({
+        modelError: { code: "transport_error", retryable: false },
+      });
+    }
+  });
+
   test("rejects an absolute or cross-origin transport path before egress", async () => {
     const time = new ManualTime();
     const gates = new RecordingPolicyGates();
@@ -449,3 +558,5 @@ describe("policy-mediated provider transport", () => {
     expect(transport.requests).toEqual([]);
   });
 });
+
+async function* emptyAudio(): AsyncIterable<never> {}

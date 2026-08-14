@@ -40,6 +40,11 @@ export interface ProviderEgressTransport {
   send(request: ProviderEgressTransportRequest): Promise<ProviderTransportResponse>;
 }
 
+export interface RevocableTransportLease {
+  readonly transport: ProviderTransport;
+  readonly revoke: () => void;
+}
+
 export interface PolicyMediatedTransportOptions {
   readonly adapterId: string;
   readonly origin: string;
@@ -77,9 +82,11 @@ export class StaticExactEgressPolicy implements ExactEgressPolicy {
 
 export function createPolicyMediatedTransport(
   options: PolicyMediatedTransportOptions,
-): ProviderTransport {
-  return Object.freeze({
+): RevocableTransportLease {
+  let active = true;
+  const transport: ProviderTransport = Object.freeze({
     async request(untrustedRequest: unknown): Promise<ProviderTransportResponse> {
+      if (!active) throw revoked();
       options.checkpoint();
       const request = providerTransportRequestSchema.parse(untrustedRequest);
       assertSafeAdapterHeaders(request.headers ?? {});
@@ -110,6 +117,7 @@ export function createPolicyMediatedTransport(
         throw new ModelRouterError("transport_error", "Provider transport failed", true);
       }
       options.checkpoint();
+      if (!active) throw revoked();
       const parsed = providerTransportResponseSchema.parse(response);
       return Object.freeze({
         status: parsed.status,
@@ -118,6 +126,20 @@ export function createPolicyMediatedTransport(
       });
     },
   });
+  return Object.freeze({
+    transport,
+    revoke: () => {
+      active = false;
+    },
+  });
+}
+
+function revoked(): ModelRouterError {
+  return new ModelRouterError(
+    "transport_error",
+    "Provider transport capability was revoked",
+    false,
+  );
 }
 
 function resolveProviderUrl(origin: string, path: string, adapterId: string): string {
