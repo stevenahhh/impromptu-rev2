@@ -185,6 +185,7 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
     let subscription: StageSubscription | null = null;
     let sseSubscription: StageSubscription | null = null;
     let latestSnapshot: StageSnapshotView | null = null;
+    let realtimeReconnectAttempts = 0;
     const leaseTimers = new Map<string, number>();
 
     const scheduleLease = (card: StageSnapshotView["cards"][number]) => {
@@ -230,16 +231,21 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
               latestSnapshot = next;
               return next;
             });
-            if (subscription?.recordApplied !== undefined) {
-              subscription.recordApplied(event);
-            } else {
-              void client
+            const recordOverHttp = () =>
+              client
                 .recordApplied(event)
                 .then((receipt) => publishStageEvent("impromptu:playback-applied", receipt))
                 .catch(() =>
                   publishStageEvent("impromptu:channel-close", { reason: "RECEIPT_REJECTED" }),
                 );
+            if (subscription?.recordApplied !== undefined) {
+              try {
+                subscription.recordApplied(event);
+              } catch {
+                // The verified HTTP receipt remains authoritative when WSS closes mid-frame.
+              }
             }
+            void recordOverHttp();
           },
           onCard(event) {
             if (!active) return;
@@ -257,6 +263,7 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
             publishStageEvent("impromptu:card-event", event);
           },
           onReceipt(receipt) {
+            realtimeReconnectAttempts = 0;
             publishStageEvent("impromptu:playback-applied", receipt);
           },
           onClose(reason) {
@@ -269,16 +276,19 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
               latestSnapshot = next;
               return next;
             });
-            void connect(latestSnapshot ?? undefined);
+            if (realtimeReconnectAttempts < 1) {
+              realtimeReconnectAttempts += 1;
+              void connect(latestSnapshot ?? undefined);
+            }
           },
         };
-        if (client.subscribeRealtime !== undefined && sseSubscription === null) {
-          sseSubscription = await client.subscribe(observer);
+        if (client.subscribeRealtime !== undefined) {
+          if (sseSubscription === null) sseSubscription = await client.subscribe(observer);
+        } else {
+          subscription = await client.subscribe(observer);
         }
-        const subscribe = client.subscribeRealtime?.bind(client) ?? client.subscribe.bind(client);
-        subscription = await subscribe(observer);
         if (!active) {
-          subscription.close();
+          subscription?.close();
           return;
         }
         const next = await client.snapshot(pins);
@@ -286,6 +296,10 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
         latestSnapshot = next;
         setSnapshot(next);
         for (const card of next.cards) scheduleLease(card);
+        if (client.subscribeRealtime !== undefined) {
+          subscription = await client.subscribeRealtime(observer);
+          if (!active) subscription.close();
+        }
       } catch (error) {
         subscription?.close();
         subscription = null;
