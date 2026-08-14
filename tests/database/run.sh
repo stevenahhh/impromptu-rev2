@@ -3,21 +3,22 @@ set -euo pipefail
 
 readonly REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 readonly COMPOSE_FILE="$REPO_ROOT/infra/database/compose.yaml"
-readonly DATABASE_NAME="impromptu"
-readonly BOOTSTRAP_ROLE="impromptu_bootstrap"
-readonly MIGRATION_ROLE="migration"
-readonly PROJECTION_ROLE="projection_app"
+if command -v cygpath >/dev/null 2>&1; then
+  readonly COMPOSE_FILE_ARG="$(cygpath --windows "$COMPOSE_FILE")"
+else
+  readonly COMPOSE_FILE_ARG="$COMPOSE_FILE"
+fi
 readonly WORKTREE_TAG="$(basename "$REPO_ROOT" | tr '[:upper:]_' '[:lower:]-' | tr -cd 'a-z0-9-')"
 readonly PROJECT_NAME="${DATABASE_TEST_PROJECT_NAME:-impromptu-r2-${WORKTREE_TAG}-$$-${RANDOM}}"
-
-mapfile -t migrations < <(find "$REPO_ROOT/infra/migrations" -maxdepth 1 -type f -name '*.sql' 2>/dev/null | sort)
-if (( ${#migrations[@]} == 0 )); then
-  echo "database test setup failed: no SQL migrations found in infra/migrations" >&2
-  exit 1
-fi
+readonly BOOTSTRAP_ROLE="impromptu_bootstrap"
+readonly PRIVATE_ROLE="private_app"
+readonly PROJECTION_ROLE="projection_app"
+readonly DEFAULT_DATABASE="postgres"
+readonly PRIVATE_DATABASE="impromptu_private"
+readonly PROJECTION_DATABASE="impromptu_projection"
 
 compose() {
-  docker compose --project-name "$PROJECT_NAME" --file "$COMPOSE_FILE" "$@"
+  MSYS_NO_PATHCONV=1 docker compose --project-name "$PROJECT_NAME" --file "$COMPOSE_FILE_ARG" "$@"
 }
 
 project_resources() {
@@ -88,75 +89,219 @@ finish() {
 }
 trap finish EXIT
 
-compose up --detach --wait --wait-timeout 60
+psql_file() {
+  local role="$1"
+  local database="$2"
+  local file="$3"
 
-if [[ -n "${DATABASE_TEST_FORCE_TEST_FAILURE:-}" ]]; then
-  exit "$DATABASE_TEST_FORCE_TEST_FAILURE"
-fi
-
-for index in "${!migrations[@]}"; do
-  role="$MIGRATION_ROLE"
-  if (( index == 0 )); then
-    role="$BOOTSTRAP_ROLE"
-  fi
-
-  echo "Applying $(basename "${migrations[$index]}") as $role"
   compose exec --no-TTY postgres \
-    psql --username "$role" --dbname "$DATABASE_NAME" --no-psqlrc --set ON_ERROR_STOP=1 \
-    < "${migrations[$index]}"
-done
+    psql --username "$role" --dbname "$database" --no-psqlrc --set ON_ERROR_STOP=1 \
+    < "$file"
+}
 
-compose exec --no-TTY postgres \
-  psql --username private_app --dbname "$DATABASE_NAME" --no-psqlrc --set ON_ERROR_STOP=1 \
-  < "$REPO_ROOT/tests/database/seed.sql"
+psql_value() {
+  local role="$1"
+  local database="$2"
+  local statement="$3"
 
-compose exec --no-TTY postgres \
-  psql --username "$BOOTSTRAP_ROLE" --dbname "$DATABASE_NAME" --no-psqlrc --set ON_ERROR_STOP=1 \
-  < "$REPO_ROOT/tests/database/assertions.sql"
+  compose exec --no-TTY postgres \
+    psql --username "$role" --dbname "$database" --no-psqlrc \
+      --set ON_ERROR_STOP=1 --tuples-only --no-align --command "$statement"
+}
 
-compose exec --no-TTY postgres \
-  psql --username "$PROJECTION_ROLE" --dbname "$DATABASE_NAME" --no-psqlrc --set ON_ERROR_STOP=1 \
-  < "$REPO_ROOT/tests/database/projection-app.sql"
+run_migrations() {
+  local migrations_root="${1:-/workspace/infra/migrations}"
+
+  compose exec --no-TTY \
+    --env "MIGRATIONS_ROOT=$migrations_root" \
+    --env "BOOTSTRAP_DATABASE_URL=postgresql:///$DEFAULT_DATABASE?user=$BOOTSTRAP_ROLE" \
+    --env "PRIVATE_MIGRATION_DATABASE_URL=postgresql:///$PRIVATE_DATABASE?user=migration" \
+    --env "PROJECTION_MIGRATION_DATABASE_URL=postgresql:///$PROJECTION_DATABASE?user=migration" \
+    postgres sh /workspace/infra/database/migrate.sh
+}
 
 expect_denied() {
-  local label="$1"
-  local statement="$2"
-  local expected_error="$3"
+  local role="$1"
+  local database="$2"
+  local label="$3"
+  local statement="$4"
+  local expected_error="$5"
   local output
 
   if output="$(compose exec --no-TTY postgres \
-    psql --username "$PROJECTION_ROLE" --dbname "$DATABASE_NAME" --no-psqlrc \
-    --set ON_ERROR_STOP=1 --command "$statement" 2>&1)"; then
-    echo "security assertion failed: projection_app was allowed to $label" >&2
+    psql --username "$role" --dbname "$database" --no-psqlrc \
+      --set ON_ERROR_STOP=1 --command "$statement" 2>&1)"; then
+    echo "security assertion failed: $role was allowed to $label" >&2
     exit 1
   fi
-
   if [[ "$output" != *"$expected_error"* ]]; then
     echo "security assertion failed: $label returned an unexpected error" >&2
     echo "$output" >&2
     exit 1
   fi
 
-  echo "DENIED projection_app: $label ($expected_error)"
+  echo "DENIED $role: $label ($expected_error)"
 }
 
+expect_connection_denied() {
+  local role="$1"
+  local database="$2"
+  local output
+
+  if output="$(compose exec --no-TTY postgres \
+    psql --username "$role" --dbname "$database" --no-psqlrc \
+      --set ON_ERROR_STOP=1 --command "SELECT 1" 2>&1)"; then
+    echo "security assertion failed: $role connected to $database" >&2
+    exit 1
+  fi
+  if [[ "$output" != *"permission denied for database \"$database\""* ]]; then
+    echo "security assertion failed: unexpected connection error for $role -> $database" >&2
+    echo "$output" >&2
+    exit 1
+  fi
+
+  echo "DENIED $role: connect to $database"
+}
+
+expect_migration_failure() {
+  local migrations_root="$1"
+  local expected_error="$2"
+  local output
+
+  if output="$(run_migrations "$migrations_root" 2>&1)"; then
+    echo "migration assertion failed: expected runner failure for $migrations_root" >&2
+    exit 1
+  fi
+  if [[ "$output" != *"$expected_error"* ]]; then
+    echo "migration assertion failed: unexpected runner error" >&2
+    echo "$output" >&2
+    exit 1
+  fi
+
+  echo "DENIED migration set: $expected_error"
+}
+
+compose up --detach --wait --wait-timeout 60
+
+if [[ -n "${DATABASE_TEST_FORCE_TEST_FAILURE:-}" ]]; then
+  exit "$DATABASE_TEST_FORCE_TEST_FAILURE"
+fi
+
+run_migrations
+
+rerun_output="$(run_migrations)"
+if [[ "$rerun_output" != *"SKIP private/0001_private_foundation.sql"* \
+  || "$rerun_output" != *"SKIP projection/0001_projection_foundation.sql"* ]]; then
+  echo "migration assertion failed: rerun did not skip applied migrations" >&2
+  echo "$rerun_output" >&2
+  exit 1
+fi
+echo "Migration ledger rerun verified."
+
+psql_file "$BOOTSTRAP_ROLE" "$DEFAULT_DATABASE" "$REPO_ROOT/tests/database/cluster-assertions.sql"
+
+if [[ "${DATABASE_TEST_MODE:-full}" == "smoke" ]]; then
+  exit 0
+fi
+
+psql_file "$PRIVATE_ROLE" "$PRIVATE_DATABASE" "$REPO_ROOT/tests/database/private-seed.sql"
+psql_file "$PRIVATE_ROLE" "$PROJECTION_DATABASE" "$REPO_ROOT/tests/database/projection-seed.sql"
+psql_file "$BOOTSTRAP_ROLE" "$PRIVATE_DATABASE" "$REPO_ROOT/tests/database/private-assertions.sql"
+psql_file "$BOOTSTRAP_ROLE" "$PROJECTION_DATABASE" "$REPO_ROOT/tests/database/projection-assertions.sql"
+psql_file "$PRIVATE_ROLE" "$PRIVATE_DATABASE" "$REPO_ROOT/tests/database/private-app.sql"
+psql_file "$PROJECTION_ROLE" "$PROJECTION_DATABASE" "$REPO_ROOT/tests/database/projection-app.sql"
+
+expect_connection_denied "$PROJECTION_ROLE" "$PRIVATE_DATABASE"
+expect_connection_denied "$PROJECTION_ROLE" "$DEFAULT_DATABASE"
+expect_connection_denied "$PRIVATE_ROLE" "$DEFAULT_DATABASE"
+expect_connection_denied "migration" "$DEFAULT_DATABASE"
 expect_denied \
-  "use the private_app schema" \
-  "SELECT count(*) FROM private_app.presentation_sessions" \
-  "permission denied for schema private_app"
+  "$PROJECTION_ROLE" "$PROJECTION_DATABASE" \
+  "measure the private database" \
+  "SELECT pg_catalog.pg_database_size('impromptu_private')" \
+  "permission denied for database impromptu_private"
 expect_denied \
-  "read a private_app table" \
-  "SELECT presenter_notes FROM private_app.presentation_sessions" \
-  "permission denied for schema private_app"
-expect_denied \
+  "$PROJECTION_ROLE" "$PROJECTION_DATABASE" \
   "read a public projection base table" \
   "SELECT count(*) FROM public_projection.projection_sessions" \
   "permission denied for table projection_sessions"
 expect_denied \
+  "$PROJECTION_ROLE" "$PROJECTION_DATABASE" \
   "write the receipt base table directly" \
   "INSERT INTO public_projection.display_receipts (projection_id, display_id, revision, command_id, request_hash, status) VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', 2, 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', repeat('b', 64), 'stage_applied')" \
   "permission denied for table display_receipts"
 expect_denied \
+  "$PROJECTION_ROLE" "$PROJECTION_DATABASE" \
   "assume the private_app role" \
   "SET ROLE private_app" \
   "permission denied to set role"
+expect_denied \
+  "$PROJECTION_ROLE" "$PROJECTION_DATABASE" \
+  "create a PostgreSQL large object" \
+  "SELECT pg_catalog.lo_create(0)" \
+  "permission denied for function lo_create"
+expect_denied \
+  "$PROJECTION_ROLE" "$PROJECTION_DATABASE" \
+  "create a PostgreSQL large object from bytes" \
+  "SELECT pg_catalog.lo_from_bytea(0, decode('00', 'hex'))" \
+  "permission denied for function lo_from_bytea"
+expect_denied \
+  "$PRIVATE_ROLE" "$PRIVATE_DATABASE" \
+  "insert a tenant B row while scoped to tenant A" \
+  "BEGIN; SET LOCAL app.tenant_id = '10000000-0000-4000-8000-000000000001'; INSERT INTO private_app.presentation_sessions (tenant_id, session_id, owner_subject, presentation_session_epoch, deck_storage_uri) VALUES ('20000000-0000-4000-8000-000000000002', '55555555-5555-4555-8555-555555555555', 'cross-tenant', 1, 'private-decks/cross-tenant.pptx'); COMMIT" \
+  "violates row-level security policy"
+expect_denied \
+  "$PRIVATE_ROLE" "$PRIVATE_DATABASE" \
+  "insert a tenant row without tenant context" \
+  "INSERT INTO private_app.tenants (tenant_id, display_name) VALUES ('30000000-0000-4000-8000-000000000003', 'No context')" \
+  "violates row-level security policy"
+expect_denied \
+  "$PRIVATE_ROLE" "$PROJECTION_DATABASE" \
+  "insert a published card without published_at" \
+  "INSERT INTO public_projection.audience_cards (projection_id, card_id, card_version, public_slide_key, occurrence_seq, lifecycle, title, body, source_label, canonical_url, expires_at, revision) VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 1, 'slide-public-2', 1, 'published', 'Invalid', 'Invalid lifecycle', 'Source', 'https://example.test/invalid', statement_timestamp() + interval '1 hour', 99)" \
+  "violates check constraint"
+
+compose exec --no-TTY postgres sh -eu -c '
+  pids=""
+  for worker in 1 2 3 4 5 6 7 8; do
+    psql --username projection_app --dbname impromptu_projection --no-psqlrc \
+      --set ON_ERROR_STOP=1 --tuples-only --no-align \
+      --command "SELECT count(*) FROM public_projection.record_display_receipt(
+        '\''aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'\'',
+        '\''dddddddd-dddd-4ddd-8ddd-dddddddddddd'\'',
+        20,
+        '\''ffffffff-ffff-4fff-8fff-ffffffffffff'\'',
+        repeat('\''e'\'', 64),
+        '\''stage_applied'\''
+      )" > "/tmp/receipt-$worker.out" &
+    pids="$pids $!"
+  done
+  for pid in $pids; do wait "$pid"; done
+  for worker in 1 2 3 4 5 6 7 8; do grep -qx 1 "/tmp/receipt-$worker.out"; done
+'
+receipt_count="$(psql_value "$BOOTSTRAP_ROLE" "$PROJECTION_DATABASE" \
+  "SELECT count(*) FROM public_projection.display_receipts WHERE revision = 20")"
+if [[ "$receipt_count" != "1" ]]; then
+  echo "receipt concurrency assertion failed: expected one stored receipt, got $receipt_count" >&2
+  exit 1
+fi
+echo "Concurrent idempotent receipt writes verified."
+
+readonly DRIFT_ROOT="/tmp/migrations-drift-$$"
+compose exec --no-TTY postgres sh -eu -c \
+  "cp -R /workspace/infra/migrations '$DRIFT_ROOT'; printf '\n-- checksum drift\n' >> '$DRIFT_ROOT/private/0001_private_foundation.sql'"
+expect_migration_failure "$DRIFT_ROOT" "checksum mismatch for private/0001_private_foundation.sql"
+compose exec --no-TTY postgres rm -rf "$DRIFT_ROOT"
+
+readonly INTERRUPTION_ROOT="/tmp/migrations-interruption-$$"
+compose exec --no-TTY postgres sh -eu -c \
+  "cp -R /workspace/infra/migrations '$INTERRUPTION_ROOT'; cp /workspace/tests/database/fixtures/9999_interrupted.sql '$INTERRUPTION_ROOT/private/9999_interrupted.sql'"
+expect_migration_failure "$INTERRUPTION_ROOT" "division by zero"
+rollback_ok="$(psql_value "$BOOTSTRAP_ROLE" "$PRIVATE_DATABASE" \
+  "SELECT to_regclass('private_app.interruption_probe') IS NULL AND NOT EXISTS (SELECT 1 FROM _migrations.applied_migrations WHERE migration_name = '9999_interrupted.sql')")"
+if [[ "$rollback_ok" != "t" ]]; then
+  echo "migration interruption assertion failed: DDL or ledger row survived rollback" >&2
+  exit 1
+fi
+compose exec --no-TTY postgres rm -rf "$INTERRUPTION_ROOT"
+echo "Checksum drift and transactional migration rollback verified."

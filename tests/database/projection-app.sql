@@ -1,9 +1,12 @@
 \set ON_ERROR_STOP 1
 
-SELECT (current_user = 'projection_app')::integer AS correct_runtime_role \gset
+SELECT (
+  current_database() = 'impromptu_projection'
+  AND current_user = 'projection_app'
+)::integer AS correct_runtime_role \gset
 \if :correct_runtime_role
 \else
-  \echo 'projection test did not connect as projection_app'
+  \echo 'projection test used the wrong database role or database'
   \quit 1
 \endif
 
@@ -19,15 +22,51 @@ WHERE projection_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
   \quit 1
 \endif
 
-SELECT (count(*) = 1)::integer AS card_visible
-FROM public_projection.published_audience_cards
-WHERE id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
-  AND title = 'Public evidence'
-  AND body = 'Audience-safe body'
-  AND expires_at = '2026-08-14T05:00:00Z'::timestamptz \gset
-\if :card_visible
+SELECT (
+  count(*) = 1
+  AND bool_and(id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'::uuid)
+  AND bool_and(title = 'Visible evidence')
+)::integer AS lifecycle_filtered
+FROM public_projection.published_audience_cards \gset
+\if :lifecycle_filtered
 \else
-  \echo 'projection_app could not read the closed audience card view'
+  \echo 'audience card lifecycle filtering exposed a non-public card'
+  \quit 1
+\endif
+
+SELECT (
+  to_regnamespace('private_app') IS NULL
+  AND to_regclass('private_app.presentation_sessions') IS NULL
+  AND NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_class
+    WHERE relname IN ('presentation_sessions', 'evidence_candidates', 'publication_outbox')
+  )
+)::integer AS private_catalog_absent \gset
+\if :private_catalog_absent
+\else
+  \echo 'projection_app observed private structural metadata'
+  \quit 1
+\endif
+
+SELECT bool_and(
+  NOT has_function_privilege(current_user, signature, 'EXECUTE')
+)::integer AS large_object_mutation_denied
+FROM unnest(ARRAY[
+  'pg_catalog.lo_create(oid)',
+  'pg_catalog.lo_creat(integer)',
+  'pg_catalog.lo_from_bytea(oid,bytea)',
+  'pg_catalog.lo_put(oid,bigint,bytea)',
+  'pg_catalog.lo_unlink(oid)',
+  'pg_catalog.lowrite(integer,bytea)',
+  'pg_catalog.lo_truncate(integer,integer)',
+  'pg_catalog.lo_truncate64(integer,bigint)',
+  'pg_catalog.lo_import(text)',
+  'pg_catalog.lo_import(text,oid)'
+]) AS functions(signature) \gset
+\if :large_object_mutation_denied
+\else
+  \echo 'projection_app retained execution on a large-object mutation function'
   \quit 1
 \endif
 

@@ -1,66 +1,29 @@
-\set ON_ERROR_STOP 1
-
 SET ROLE impromptu_owner;
 
-BEGIN;
-
-CREATE SCHEMA private_app AUTHORIZATION impromptu_owner;
+REVOKE ALL PRIVILEGES ON SCHEMA public FROM PUBLIC;
 CREATE SCHEMA public_projection AUTHORIZATION impromptu_owner;
-
-REVOKE ALL PRIVILEGES ON SCHEMA private_app FROM PUBLIC;
 REVOKE ALL PRIVILEGES ON SCHEMA public_projection FROM PUBLIC;
 
--- PostgreSQL's function and type PUBLIC grants are global defaults. A per-schema
--- REVOKE cannot subtract them, so revoke those defaults for every owner-created object.
 ALTER DEFAULT PRIVILEGES FOR ROLE impromptu_owner
   REVOKE ALL PRIVILEGES ON FUNCTIONS FROM PUBLIC;
 ALTER DEFAULT PRIVILEGES FOR ROLE impromptu_owner
   REVOKE ALL PRIVILEGES ON TYPES FROM PUBLIC;
-
-ALTER DEFAULT PRIVILEGES FOR ROLE impromptu_owner IN SCHEMA private_app
-  REVOKE ALL PRIVILEGES ON TABLES FROM PUBLIC;
-ALTER DEFAULT PRIVILEGES FOR ROLE impromptu_owner IN SCHEMA private_app
-  REVOKE ALL PRIVILEGES ON SEQUENCES FROM PUBLIC;
-
 ALTER DEFAULT PRIVILEGES FOR ROLE impromptu_owner IN SCHEMA public_projection
   REVOKE ALL PRIVILEGES ON TABLES FROM PUBLIC;
 ALTER DEFAULT PRIVILEGES FOR ROLE impromptu_owner IN SCHEMA public_projection
   REVOKE ALL PRIVILEGES ON SEQUENCES FROM PUBLIC;
-
-CREATE TYPE private_app.candidate_classification AS ENUM (
-  'private',
-  'eligible_for_review',
-  'rejected'
-);
-
-CREATE TABLE private_app.presentation_sessions (
-  session_id uuid PRIMARY KEY,
-  owner_subject text NOT NULL CHECK (length(owner_subject) BETWEEN 1 AND 512),
-  presentation_session_epoch bigint NOT NULL CHECK (presentation_session_epoch > 0),
-  deck_storage_uri text NOT NULL CHECK (length(deck_storage_uri) BETWEEN 1 AND 2048),
-  presenter_notes text,
-  created_at timestamptz NOT NULL DEFAULT transaction_timestamp(),
-  ended_at timestamptz,
-  CHECK (ended_at IS NULL OR ended_at >= created_at)
-);
-
-CREATE TABLE private_app.evidence_candidates (
-  candidate_id uuid PRIMARY KEY,
-  session_id uuid NOT NULL REFERENCES private_app.presentation_sessions(session_id) ON DELETE CASCADE,
-  candidate_version bigint NOT NULL CHECK (candidate_version > 0),
-  raw_excerpt text NOT NULL CHECK (length(raw_excerpt) > 0),
-  internal_source_uri text NOT NULL CHECK (length(internal_source_uri) BETWEEN 1 AND 2048),
-  classification private_app.candidate_classification NOT NULL DEFAULT 'private',
-  created_at timestamptz NOT NULL DEFAULT transaction_timestamp(),
-  UNIQUE (session_id, candidate_id, candidate_version)
-);
 
 CREATE TYPE public_projection.projection_state AS ENUM (
   'bound',
   'active',
   'ended'
 );
-
+CREATE TYPE public_projection.card_lifecycle AS ENUM (
+  'draft',
+  'scheduled',
+  'published',
+  'retracted'
+);
 CREATE TYPE public_projection.receipt_status AS ENUM (
   'accepted',
   'stage_applied'
@@ -94,6 +57,7 @@ CREATE TABLE public_projection.audience_cards (
   card_version bigint NOT NULL CHECK (card_version > 0),
   public_slide_key text NOT NULL CHECK (length(public_slide_key) BETWEEN 1 AND 256),
   occurrence_seq bigint NOT NULL CHECK (occurrence_seq > 0),
+  lifecycle public_projection.card_lifecycle NOT NULL DEFAULT 'draft',
   title text NOT NULL CHECK (length(title) BETWEEN 1 AND 200),
   body text NOT NULL CHECK (length(body) BETWEEN 1 AND 2000),
   source_label text NOT NULL CHECK (length(source_label) BETWEEN 1 AND 300),
@@ -110,8 +74,22 @@ CREATE TABLE public_projection.audience_cards (
   revision bigint NOT NULL CHECK (revision >= 0),
   created_at timestamptz NOT NULL DEFAULT transaction_timestamp(),
   PRIMARY KEY (projection_id, card_id, card_version),
-  CHECK (published_at IS NULL OR expires_at > published_at),
-  CHECK (retracted_at IS NULL OR published_at IS NULL OR retracted_at >= published_at)
+  CONSTRAINT audience_cards_lifecycle_check CHECK (
+    (lifecycle = 'draft' AND published_at IS NULL AND retracted_at IS NULL)
+    OR (
+      lifecycle IN ('scheduled', 'published')
+      AND published_at IS NOT NULL
+      AND retracted_at IS NULL
+      AND expires_at > published_at
+    )
+    OR (
+      lifecycle = 'retracted'
+      AND published_at IS NOT NULL
+      AND retracted_at IS NOT NULL
+      AND retracted_at >= published_at
+      AND expires_at > published_at
+    )
+  )
 );
 
 CREATE TABLE public_projection.display_receipts (
@@ -163,7 +141,10 @@ SELECT
   expires_at,
   revision
 FROM public_projection.audience_cards
-WHERE retracted_at IS NULL;
+WHERE lifecycle = 'published'
+  AND published_at <= statement_timestamp()
+  AND retracted_at IS NULL
+  AND expires_at > statement_timestamp();
 
 CREATE FUNCTION public_projection.record_display_receipt(
   requested_projection_id uuid,
@@ -222,15 +203,11 @@ REVOKE ALL PRIVILEGES ON FUNCTION public_projection.record_display_receipt(
   public_projection.receipt_status
 ) FROM PUBLIC;
 
-GRANT USAGE ON SCHEMA private_app TO private_app;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA private_app TO private_app;
-GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA private_app TO private_app;
-GRANT USAGE ON TYPE private_app.candidate_classification TO private_app;
-
 GRANT USAGE ON SCHEMA public_projection TO private_app, projection_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public_projection TO private_app;
 GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public_projection TO private_app;
 GRANT USAGE ON TYPE public_projection.projection_state TO private_app, projection_app;
+GRANT USAGE ON TYPE public_projection.card_lifecycle TO private_app, projection_app;
 GRANT USAGE ON TYPE public_projection.receipt_status TO private_app, projection_app;
 
 REVOKE ALL PRIVILEGES ON TABLE public_projection.projection_sessions FROM projection_app;
@@ -246,7 +223,3 @@ GRANT EXECUTE ON FUNCTION public_projection.record_display_receipt(
   text,
   public_projection.receipt_status
 ) TO projection_app;
-
-COMMIT;
-
-RESET ROLE;
