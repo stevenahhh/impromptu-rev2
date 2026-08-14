@@ -9,11 +9,16 @@
     "packages/*"
   ],
   "scripts": {
+    "dev:console": "bun run --cwd apps/console dev",
+    "dev:stage": "bun run --cwd apps/stage dev",
+    "build": "bun run --cwd packages/ui build && bun run --cwd apps/console build && bun run --cwd apps/stage build",
     "check:repo": "bun run scripts/verify-repo.ts",
+    "check:browser": "bun run scripts/verify-browser-boundaries.ts",
     "lint": "biome check .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && bun run --cwd packages/ui typecheck && bun run --cwd apps/console typecheck && bun run --cwd apps/stage typecheck",
     "test": "bun test",
-    "check": "bun run check:repo && bun run lint && bun run typecheck && bun run test"
+    "test:browser": "bun test tests/browser-boundaries.test.ts apps/console/src/App.test.tsx apps/stage/src/App.test.tsx",
+    "check": "bun run check:repo && bun run lint && bun run typecheck && bun run test && bun run build && bun run check:browser"
   },
   "devDependencies": {
     "@biomejs/biome": "2.2.0",
