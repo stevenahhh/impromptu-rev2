@@ -67,7 +67,7 @@ finish() {
   local cleanup_status=0
   local final_status
 
-  trap - EXIT
+  trap - EXIT TERM INT
   set +e
   cleanup_resources
   cleanup_status=$?
@@ -87,7 +87,17 @@ finish() {
   fi
   exit "$final_status"
 }
+
+handle_signal() {
+  local signal_status="$1"
+
+  trap - TERM INT
+  exit "$signal_status"
+}
+
 trap finish EXIT
+trap 'handle_signal 143' TERM
+trap 'handle_signal 130' INT
 
 psql_file() {
   local role="$1"
@@ -182,6 +192,21 @@ expect_migration_failure() {
 }
 
 compose up --detach --wait --wait-timeout 60
+
+if [[ -n "${DATABASE_TEST_READY_FIFO:-}" ]]; then
+  if [[ ! -p "$DATABASE_TEST_READY_FIFO" ]]; then
+    echo "database test setup failed: readiness path is not a FIFO" >&2
+    exit 1
+  fi
+  printf 'healthy:%s\n' "$PROJECT_NAME" > "$DATABASE_TEST_READY_FIFO"
+fi
+if [[ -n "${DATABASE_TEST_HOLD_AFTER_HEALTHY_FIFO:-}" ]]; then
+  if [[ ! -p "$DATABASE_TEST_HOLD_AFTER_HEALTHY_FIFO" ]]; then
+    echo "database test setup failed: healthy hold path is not a FIFO" >&2
+    exit 1
+  fi
+  IFS= read -r _ < "$DATABASE_TEST_HOLD_AFTER_HEALTHY_FIFO"
+fi
 
 if [[ -n "${DATABASE_TEST_FORCE_TEST_FAILURE:-}" ]]; then
   exit "$DATABASE_TEST_FORCE_TEST_FAILURE"
