@@ -23,7 +23,7 @@ import type {
 } from "../retrieval/internal-retrieval.ts";
 import { reconcileEvidence } from "./deterministic-evidence.ts";
 
-const TERMINAL_DEADLINE_GUARD_MS = 50;
+const TERMINAL_DEADLINE_GUARD_MS = 500;
 
 const embeddingOutputSchema = z
   .object({ vector: z.array(z.number().finite()).min(1).max(8_192) })
