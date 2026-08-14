@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 
 import { type BrowserContext, chromium, type Page } from "playwright-core";
@@ -41,6 +42,26 @@ function address(surface: AppSurface) {
   return `http://127.0.0.1:${surface.port}${surface.route}`;
 }
 
+async function startEmbedOrigin(): Promise<Server> {
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { "Content-Type": "text/html" });
+    response.end(
+      '<!doctype html><title>Embed verifier</title><iframe src="http://127.0.0.1:43174/"></iframe>',
+    );
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(43175, "127.0.0.1", resolve);
+  });
+  return server;
+}
+
+async function closeHttpServer(server: Server) {
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => (error ? reject(error) : resolve()));
+  });
+}
+
 async function clearHttpCache(context: BrowserContext, page: Page) {
   const session = await context.newCDPSession(page);
   await session.send("Network.enable");
@@ -51,7 +72,11 @@ async function clearHttpCache(context: BrowserContext, page: Page) {
 async function installOfflineShell(context: BrowserContext, surface: AppSurface) {
   console.log(`Installing ${surface.app} offline shell...`);
   const page = await context.newPage();
-  await page.goto(address(surface), { waitUntil: "networkidle" });
+  const response = await page.goto(address(surface), { waitUntil: "networkidle" });
+  const policy = await response?.headerValue("content-security-policy");
+  if (!policy?.includes("frame-ancestors 'none'")) {
+    throw new Error(`${surface.app} preview response is missing frame-ancestors denial`);
+  }
   await page.evaluate(async () => {
     const registration = await navigator.serviceWorker.ready;
     if (!registration.active) {
@@ -103,6 +128,21 @@ async function installOfflineShell(context: BrowserContext, surface: AppSurface)
   console.log(`Installed ${surface.app} offline shell (${shell.urls.length} entries).`);
 }
 
+async function verifyCrossOriginFrameRejection(context: BrowserContext) {
+  const page = await context.newPage();
+  const violation = page.waitForEvent("console", {
+    predicate: (message) => message.text().includes("frame-ancestors 'none'"),
+  });
+  await page.goto("http://127.0.0.1:43175/", { waitUntil: "domcontentloaded" });
+  await violation;
+  if (page.frames().some((frame) => frame.url().startsWith("http://127.0.0.1:43174"))) {
+    throw new Error("Cross-origin parent rendered the Stage frame despite its CSP");
+  }
+  await page.screenshot({ path: join(artifactPath, "cross-origin-frame-rejected.png") });
+  await page.close();
+  console.log("Stage rejected a cross-origin iframe parent.");
+}
+
 async function verifyColdOfflineRestart() {
   console.log("Starting preview origins...");
   const servers = [];
@@ -115,6 +155,7 @@ async function verifyColdOfflineRestart() {
     );
   }
 
+  const embedServer = await startEmbedOrigin();
   const onlineContext = await chromium.launchPersistentContext(profilePath, {
     executablePath: chromeExecutable,
     headless: true,
@@ -125,9 +166,11 @@ async function verifyColdOfflineRestart() {
     for (const surface of surfaces) {
       await installOfflineShell(onlineContext, surface);
     }
+    await verifyCrossOriginFrameRejection(onlineContext);
   } finally {
     console.log("Closing online Chrome and preview origins...");
     await onlineContext.close();
+    await closeHttpServer(embedServer);
     await Promise.all(servers.map((server) => server.close()));
   }
 

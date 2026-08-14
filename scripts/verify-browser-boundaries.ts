@@ -53,7 +53,7 @@ for (const app of browserApps) {
     throw new Error(`Missing ${app} production bundle; run the build first`);
   }
 
-  for (const requiredFile of ["index.html", "manifest.webmanifest", "sw.js"]) {
+  for (const requiredFile of ["_headers", "index.html", "manifest.webmanifest", "sw.js"]) {
     if (!existsSync(`${dist}/${requiredFile}`)) {
       throw new Error(`${app} bundle is missing ${requiredFile}`);
     }
@@ -66,6 +66,14 @@ for (const app of browserApps) {
         throw new Error(`Forbidden browser token ${token} found in ${file}`);
       }
     }
+  }
+
+  const deploymentHeaders = readFileSync(`${dist}/_headers`, "utf8");
+  if (
+    !deploymentHeaders.includes("Content-Security-Policy:") ||
+    !deploymentHeaders.includes("frame-ancestors 'none'")
+  ) {
+    throw new Error(`${app} deployment artifact does not deny frame ancestors`);
   }
 
   const worker = readFileSync(`${dist}/sw.js`, "utf8");
