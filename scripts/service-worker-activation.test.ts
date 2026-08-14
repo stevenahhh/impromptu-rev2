@@ -147,7 +147,7 @@ describe("first service worker activation observer", () => {
     }
   });
 
-  test("rechecks authority after activated statechange promotes the worker", async () => {
+  test("rechecks authority in one task after activated statechange and microtasks", async () => {
     const registration = new FakeRegistration();
     const worker = new FakeWorker("installing");
     registration.installing = worker;
@@ -159,7 +159,11 @@ describe("first service worker activation observer", () => {
         worker.transition("activating");
         registration.waiting = null;
         worker.transition("activated");
-        registration.active = worker;
+        queueMicrotask(() => {
+          queueMicrotask(() => {
+            registration.active = worker;
+          });
+        });
       });
     };
     const restore = installServiceWorkerContainer(registration);

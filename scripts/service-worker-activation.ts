@@ -22,10 +22,18 @@ export async function waitForFirstServiceWorkerActivation({
 
   return new Promise<FirstServiceWorkerActivationResult>((resolve, reject) => {
     let settled = false;
+    const activationTaskChannels = new Set<MessageChannel>();
     const observedWorkers = new Map<ServiceWorker, () => void>();
     const timeout = globalThis.setTimeout(() => {
       finish(new Error("First service worker activation timed out"));
     }, timeoutMs);
+
+    const closeActivationTask = (channel: MessageChannel) => {
+      channel.port1.onmessage = null;
+      channel.port1.close();
+      channel.port2.close();
+      activationTaskChannels.delete(channel);
+    };
 
     const cleanup = () => {
       globalThis.clearTimeout(timeout);
@@ -34,6 +42,9 @@ export async function waitForFirstServiceWorkerActivation({
         worker.removeEventListener("statechange", listener);
       }
       observedWorkers.clear();
+      for (const channel of [...activationTaskChannels]) {
+        closeActivationTask(channel);
+      }
     };
 
     const finish = (error?: unknown) => {
@@ -55,7 +66,13 @@ export async function waitForFirstServiceWorkerActivation({
       }
       const inspectState = () => {
         if (worker.state === "activated") {
-          globalThis.queueMicrotask(inspectRegistration);
+          const channel = new MessageChannel();
+          activationTaskChannels.add(channel);
+          channel.port1.onmessage = () => {
+            closeActivationTask(channel);
+            inspectRegistration();
+          };
+          channel.port2.postMessage(null);
         } else {
           inspectRegistration();
         }
