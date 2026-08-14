@@ -1,0 +1,306 @@
+import { describe, expect, test } from "bun:test";
+import {
+  authorizeRoleAction,
+  type PlaybackCommand,
+  PublishedAudienceCardSchema,
+} from "@impromptu/contracts";
+import {
+  createPublicationState,
+  initialPublicPlaybackState,
+  type PublicPlaybackEvent,
+  reducePublication,
+} from "@impromptu/state";
+import {
+  type PlaybackFaultAction,
+  type PlaybackIntent,
+  PROTOCOL_TRANSITION_MATRIX,
+  type PublicProjectionFaultAction,
+  playbackAuthorityFixture,
+  playbackCommandFixture,
+  runPlaybackFaultSchedule,
+  runPublicProjectionFaultSchedule,
+} from "@impromptu/test-harness";
+import fc from "fast-check";
+
+const propertyOptions = { seed: 20_260_814, numRuns: 250 } as const;
+const manifestHash = "a".repeat(64);
+
+const intentArbitrary: fc.Arbitrary<PlaybackIntent> = fc.oneof(
+  fc.record({
+    type: fc.constant("SLIDE_SET" as const),
+    publicSlideKey: fc.constantFrom("slide-1", "slide-2", "slide-3"),
+  }),
+  fc.record({ type: fc.constant("BLACKOUT_SET" as const), enabled: fc.boolean() }),
+);
+
+function commandActions(
+  commands: readonly PlaybackCommand[],
+  restarts: readonly boolean[],
+): PlaybackFaultAction[] {
+  return commands.flatMap((command, index) => {
+    const actions: PlaybackFaultAction[] = [{ type: "COMMAND", command }];
+    if (restarts[index] === true) actions.push({ type: "RESTART" });
+    return actions;
+  });
+}
+
+describe("generated playback fault schedules", () => {
+  test("duplicates and restarts preserve the same terminal authority state", () => {
+    fc.assert(
+      fc.property(
+        fc.array(intentArbitrary, { minLength: 1, maxLength: 30 }),
+        fc.array(fc.nat(), { maxLength: 60 }),
+        fc.array(fc.boolean(), { maxLength: 30 }),
+        (intents, duplicateSelectors, restarts) => {
+          const commands = intents.map((intent, index) =>
+            playbackCommandFixture(index + 1, intent),
+          );
+          const uniqueSchedule = commandActions(commands, restarts);
+          const faultSchedule: PlaybackFaultAction[] = [
+            ...uniqueSchedule,
+            ...duplicateSelectors.map((selector) => ({
+              type: "COMMAND" as const,
+              command: commands[selector % commands.length] as PlaybackCommand,
+            })),
+            ...commands.map((command) => ({
+              type: "STAGE_APPLY" as const,
+              commandId: command.commandId,
+              displayBindingEpoch: 1,
+            })),
+          ];
+          const expected = runPlaybackFaultSchedule(playbackAuthorityFixture(), [
+            ...uniqueSchedule,
+            ...commands.map((command) => ({
+              type: "STAGE_APPLY" as const,
+              commandId: command.commandId,
+              displayBindingEpoch: 1,
+            })),
+          ]);
+          const first = runPlaybackFaultSchedule(playbackAuthorityFixture(), faultSchedule);
+          const replay = runPlaybackFaultSchedule(playbackAuthorityFixture(), faultSchedule);
+
+          expect(first).toEqual(replay);
+          expect(first.state).toEqual(expected.state);
+          expect(first.state.controlRevision).toBe(commands.length);
+          expect(first.state.publicPlaybackRevision).toBe(commands.length);
+        },
+      ),
+      propertyOptions,
+    );
+  });
+
+  test("stale-epoch duplicates remain rejected after generated takeovers", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 2, max: 1_000 }), (nextEpoch) => {
+        const original = playbackCommandFixture(1, {
+          type: "BLACKOUT_SET",
+          enabled: true,
+        });
+        const result = runPlaybackFaultSchedule(playbackAuthorityFixture(), [
+          { type: "COMMAND", command: original },
+          { type: "TAKEOVER", actorId: "new-controller", controllerEpoch: nextEpoch },
+          { type: "COMMAND", command: original },
+        ]);
+        const finalTrace = result.trace.at(-1);
+        expect(finalTrace).toMatchObject({
+          type: "COMMAND",
+          receipt: { status: "REJECTED", reason: "STALE_CONTROLLER_EPOCH" },
+        });
+        expect(result.state.controlRevision).toBe(1);
+      }),
+      propertyOptions,
+    );
+  });
+});
+
+function publicEvent(revision: number): PublicPlaybackEvent {
+  return {
+    presentationSessionId: "session-public",
+    presentationSessionEpoch: 1,
+    displayBindingEpoch: 1,
+    deckVersion: "deck-v1",
+    manifestHash,
+    publicPlaybackRevision: revision,
+    occurrence: {
+      publicSlideKey: `slide-${(revision % 3) + 1}`,
+      occurrenceSeq: revision + 1,
+    },
+    blackout: revision % 2 === 0,
+  };
+}
+
+describe("generated public projection schedules", () => {
+  test("reorder, duplicate, gap, partition, and restart converge through a current snapshot", () => {
+    const events = Array.from({ length: 8 }, (_, index) => publicEvent(index + 1));
+    const initial = initialPublicPlaybackState({
+      ...publicEvent(0),
+      occurrence: { publicSlideKey: "slide-1", occurrenceSeq: 1 },
+    });
+    const authoritative = publicEvent(events.length);
+    const descriptorArbitrary = fc.oneof(
+      fc.record({ type: fc.constant("EVENT" as const), index: fc.integer({ min: 0, max: 7 }) }),
+      fc.record({ type: fc.constant("PARTITION" as const), active: fc.boolean() }),
+      fc.record({ type: fc.constant("RESTART" as const) }),
+    );
+
+    fc.assert(
+      fc.property(fc.array(descriptorArbitrary, { maxLength: 80 }), (descriptors) => {
+        const actions: PublicProjectionFaultAction[] = descriptors.map((descriptor) => {
+          if (descriptor.type === "EVENT") {
+            return { type: "EVENT", event: events[descriptor.index] as PublicPlaybackEvent };
+          }
+          return descriptor;
+        });
+        actions.push({ type: "PARTITION", active: false });
+        actions.push({ type: "SNAPSHOT", snapshot: authoritative });
+
+        const first = runPublicProjectionFaultSchedule(initial, actions);
+        const replay = runPublicProjectionFaultSchedule(initial, actions);
+        expect(first).toEqual(replay);
+        expect(first.state).toEqual(authoritative);
+      }),
+      propertyOptions,
+    );
+  });
+
+  test("does not queue partitioned events for later relative replay", () => {
+    const initial = initialPublicPlaybackState({
+      ...publicEvent(0),
+      occurrence: { publicSlideKey: "slide-1", occurrenceSeq: 1 },
+    });
+    const result = runPublicProjectionFaultSchedule(initial, [
+      { type: "PARTITION", active: true },
+      { type: "EVENT", event: publicEvent(1) },
+      { type: "PARTITION", active: false },
+    ]);
+    expect(result.state).toEqual(initial);
+    expect(result.trace[1]).toEqual({ type: "EVENT", outcome: "DROPPED_BY_PARTITION" });
+  });
+});
+
+describe("generated publication races", () => {
+  test("concurrent approve/retract ordering has one deterministic published terminal state", () => {
+    fc.assert(
+      fc.property(fc.boolean(), (approveFirst) => {
+        const qualified = reducePublication(createPublicationState("candidate-1", "v1"), {
+          type: "QUALIFY",
+          commandId: "qualify",
+          requestHash: "1".repeat(64),
+          expectedRevision: 0,
+        }).state;
+        const approve = {
+          type: "APPROVE" as const,
+          commandId: "approve",
+          requestHash: "2".repeat(64),
+          expectedRevision: 1,
+          candidateVersion: "v1",
+          projectionId: "projection-1",
+        };
+        const retract = {
+          type: "RETRACT" as const,
+          commandId: "retract",
+          requestHash: "3".repeat(64),
+          expectedRevision: 1,
+          projectionId: "projection-1",
+        };
+        const ordered = approveFirst ? [approve, retract] : [retract, approve];
+        const terminal = ordered.reduce(
+          (state, operation) => reducePublication(state, operation).state,
+          qualified,
+        );
+        expect(terminal.status).toBe("PUBLISHED");
+        expect(terminal.revision).toBe(2);
+      }),
+      propertyOptions,
+    );
+  });
+});
+
+describe("generated security contracts", () => {
+  test("keeps role/topic/action authorization closed by default", () => {
+    const allowed = new Set([
+      "CONTROLLER:PRESENTER_CONTROL:READ",
+      "CONTROLLER:PRESENTER_CONTROL:WRITE",
+      "CONTROLLER:PRIVATE_CANDIDATES:READ",
+      "CONTROLLER:DISPLAY_RECEIPTS:READ",
+      "PUBLISHER:PRIVATE_CANDIDATES:READ",
+      "PUBLISHER:PRIVATE_CANDIDATES:WRITE",
+      "PUBLISHER:PUBLIC_CARDS:READ",
+      "PUBLISHER:PUBLIC_CARDS:WRITE",
+      "PUBLIC_STAGE:PUBLIC_PLAYBACK:READ",
+      "PUBLIC_STAGE:PUBLIC_CARDS:READ",
+      "PUBLIC_STAGE:DISPLAY_RECEIPTS:WRITE",
+    ]);
+    fc.assert(
+      fc.property(
+        fc.constantFrom("CONTROLLER", "PUBLIC_STAGE", "PUBLISHER", "UNKNOWN_ROLE"),
+        fc.constantFrom(
+          "PRESENTER_CONTROL",
+          "PRIVATE_CANDIDATES",
+          "PUBLIC_PLAYBACK",
+          "PUBLIC_CARDS",
+          "DISPLAY_RECEIPTS",
+          "UNKNOWN_TOPIC",
+        ),
+        fc.constantFrom("READ", "WRITE", "DELETE"),
+        (role, topic, action) => {
+          expect(authorizeRoleAction(role, topic, action)).toBe(
+            allowed.has(`${role}:${topic}:${action}`),
+          );
+        },
+      ),
+      propertyOptions,
+    );
+  });
+
+  test("rejects every generated unknown public card field", () => {
+    const knownFields = new Set([
+      "projectionId",
+      "status",
+      "claim",
+      "supportSummary",
+      "sourceLabel",
+      "publishedAtMs",
+      "expiresAtMs",
+      "publicCardRevision",
+      "deckVersion",
+      "manifestHash",
+      "occurrence",
+    ]);
+    const unknownField = fc
+      .string({ minLength: 1, maxLength: 30 })
+      .filter((field) => !knownFields.has(field));
+    const card = {
+      projectionId: "projection-1",
+      status: "PUBLISHED",
+      claim: "A declassified claim",
+      supportSummary: "A declassified summary",
+      sourceLabel: "Approved source",
+      publishedAtMs: 1,
+      expiresAtMs: null,
+      publicCardRevision: 1,
+      deckVersion: "deck-v1",
+      manifestHash,
+      occurrence: { publicSlideKey: "slide-1", occurrenceSeq: 1 },
+    };
+    fc.assert(
+      fc.property(unknownField, fc.jsonValue(), (field, value) => {
+        expect(PublishedAudienceCardSchema.safeParse({ ...card, [field]: value }).success).toBe(
+          false,
+        );
+      }),
+      propertyOptions,
+    );
+  });
+
+  test("enumerates all required formal fault scenarios", () => {
+    expect(PROTOCOL_TRANSITION_MATRIX.map(({ scenario }) => scenario)).toEqual([
+      "LEGAL_PLAYBACK_TRANSITION",
+      "ILLEGAL_PUBLICATION_TRANSITION",
+      "CONCURRENT_APPROVE_RETRACT",
+      "PARTITIONED_RELATIVE_COMMAND",
+      "STALE_ROLE_SNAPSHOT",
+      "INCOMPATIBLE_BUILD",
+    ]);
+  });
+});
