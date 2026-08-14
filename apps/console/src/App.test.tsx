@@ -1,9 +1,13 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import "../../../tests/setup.ts";
-import { cleanup, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import { GlobalRegistrator } from "@happy-dom/global-registrator";
 
-import { AuthProvider, ConsoleRoutes } from "./App";
+GlobalRegistrator.register();
+afterAll(() => GlobalRegistrator.unregister());
+
+const { cleanup, render, within } = await import("@testing-library/react");
+const { MemoryRouter } = await import("react-router-dom");
+
+const { AuthProvider, ConsoleRoutes } = await import("./App");
 
 afterEach(cleanup);
 
@@ -21,21 +25,21 @@ describe("Console route boundary", () => {
   test("redirects a signed-out visitor away from every private route", () => {
     renderConsole("/session", false);
 
-    expect(screen.getByRole("heading", { name: "Private presentation control" })).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "Session controls" })).toBeNull();
+    expect(within(document.body).getByRole("heading", { name: "Private presentation control" })).toBeTruthy();
+    expect(within(document.body).queryByRole("heading", { name: "Session controls" })).toBeNull();
   });
 
   test("keeps the sign-in route public-only once authenticated", () => {
     renderConsole("/sign-in", true);
 
-    expect(screen.getByRole("heading", { name: "Ready for the room" })).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "Private presentation control" })).toBeNull();
+    expect(within(document.body).getByRole("heading", { name: "Ready for the room" })).toBeTruthy();
+    expect(within(document.body).queryByRole("heading", { name: "Private presentation control" })).toBeNull();
   });
 
   test("renders an explicit private navigation landmark", () => {
     renderConsole("/", true);
 
-    expect(screen.getByRole("navigation", { name: "Private workspace" })).toBeTruthy();
-    expect(screen.getByText("Private workspace")).toBeTruthy();
+    expect(within(document.body).getByRole("navigation", { name: "Private workspace" })).toBeTruthy();
+    expect(within(document.body).getByText("Private workspace")).toBeTruthy();
   });
 });

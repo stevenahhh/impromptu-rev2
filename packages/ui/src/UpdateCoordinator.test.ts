@@ -1,8 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 
 import "../../../tests/setup.ts";
+import { GlobalRegistrator } from "@happy-dom/global-registrator";
 
 import { ACTIVATION_MESSAGE, type ActivationReason, UpdateCoordinator } from "./UpdateCoordinator";
+
+afterAll(() => GlobalRegistrator.unregister());
 
 class FakeWorker extends EventTarget {
   messages: Array<{ reason: ActivationReason; type: string }> = [];

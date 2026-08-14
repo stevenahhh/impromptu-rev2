@@ -1,9 +1,13 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
-import "../../../tests/setup.ts";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { afterAll, afterEach, describe, expect, mock, test } from "bun:test";
+import { GlobalRegistrator } from "@happy-dom/global-registrator";
 
-import { StageRoutes } from "./App";
+GlobalRegistrator.register();
+afterAll(() => GlobalRegistrator.unregister());
+
+const { cleanup, fireEvent, render, within } = await import("@testing-library/react");
+const { MemoryRouter } = await import("react-router-dom");
+
+const { StageRoutes } = await import("./App");
 
 afterEach(() => {
   cleanup();
@@ -24,13 +28,13 @@ function renderStage(path: string) {
 describe("public Stage boundary", () => {
   test("keeps both Stage routes public and audience-only", () => {
     renderStage("/");
-    expect(screen.getByRole("heading", { name: "A clean screen for the room" })).toBeTruthy();
-    expect(screen.queryByText("Private workspace")).toBeNull();
+    expect(within(document.body).getByRole("heading", { name: "A clean screen for the room" })).toBeTruthy();
+    expect(within(document.body).queryByText("Private workspace")).toBeNull();
 
     cleanup();
     renderStage("/display/rehearsal");
-    expect(screen.getByRole("heading", { name: "Evidence, without the detour" })).toBeTruthy();
-    expect(screen.queryByText("Private workspace")).toBeNull();
+    expect(within(document.body).getByRole("heading", { name: "Evidence, without the detour" })).toBeTruthy();
+    expect(within(document.body).queryByText("Private workspace")).toBeNull();
   });
 
   test("enters and exits fullscreen only from a Stage-local action", () => {
@@ -58,13 +62,13 @@ describe("public Stage boundary", () => {
     });
 
     renderStage("/display/rehearsal");
-    fireEvent.click(screen.getByRole("button", { name: "Enter fullscreen" }));
+    fireEvent.click(within(document.body).getByRole("button", { name: "Enter fullscreen" }));
 
     expect(requestFullscreen).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: "Exit fullscreen" })).toBeTruthy();
+    expect(within(document.body).getByRole("button", { name: "Exit fullscreen" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Exit fullscreen" }));
+    fireEvent.click(within(document.body).getByRole("button", { name: "Exit fullscreen" }));
     expect(exitFullscreen).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: "Enter fullscreen" })).toBeTruthy();
+    expect(within(document.body).getByRole("button", { name: "Enter fullscreen" })).toBeTruthy();
   });
 });
