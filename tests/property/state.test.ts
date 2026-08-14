@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { AudienceSnapshot, PlaybackCommand } from "@impromptu/contracts";
+import type { PlaybackCommand } from "@impromptu/contracts/control";
+import type { AudienceSnapshot } from "@impromptu/contracts/public";
 import {
   applyAudiencePlaybackSnapshot,
   applyPublicPlaybackEvent,

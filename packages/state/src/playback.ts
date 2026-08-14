@@ -2,10 +2,10 @@ import type {
   AcceptedCommandReceipt,
   CommandReceipt,
   PlaybackCommand,
-  PublicSlideOccurrence,
   RejectedCommandReceipt,
   StageAppliedReceipt,
-} from "@impromptu/contracts";
+} from "@impromptu/contracts/control";
+import type { PublicSlideOccurrence } from "@impromptu/contracts/public";
 
 export type StageStatus = "READY" | "DISCONNECTED" | "UNBOUND";
 

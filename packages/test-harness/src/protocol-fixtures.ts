@@ -1,4 +1,4 @@
-import type { PlaybackCommand } from "@impromptu/contracts";
+import type { PlaybackCommand } from "@impromptu/contracts/control";
 import { createPlaybackAuthorityState, type PlaybackAuthorityState } from "@impromptu/state";
 
 export type PlaybackIntent =

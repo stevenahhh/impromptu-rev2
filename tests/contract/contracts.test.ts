@@ -1,19 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { authorizeRoleAction, PlaybackCommandSchema } from "@impromptu/contracts/control";
+import {
+  authorizeRoleSnapshot,
+  EvidenceCandidateSchema,
+  PrivateDeckContextSchema,
+  RoleSessionSchema,
+} from "@impromptu/contracts/private";
 import {
   AudienceSnapshotSchema,
-  authorizeRoleAction,
-  authorizeRoleSnapshot,
   BuildHandshakeSchema,
   checkHandshakeCompatibility,
-  EvidenceCandidateSchema,
-  PlaybackCommandSchema,
-  PrivateDeckContextSchema,
   PublicationTombstoneSchema,
   PublishedAudienceCardSchema,
   PublishedDeckArtifactSchema,
-  RoleSessionSchema,
-} from "@impromptu/contracts";
+} from "@impromptu/contracts/public";
 
 function fixture(name: string): unknown {
   return JSON.parse(readFileSync(`tests/contract/fixtures/${name}.json`, "utf8"));

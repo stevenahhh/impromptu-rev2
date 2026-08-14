@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import {
-  authorizeRoleAction,
-  type PlaybackCommand,
-  PublishedAudienceCardSchema,
-} from "@impromptu/contracts";
+import { authorizeRoleAction, type PlaybackCommand } from "@impromptu/contracts/control";
+import { PublishedAudienceCardSchema } from "@impromptu/contracts/public";
 import {
   createPublicationState,
   initialPublicPlaybackState,

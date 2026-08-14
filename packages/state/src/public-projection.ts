@@ -1,4 +1,4 @@
-import type { AudienceSnapshot, PublicSlideOccurrence } from "@impromptu/contracts";
+import type { AudienceSnapshot, PublicSlideOccurrence } from "@impromptu/contracts/public";
 
 export type PublicPlaybackState = Readonly<{
   presentationSessionId: string;

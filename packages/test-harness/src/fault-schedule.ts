@@ -1,4 +1,4 @@
-import type { CommandReceipt, PlaybackCommand } from "@impromptu/contracts";
+import type { CommandReceipt, PlaybackCommand } from "@impromptu/contracts/control";
 import {
   applyPublicPlaybackEvent,
   applyPublicPlaybackSnapshot,
