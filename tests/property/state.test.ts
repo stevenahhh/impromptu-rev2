@@ -26,6 +26,8 @@ import {
   reducePlaybackCommand,
   replacePlaybackLease,
   restorePlaybackAuthority,
+  rotatePlaybackDisplayBinding,
+  setPlaybackStageStatus,
   snapshotPlaybackAuthority,
 } from "@impromptu/state";
 
@@ -41,6 +43,7 @@ interface CommandOverrides {
   commandId?: string;
   baseRevision?: number;
   delivery?: "LIVE" | "OFFLINE_REPLAY";
+  displayBindingEpoch?: number;
   publicSlideKey?: string;
   enabled?: boolean;
 }
@@ -55,6 +58,7 @@ function command(overrides: CommandOverrides): PlaybackCommand {
     commandId: overrides.commandId ?? "cmd_1",
     baseRevision: `cr_${overrides.baseRevision ?? 0}`,
     delivery: overrides.delivery ?? "LIVE",
+    displayBindingEpoch: `dbe_${overrides.displayBindingEpoch ?? 2}`,
   };
   if (overrides.type === "SLIDE_SET") {
     return PlaybackCommandSchema.parse({
@@ -73,7 +77,7 @@ function command(overrides: CommandOverrides): PlaybackCommand {
   return PlaybackCommandSchema.parse({ ...base, type: overrides.type });
 }
 
-function authority(stageStatus: "READY" | "DISCONNECTED" | "UNBOUND" = "READY") {
+function authority(stageStatus: "READY" | "DISCONNECTED" | "UNBOUND" = "READY", bindingEpoch = 2) {
   const presentationSessionId = PresentationSessionIdSchema.parse("ps_session-1");
   const sessionEpoch = presentationSessionEpoch(3);
   return createPlaybackAuthorityState({
@@ -87,7 +91,7 @@ function authority(stageStatus: "READY" | "DISCONNECTED" | "UNBOUND" = "READY") 
       controllerEpoch: "ce_7",
       expiresAtMs: 1_800_000_000_000,
     }),
-    displayBindingEpoch: displayBindingEpoch(2),
+    displayBindingEpoch: displayBindingEpoch(bindingEpoch),
     stageStatus,
     slideOrder: ["slide_1", "slide_2", "slide_3"].map((key) => PublicSlideKeySchema.parse(key)),
     initialSlideKey: PublicSlideKeySchema.parse("slide_1"),
@@ -223,12 +227,6 @@ describe("playback authority reducer", () => {
     expect(
       restorePlaybackAuthority({
         ...snapshot,
-        stageStatus: "DISCONNECTED",
-      }),
-    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
-    expect(
-      restorePlaybackAuthority({
-        ...snapshot,
         controlRevision: "cr_2",
       }),
     ).toEqual({ outcome: "INVALID_SNAPSHOT" });
@@ -257,6 +255,115 @@ describe("playback authority reducer", () => {
         },
       }),
     ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+  });
+
+  test("restores acceptance-time readiness after Stage disconnects", () => {
+    const accepted = reducePlaybackCommand(authority(), command({ type: "SLIDE_NEXT" }), nowMs);
+    const disconnected = setPlaybackStageStatus(accepted.state, "DISCONNECTED");
+    expect(restorePlaybackAuthority(snapshotPlaybackAuthority(disconnected))).toEqual({
+      outcome: "RESTORED",
+      state: disconnected,
+    });
+    const snapshot = snapshotPlaybackAuthority(disconnected);
+    const entry = Object.entries(snapshot.acceptedCommands)[0];
+    if (entry === undefined) throw new Error("accepted command was not persisted");
+    expect(
+      restorePlaybackAuthority({
+        ...snapshot,
+        acceptedCommands: {
+          [entry[0]]: {
+            ...entry[1],
+            acceptanceContext: {
+              ...entry[1].acceptanceContext,
+              stageStatus: "DISCONNECTED",
+            },
+          },
+        },
+      }),
+    ).toEqual({ outcome: "INVALID_SNAPSHOT" });
+  });
+
+  test("persists acceptance and application binding epochs across rotation", () => {
+    const atBindingOne = authority("READY", 1);
+    const acceptedOne = reducePlaybackCommand(
+      atBindingOne,
+      command({ type: "SLIDE_NEXT", displayBindingEpoch: 1 }),
+      nowMs,
+    );
+    const appliedOne = markStageApplied(
+      acceptedOne.state,
+      command({ type: "SLIDE_NEXT", displayBindingEpoch: 1 }).commandId,
+      displayBindingEpoch(1),
+    );
+    const atBindingTwo = rotatePlaybackDisplayBinding(appliedOne.state, displayBindingEpoch(2));
+    const acceptedTwo = reducePlaybackCommand(
+      atBindingTwo,
+      command({
+        type: "BLACKOUT_SET",
+        commandId: "cmd_2",
+        baseRevision: 1,
+        displayBindingEpoch: 2,
+      }),
+      nowMs,
+    );
+    const appliedTwo = markStageApplied(
+      acceptedTwo.state,
+      command({ type: "BLACKOUT_SET", commandId: "cmd_2", displayBindingEpoch: 2 }).commandId,
+      displayBindingEpoch(2),
+    );
+    expect(appliedTwo.outcome).toBe("APPLIED");
+    expect(restorePlaybackAuthority(snapshotPlaybackAuthority(appliedTwo.state))).toEqual({
+      outcome: "RESTORED",
+      state: appliedTwo.state,
+    });
+    expect(
+      reducePlaybackCommand(
+        atBindingTwo,
+        command({ type: "BLACKOUT_SET", displayBindingEpoch: 1 }),
+        nowMs,
+      ).receipt,
+    ).toMatchObject({ status: "REJECTED", reason: "STALE_DISPLAY_BINDING" });
+  });
+
+  test("supersedes old pending commands during lease takeover without blocking the new lease", () => {
+    const acceptedOld = reducePlaybackCommand(authority(), command({ type: "SLIDE_NEXT" }), nowMs);
+    const replacement = PlaybackControlLeaseSchema.parse({
+      ...acceptedOld.state.activeLease,
+      leaseId: "lease_replacement",
+      actorId: "actor_controller-2",
+      controllerEpoch: "ce_8",
+    });
+    const takenOver = replacePlaybackLease(acceptedOld.state, replacement);
+    const oldRecord = Object.values(takenOver.acceptedCommands)[0];
+    expect(oldRecord?.supersededReceipt).toMatchObject({
+      status: "SUPERSEDED",
+      supersededByLeaseId: "lease_replacement",
+      supersededByControllerEpoch: "ce_8",
+    });
+    const acceptedNew = reducePlaybackCommand(
+      takenOver,
+      command({
+        type: "BLACKOUT_SET",
+        actorId: "actor_controller-2",
+        leaseId: "lease_replacement",
+        controllerEpoch: "ce_8",
+        commandId: "cmd_2",
+        baseRevision: 1,
+      }),
+      nowMs,
+    );
+    expect(acceptedNew.receipt.status).toBe("ACCEPTED");
+    const appliedNew = markStageApplied(
+      acceptedNew.state,
+      command({ type: "BLACKOUT_SET", commandId: "cmd_2" }).commandId,
+      displayBindingEpoch(2),
+    );
+    expect(appliedNew.outcome).toBe("APPLIED");
+    expect(String(appliedNew.state.publicPlaybackRevision)).toBe("pbr_1");
+    expect(restorePlaybackAuthority(snapshotPlaybackAuthority(appliedNew.state))).toEqual({
+      outcome: "RESTORED",
+      state: appliedNew.state,
+    });
   });
 
   test("never accepts relative commands from an offline queue or without a ready binding", () => {

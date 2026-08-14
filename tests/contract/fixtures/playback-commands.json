@@ -9,6 +9,7 @@
     "commandId": "cmd_1",
     "baseRevision": "cr_10",
     "delivery": "LIVE",
+    "displayBindingEpoch": "dbe_2",
     "publicSlideKey": "slide_public-1"
   },
   {
@@ -20,7 +21,8 @@
     "controllerEpoch": "ce_6",
     "commandId": "cmd_2",
     "baseRevision": "cr_11",
-    "delivery": "LIVE"
+    "delivery": "LIVE",
+    "displayBindingEpoch": "dbe_2"
   },
   {
     "type": "BLACKOUT_SET",
@@ -32,6 +34,7 @@
     "commandId": "cmd_3",
     "baseRevision": "cr_12",
     "delivery": "LIVE",
+    "displayBindingEpoch": "dbe_2",
     "enabled": true
   }
 ]

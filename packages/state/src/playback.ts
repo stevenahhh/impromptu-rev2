@@ -8,6 +8,7 @@ import type {
   PlaybackControlLease,
   RejectedCommandReceipt,
   StageAppliedReceipt,
+  SupersededCommandReceipt,
 } from "@impromptu/contracts/control";
 import {
   AcceptedCommandReceiptSchema,
@@ -19,6 +20,7 @@ import {
   PlaybackCommandSchema,
   PlaybackControlLeaseSchema,
   StageAppliedReceiptSchema,
+  SupersededCommandReceiptSchema,
 } from "@impromptu/contracts/control";
 import type {
   DisplayBindingEpoch,
@@ -51,12 +53,21 @@ export type PlaybackEffect = Readonly<{
   blackout: boolean;
 }>;
 
+type AcceptanceContext = Readonly<{
+  lease: PlaybackControlLease;
+  stageStatus: StageStatus;
+  displayBindingEpoch: DisplayBindingEpoch;
+  acceptedAtMs: number;
+}>;
+
 type AcceptedCommandRecord = Readonly<{
   command: PlaybackCommand;
+  acceptanceContext: AcceptanceContext;
   requestHash: string;
   receipt: AcceptedCommandReceipt;
   effect: PlaybackEffect;
   appliedReceipt: StageAppliedReceipt | null;
+  supersededReceipt: SupersededCommandReceipt | null;
 }>;
 
 export type PlaybackAuthorityState = Readonly<{
@@ -88,10 +99,19 @@ const PlaybackEffectSchema = z
 const AcceptedCommandRecordSchema = z
   .object({
     command: PlaybackCommandSchema,
+    acceptanceContext: z
+      .object({
+        lease: PlaybackControlLeaseSchema,
+        stageStatus: z.enum(["READY", "DISCONNECTED", "UNBOUND"]),
+        displayBindingEpoch: DisplayBindingEpochSchema,
+        acceptedAtMs: z.number().int().nonnegative(),
+      })
+      .strict(),
     requestHash: Sha256Schema,
     receipt: AcceptedCommandReceiptSchema,
     effect: PlaybackEffectSchema,
     appliedReceipt: StageAppliedReceiptSchema.nullable(),
+    supersededReceipt: SupersededCommandReceiptSchema.nullable(),
   })
   .strict();
 const PlaybackAuthoritySnapshotSchema = z
@@ -132,10 +152,14 @@ const PlaybackAuthoritySnapshotSchema = z
     const playbackHead = safeEncodedCounterValue(snapshot.publicPlaybackRevision);
     if (controlHead === null || playbackHead === null) return;
     const recordsByRevision = new Map<number, AcceptedCommandRecord>();
-    const appliedRevisions = new Set<number>();
+    const appliedByPublicRevision = new Map<number, AcceptedCommandRecord>();
+    const currentBinding = safeEncodedCounterValue(snapshot.displayBindingEpoch);
+    if (currentBinding === null) return;
     for (const [key, record] of Object.entries(snapshot.acceptedCommands)) {
       const command = record.command;
       const receipt = record.receipt;
+      const acceptance = record.acceptanceContext;
+      const acceptedLease = acceptance.lease;
       const acceptedRevision = safeEncodedCounterValue(receipt.acceptedControlRevision);
       const canonicalHash = canonicalPlaybackRequestHash(command);
       const identityMatches =
@@ -144,12 +168,22 @@ const PlaybackAuthoritySnapshotSchema = z
         command.actorId === receipt.actorId &&
         command.leaseId === receipt.leaseId &&
         command.controllerEpoch === receipt.controllerEpoch &&
-        command.commandId === receipt.commandId;
+        command.commandId === receipt.commandId &&
+        command.displayBindingEpoch === receipt.displayBindingEpoch;
+      const acceptanceMatches =
+        acceptedLease.presentationSessionId === command.presentationSessionId &&
+        acceptedLease.presentationSessionEpoch === command.presentationSessionEpoch &&
+        acceptedLease.actorId === command.actorId &&
+        acceptedLease.leaseId === command.leaseId &&
+        acceptedLease.controllerEpoch === command.controllerEpoch &&
+        acceptance.displayBindingEpoch === command.displayBindingEpoch &&
+        acceptance.acceptedAtMs < acceptedLease.expiresAtMs;
       let valid =
         key === commandKey(command) &&
         command.presentationSessionId === snapshot.presentationSessionId &&
         command.presentationSessionEpoch === snapshot.presentationSessionEpoch &&
         identityMatches &&
+        acceptanceMatches &&
         record.requestHash === canonicalHash &&
         receipt.requestHash === canonicalHash &&
         record.effect.commandId === receipt.commandId &&
@@ -157,11 +191,13 @@ const PlaybackAuthoritySnapshotSchema = z
         acceptedRevision !== null &&
         acceptedRevision >= 1 &&
         acceptedRevision <= controlHead &&
-        !recordsByRevision.has(acceptedRevision ?? -1);
+        !recordsByRevision.has(acceptedRevision ?? -1) &&
+        !(record.appliedReceipt !== null && record.supersededReceipt !== null);
 
       if (record.appliedReceipt !== null) {
         const applied = record.appliedReceipt;
         const appliedRevision = safeEncodedCounterValue(applied.publicPlaybackRevision);
+        const appliedBinding = safeEncodedCounterValue(applied.displayBindingEpoch);
         valid =
           valid &&
           applied.presentationSessionId === receipt.presentationSessionId &&
@@ -172,26 +208,41 @@ const PlaybackAuthoritySnapshotSchema = z
           applied.commandId === receipt.commandId &&
           applied.requestHash === receipt.requestHash &&
           applied.acceptedControlRevision === receipt.acceptedControlRevision &&
-          applied.displayBindingEpoch === snapshot.displayBindingEpoch &&
           appliedRevision !== null &&
-          appliedRevision === acceptedRevision &&
+          appliedRevision >= 1 &&
           appliedRevision <= playbackHead &&
-          !appliedRevisions.has(appliedRevision ?? -1);
-        if (appliedRevision !== null) appliedRevisions.add(appliedRevision);
-      } else {
-        valid = valid && acceptedRevision !== null && acceptedRevision > playbackHead;
+          appliedBinding !== null &&
+          appliedBinding <= currentBinding &&
+          !appliedByPublicRevision.has(appliedRevision ?? -1);
+        if (appliedRevision !== null) appliedByPublicRevision.set(appliedRevision, record);
+      }
+      if (record.supersededReceipt !== null) {
+        const superseded = record.supersededReceipt;
+        valid =
+          valid &&
+          superseded.presentationSessionId === receipt.presentationSessionId &&
+          superseded.presentationSessionEpoch === receipt.presentationSessionEpoch &&
+          superseded.actorId === receipt.actorId &&
+          superseded.leaseId === receipt.leaseId &&
+          superseded.controllerEpoch === receipt.controllerEpoch &&
+          superseded.commandId === receipt.commandId &&
+          superseded.requestHash === receipt.requestHash &&
+          superseded.displayBindingEpoch === receipt.displayBindingEpoch &&
+          superseded.acceptedControlRevision === receipt.acceptedControlRevision &&
+          (superseded.supersededByLeaseId !== receipt.leaseId ||
+            superseded.supersededByControllerEpoch !== receipt.controllerEpoch);
       }
       if (acceptedRevision !== null) recordsByRevision.set(acceptedRevision, record);
       if (!valid) {
         context.addIssue({
           code: "custom",
           path: ["acceptedCommands", key],
-          message: "invalid accepted command identity or hash",
+          message: "invalid accepted command identity, context, or terminal receipt",
         });
       }
     }
 
-    if (recordsByRevision.size !== controlHead || appliedRevisions.size !== playbackHead) {
+    if (recordsByRevision.size !== controlHead || appliedByPublicRevision.size !== playbackHead) {
       context.addIssue({
         code: "custom",
         path: ["acceptedCommands"],
@@ -210,7 +261,7 @@ const PlaybackAuthoritySnapshotSchema = z
       }
     }
     for (let revision = 1; revision <= playbackHead; revision += 1) {
-      if (!appliedRevisions.has(revision)) {
+      if (!appliedByPublicRevision.has(revision)) {
         context.addIssue({
           code: "custom",
           path: ["acceptedCommands"],
@@ -226,6 +277,9 @@ const PlaybackAuthoritySnapshotSchema = z
     };
     let nextOccurrenceSeq = 2;
     let blackout = false;
+    let expectedAppliedRevision = 0;
+    let lastAppliedBinding = 0;
+    let pendingSeen = false;
     for (let revision = 1; revision <= controlHead; revision += 1) {
       const record = recordsByRevision.get(revision);
       if (record === undefined) return;
@@ -241,13 +295,48 @@ const PlaybackAuthoritySnapshotSchema = z
       const relative = command.type === "SLIDE_NEXT" || command.type === "SLIDE_PREVIOUS";
       if (
         (relative && command.delivery === "OFFLINE_REPLAY") ||
-        (relative && snapshot.stageStatus !== "READY") ||
+        (relative && record.acceptanceContext.stageStatus !== "READY") ||
         (command.type === "SLIDE_SET" && !snapshot.slideOrder.includes(command.publicSlideKey))
       ) {
         context.addIssue({
           code: "custom",
           path: ["acceptedCommands"],
           message: "persisted command violates live acceptance predicates",
+        });
+        return;
+      }
+      if (record.appliedReceipt !== null) {
+        const appliedRevision = safeEncodedCounterValue(
+          record.appliedReceipt.publicPlaybackRevision,
+        );
+        const appliedBinding = safeEncodedCounterValue(record.appliedReceipt.displayBindingEpoch);
+        const acceptedBinding = safeEncodedCounterValue(
+          record.acceptanceContext.displayBindingEpoch,
+        );
+        expectedAppliedRevision += 1;
+        if (
+          pendingSeen ||
+          appliedRevision !== expectedAppliedRevision ||
+          appliedBinding === null ||
+          acceptedBinding === null ||
+          appliedBinding < acceptedBinding ||
+          appliedBinding < lastAppliedBinding
+        ) {
+          context.addIssue({
+            code: "custom",
+            path: ["acceptedCommands"],
+            message: "Stage receipts do not form an ordered terminal prefix",
+          });
+          return;
+        }
+        lastAppliedBinding = appliedBinding;
+      } else if (record.supersededReceipt === null) {
+        pendingSeen = true;
+      } else if (pendingSeen) {
+        context.addIssue({
+          code: "custom",
+          path: ["acceptedCommands"],
+          message: "superseded receipt appears after a pending command",
         });
         return;
       }
@@ -284,6 +373,13 @@ const PlaybackAuthoritySnapshotSchema = z
         });
         return;
       }
+    }
+    if (expectedAppliedRevision !== playbackHead) {
+      context.addIssue({
+        code: "custom",
+        path: ["publicPlaybackRevision"],
+        message: "public playback head does not match applied command history",
+      });
     }
     if (
       snapshot.occurrence.publicSlideKey !== occurrence.publicSlideKey ||
@@ -352,6 +448,7 @@ function canonicalCommandPayload(command: PlaybackCommand): string {
     `type=${command.type}`,
     `baseRevision=${command.baseRevision}`,
     `delivery=${command.delivery}`,
+    `displayBindingEpoch=${command.displayBindingEpoch}`,
     payload,
   ].join("\n");
 }
@@ -380,6 +477,7 @@ function receiptIdentity(command: PlaybackCommand, requestHash: string) {
     controllerEpoch: command.controllerEpoch,
     commandId: command.commandId,
     requestHash,
+    displayBindingEpoch: command.displayBindingEpoch,
   };
 }
 
@@ -443,6 +541,9 @@ export function reducePlaybackCommand(
   if (command.controllerEpoch !== state.activeLease.controllerEpoch) {
     return reject(state, command, requestHash, "STALE_CONTROLLER_EPOCH");
   }
+  if (command.displayBindingEpoch !== state.displayBindingEpoch) {
+    return reject(state, command, requestHash, "STALE_DISPLAY_BINDING");
+  }
 
   const key = commandKey(command);
   const prior = state.acceptedCommands[key];
@@ -492,10 +593,17 @@ export function reducePlaybackCommand(
   };
   const record: AcceptedCommandRecord = {
     command,
+    acceptanceContext: {
+      lease: state.activeLease,
+      stageStatus: state.stageStatus,
+      displayBindingEpoch: state.displayBindingEpoch,
+      acceptedAtMs: nowMs,
+    },
     requestHash,
     receipt,
     effect,
     appliedReceipt: null,
+    supersededReceipt: null,
   };
   return {
     state: {
@@ -547,7 +655,9 @@ export function markStageApplied(
   }
 
   const firstPendingRevision = Object.values(state.acceptedCommands)
-    .filter((candidate) => candidate.appliedReceipt === null)
+    .filter(
+      (candidate) => candidate.appliedReceipt === null && candidate.supersededReceipt === null,
+    )
     .reduce(
       (minimum, candidate) =>
         Math.min(minimum, controlRevisionValue(candidate.receipt.acceptedControlRevision)),
@@ -594,7 +704,55 @@ export function replacePlaybackLease(
   ) {
     throw new Error("replacement lease belongs to a different presentation session");
   }
-  return { ...state, activeLease };
+  const acceptedCommands = Object.fromEntries(
+    Object.entries(state.acceptedCommands).map(([key, record]) => {
+      const belongsToCurrentLease =
+        record.receipt.leaseId === state.activeLease.leaseId &&
+        record.receipt.controllerEpoch === state.activeLease.controllerEpoch;
+      if (
+        !belongsToCurrentLease ||
+        record.appliedReceipt !== null ||
+        record.supersededReceipt !== null
+      ) {
+        return [key, record];
+      }
+      const supersededReceipt: SupersededCommandReceipt = {
+        status: "SUPERSEDED",
+        presentationSessionId: record.receipt.presentationSessionId,
+        presentationSessionEpoch: record.receipt.presentationSessionEpoch,
+        actorId: record.receipt.actorId,
+        leaseId: record.receipt.leaseId,
+        controllerEpoch: record.receipt.controllerEpoch,
+        commandId: record.receipt.commandId,
+        requestHash: record.receipt.requestHash,
+        displayBindingEpoch: record.receipt.displayBindingEpoch,
+        acceptedControlRevision: record.receipt.acceptedControlRevision,
+        supersededByLeaseId: activeLease.leaseId,
+        supersededByControllerEpoch: activeLease.controllerEpoch,
+      };
+      return [key, { ...record, supersededReceipt }];
+    }),
+  );
+  return { ...state, activeLease, acceptedCommands };
+}
+
+export function setPlaybackStageStatus(
+  state: PlaybackAuthorityState,
+  stageStatus: StageStatus,
+): PlaybackAuthorityState {
+  return { ...state, stageStatus };
+}
+
+export function rotatePlaybackDisplayBinding(
+  state: PlaybackAuthorityState,
+  displayBindingEpoch: DisplayBindingEpoch,
+): PlaybackAuthorityState {
+  const current = safeEncodedCounterValue(state.displayBindingEpoch);
+  const next = safeEncodedCounterValue(displayBindingEpoch);
+  if (current === null || next === null || next <= current) {
+    throw new Error("display binding epoch must advance monotonically");
+  }
+  return { ...state, displayBindingEpoch };
 }
 
 export function snapshotPlaybackAuthority(

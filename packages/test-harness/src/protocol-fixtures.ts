@@ -34,6 +34,7 @@ export function playbackCommandFixture(sequence: number, intent: PlaybackIntent)
     commandId: `cmd_${sequence}`,
     baseRevision: `cr_${sequence - 1}`,
     delivery: "LIVE",
+    displayBindingEpoch: "dbe_1",
   });
 }
 

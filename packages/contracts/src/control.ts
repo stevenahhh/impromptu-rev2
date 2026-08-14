@@ -85,6 +85,7 @@ const PlaybackCommandHeaderShape = {
   commandId: CommandIdSchema,
   baseRevision: ControlRevisionSchema,
   delivery: z.enum(["LIVE", "OFFLINE_REPLAY"]),
+  displayBindingEpoch: DisplayBindingEpochSchema,
 } as const;
 
 export const SlideSetCommandSchema = z
@@ -122,6 +123,7 @@ const ReceiptIdentityShape = {
   controllerEpoch: ControllerEpochSchema,
   commandId: CommandIdSchema,
   requestHash: Sha256Schema,
+  displayBindingEpoch: DisplayBindingEpochSchema,
 } as const;
 
 export const AcceptedCommandReceiptSchema = z
@@ -137,7 +139,16 @@ export const StageAppliedReceiptSchema = z
     ...ReceiptIdentityShape,
     acceptedControlRevision: ControlRevisionSchema,
     publicPlaybackRevision: PublicPlaybackRevisionSchema,
-    displayBindingEpoch: DisplayBindingEpochSchema,
+  })
+  .strict();
+
+export const SupersededCommandReceiptSchema = z
+  .object({
+    status: z.literal("SUPERSEDED"),
+    ...ReceiptIdentityShape,
+    acceptedControlRevision: ControlRevisionSchema,
+    supersededByLeaseId: PlaybackControlLeaseIdSchema,
+    supersededByControllerEpoch: ControllerEpochSchema,
   })
   .strict();
 
@@ -147,6 +158,7 @@ export const CommandRejectionReasonSchema = z.enum([
   "STALE_LEASE",
   "LEASE_EXPIRED",
   "STALE_CONTROLLER_EPOCH",
+  "STALE_DISPLAY_BINDING",
   "IDEMPOTENCY_CONFLICT",
   "REVISION_MISMATCH",
   "STAGE_NOT_READY",
@@ -164,6 +176,7 @@ export const RejectedCommandReceiptSchema = z
 export const CommandReceiptSchema = z.discriminatedUnion("status", [
   AcceptedCommandReceiptSchema,
   StageAppliedReceiptSchema,
+  SupersededCommandReceiptSchema,
   RejectedCommandReceiptSchema,
 ]);
 
@@ -186,6 +199,7 @@ export type ControllerSession = z.infer<typeof ControllerSessionSchema>;
 export type PlaybackCommand = z.infer<typeof PlaybackCommandSchema>;
 export type AcceptedCommandReceipt = z.infer<typeof AcceptedCommandReceiptSchema>;
 export type StageAppliedReceipt = z.infer<typeof StageAppliedReceiptSchema>;
+export type SupersededCommandReceipt = z.infer<typeof SupersededCommandReceiptSchema>;
 export type RejectedCommandReceipt = z.infer<typeof RejectedCommandReceiptSchema>;
 export type CommandReceipt = z.infer<typeof CommandReceiptSchema>;
 export type CommandRejectionReason = z.infer<typeof CommandRejectionReasonSchema>;

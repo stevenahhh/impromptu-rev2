@@ -93,6 +93,74 @@ describe("generated playback fault schedules", () => {
     );
   });
 
+  test("takeovers terminalize every old pending interleaving across restart", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 20 }),
+        fc.nat(),
+        fc.integer({ min: 2, max: 1_000 }),
+        (acceptedCount, prefixSelector, nextEpoch) => {
+          const appliedPrefix = prefixSelector % (acceptedCount + 1);
+          const commands = Array.from({ length: acceptedCount }, (_, index) =>
+            playbackCommandFixture(index + 1, {
+              type: "BLACKOUT_SET",
+              enabled: index % 2 === 0,
+            }),
+          );
+          const replacement = PlaybackControlLeaseSchema.parse({
+            ...playbackAuthorityFixture().activeLease,
+            leaseId: `lease_takeover-${nextEpoch}`,
+            actorId: `actor_takeover-${nextEpoch}`,
+            controllerEpoch: `ce_${nextEpoch}`,
+          });
+          const replacementCommand: PlaybackCommand = {
+            ...playbackCommandFixture(acceptedCount + 1, {
+              type: "BLACKOUT_SET",
+              enabled: true,
+            }),
+            actorId: replacement.actorId,
+            leaseId: replacement.leaseId,
+            controllerEpoch: replacement.controllerEpoch,
+          };
+          const result = runPlaybackFaultSchedule(playbackAuthorityFixture(), [
+            ...commands.map((command) => ({ type: "COMMAND" as const, command })),
+            ...commands.slice(0, appliedPrefix).map((command) => ({
+              type: "STAGE_APPLY" as const,
+              commandId: command.commandId,
+              displayBindingEpoch: displayBindingEpoch(1),
+            })),
+            { type: "TAKEOVER", lease: replacement },
+            { type: "RESTART" },
+            { type: "COMMAND", command: replacementCommand },
+            {
+              type: "STAGE_APPLY",
+              commandId: replacementCommand.commandId,
+              displayBindingEpoch: displayBindingEpoch(1),
+            },
+            { type: "RESTART" },
+          ]);
+
+          const oldRecords = Object.values(result.state.acceptedCommands).filter(
+            ({ receipt }) => receipt.leaseId !== replacement.leaseId,
+          );
+          expect(
+            oldRecords
+              .slice(0, appliedPrefix)
+              .every(({ appliedReceipt }) => appliedReceipt !== null),
+          ).toBe(true);
+          expect(
+            oldRecords
+              .slice(appliedPrefix)
+              .every(({ supersededReceipt }) => supersededReceipt?.status === "SUPERSEDED"),
+          ).toBe(true);
+          expect(String(result.state.publicPlaybackRevision)).toBe(`pbr_${appliedPrefix + 1}`);
+          expect(result.trace.at(-2)).toMatchObject({ type: "STAGE_APPLY", outcome: "APPLIED" });
+        },
+      ),
+      propertyOptions,
+    );
+  });
+
   test("old-lease duplicates remain rejected after generated takeovers", () => {
     fc.assert(
       fc.property(fc.integer({ min: 2, max: 1_000 }), (nextEpoch) => {
