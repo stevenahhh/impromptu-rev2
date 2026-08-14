@@ -32,7 +32,10 @@
     "check": "bun run check:repo && bun run check:boundaries && bun run check:browser && bun run check:browser-boundary && bun run lint && bun run typecheck && bun run test && bun run build && bun run check:browser-runtime",
     "test:retrieval": "bun test services/private-backend/test/internal-retrieval.test.ts services/private-backend/test/external-fetch.test.ts services/private-backend/test/recommendation-pipeline.test.ts services/private-backend/test/private-recommendation-http.test.ts",
     "test:security": "bun test tests/security",
-    "test:private-latency": "bun test services/private-backend/test/private-recommendation-http.test.ts"
+    "test:private-latency": "bun test services/private-backend/test/private-recommendation-http.test.ts",
+    "test:wp8:gate": "bun test tests/wp8/safety-gate.test.ts",
+    "test:wp8:concurrency": "bun test services/private-backend/test/prepared-evidence.test.ts -t 'linearizes supervised live approval'",
+    "test:wp8": "bun run test:wp8:gate && bun run test:wp8:concurrency && bun test apps/console/src/live-publication-client.test.ts apps/console/src/App.test.tsx"
   },
   "devDependencies": {
     "@biomejs/biome": "2.2.0",

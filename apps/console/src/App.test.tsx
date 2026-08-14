@@ -109,6 +109,12 @@ describe("Console route boundary", () => {
       async recommend() {
         throw new Error("not used");
       },
+      async readLiveCandidates() {
+        throw new Error("not used");
+      },
+      async approveLiveCandidate() {
+        throw new Error("not used");
+      },
     };
     render(
       <MemoryRouter initialEntries={["/sign-in"]}>
@@ -135,5 +141,85 @@ describe("Console route boundary", () => {
     expect(receivedCodes).toEqual(["transient-code"]);
     expect(window.localStorage.length).toBe(0);
     expect(window.sessionStorage.length).toBe(0);
+  });
+
+  test("approves a live candidate only from the loaded authoritative snapshot", async () => {
+    const approvals: Array<{ candidateId: string; snapshotHash: string }> = [];
+    let loadedSnapshot: (() => void) | undefined;
+    const loaded = new Promise<void>((resolve) => {
+      loadedSnapshot = resolve;
+    });
+    let approvedCandidate: (() => void) | undefined;
+    const approved = new Promise<void>((resolve) => {
+      approvedCandidate = resolve;
+    });
+    const snapshot = {
+      authoritativeSnapshotHash: "snapshot-hash-1",
+      presentationSessionId: "ps_live-ui",
+      presentationSessionEpoch: "pse_1",
+      publicationPolicyVersion: "publication-policy-1",
+      publicationAuthorityId: "pubauth_live-ui",
+      publicCardRevision: "pcr_0",
+      livePublicEnabled: true,
+      candidates: [
+        {
+          candidateId: "candidate_live-ui",
+          candidateVersion: "candidate-version-1",
+          candidateRevision: "candrev_1",
+          claimText: "Fresh verified claim",
+          evidenceExcerpt: "Authoritative support",
+          occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+        },
+      ],
+    } as const;
+    const client: ConsoleSessionClient = {
+      async signIn() {
+        throw new Error("not used");
+      },
+      async readSession() {
+        return null;
+      },
+      async signOut() {},
+      async createPresentation() {
+        throw new Error("not used");
+      },
+      async recommend() {
+        throw new Error("not used");
+      },
+      async readLiveCandidates(presentationSessionId) {
+        expect(presentationSessionId).toBe("ps_live-ui");
+        loadedSnapshot?.();
+        return snapshot;
+      },
+      async approveLiveCandidate(_csrfToken, authoritative, candidate) {
+        approvals.push({
+          candidateId: candidate.candidateId,
+          snapshotHash: authoritative.authoritativeSnapshotHash,
+        });
+        approvedCandidate?.();
+      },
+    };
+    render(
+      <MemoryRouter initialEntries={["/live-publication"]}>
+        <AuthProvider initialAuthenticated client={client}>
+          <ConsoleRoutes />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(within(document.body).getByLabelText("Presentation session ID"), {
+      target: { value: "ps_live-ui" },
+    });
+    fireEvent.click(within(document.body).getByRole("button", { name: "Load fresh candidates" }));
+    await act(async () => await loaded);
+    expect(within(document.body).getByText("Fresh verified claim")).toBeTruthy();
+
+    fireEvent.click(within(document.body).getByRole("button", { name: "Approve live card" }));
+    await act(async () => await approved);
+    expect(approvals).toEqual([
+      { candidateId: "candidate_live-ui", snapshotHash: "snapshot-hash-1" },
+    ]);
+    expect(within(document.body).queryByText("Fresh verified claim")).toBeNull();
+    expect(within(document.body).getByText(/Load a new authoritative snapshot/)).toBeTruthy();
   });
 });

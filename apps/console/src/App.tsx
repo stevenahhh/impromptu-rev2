@@ -14,12 +14,15 @@ import {
   type AccountSessionView,
   type ConsoleSessionClient,
   createConsoleSessionClient,
+  type LiveCandidateSnapshotView,
 } from "./session-client";
 
 interface AuthState {
   authenticated: boolean;
   pending: boolean;
   error: string | null;
+  session: AccountSessionView | null;
+  client: ConsoleSessionClient;
   signIn: (authorizationCode: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -54,6 +57,8 @@ export function AuthProvider({
       authenticated: session !== null,
       pending,
       error,
+      session,
+      client: sessionClient,
       async signIn(authorizationCode: string) {
         setPending(true);
         setError(null);
@@ -166,6 +171,7 @@ function PrivateNavigation() {
           Room overview
         </NavLink>
         <NavLink to="/session">Session setup</NavLink>
+        <NavLink to="/live-publication">Live approval</NavLink>
       </nav>
       <Button variant="quiet" onClick={() => void signOut()}>
         Leave workspace
@@ -291,6 +297,101 @@ function OverviewPage() {
   );
 }
 
+function LivePublicationPage() {
+  const titleId = useId();
+  const { client, session } = useAuth();
+  const [presentationSessionId, setPresentationSessionId] = useState("");
+  const [snapshot, setSnapshot] = useState<LiveCandidateSnapshotView | null>(null);
+  const [pendingCandidateId, setPendingCandidateId] = useState<string | null>(null);
+  const [message, setMessage] = useState("Load a fresh authoritative snapshot before approval.");
+
+  const loadSnapshot = async () => {
+    setMessage("Loading authoritative snapshot...");
+    try {
+      const next = await client.readLiveCandidates(presentationSessionId);
+      setSnapshot(next);
+      setMessage(
+        next.livePublicEnabled
+          ? `${next.candidates.length} fresh live candidate${next.candidates.length === 1 ? "" : "s"}.`
+          : "Live public is fail-closed. Verified candidates remain private; curated publication stays available.",
+      );
+    } catch (cause) {
+      setSnapshot(null);
+      setMessage(cause instanceof Error ? cause.message : "Snapshot failed.");
+    }
+  };
+
+  const approve = async (candidate: LiveCandidateSnapshotView["candidates"][number]) => {
+    if (snapshot === null || session === null) return;
+    setPendingCandidateId(candidate.candidateId);
+    setMessage("Submitting explicit approval...");
+    try {
+      await client.approveLiveCandidate(
+        session.csrfToken,
+        snapshot,
+        candidate,
+        crypto.randomUUID(),
+      );
+      setSnapshot(null);
+      setMessage("Published. Load a new authoritative snapshot for any further approval.");
+    } catch (cause) {
+      setSnapshot(null);
+      setMessage(
+        cause instanceof Error
+          ? `${cause.message}. Load a new authoritative snapshot.`
+          : "Approval was rejected. Load a new authoritative snapshot.",
+      );
+    } finally {
+      setPendingCandidateId(null);
+    }
+  };
+
+  return (
+    <section className="console-stack ui-reveal" aria-labelledby={titleId}>
+      <div>
+        <p className="ui-eyebrow">Supervised publication</p>
+        <h1 id={titleId}>Live candidate approval</h1>
+        <p className="console-lead">
+          Nothing publishes automatically. Each approval uses the candidate version and the latest
+          authoritative publication snapshot.
+        </p>
+      </div>
+      <Panel title="Authoritative snapshot" tone="inset">
+        <label className="console-field">
+          <span>Presentation session ID</span>
+          <input
+            value={presentationSessionId}
+            onChange={(event) => {
+              setPresentationSessionId(event.currentTarget.value);
+              setSnapshot(null);
+            }}
+          />
+        </label>
+        <Button disabled={presentationSessionId.length === 0} onClick={() => void loadSnapshot()}>
+          Load fresh candidates
+        </Button>
+        <p className="console-caption" aria-live="polite">
+          {message}
+        </p>
+      </Panel>
+      {snapshot?.candidates.map((candidate) => (
+        <Panel key={candidate.candidateId} title={candidate.claimText}>
+          <p>{candidate.evidenceExcerpt}</p>
+          <p className="console-caption">
+            {candidate.occurrence.publicSlideKey} / occurrence {candidate.occurrence.occurrenceSeq}
+          </p>
+          <Button
+            disabled={!snapshot.livePublicEnabled || pendingCandidateId !== null}
+            onClick={() => void approve(candidate)}
+          >
+            {pendingCandidateId === candidate.candidateId ? "Approving..." : "Approve live card"}
+          </Button>
+        </Panel>
+      ))}
+    </section>
+  );
+}
+
 function SessionPage() {
   const titleId = useId();
 
@@ -342,6 +443,7 @@ export function ConsoleRoutes({ coResident = false }: { readonly coResident?: bo
         <Route element={<PrivateLayout coResident={coResident} />}>
           <Route index element={<OverviewPage />} />
           <Route path="/session" element={<SessionPage />} />
+          <Route path="/live-publication" element={<LivePublicationPage />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/sign-in" replace />} />

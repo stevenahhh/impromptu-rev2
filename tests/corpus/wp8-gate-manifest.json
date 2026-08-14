@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "manifestId": "wp8-supervised-publication-deterministic-v1",
+  "status": "FROZEN",
+  "scope": "DETERMINISTIC_GUARDED_PILOT_HARNESS",
+  "acceptanceClaim": "This freezes the WP8 machine harness and preregistered thresholds. It does not replace the blocked WP0 collected Korean acceptance corpus.",
+  "representativeArtifact": {
+    "path": "tests/corpus/wp8-supervised-holdout.json",
+    "sha256": "4a8e92733432d293993b05d8dee6aee0cf08f8edf65cc1ee68ba8d3a36410041"
+  },
+  "adversarialArtifact": {
+    "path": "tests/corpus/wp8-adversarial.json",
+    "sha256": "6a5d77022874d3545b05128b6cbb998b1a0a4d3c24b276f4dc417bd85f24e8e1",
+    "separateFromRepresentative": true
+  },
+  "thresholds": {
+    "falseSupportMaximum": 0.01,
+    "falseSupportUpper95MaximumExclusive": 0.01,
+    "falseConflictMaximum": 0.05,
+    "eligibleYieldMinimum": 0.6,
+    "usefulnessMinimum": 0.8,
+    "abstentionMinimum": 0.95,
+    "approvalMedianMaximumMs": 2000,
+    "approvalP90MaximumMs": 5000,
+    "inducedSpeechPausesMaximumPerTenMinutes": 1,
+    "effortDeltaMaximumExclusive": 0.14285714285714285
+  },
+  "failureMode": {
+    "livePublicEnabled": false,
+    "privateLiveVerifiedEnabled": true,
+    "curatedPublicEnabled": true
+  }
+}

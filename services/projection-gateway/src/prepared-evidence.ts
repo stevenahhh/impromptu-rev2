@@ -885,6 +885,7 @@ export class PreparedEvidenceProjectionGateway {
     if (current === null || next !== current + 1) return false;
     if (projection.tombstones.has(event.projectionId)) return false;
     if (event.status === "PUBLISHED") {
+      if (projection.cards.has(event.projectionId)) return false;
       projection.cards.set(event.projectionId, event);
     } else {
       projection.cards.delete(event.projectionId);
@@ -924,7 +925,12 @@ export class PreparedEvidenceProjectionGateway {
           card.mode !== "LIVE" ||
           (card.leaseExpiresAtMs !== undefined &&
             card.leaseExpiresAtMs !== null &&
-            nowMs < card.leaseExpiresAtMs),
+            nowMs < card.leaseExpiresAtMs &&
+            card.liveBinding !== undefined &&
+            card.liveBinding.publicSlideOccurrence.publicSlideKey ===
+              projection.occurrence.publicSlideKey &&
+            card.liveBinding.publicSlideOccurrence.occurrenceSeq ===
+              projection.occurrence.occurrenceSeq),
       ),
       tombstones: retainedTombstones,
       tombstoneWatermark: `pcr_${watermark}`,

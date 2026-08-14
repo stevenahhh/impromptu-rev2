@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "representative": {
+    "nonSupportable": 300,
+    "falseSupport": 0,
+    "conflict": 20,
+    "falseConflict": 1,
+    "numeric": 40,
+    "wrongNumeric": 0,
+    "date": 40,
+    "wrongDate": 0,
+    "entity": 40,
+    "wrongEntity": 0,
+    "authoritativeConflict": 20,
+    "authoritativeConflictAutoPublished": 0,
+    "supportableFetchable": 100,
+    "eligibleWithinFiveSeconds": 65,
+    "answerable": 100,
+    "usefulTopThree": 82,
+    "unanswerable": 100,
+    "abstained": 96
+  },
+  "approvalLatencyHistogram": [
+    { "milliseconds": 900, "count": 30 },
+    { "milliseconds": 1400, "count": 25 },
+    { "milliseconds": 1900, "count": 25 },
+    { "milliseconds": 3200, "count": 10 },
+    { "milliseconds": 4700, "count": 10 }
+  ],
+  "interaction": {
+    "observedMinutes": 120,
+    "inducedSpeechPauses": 10,
+    "baselineActions": 700,
+    "supervisedAdditionalActions": 90
+  }
+}

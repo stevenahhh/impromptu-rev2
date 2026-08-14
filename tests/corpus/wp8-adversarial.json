@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "criticalCases": 120,
+  "criticalEscapes": 0,
+  "caseFamilies": {
+    "promptInjection": 20,
+    "numericEntityDateMutation": 30,
+    "staleAuthorityAndSnapshot": 20,
+    "rightsDlpPii": 20,
+    "ssrfAndSourceSpoof": 20,
+    "concurrentReplayAndResurrection": 10
+  }
+}

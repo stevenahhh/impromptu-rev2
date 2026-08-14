@@ -362,11 +362,28 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
             if (playbackResult?.outcome === "APPLIED") {
               setSnapshot((current) => {
                 if (current === null) return null;
+                const cards = current.cards.filter(
+                  (card) =>
+                    card.mode !== "LIVE" ||
+                    (card.liveBinding?.publicSlideOccurrence.publicSlideKey ===
+                      event.occurrence.publicSlideKey &&
+                      card.liveBinding.publicSlideOccurrence.occurrenceSeq ===
+                        event.occurrence.occurrenceSeq),
+                );
+                for (const card of current.cards) {
+                  if (!cards.includes(card)) {
+                    publishStageEvent("impromptu:card-hidden", {
+                      projectionId: card.projectionId,
+                      reason: "OCCURRENCE_CHANGED",
+                    });
+                  }
+                }
                 const next = {
                   ...current,
                   publicPlaybackRevision: event.publicPlaybackRevision,
                   occurrence: event.occurrence,
                   blackout: event.blackout,
+                  cards,
                 };
                 latestSnapshot = next;
                 return next;

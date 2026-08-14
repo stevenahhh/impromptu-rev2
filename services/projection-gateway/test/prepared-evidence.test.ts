@@ -152,6 +152,70 @@ describe("prepared evidence projection gateway", () => {
     ).toBe(false);
   });
 
+  test("never re-exposes a live card after occurrence change or display rebind", () => {
+    const gateway = new PreparedEvidenceProjectionGateway();
+    const bound = approval(gateway).bind();
+    if (bound.outcome !== "BOUND") throw new Error("fixture failed to bind");
+    expect(
+      gateway.projectCard("ps_alpha", {
+        projectionId: "projection_live_binding",
+        status: "PUBLISHED",
+        mode: "LIVE",
+        leaseExpiresAtMs: 4_000,
+        liveBinding: {
+          presentationSessionEpoch: "pse_1",
+          publicSlideOccurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+          publicationPolicyVersion: "publication-policy-1",
+          cardVersion: "card-version-1",
+        },
+        claim: "Bound live claim",
+        supportSummary: "Bound support",
+        sourceLabel: "Public source",
+        publishedAtMs: 1_000,
+        expiresAtMs: 4_000,
+        publicCardRevision: "pcr_1",
+        deckVersion: deck.deckVersion,
+        manifestHash: deck.manifestHash,
+        occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+      }),
+    ).toBe(true);
+    expect(gateway.snapshot(bound.session.audienceDisplaySessionId, 1_001)?.cards).toHaveLength(1);
+    expect(
+      gateway.projectPlayback("ps_alpha", {
+        commandId: "cmd_revisit",
+        displayBindingEpoch: "dbe_1",
+        acceptedControlRevision: "cr_1",
+        occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 2 },
+        blackout: false,
+      }),
+    ).toBe(true);
+    expect(gateway.snapshot(bound.session.audienceDisplaySessionId, 1_002)?.cards).toEqual([]);
+
+    const reboundJoin = gateway.createDisplayJoin(
+      {
+        displayId: "display_rebound",
+        deckVersion: deck.deckVersion,
+        displayFingerprint: "fingerprint-stage-rebound",
+      },
+      1_003,
+    );
+    const rebound = gateway.bindDisplay(
+      {
+        displayJoinId: reboundJoin.displayJoinId,
+        presentationSessionId: "ps_alpha",
+        presentationSessionEpoch: "pse_1",
+        expectedDisplayBindingEpoch: "dbe_1",
+        expectedDeckVersion: deck.deckVersion,
+        approvedDisplayId: reboundJoin.displayId,
+        approvedDisplayFingerprint: reboundJoin.displayFingerprint,
+        deck,
+      },
+      1_003,
+    );
+    if (rebound.outcome !== "BOUND") throw new Error("fixture failed to rebind");
+    expect(gateway.snapshot(rebound.session.audienceDisplaySessionId, 1_004)?.cards).toEqual([]);
+  });
+
   test("persists ordered playback and terminal card snapshots across restart", () => {
     const store = createProjectionGatewayStore();
     let gateway = new PreparedEvidenceProjectionGateway(store, { tombstoneRetentionMs: 60_000 });
