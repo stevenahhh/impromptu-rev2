@@ -13,5 +13,6 @@
     "types": ["bun"],
     "noEmit": true
   },
-  "include": ["scripts/**/*.ts", "services/**/*.ts", "packages/**/*.ts", "tests/**/*.ts"]
+  "include": ["scripts/**/*.ts", "services/**/*.ts", "packages/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["apps", "packages/ui", "node_modules"]
 }
