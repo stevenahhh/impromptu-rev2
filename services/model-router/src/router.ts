@@ -303,20 +303,16 @@ export class ServerModelRouter {
           false,
         );
       }
-      terminalResult = {
+      terminalResult = this.#validatedResult({
         ok: true,
         output: finalTranscript,
         metadata: this.#metadata("stt", adapter.descriptor, context, startedAtMs),
-      };
+      }) as ModelResult<SttTranscript>;
       yield { kind: "complete", result: terminalResult };
     } catch (caught) {
-      terminalResult = this.#failure(
-        "stt",
-        adapter.descriptor,
-        context,
-        startedAtMs,
-        classifyError(caught),
-      );
+      terminalResult = this.#validatedResult(
+        this.#failure("stt", adapter.descriptor, context, startedAtMs, classifyError(caught)),
+      ) as ModelResult<SttTranscript>;
       yield { kind: "complete", result: terminalResult };
     } finally {
       if (terminalResult === undefined) {

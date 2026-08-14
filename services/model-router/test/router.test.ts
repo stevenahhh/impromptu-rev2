@@ -166,6 +166,27 @@ describe("routing registry", () => {
     expect(() => registry.resolveUnary("ocr")).toThrow("No unary adapter");
   });
 
+  test("rejects unknown descriptor properties at registration", () => {
+    const registry = new ModelRoutingRegistry();
+    const descriptor = {
+      adapterId: "invalid-descriptor",
+      capability: "llm" as const,
+      provider: "fake",
+      model: "fixed-output",
+      modelVersion: "1",
+      estimatedCostUnits: 1,
+      unexpected: true,
+    };
+    const adapter = new DeterministicFakeUnaryAdapter({
+      descriptor,
+      inputSchema: z.object({}).strict(),
+      outputSchema: z.object({ answer: z.string() }).strict(),
+      respond: () => ({ answer: "must not register" }),
+    });
+
+    expect(() => registry.registerUnary(adapter)).toThrow();
+  });
+
   test("registers streaming STT independently from unary STT", () => {
     const registry = new ModelRoutingRegistry();
     const stt = new DeterministicFakeSttAdapter({
