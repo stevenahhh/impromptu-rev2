@@ -6,12 +6,12 @@ export {
   type PrivateBackendHandler,
   type PrivateBackendHttpDependencies,
 } from "./http.ts";
-export type {
-  ModelExecution,
-  ModelOperation,
+export {
+  type ModelExecution,
+  type ModelOperation,
   SERVER_MODEL_CAPABILITIES,
-  ServerModelCapability,
-  ServerModelRouter,
+  type ServerModelCapability,
+  type ServerModelRouter,
 } from "./ports/server-model-router.ts";
 export * from "./prepared-evidence.ts";
 export { ProjectionHttpPort } from "./projection-http-port.ts";
