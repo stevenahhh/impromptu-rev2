@@ -1,0 +1,19 @@
+{
+  "browserRoots": ["apps/console", "apps/stage"],
+  "forbiddenPackagePrefixes": [
+    "@impromptu/model-router",
+    "@anthropic-ai/sdk",
+    "@azure/cognitiveservices-speech-sdk",
+    "@aws-sdk/client-transcribe-streaming",
+    "@deepgram/sdk",
+    "@google/generative-ai",
+    "@google/genai",
+    "@huggingface/transformers",
+    "@tensorflow/tfjs",
+    "@xenova/transformers",
+    "assemblyai",
+    "onnxruntime-web",
+    "openai"
+  ],
+  "forbiddenPathFragments": ["services/model-router"]
+}
