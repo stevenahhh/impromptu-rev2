@@ -3,6 +3,7 @@
 import hashlib
 import json
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -50,6 +51,19 @@ class RenderRequest:
     output_dir: Path
     converter: SvgConverter
     renderer_version: str = "unknown"
+    strict_mapping: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class _VerifiedSlide:
+    """One slide that passed verification and is ready to be written."""
+
+    key: str
+    index: int
+    svg: str
+    assets: tuple[RenderAsset, ...]
+    payloads: Mapping[str, bytes]
+    timeline: SlideTimeline
 
 
 def _require_empty_output(output_dir: Path) -> None:
@@ -167,11 +181,10 @@ def render_deck(request: RenderRequest) -> RenderedDeck:
         )
 
     width_points, height_points = _slide_size_points(request.source)
-    slides: list[RenderedSlide] = []
-    assets: list[RenderAsset] = []
-    timelines: list[SlideTimeline] = []
+    verified: list[_VerifiedSlide] = []
     issues: list[MappingIssue] = []
 
+    # Verify every slide before writing anything: a deck that fails the gate must leave no artifact.
     for index, ((part_name, slide_xml), converted) in enumerate(
         zip(slide_parts, slide_svgs, strict=True), 1
     ):
@@ -180,27 +193,45 @@ def render_deck(request: RenderRequest) -> RenderedDeck:
         issues.extend(mapping.issues)
         targets: dict[int, ResolvedTarget] = {target.shape_id: target for target in mapping.targets}
         key = slide_key(source_sha256, part_name)
-        timelines.append(parse_slide_timeline(slide_xml, key, targets))
-
         svg_text, slide_assets, payloads = externalize_assets(raw_svg)
-        write_assets(slide_assets, payloads, request.output_dir)
-        assets.extend(slide_assets)
+        verified.append(
+            _VerifiedSlide(
+                key=key,
+                index=index,
+                svg=svg_text,
+                assets=slide_assets,
+                payloads=payloads,
+                timeline=parse_slide_timeline(slide_xml, key, targets),
+            )
+        )
 
-        relative = f"slides/slide-{index}.svg"
+    if issues and request.strict_mapping:
+        raise RenderError(
+            "slide_mapping_mismatch",
+            "; ".join(f"{issue.code} at {issue.path}: {issue.detail}" for issue in issues[:5]),
+        )
+
+    slides: list[RenderedSlide] = []
+    assets: list[RenderAsset] = []
+    for slide in verified:
+        write_assets(slide.assets, slide.payloads, request.output_dir)
+        assets.extend(slide.assets)
+        relative = f"slides/slide-{slide.index}.svg"
         destination = request.output_dir / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text(svg_text, encoding="utf-8")
+        destination.write_text(slide.svg, encoding="utf-8")
         slides.append(
             RenderedSlide(
-                slide_key=key,
-                source_index=index,
+                slide_key=slide.key,
+                source_index=slide.index,
                 relative_path=relative,
-                content_sha256=hashlib.sha256(svg_text.encode("utf-8")).hexdigest(),
+                content_sha256=hashlib.sha256(slide.svg.encode("utf-8")).hexdigest(),
                 width_points=width_points,
                 height_points=height_points,
             )
         )
 
+    timelines = [slide.timeline for slide in verified]
     unsupported = sum(len(timeline.unsupported) for timeline in timelines)
     eligible = not issues and unsupported == 0
     reason: str | None = None

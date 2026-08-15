@@ -96,18 +96,40 @@ def test_render_publishes_externalized_artifacts_and_a_manifest(tmp_path: Path) 
     assert manifest["deck_id"] == rendered.deck_id
 
 
-def test_structural_mismatch_makes_the_deck_animation_ineligible(tmp_path: Path) -> None:
+def test_structural_mismatch_publishes_nothing_and_fails_with_a_typed_code(tmp_path: Path) -> None:
+    """A deck whose render does not mirror its shapes must not reach the output directory."""
+    deck_path = tmp_path / "deck.pptx"
+    shape_ids = _two_shape_deck(deck_path)
+    output_dir = tmp_path / "out"
+
+    with pytest.raises(Exception) as failure:
+        render_deck(
+            _request(deck_path, output_dir, _FakeConverter(_svg_for(shape_ids, drop_second=True)))
+        )
+
+    assert getattr(failure.value, "code", "") == "slide_mapping_mismatch"
+    assert "top_level_count_mismatch" in str(failure.value)
+    assert list(output_dir.rglob("*")) == [], "a refused render must leave no artifacts behind"
+
+
+def test_mismatch_may_be_published_static_only_when_explicitly_allowed(tmp_path: Path) -> None:
     deck_path = tmp_path / "deck.pptx"
     shape_ids = _two_shape_deck(deck_path)
     output_dir = tmp_path / "out"
 
     rendered = render_deck(
-        _request(deck_path, output_dir, _FakeConverter(_svg_for(shape_ids, drop_second=True)))
+        RenderRequest(
+            source=deck_path,
+            output_dir=output_dir,
+            converter=_FakeConverter(_svg_for(shape_ids, drop_second=True)),
+            strict_mapping=False,
+        )
     )
 
     assert rendered.animation_eligible is False
     assert rendered.ineligible_reason is not None
     assert rendered.mapping_issues, "a dropped container must be reported as a mapping issue"
+    assert (output_dir / rendered.slides[0].relative_path).is_file()
 
 
 def test_containers_without_a_renderer_id_are_stamped_and_stay_targetable(tmp_path: Path) -> None:

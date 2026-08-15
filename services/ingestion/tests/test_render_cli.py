@@ -68,6 +68,59 @@ def test_render_refuses_a_non_empty_output_directory(simple_deck: Path, tmp_path
     assert (output_dir / "existing.txt").read_text(encoding="utf-8") == "keep"
 
 
+def test_render_refuses_a_deck_whose_render_does_not_mirror_its_shapes(
+    simple_deck: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A converter that drops a shape must fail the CLI, not publish a half-verified deck."""
+    output_dir = tmp_path / "out"
+    stub = tmp_path / "stub-soffice"
+    stub.write_text("", encoding="utf-8")
+    truncated = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="33866" height="19050"'
+        ' viewBox="0 0 33866 19050"><g class="Slide" id="s1"><g class="Page">'
+        '<g class="com.sun.star.drawing.CustomShape"><g id="only">'
+        '<rect class="BoundingBox" x="0" y="0" width="10" height="10"/></g></g>'
+        "</g></g></svg>"
+    )
+
+    class _DroppingConverter:
+        def convert(self, source: Path, output_dir: Path) -> Path:
+            produced = output_dir / f"{source.stem}.svg"
+            produced.write_text(truncated, encoding="utf-8")
+            return produced
+
+    monkeypatch.setattr("impromptu_ingestion.cli.discover_soffice", lambda: stub)
+    monkeypatch.setattr("impromptu_ingestion.cli.converter_version", lambda _: "stub")
+    monkeypatch.setattr(
+        "impromptu_ingestion.cli.LibreOfficeSvgConverter", lambda _soffice: _DroppingConverter()
+    )
+
+    exit_code = main(["render", str(simple_deck), "--output-dir", str(output_dir)])
+
+    assert exit_code == 2
+    assert "slide_mapping_mismatch" in capsys.readouterr().err
+    assert list(output_dir.rglob("*")) == [], "a refused render must publish nothing"
+
+    allowed = tmp_path / "allowed"
+    assert (
+        main(
+            [
+                "render",
+                str(simple_deck),
+                "--output-dir",
+                str(allowed),
+                "--allow-mapping-mismatch",
+            ]
+        )
+        == 0
+    )
+    assert (allowed / "render.json").is_file()
+    assert "animation withheld" in capsys.readouterr().out
+
+
 def test_doctor_json_reports_renderer_availability(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["doctor", "--json"]) in (0, 1)
 

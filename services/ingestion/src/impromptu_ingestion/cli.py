@@ -63,6 +63,14 @@ def _parser() -> argparse.ArgumentParser:
         required=True,
         help="new or empty output directory; existing contents are never replaced",
     )
+    render_command.add_argument(
+        "--allow-mapping-mismatch",
+        action="store_true",
+        help=(
+            "publish a static-only render when the deck's shapes do not mirror the rendered "
+            "output; animation stays withheld and every disagreement is recorded"
+        ),
+    )
     return parser
 
 
@@ -231,7 +239,9 @@ def _run_doctor(as_json: bool) -> int:
     return 0 if report.ok else 1
 
 
-def _run_render(source_argument: str, output_dir_argument: str) -> int:
+def _run_render(
+    source_argument: str, output_dir_argument: str, allow_mapping_mismatch: bool
+) -> int:
     soffice = discover_soffice()
     if soffice is None:
         raise CliOperationError(
@@ -244,6 +254,7 @@ def _run_render(source_argument: str, output_dir_argument: str) -> int:
             output_dir=_absolute_without_resolving(Path(output_dir_argument)),
             converter=LibreOfficeSvgConverter(soffice),
             renderer_version=converter_version(soffice),
+            strict_mapping=not allow_mapping_mismatch,
         )
     )
     eligibility = "animatable" if rendered.animation_eligible else "static only"
@@ -271,7 +282,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         if command == "doctor":
             return _run_doctor(cast(bool, arguments.json))
         if command == "render":
-            return _run_render(cast(str, arguments.source), cast(str, arguments.output_dir))
+            return _run_render(
+                cast(str, arguments.source),
+                cast(str, arguments.output_dir),
+                cast(bool, arguments.allow_mapping_mismatch),
+            )
         return _run_ingest(
             cast(str, arguments.source),
             cast(str, arguments.job_id),
