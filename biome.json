@@ -9,6 +9,7 @@
       "!docs/*.html",
       "!docs/*.pdf",
       "!.omo/boulder.json",
+      "!.omo/scratch",
       "!.omo/senpi-task",
       "!.senpi",
       "!**/.venv",
