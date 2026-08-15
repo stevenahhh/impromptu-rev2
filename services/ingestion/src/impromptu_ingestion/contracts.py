@@ -174,8 +174,15 @@ class PythonDoctorStatus(ContractModel):
 
 
 class RenderingDoctorStatus(ContractModel):
-    status: Literal["not_configured"] = "not_configured"
+    status: Literal["configured", "not_configured"] = "not_configured"
+    renderer: str | None = None
     fidelity_verified: Literal[False] = False
+
+    @model_validator(mode="after")
+    def renderer_presence_must_match_status(self) -> Self:
+        if (self.status == "configured") is not (self.renderer is not None):
+            raise ValueError("a configured renderer must be named, and an absent one must not be")
+        return self
 
 
 class DoctorReport(ContractModel):

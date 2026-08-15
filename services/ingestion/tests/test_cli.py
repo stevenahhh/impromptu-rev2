@@ -48,8 +48,13 @@ def test_doctor_json_reports_runtime_and_explicit_boundaries(
     assert report["python"]["required"] == ">=3.14,<3.15"
     assert report["python"]["supported"] is True
     assert report["structural_extractors"] == {"pdf": True, "pptx": True}
-    assert report["rendering"]["status"] == "not_configured"
-    assert report["rendering"]["fidelity_verified"] is False
+    rendering = report["rendering"]
+    from impromptu_ingestion.render.libreoffice import discover_soffice
+
+    expected = "configured" if discover_soffice() is not None else "not_configured"
+    assert rendering["status"] == expected
+    assert (rendering["renderer"] is not None) is (expected == "configured")
+    assert rendering["fidelity_verified"] is False
     assert report["ai_enabled"] is False
 
 

@@ -9,6 +9,7 @@ from impromptu_ingestion.contracts import (
     PythonDoctorStatus,
     RenderingDoctorStatus,
 )
+from impromptu_ingestion.render.libreoffice import converter_version, discover_soffice
 
 _REQUIRED_DISTRIBUTIONS = ("pydantic", "pymupdf", "python-pptx")
 
@@ -23,6 +24,14 @@ def _dependency_versions() -> tuple[dict[str, str], bool]:
             versions[distribution] = "missing"
             available = False
     return versions, available
+
+
+def _rendering_status() -> RenderingDoctorStatus:
+    """Report the renderer this machine actually has, never a hardcoded absence."""
+    soffice = discover_soffice()
+    if soffice is None:
+        return RenderingDoctorStatus()
+    return RenderingDoctorStatus(status="configured", renderer=converter_version(soffice))
 
 
 def doctor_report() -> DoctorReport:
@@ -40,5 +49,5 @@ def doctor_report() -> DoctorReport:
             InputKind.PDF: dependencies["pymupdf"] != "missing",
             InputKind.PPTX: dependencies["python-pptx"] != "missing",
         },
-        rendering=RenderingDoctorStatus(),
+        rendering=_rendering_status(),
     )

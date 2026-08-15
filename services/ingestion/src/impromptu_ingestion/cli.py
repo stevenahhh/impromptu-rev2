@@ -15,6 +15,14 @@ from pydantic import ValidationError
 from impromptu_ingestion.adapters import StructuralExtractionError
 from impromptu_ingestion.contracts import CompletedIngestion, IngestionJob
 from impromptu_ingestion.doctor import doctor_report
+from impromptu_ingestion.render.assets import AssetExternalizationError, FontExtractionError
+from impromptu_ingestion.render.libreoffice import (
+    LibreOfficeConversionError,
+    LibreOfficeSvgConverter,
+    converter_version,
+    discover_soffice,
+)
+from impromptu_ingestion.render.pipeline import RenderError, RenderRequest, render_deck
 from impromptu_ingestion.validation import InputValidationError
 from impromptu_ingestion.worker import ingest
 
@@ -44,6 +52,16 @@ def _parser() -> argparse.ArgumentParser:
         "--output",
         required=True,
         help="new JSON output path; existing files are never overwritten",
+    )
+
+    render_command = commands.add_parser(
+        "render", help="render a deck to per-slide SVG, assets, and animation timelines"
+    )
+    render_command.add_argument("source", help="local .pptx input")
+    render_command.add_argument(
+        "--output-dir",
+        required=True,
+        help="new or empty output directory; existing contents are never replaced",
     )
     return parser
 
@@ -204,9 +222,37 @@ def _run_doctor(as_json: bool) -> int:
     else:
         state = "ready" if report.ok else "not ready"
         print(f"ingestion worker: {state}")
-        print("rendering: not configured (structural extraction only)")
+        rendering = report.rendering
+        if rendering.renderer is None:
+            print("rendering: not configured (structural extraction only)")
+        else:
+            print(f"rendering: configured ({rendering.renderer})")
         print("AI/OCR/VLM: disabled")
     return 0 if report.ok else 1
+
+
+def _run_render(source_argument: str, output_dir_argument: str) -> int:
+    soffice = discover_soffice()
+    if soffice is None:
+        raise CliOperationError(
+            "renderer_not_configured",
+            "LibreOffice was not found; set SOFFICE_PATH or install it to render decks",
+        )
+    rendered = render_deck(
+        RenderRequest(
+            source=_absolute_without_resolving(Path(source_argument)),
+            output_dir=_absolute_without_resolving(Path(output_dir_argument)),
+            converter=LibreOfficeSvgConverter(soffice),
+            renderer_version=converter_version(soffice),
+        )
+    )
+    eligibility = "animatable" if rendered.animation_eligible else "static only"
+    print(
+        f"rendered {len(rendered.slides)} slide(s), {len(rendered.assets)} asset(s): {eligibility}"
+    )
+    if rendered.ineligible_reason is not None:
+        print(f"animation withheld: {rendered.ineligible_reason}")
+    return 0
 
 
 def _run_ingest(source_argument: str, job_id: str, output_argument: str) -> int:
@@ -224,12 +270,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if command == "doctor":
             return _run_doctor(cast(bool, arguments.json))
+        if command == "render":
+            return _run_render(cast(str, arguments.source), cast(str, arguments.output_dir))
         return _run_ingest(
             cast(str, arguments.source),
             cast(str, arguments.job_id),
             cast(str, arguments.output),
         )
-    except (InputValidationError, StructuralExtractionError, CliOperationError) as error:
+    except (
+        AssetExternalizationError,
+        FontExtractionError,
+        InputValidationError,
+        LibreOfficeConversionError,
+        RenderError,
+        StructuralExtractionError,
+        CliOperationError,
+    ) as error:
         print(f"error[{error.code}]: {error}", file=sys.stderr)
         return 2
     except ValidationError as error:
