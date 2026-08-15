@@ -164,6 +164,51 @@ def test_libreoffice_doctype_prologue_is_normalized_before_parsing(tmp_path: Pat
     assert len(rendered.slides) == 1
 
 
+def _deck_with_notes(path: Path, note: str, visible: str = "공개 문구") -> tuple[int, int]:
+    presentation = Presentation()
+    presentation.slide_width = Inches(13.333)
+    presentation.slide_height = Inches(7.5)
+    slide = presentation.slides.add_slide(presentation.slide_layouts[6])
+    first = slide.shapes.add_shape(
+        MSO_SHAPE.ROUNDED_RECTANGLE, Inches(1), Inches(1), Inches(3), Inches(2)
+    )
+    first.name = "카드A"
+    first.text_frame.text = visible
+    second = slide.shapes.add_shape(MSO_SHAPE.OVAL, Inches(6), Inches(4), Inches(3), Inches(2))
+    second.name = "카드B"
+    slide.notes_slide.notes_text_frame.text = note
+    presentation.save(path)
+    return first.shape_id, second.shape_id
+
+
+def test_speaker_notes_in_the_render_refuse_publication(tmp_path: Path) -> None:
+    """A converter that paints private notes onto the public surface must be refused."""
+    note = "PRIVATE-NOTES-MUST-NEVER-LEAK"
+    deck_path = tmp_path / "deck.pptx"
+    shape_ids = _deck_with_notes(deck_path, note)
+    output_dir = tmp_path / "out"
+    leaking_svg = _svg_for(shape_ids).replace(
+        "</g></g></svg>", f"<text>{note}</text></g></g></svg>"
+    )
+
+    with pytest.raises(Exception) as failure:
+        render_deck(_request(deck_path, output_dir, _FakeConverter(leaking_svg)))
+
+    assert getattr(failure.value, "code", "") == "speaker_notes_in_render"
+    assert list(output_dir.rglob("*")) == [], "a leaking render must publish nothing"
+
+
+def test_notes_that_repeat_visible_slide_text_do_not_block_publication(tmp_path: Path) -> None:
+    """Only note content absent from the slide itself can constitute a leak."""
+    deck_path = tmp_path / "deck.pptx"
+    shape_ids = _deck_with_notes(deck_path, "공개 문구", visible="공개 문구")
+    output_dir = tmp_path / "out"
+
+    rendered = render_deck(_request(deck_path, output_dir, _FakeConverter(_svg_for(shape_ids))))
+
+    assert len(rendered.slides) == 1
+
+
 def test_render_refuses_to_overwrite_an_existing_output_directory(tmp_path: Path) -> None:
     deck_path = tmp_path / "deck.pptx"
     shape_ids = _two_shape_deck(deck_path)

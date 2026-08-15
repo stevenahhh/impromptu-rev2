@@ -7,6 +7,10 @@ from zipfile import BadZipFile, ZipFile
 from lxml import etree
 
 _SLIDE_PART = re.compile(r"^ppt/slides/slide(\d+)\.xml$")
+_NOTES_PART = re.compile(r"^ppt/notesSlides/notesSlide\d+\.xml$")
+_A_TEXT = "{http://schemas.openxmlformats.org/drawingml/2006/main}t"
+_MIN_LEAK_LENGTH = 4
+_MAX_NOTE_FRAGMENTS = 2_000
 _MAX_SLIDE_XML_BYTES = 8_000_000
 _DEFAULT_SLIDE_POINTS = (960.0, 540.0)
 _EMU_PER_POINT = 12_700
@@ -106,3 +110,41 @@ def strip_prologue(svg_text: str) -> str:
     if start < 0:
         raise RenderError("converter_produced_no_svg", "converter output has no svg element")
     return svg_text[start:]
+
+
+def _text_runs(archive: ZipFile, name: str, limit: int) -> set[str]:
+    if archive.getinfo(name).file_size > limit:
+        raise RenderError("slide_xml_too_large", f"{name} exceeds the part size limit")
+    root = etree.fromstring(
+        archive.read(name),
+        parser=etree.XMLParser(resolve_entities=False, no_network=True, huge_tree=False),
+    )
+    runs: set[str] = set()
+    for element in root.iter(_A_TEXT):
+        value = (element.text or "").strip()
+        if len(value) >= _MIN_LEAK_LENGTH:
+            runs.add(value)
+    return runs
+
+
+def private_note_fragments(source: Path) -> tuple[str, ...]:
+    """Return note text that appears nowhere in the deck's own visible slide text.
+
+    Only these fragments can prove a leak: a note that merely repeats what the slide
+    already shows is not private, and matching it would refuse legitimate decks.
+    """
+    with ZipFile(source) as archive:
+        names = archive.namelist()
+        notes: set[str] = set()
+        for name in names:
+            if _NOTES_PART.match(name) is not None:
+                notes |= _text_runs(archive, name, _MAX_SLIDE_XML_BYTES)
+                if len(notes) > _MAX_NOTE_FRAGMENTS:
+                    raise RenderError("notes_too_large", "deck declares too many note fragments")
+        if not notes:
+            return ()
+        visible: set[str] = set()
+        for name in names:
+            if _SLIDE_PART.match(name) is not None:
+                visible |= _text_runs(archive, name, _MAX_SLIDE_XML_BYTES)
+    return tuple(sorted(notes - visible))

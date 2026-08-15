@@ -22,6 +22,7 @@ from impromptu_ingestion.render.libreoffice import SvgConverter, split_slides
 from impromptu_ingestion.render.mapping import map_slide
 from impromptu_ingestion.render.source import (
     RenderError,
+    private_note_fragments,
     slide_parts,
     slide_size_points,
     stamp_container_ids,
@@ -105,6 +106,18 @@ def render_deck(request: RenderRequest) -> RenderedDeck:
                 payloads=payloads,
                 timeline=parse_slide_timeline(slide_xml, key, targets),
             )
+        )
+
+    leaked = [
+        fragment
+        for fragment in private_note_fragments(request.source)
+        for slide in verified
+        if fragment in slide.svg
+    ]
+    if leaked:
+        raise RenderError(
+            "speaker_notes_in_render",
+            f"{len(leaked)} private note fragment(s) appear in the rendered public surface",
         )
 
     if issues and request.strict_mapping:
