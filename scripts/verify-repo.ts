@@ -11,7 +11,7 @@ const textArtifacts: readonly TextArtifact[] = [
   {
     path: "README.md",
     minimumBytes: 500,
-    requiredContent: ["# impromptu-r2", "## Product contract"],
+    requiredContent: ["# impromptu-rev2", "## 제품 계약"],
   },
   {
     path: "CONTRIBUTING.md",

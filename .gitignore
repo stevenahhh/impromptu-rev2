@@ -30,7 +30,7 @@ __pycache__/
 # User and runtime state
 .senpi/
 .omo/senpi-task/
-NUL
+.omo/boulder.json
 
 # Local presentation data and model artifacts
 uploads/
