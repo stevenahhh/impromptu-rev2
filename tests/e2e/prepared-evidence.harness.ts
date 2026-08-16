@@ -392,6 +392,7 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
     PROJECTION_DATABASE_PATH: projectionDatabasePath,
     SERVICE_AUTH_TOKEN: serviceToken,
     STAGE_ORIGIN: stageOrigin,
+    DECK_ARTIFACT_ROOT: deckArtifactRoot,
   };
   const privateEnvironment = {
     CONSOLE_ORIGIN: consoleOrigin,

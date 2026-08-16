@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 type ServiceProcess = ReturnType<typeof Bun.spawn<"ignore", "pipe", "pipe">>;
@@ -10,9 +10,25 @@ const projectionDatabasePath = join(import.meta.dir, ".runtime-projection-databa
 const deckStagingRoot = join(import.meta.dir, ".runtime-deck-staging");
 const deckArtifactRoot = join(import.meta.dir, ".runtime-deck-artifacts");
 
+const RUNTIME_MANIFEST_HASH = "a".repeat(64);
+const runtimeArtifactDir = join(deckArtifactRoot, RUNTIME_MANIFEST_HASH);
+const runtimeOutsideSecret = join(import.meta.dir, ".runtime-deck-outside-secret.txt");
+
 beforeAll(() => {
   mkdirSync(deckStagingRoot, { recursive: true });
-  mkdirSync(deckArtifactRoot, { recursive: true });
+  mkdirSync(runtimeArtifactDir, { recursive: true });
+  writeFileSync(
+    join(runtimeArtifactDir, "slide-01.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"/>',
+  );
+  writeFileSync(runtimeOutsideSecret, "not for public serving");
+  symlinkSync(runtimeOutsideSecret, join(runtimeArtifactDir, "leak.svg"));
+});
+
+afterAll(() => {
+  rmSync(deckStagingRoot, { force: true, recursive: true });
+  rmSync(deckArtifactRoot, { force: true, recursive: true });
+  rmSync(runtimeOutsideSecret, { force: true });
 });
 
 afterAll(() => {
@@ -102,6 +118,7 @@ describe("runnable WP3 service composition", () => {
         PRIVATE_BACKEND_ORIGIN: "http://127.0.0.1:44101",
         SERVICE_AUTH_TOKEN: serviceToken,
         STAGE_ORIGIN: stageOrigin,
+        DECK_ARTIFACT_ROOT: deckArtifactRoot,
       },
       "projection-gateway listening",
     );
@@ -154,6 +171,23 @@ describe("runnable WP3 service composition", () => {
       body: JSON.stringify({}),
     });
     expect(applied.status).not.toBe(404);
+    const deckAsset = await fetch(
+      `http://127.0.0.1:44102/v1/deck-assets/${RUNTIME_MANIFEST_HASH}/slide-01.svg`,
+      { headers: { origin: stageOrigin } },
+    );
+    expect(deckAsset.status).toBe(200);
+    expect(deckAsset.headers.get("content-type")).toBe("image/svg+xml");
+    expect(deckAsset.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+    expect(deckAsset.headers.get("access-control-allow-origin")).toBe(stageOrigin);
+    expect(await deckAsset.text()).toBe(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"/>',
+    );
+    const escapedAsset = await fetch(
+      `http://127.0.0.1:44102/v1/deck-assets/${RUNTIME_MANIFEST_HASH}/leak.svg`,
+      { headers: { origin: stageOrigin } },
+    );
+    expect(escapedAsset.status).toBe(403);
+    expect(await escapedAsset.json()).toEqual({ error: "asset_escape_forbidden" });
 
     const signIn = await fetch("http://127.0.0.1:44101/v1/account-sessions", {
       method: "POST",

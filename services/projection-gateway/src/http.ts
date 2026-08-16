@@ -9,6 +9,94 @@ import type {
 
 export type ProjectionGatewayHandler = (request: Request) => Response | Promise<Response>;
 
+// Public deck artifact containment contract.
+//
+// GET /v1/deck-assets/:manifestHash/:fileName must serve only assets contained
+// inside the deck store root as immutable bytes with the exact MIME type for
+// the extension and Stage CORS headers.
+
+export interface DeckAsset {
+  readonly bytes: Uint8Array;
+  readonly contentType: string;
+}
+
+export type DeckAssetReadResult =
+  | { readonly outcome: "FOUND"; readonly asset: DeckAsset }
+  | { readonly outcome: "UNKNOWN" }
+  | { readonly outcome: "ESCAPE" };
+
+export interface DeckAssetReader {
+  readonly read: (manifestHash: string, fileName: string) => Promise<DeckAssetReadResult>;
+}
+
+interface DeckAssetFilesystem {
+  readonly existsSync: (path: string) => boolean;
+  readonly readFileSync: (path: string) => Uint8Array;
+  readonly realpathSync: (path: string) => string;
+}
+
+function nodeDeckAssetFilesystem(): DeckAssetFilesystem {
+  const filesystem = process.getBuiltinModule("node:fs");
+  if (filesystem === undefined) {
+    throw new Error("node:fs is unavailable");
+  }
+  return filesystem as unknown as DeckAssetFilesystem;
+}
+
+function contentTypeForDeckAsset(fileName: string): string | null {
+  if (fileName.endsWith(".svg")) return "image/svg+xml";
+  if (fileName.endsWith(".png")) return "image/png";
+  if (fileName.endsWith(".woff2")) return "font/woff2";
+  return null;
+}
+
+function deckAssetJoin(root: string, part: string): string {
+  return root + (root.endsWith("/") || root.endsWith("\\") ? "" : "/") + part;
+}
+
+export function createDeckAssetReader(root: string): DeckAssetReader {
+  const filesystem = nodeDeckAssetFilesystem();
+  const rootReal = filesystem.realpathSync(root);
+  return {
+    async read(manifestHash, fileName) {
+      const separator = process.platform === "win32" ? "\\" : "/";
+      if (
+        manifestHash === "" ||
+        manifestHash === "." ||
+        manifestHash === ".." ||
+        manifestHash.includes("/") ||
+        manifestHash.includes("\\") ||
+        fileName === "" ||
+        fileName === "." ||
+        fileName === ".." ||
+        fileName.includes("/") ||
+        fileName.includes("\\")
+      ) {
+        return { outcome: "UNKNOWN" };
+      }
+      const manifestDir = deckAssetJoin(root, manifestHash);
+      if (!filesystem.existsSync(manifestDir)) return { outcome: "UNKNOWN" };
+      const candidate = deckAssetJoin(manifestDir, fileName);
+      if (!filesystem.existsSync(candidate)) return { outcome: "UNKNOWN" };
+      let resolved: string;
+      try {
+        resolved = filesystem.realpathSync(candidate);
+      } catch {
+        return { outcome: "UNKNOWN" };
+      }
+      if (resolved !== rootReal && !resolved.startsWith(`${rootReal}${separator}`)) {
+        return { outcome: "ESCAPE" };
+      }
+      const contentType = contentTypeForDeckAsset(fileName);
+      if (contentType === null) return { outcome: "UNKNOWN" };
+      return {
+        outcome: "FOUND",
+        asset: { bytes: filesystem.readFileSync(candidate), contentType },
+      };
+    },
+  };
+}
+
 export interface StageReceiptWriter {
   recordApplied(input: {
     readonly audienceDisplaySessionId: string;
@@ -23,6 +111,7 @@ export interface ProjectionGatewayHttpDependencies {
   readonly now: () => number;
   readonly stageReceiptWriter: StageReceiptWriter;
   readonly persist?: () => Promise<void>;
+  readonly deckAssets?: DeckAssetReader;
 }
 
 function json(body: unknown, status: number, headers?: Headers): Response {
@@ -31,6 +120,18 @@ function json(body: unknown, status: number, headers?: Headers): Response {
   responseHeaders.set("content-type", "application/json; charset=utf-8");
 
   return new Response(JSON.stringify(body), { status, headers: responseHeaders });
+}
+
+const DECK_ASSET_PATH_PATTERN = /^\/v1\/deck-assets\/([^/]+)\/([^/]+)$/;
+
+function isDeckAssetPathComponent(component: string): boolean {
+  return (
+    component !== "" &&
+    component !== "." &&
+    component !== ".." &&
+    !component.includes("/") &&
+    !component.includes("\\")
+  );
 }
 
 function browserOriginHeaders(request: Request, allowedOrigin: ExactOrigin): Headers | Response {
@@ -607,6 +708,33 @@ export function createProjectionGatewayHandler(
       return snapshot === null
         ? json({ error: "display_session_expired" }, 401, origin)
         : json(snapshot, 200, origin);
+    }
+    if (request.method === "GET" && url.pathname.startsWith("/v1/deck-assets/")) {
+      const match = url.pathname.match(DECK_ASSET_PATH_PATTERN);
+      if (match === null || dependencies.deckAssets === undefined) {
+        return json({ error: "not_found" }, 404, origin);
+      }
+      let manifestHash: string;
+      let fileName: string;
+      try {
+        manifestHash = decodeURIComponent(match[1] ?? "");
+        fileName = decodeURIComponent(match[2] ?? "");
+      } catch {
+        return json({ error: "invalid_asset_path" }, 400, origin);
+      }
+      if (!isDeckAssetPathComponent(manifestHash) || !isDeckAssetPathComponent(fileName)) {
+        return json({ error: "invalid_asset_path" }, 400, origin);
+      }
+      const result = await dependencies.deckAssets.read(manifestHash, fileName);
+      if (result.outcome === "ESCAPE") {
+        return json({ error: "asset_escape_forbidden" }, 403, origin);
+      }
+      if (result.outcome === "UNKNOWN") {
+        return json({ error: "asset_not_found" }, 404, origin);
+      }
+      origin.set("content-type", result.asset.contentType);
+      origin.set("cache-control", "public, max-age=31536000, immutable");
+      return new Response(new Uint8Array(result.asset.bytes), { status: 200, headers: origin });
     }
 
     return json({ error: "not_found" }, 404, origin);

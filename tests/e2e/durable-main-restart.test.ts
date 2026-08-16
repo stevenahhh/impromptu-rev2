@@ -121,6 +121,7 @@ const projectionEnvironment = {
   PROJECTION_GATEWAY_PORT: String(projectionPort),
   SERVICE_AUTH_TOKEN: serviceToken,
   STAGE_ORIGIN: stageOrigin,
+  DECK_ARTIFACT_ROOT: deckArtifactRoot,
 };
 const privateEnvironment = {
   CONSOLE_ORIGIN: consoleOrigin,

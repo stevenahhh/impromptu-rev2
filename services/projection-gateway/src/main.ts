@@ -1,5 +1,5 @@
 import { parseProjectionGatewayConfig } from "./config.ts";
-import { createProjectionGatewayHandler } from "./http.ts";
+import { createDeckAssetReader, createProjectionGatewayHandler } from "./http.ts";
 import {
   createProjectionGatewayStore,
   PreparedEvidenceProjectionGateway,
@@ -21,6 +21,19 @@ if (
   throw new Error("PRIVATE_BACKEND_ORIGIN must be an exact origin");
 }
 const config = parseProjectionGatewayConfig(Bun.env);
+const deckArtifactRoot = Bun.env.DECK_ARTIFACT_ROOT;
+if (
+  deckArtifactRoot === undefined ||
+  (!deckArtifactRoot.startsWith("/") && !/^[A-Za-z]:[\\/]/.test(deckArtifactRoot))
+) {
+  throw new Error("DECK_ARTIFACT_ROOT must be an existing absolute directory");
+}
+const deckArtifactStats = await Bun.file(deckArtifactRoot)
+  .stat()
+  .catch(() => null);
+if (deckArtifactStats === null || !deckArtifactStats.isDirectory()) {
+  throw new Error("DECK_ARTIFACT_ROOT must be an existing absolute directory");
+}
 const databasePath = Bun.env.PROJECTION_DATABASE_PATH;
 if (databasePath === undefined || databasePath.length === 0) {
   throw new Error("PROJECTION_DATABASE_PATH is required");
@@ -69,6 +82,7 @@ const httpHandler = createProjectionGatewayHandler(config, {
   now: Date.now,
   persist,
   stageReceiptWriter: { recordApplied },
+  deckAssets: createDeckAssetReader(deckArtifactRoot),
 });
 const realtime = createProjectionRealtimeProtocol({
   gateway,

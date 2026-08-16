@@ -217,6 +217,7 @@ export async function runRealtimeSoak(): Promise<RealtimeSoakEvidence> {
     PROJECTION_DATABASE_PATH: projectionDatabasePath,
     SERVICE_AUTH_TOKEN: serviceToken,
     STAGE_ORIGIN: stageOrigin,
+    DECK_ARTIFACT_ROOT: deckArtifactRoot,
   };
   const privateEnvironment = {
     CONSOLE_ORIGIN: consoleOrigin,
