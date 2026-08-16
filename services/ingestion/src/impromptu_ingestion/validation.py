@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
 from typing import BinaryIO
+from xml.etree import ElementTree
 from zipfile import BadZipFile, ZipFile
 
 from impromptu_ingestion.contracts import IngestionJob, InputKind, ValidatedInput
@@ -19,6 +20,10 @@ _MAX_ARCHIVE_UNCOMPRESSED_BYTES = 512 * 1024 * 1024
 _PPTX_MAIN_CONTENT_TYPE = (
     b"application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"
 )
+_MAX_RELS_BYTES = 1024 * 1024
+_ACTIVE_PPTX_PATH_SEGMENTS = frozenset({"activex"})
+_ACTIVE_PPTX_BASENAMES = frozenset({"vbaproject.bin", "vbaprojectsignature.bin"})
+_PDF_ACTIVE_TOKENS = (b"/JavaScript", b"/OpenAction", b"/Launch", b"/EmbeddedFiles")
 
 
 class InputValidationError(ValueError):
@@ -196,6 +201,71 @@ def _validate_pptx_container(path: Path) -> None:
         raise InputValidationError("invalid_pptx", "PPTX container could not be read") from error
 
 
+def _validate_pptx_active_content(path: Path) -> None:
+    """Reject VBA, ActiveX, and embedded OLE parts and external relationships."""
+    try:
+        with ZipFile(path) as archive:
+            for member in archive.infolist():
+                lowered = member.filename.lower()
+                parts = lowered.split("/")
+                if (
+                    parts[-1] in _ACTIVE_PPTX_BASENAMES
+                    or (parts[-1].startswith("oleobject") and parts[-1].endswith(".bin"))
+                    or any(part in _ACTIVE_PPTX_PATH_SEGMENTS for part in parts)
+                ):
+                    raise InputValidationError(
+                        "active_content",
+                        f"PPTX part {member.filename!r} is active content",
+                    )
+                if not lowered.endswith(".rels"):
+                    continue
+                if member.file_size > _MAX_RELS_BYTES:
+                    raise InputValidationError(
+                        "unsafe_archive", "OOXML relationship part exceeds the size limit"
+                    )
+                relationship_xml = archive.read(member)
+                if b"<!DOCTYPE" in relationship_xml or b"<!ENTITY" in relationship_xml:
+                    raise InputValidationError(
+                        "unsafe_archive",
+                        "OOXML relationship part declares XML DOCTYPE or entities",
+                    )
+                root = ElementTree.fromstring(relationship_xml)
+                for element in root.iter():
+                    target_mode = element.get("TargetMode")
+                    if target_mode is not None and target_mode.lower() == "external":
+                        raise InputValidationError(
+                            "active_content",
+                            f"PPTX relationship {member.filename!r} targets external content",
+                        )
+    except InputValidationError:
+        raise
+    except (
+        BadZipFile,
+        OSError,
+        RuntimeError,
+        ElementTree.ParseError,
+        ValueError,
+    ) as error:
+        raise InputValidationError("invalid_pptx", "PPTX container could not be read") from error
+
+
+def _validate_pdf_active_content(path: Path) -> None:
+    """Reject PDF JavaScript, OpenAction, Launch, and EmbeddedFiles tokens."""
+    overlap = max(len(token) for token in _PDF_ACTIVE_TOKENS) - 1
+    tail = b""
+    try:
+        with path.open("rb") as source:
+            while chunk := source.read(_CHUNK_SIZE):
+                window = tail + chunk
+                if any(token in window for token in _PDF_ACTIVE_TOKENS):
+                    raise InputValidationError(
+                        "active_content", "PDF contains executable or action content"
+                    )
+                tail = window[-overlap:]
+    except OSError as error:
+        raise InputValidationError("input_unreadable", "staged input could not be read") from error
+
+
 @contextmanager
 def stage_input(job: IngestionJob) -> Generator[ValidatedInput]:
     """Copy one stable source snapshot to private storage and validate exactly that copy."""
@@ -227,6 +297,9 @@ def stage_input(job: IngestionJob) -> Generator[ValidatedInput]:
         _validate_signature(staged_path, kind)
         if kind is InputKind.PPTX:
             _validate_pptx_container(staged_path)
+            _validate_pptx_active_content(staged_path)
+        else:
+            _validate_pdf_active_content(staged_path)
         staged_path.chmod(stat.S_IRUSR)
 
         yield ValidatedInput(

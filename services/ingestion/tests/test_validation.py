@@ -142,3 +142,54 @@ def test_rejects_unsafe_ooxml_member_names(tmp_path: Path) -> None:
         pass
 
     assert raised.value.code == "unsafe_archive"
+
+
+@pytest.mark.parametrize(
+    "member",
+    [
+        "ppt/vbaProject.bin",
+        "ppt/activeX/activeX1.bin",
+        "ppt/embeddings/oleObject1.bin",
+    ],
+)
+def test_rejects_active_pptx_parts(tmp_path: Path, member: str) -> None:
+    source = tmp_path / "active.pptx"
+    _write_minimal_pptx(source)
+    with ZipFile(source, "a", compression=ZIP_DEFLATED) as archive:
+        archive.writestr(member, b"active content")
+
+    with pytest.raises(InputValidationError) as raised, stage_input(_job(source)):
+        pass
+
+    assert raised.value.code == "active_content"
+
+
+def test_rejects_external_pptx_relationships(tmp_path: Path) -> None:
+    source = tmp_path / "external.pptx"
+    _write_minimal_pptx(source)
+    with ZipFile(source, "a", compression=ZIP_DEFLATED) as archive:
+        archive.writestr(
+            "ppt/_rels/presentation.xml.rels",
+            (
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                '<Relationship Id="rId1" Type="https://example.test/type" '
+                'Target="https://example.test/payload" TargetMode="External"/>'
+                "</Relationships>"
+            ),
+        )
+
+    with pytest.raises(InputValidationError) as raised, stage_input(_job(source)):
+        pass
+
+    assert raised.value.code == "active_content"
+
+
+@pytest.mark.parametrize("active_token", [b"/JavaScript", b"/OpenAction", b"/Launch"])
+def test_rejects_active_pdf_actions(tmp_path: Path, active_token: bytes) -> None:
+    source = tmp_path / "active.pdf"
+    source.write_bytes(b"%PDF-1.7\n1 0 obj\n<< " + active_token + b" 2 0 R >>\nendobj\n%%EOF\n")
+
+    with pytest.raises(InputValidationError) as raised, stage_input(_job(source)):
+        pass
+
+    assert raised.value.code == "active_content"
