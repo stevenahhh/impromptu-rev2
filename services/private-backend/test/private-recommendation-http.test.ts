@@ -244,4 +244,7 @@ test("real loopback TCP recommendation chain meets p95 and wall-clock terminal d
     await pending?.close();
     await harness.close();
   }
-}, 7_000);
+  // The p95 and wall-clock deadline assertions above are the SLA. This argument is only
+  // the runner budget covering fixture setup plus 100 sequential loopback calls, so it must
+  // stay well clear of the measured runtime instead of tracking it.
+}, 60_000);

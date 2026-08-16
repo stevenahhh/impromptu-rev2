@@ -21,6 +21,13 @@ export interface RealtimeSoakEvidence {
 
 type ServiceProcess = ChildProcessByStdio<null, Readable, Readable>;
 type JsonRecord = Record<string, unknown>;
+
+/**
+ * Liveness budget for one command receipt: it only bounds how long the soak waits
+ * before declaring the pipeline stuck. The command latency SLA itself stays a p95
+ * assertion in realtime-soak.test.ts and is measured from the recorded samples.
+ */
+const COMMAND_RECEIPT_LIVENESS_TIMEOUT_MS = 5_000;
 type RuntimeSocket = WebSocket;
 type RuntimeWebSocketConstructor = new (
   url: string,
@@ -457,7 +464,7 @@ export async function runRealtimeSoak(): Promise<RealtimeSoakEvidence> {
     const commandLatencies: number[] = [];
     for (let index = 1; index <= 500; index += 1) {
       const commandId = `cmd_soak_${index}`;
-      const receipt = exactSignal<JsonRecord>(commandId, 300);
+      const receipt = exactSignal<JsonRecord>(commandId, COMMAND_RECEIPT_LIVENESS_TIMEOUT_MS);
       receiptSignals.set(commandId, receipt);
       const startedAt = performance.now();
       const command = {

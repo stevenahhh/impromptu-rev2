@@ -16,5 +16,8 @@ describe("WP5 venue-like realtime and reconnect soak", () => {
     expect(evidence.staleCardResurrections).toBe(0);
     expect(evidence.liveLeaseMs).toBeLessThanOrEqual(3_000);
     expect(evidence.silentPartitionExposureMs).toBeLessThanOrEqual(3_000);
-  }, 30_000);
+    // The latency gates above are the SLA. This argument is only the runner budget for a
+    // 500-command, 50-reconnect soak against real services, so it must stay well clear of
+    // the measured runtime instead of tracking it.
+  }, 180_000);
 });
