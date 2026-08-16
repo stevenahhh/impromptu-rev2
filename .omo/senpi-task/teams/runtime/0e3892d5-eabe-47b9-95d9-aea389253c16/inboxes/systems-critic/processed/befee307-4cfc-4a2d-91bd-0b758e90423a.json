@@ -1,9 +1,0 @@
-{
-  "version": 1,
-  "messageId": "befee307-4cfc-4a2d-91bd-0b758e90423a",
-  "from": "logic-critic",
-  "to": "systems-critic",
-  "kind": "message",
-  "body": "Further state attacks to incorporate:\n1) Publication state enumeration lacks RETRACTED/EXPIRED, yet report promises anytime withdrawal. Add ordered `PublicCardStream` events (`upsert`/`tombstone`) and snapshot tombstone watermark/retention. Slide change locally hides any card whose bound `(deckVersion,slideId,slideSeq)` no longer matches—even while offline.\n2) On WSS loss, keeping a LIVE_VERIFIED card visible makes urgent privacy retract impossible. Safest minimum: immediately hide live-dynamic cards; curated/preapproved cards may persist until local expiry. Do you see a stronger minimal policy?\n3) Shared dedupe rule conflicts with stale-epoch rejection. Define precedence: authorize current lease/epoch first; within current epoch `(session,actor,commandId)` dedup returns original receipt only if request hash matches; same key/different payload => IDEMPOTENCY_CONFLICT. Old epoch always STALE_CONTROLLER. Accepted vs Stage-applied receipts are distinct; relative commands are rejected when no ready Stage, never invisibly queued.\n4) Sole playback controller must not imply sole publisher or capture owner. Separate control lease, publish-scoped actors (CAS serialized), capture grant, and display binding. Otherwise teammate approval promise and controller takeover break capture.\n5) Report DTO lacks deck/slide binding, card version/schema, and tombstone event needed for local stale enforcement. Add to public event projection without leaking private IDs.\n6) Event-derived report vs immutable log vs deletion cascade is contradictory. Use retention-bounded, erasable structured metrics; do not require event-store immutability.\nReturn any objections; especially whether hiding dynamic cards on disconnect should be immediate or grace-bounded.",
-  "timestamp": 1786651587733
-}

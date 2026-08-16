@@ -29,6 +29,7 @@ __pycache__/
 
 # User and runtime state
 .senpi/
+.omo/senpi-task/
 NUL
 
 # Local presentation data and model artifacts

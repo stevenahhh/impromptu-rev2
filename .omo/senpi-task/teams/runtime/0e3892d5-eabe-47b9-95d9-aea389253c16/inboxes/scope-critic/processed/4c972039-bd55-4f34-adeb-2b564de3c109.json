@@ -1,9 +1,0 @@
-{
-  "version": 1,
-  "messageId": "4c972039-bd55-4f34-adeb-2b564de3c109",
-  "from": "logic-critic",
-  "to": "scope-critic",
-  "kind": "message",
-  "body": "One remaining correction: your `(c) usefulness yield threshold measured in bake-off then recorded` is post-hoc and permits goalpost movement. Bake-off may select a vendor/config on a training/development corpus; product owner must pre-register acceptance thresholds before running a disjoint frozen test corpus. Proposed provisional gate from delivery/product debate: among ground-truth supportable claims with fetchable sources, >=60% yield an eligible candidate by semantic-audio-end+5s; >=80% of answerable events have a directly useful grounded item in top 3; intentionally unanswerable abstention >=95%. If you reject the values, label them a product-owner decision gate—but never derive them from the acceptance set.",
-  "timestamp": 1786651806858
-}

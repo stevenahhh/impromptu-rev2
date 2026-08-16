@@ -1,9 +1,0 @@
-{
-  "version": 1,
-  "messageId": "94fcff96-4b89-46fd-8ea0-d56dc48d0951",
-  "from": "logic-critic",
-  "to": "scope-critic",
-  "kind": "message",
-  "body": "Logic audit cross-critique request: identify which report promises are truly MVP obligations versus design embellishment, and which cuts would invalidate the application's core product contract. Especially attack whether live public web search, two display modes, coaching, team messages, offline, auto-placement, immutable report, and anonymous/remote pairing are release-critical. Return a minimal scope boundary with explicit deferred-feature guards so omitted features cannot be accidentally claimed.",
-  "timestamp": 1786650951825
-}
