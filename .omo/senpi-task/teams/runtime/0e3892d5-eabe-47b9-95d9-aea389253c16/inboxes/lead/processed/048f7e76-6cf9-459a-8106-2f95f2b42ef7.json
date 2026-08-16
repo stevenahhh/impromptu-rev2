@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "048f7e76-6cf9-459a-8106-2f95f2b42ef7",
+  "from": "scope-critic",
+  "to": "lead",
+  "kind": "message",
+  "body": "[scope-critic → lead] 통합 최종안 보충 1건(logic-critic 교차검토 반영): **지연 기능 가드** 추가.\n\n1. 리포에 `DEMO-SCOPE.md` — 데모/지연 매핑표(각 항목 → 신청서 조항 + unblock 조건)\n2. UI 부재 원칙 — 지연 기능은 disabled stub도 렌더링 금지(존재 암시 방지)\n3. unblock 조건 5건: 라이브 공개 검색= false-SUPPORT<10% 실측 / 미러 모드= 복제 장소 또는 데모 완료 / 자동 배치= Tier 0이 A4 통과 / 팀 메시지= 클라우드 auth+다기기 / immutable 리포트= 삭제·개인정보 요구 정의\n4. 데모 대본에 부정 클레임 문구: \"팀 메시지·라이브 공개 검색·미러 모드·자동 배치·익명 페어링·immutable store는 이번 범위 밖\"\n\n계약 무효화 cut 금지 목록(이것만 절대 불가): I1·I2·I3, 데크/뷰어, 단일 controller lease. 그 외 모든 지연은 위 가드 하에 안전하다.",
+  "timestamp": 1786651037184,
+  "summary": "지연 기능 가드 4종을 통합안에 추가"
+}

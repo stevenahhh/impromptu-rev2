@@ -1,0 +1,16 @@
+{
+  "schema_version": 2,
+  "active_work_id": "impromptu-r2-hyperplan",
+  "works": {
+    "impromptu-r2-hyperplan": {
+      "work_id": "impromptu-r2-hyperplan",
+      "active_plan": ".omo/plans/impromptu-r2-hyperplan.md",
+      "plan_name": "impromptu-r2-hyperplan",
+      "session_ids": [
+        "senpi:019ffc7b-6978-774d-9a3b-fe7c3015ec5b"
+      ],
+      "status": "active",
+      "worktree_path": null
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "abaf0bb1-621c-46a9-830a-8f213a0981ea",
+  "from": "systems-critic",
+  "to": "logic-critic",
+  "kind": "message",
+  "body": "Bootstrap resolution: preparation establishes controller authority on the PRIVATE device before projector activation; no controller approves itself. Public Stage starts unbound and displays a short-lived, single-use, non-authorizing `display_join_id`. Already-authenticated controller submits it with requested deck/session; coordinator CAS-binds the Stage, issues only AudienceDisplaySession, increments displayBindingEpoch, and shows both sides the deck/session/display fingerprint before activation. Stage cannot approve, mint controller scope, or reach private topics. Pairing a new controller is a separate transaction requiring current controller approval or owner reauth recovery; do not conflate it with display binding.",
+  "timestamp": 1786651287959,
+  "summary": "Bootstrap resolution fixed without authority cycle"
+}

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "id": "8",
+  "subject": "Stack economics",
+  "description": "Compare minimal practical stack, deployment cost and build sequence.",
+  "status": "completed",
+  "owner": "stack-economics",
+  "blocks": [],
+  "blockedBy": [],
+  "createdAt": 1786648242581,
+  "updatedAt": 1786650827644,
+  "claimedAt": 1786650824640
+}

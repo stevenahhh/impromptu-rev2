@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "teamRunId": "0e3892d5-eabe-47b9-95d9-aea389253c16",
+  "teamName": "pwa-hyperplan-debate",
+  "specSource": "user",
+  "createdAt": 1786650122560,
+  "status": "creating",
+  "leadSessionId": "019ffc7b-6978-774d-9a3b-fe7c3015ec5b",
+  "members": [
+    {
+      "name": "scope-critic",
+      "agentType": "general-purpose",
+      "status": "pending",
+      "pendingInjectedMessageIds": []
+    },
+    {
+      "name": "delivery-critic",
+      "agentType": "general-purpose",
+      "status": "pending",
+      "pendingInjectedMessageIds": []
+    },
+    {
+      "name": "systems-critic",
+      "agentType": "general-purpose",
+      "status": "pending",
+      "pendingInjectedMessageIds": []
+    },
+    {
+      "name": "logic-critic",
+      "agentType": "general-purpose",
+      "status": "pending",
+      "pendingInjectedMessageIds": []
+    },
+    {
+      "name": "product-critic",
+      "agentType": "general-purpose",
+      "status": "pending",
+      "pendingInjectedMessageIds": []
+    }
+  ],
+  "shutdownRequests": [],
+  "bounds": {
+    "maxMembers": 8,
+    "maxParallelMembers": 4,
+    "maxMessagesPerRun": 10000,
+    "maxWallClockMinutes": 120,
+    "maxMemberTurns": 500
+  }
+}

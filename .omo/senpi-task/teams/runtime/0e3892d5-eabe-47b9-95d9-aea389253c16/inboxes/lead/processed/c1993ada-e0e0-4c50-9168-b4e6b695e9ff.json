@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "c1993ada-e0e0-4c50-9168-b4e6b695e9ff",
+  "from": "systems-critic",
+  "to": "lead",
+  "kind": "message",
+  "body": "FINAL STATE HARDENING from logic cross-attack:\n1) Public cards need ordered `PublicCardStream` upsert/tombstone events and states PUBLISHED/RETRACTED/EXPIRED. Snapshots carry tombstone watermark/retention so stale clients cannot resurrect withdrawn cards. Public event includes non-correlatable projection ID, public deck manifest hash + public slide key/seq binding, schema/card version, expiry.\n2) Disconnect policy: live/dynamic cards are lease-backed. Declare DISCONNECTED after the measured transport liveness deadline, then hide them immediately—no visibility grace, because urgent privacy/rights retraction cannot arrive. Curated/preapproved cards persist offline only with explicit `offlineDisplayAllowed` and local expiry. Any slide-binding mismatch hides locally at once. Slide content itself remains.\n3) Command precedence: authenticate and validate current lease/epoch first; old epoch always STALE_CONTROLLER. Then dedupe `(session,actor,epoch,commandId)` with request hash: identical returns original ACCEPTED receipt; different payload is IDEMPOTENCY_CONFLICT. ACCEPTED and STAGE_APPLIED are distinct receipts. Relative commands require a ready bound Stage and are never silently queued.\n4) Split capabilities: PlaybackControlLease, CAS-serialized PublicationAuthority, CaptureGrant, DisplayBinding. Controller takeover must not implicitly revoke capture or change publisher authority.\n5) “immutable event log” conflicts with privacy deletion. Use append-only/tamper-evident events only within bounded retention; derive reports from purpose-limited erasable structured metrics. Deletion receipt must not retain the deleted personal payload.",
+  "timestamp": 1786651719233,
+  "summary": "Final state-machine hardening rules"
+}

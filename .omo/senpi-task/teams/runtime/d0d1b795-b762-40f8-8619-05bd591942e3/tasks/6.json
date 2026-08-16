@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "id": "6",
+  "subject": "PWA browser capability evidence",
+  "description": "Verify PWA, multi-window, fullscreen, microphone and compatibility constraints.",
+  "status": "completed",
+  "owner": "pwa-platform",
+  "blocks": [],
+  "blockedBy": [],
+  "createdAt": 1786648241603,
+  "updatedAt": 1786650739444,
+  "claimedAt": 1786649166944
+}

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "b98910f1-6a8c-4345-8103-6787902d4152",
+  "from": "lead",
+  "to": "skeptic",
+  "kind": "message",
+  "body": "ATTACK pairing conflict: security lane says QR must contain no bearer credential and requires authenticated new device + SAS + existing-console approval; remote lane proposes 256-bit fragment secret, one-use <=120s, SAS/display approval conditionally. Decide the smallest safe flow for the user's primary mirror case where presenter scans a QR from a private setup console. Address whether account login is mandatory and whether fragment secret is acceptable evidence-wise.",
+  "timestamp": 1786648799299,
+  "summary": "QR 페어링 credential 충돌 공격"
+}

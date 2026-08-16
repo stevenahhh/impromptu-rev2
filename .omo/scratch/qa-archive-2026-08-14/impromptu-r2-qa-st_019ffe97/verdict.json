@@ -1,0 +1,149 @@
+{
+  "Sisyphus": {
+    "DoneClaim": {
+      "task_id": "st_019ffe97",
+      "claim_under_review": "Console and Stage PWA foundations",
+      "branch": "feat/wp2-frontend",
+      "head": "88aef36d9d26f48a0f8d832287b9d404a1748d2b",
+      "commits": [
+        "771486920ec09d3df642b5a6659a4a6460f671f2",
+        "1af34da680499f834e610a1235224f5946210eee",
+        "d8df316ac026fa695cab00397179aa600e44f6b9",
+        "f06ce9c549d248da1b9f9c27d13cdb5ea07df274",
+        "88aef36d9d26f48a0f8d832287b9d404a1748d2b"
+      ],
+      "executor_claims_reproduced": {
+        "clean_worktree": true,
+        "tests": "14 passed, 0 failed, 522 assertions",
+        "production_builds": 3,
+        "built_in_browser_boundary_scan": "2 isolated PWAs, 0 forbidden provider/model tokens",
+        "lint": "clean",
+        "typecheck": "clean"
+      },
+      "status": "not_done",
+      "reason": "The command-level claims reproduce, but browser acceptance does not: cold-restart offline shells are blank, stale Stage cache content wins, frame-ancestors is ineffective and Stage is embeddable, reduced-motion does not reduce the reveal animation, and the fullscreen Stage retains vertical overflow."
+    },
+    "AdversarialVerify": {
+      "verifier": "st_019ffe97",
+      "verified_at": "2026-08-14T05:16:26Z",
+      "environment": {
+        "os": "Windows_NT 10.0.29639 x64",
+        "browser": "Chrome 151.0.7922.138",
+        "edge_available": "152.0.4191.19",
+        "bun": "1.3.14",
+        "origins": {
+          "console": "http://console.localhost:45173",
+          "stage": "http://stage.localhost:45174"
+        }
+      },
+      "verdict": "rejected",
+      "confirmed": false,
+      "foundation_acceptance_all_passed": false,
+      "command_results": [
+        { "command": "bun run check:repo", "result": "pass", "artifact": "logs/check-repo.log" },
+        { "command": "bun run lint", "result": "pass", "artifact": "logs/lint.log" },
+        { "command": "bun run typecheck", "result": "pass", "artifact": "logs/typecheck.log" },
+        { "command": "bun test", "result": "pass: 14/14, 522 assertions", "artifact": "logs/test.log" },
+        { "command": "bun run build", "result": "pass: ui, console, stage", "artifact": "logs/build.log" },
+        { "command": "bun run check:browser", "result": "pass", "artifact": "logs/check-browser.log" },
+        { "command": "bun run test:browser", "result": "pass: 9/9, 477 assertions", "artifact": "logs/test-browser.log" },
+        { "command": "git show --check for all five commits; git diff --check", "result": "pass", "artifact": "logs/git-integrity.log" },
+        { "command": "independent source, bundle, sourcemap, token, route and canary scanner", "result": "pass for private imports/routes/provider/model tokens", "artifact": "static-audit.json" },
+        { "command": "real-browser CDP QA", "result": "30 passed, 3 failed in initial matrix; focused probes confirmed additional offline/CSP/visual blockers", "artifact": "browser-qa.json" }
+      ],
+      "acceptance_matrix": [
+        { "criterion": "Console private-route guard and malformed-path fallback", "result": "pass" },
+        { "criterion": "Stage public-only routes and malformed-path fallback", "result": "pass" },
+        { "criterion": "Distinct origins, manifests, identities, service workers and cache names", "result": "pass" },
+        { "criterion": "Stage has no Console route/import, service import, provider/model token, private seeded canary, or Console storage/cookie/cache visibility", "result": "pass" },
+        { "criterion": "CSP connect-src blocks Console/provider HTTP and provider WSS from Stage", "result": "pass" },
+        { "criterion": "CSP prevents framing", "result": "fail: frame-ancestors in meta is ignored; cross-origin embedding rendered Stage" },
+        { "criterion": "Manifest parsing/installability", "result": "pass: Chromium reported no manifest or installability errors" },
+        { "criterion": "Active-session service-worker update does not auto-activate", "result": "pass: new worker reached waiting while active/controller remained unchanged and controllerchange count stayed zero" },
+        { "criterion": "Offline navigation fallback after cold browser restart and stopped origin", "result": "fail for Console and Stage: cached HTML loaded but uncached hashed CSS/JS failed, leaving #root empty" },
+        { "criterion": "Stale cache isolation", "result": "fail: Stage caches.match(request) searched all cache namespaces and served STALE_CACHE_CANARY from impromptu-stage-public-v0" },
+        { "criterion": "Real Stage-local fullscreen click and exact fullscreenchange", "result": "pass: physical CDP click entered and exited fullscreen with exact events" },
+        { "criterion": "Fullscreen denial and exit recovery", "result": "pass: physical click under denied API produced visible browser-menu guidance; physical exit restored ready state" },
+        { "criterion": "Popup denial recovery", "result": "not_applicable: the branch contains no popup/window.open/Window Management path and the canonical flow is Stage-local fullscreen" },
+        { "criterion": "1440px, 768px, 320px and 200% reflow", "result": "partial: no horizontal overflow on clean probes; Stage display has vertical overflow at every tested viewport, including fullscreen" },
+        { "criterion": "Keyboard-only focus order and visible focus", "result": "pass: skip link precedes primary action on Console and Stage" },
+        { "criterion": "Forced colors", "result": "pass: media query active and explicit borders visible" },
+        { "criterion": "Reduced motion", "result": "fail: computed .ui-reveal animation-duration remained 0.52s because the universal media override loses specificity" },
+        { "criterion": "No flaky/timing-luck project tests", "result": "pass by source review: project tests use synchronous state/event assertions and no sleeps/polling" },
+        { "criterion": "No hung project validators", "result": "pass: all repository commands completed inside deadlines" },
+        { "criterion": "Clean branch after verification", "result": "pass: no tracked or staged diff" }
+      ],
+      "risks": [
+        {
+          "severity": "blocker",
+          "id": "offline-shell-assets-not-cached",
+          "finding": "Both PWAs cache HTML/manifest/icon but not their hashed JS/CSS. After clearing HTTP cache, closing Chrome, stopping both origins, and restarting Chrome, navigation returned cached HTML while Script and Stylesheet failed net::ERR_FAILED; both roots were empty.",
+          "evidence": ["offline-restart.json", "screenshots/stage-offline-cold-restart.png", "screenshots/console-offline-cold-restart.png"]
+        },
+        {
+          "severity": "high",
+          "id": "stage-stale-cache-wins",
+          "finding": "The Stage cache-first handler uses global caches.match rather than the current named cache. A matching response in impromptu-stage-public-v0 replaced the live Stage document with STALE_CACHE_CANARY.",
+          "evidence": ["browser-qa.json", "extra-probe.json"]
+        },
+        {
+          "severity": "high",
+          "id": "frame-ancestors-ineffective",
+          "finding": "Chromium logs that frame-ancestors is ignored in a meta CSP, preview responses carry no CSP header, and a cross-origin evil.localhost page rendered the Stage in an iframe.",
+          "evidence": ["browser-qa.json", "embed-probe.json", "screenshots/cross-origin-embed.png"]
+        },
+        {
+          "severity": "medium",
+          "id": "reduced-motion-specificity",
+          "finding": "With prefers-reduced-motion: reduce active, .ui-reveal still computes to 0.52s; the intended 0.14s rule does not override the class animation.",
+          "evidence": ["extra-probe.json", "screenshots/stage-reduced-motion.png"]
+        },
+        {
+          "severity": "medium",
+          "id": "fullscreen-stage-scrollbar",
+          "finding": "The projected Stage document vertically overflows at 1440x900 (935px), 768x900 (916px), 320x800 (932px), and 200%-equivalent 720x450 (593px). The scrollbar remains visible in actual fullscreen.",
+          "evidence": ["responsive-probe.json", "screenshots/stage-display-fullscreen.png", "screenshots/stage-display-320.png", "screenshots/stage-display-200pct-720css.png"]
+        }
+      ],
+      "positive_security_evidence": {
+        "stage_forbidden_token_hits": 0,
+        "stage_private_source_map_paths": 0,
+        "stage_console_storage_cookie_cache_visibility": 0,
+        "stage_cross_origin_http_wss_attempts_blocked_by_csp": true,
+        "active_session_sw_auto_activation": false
+      },
+      "screenshots": [
+        "screenshots/console-protected-1440.png",
+        "screenshots/console-private-1440.png",
+        "screenshots/console-private-320.png",
+        "screenshots/console-keyboard-focus.png",
+        "screenshots/stage-landing-1440.png",
+        "screenshots/stage-landing-768.png",
+        "screenshots/stage-landing-320.png",
+        "screenshots/stage-landing-200pct-1440physical.png",
+        "screenshots/stage-keyboard-focus.png",
+        "screenshots/stage-forced-colors.png",
+        "screenshots/stage-reduced-motion.png",
+        "screenshots/stage-display-1440.png",
+        "screenshots/stage-display-768.png",
+        "screenshots/stage-display-320.png",
+        "screenshots/stage-display-fullscreen.png",
+        "screenshots/stage-fullscreen-denied.png",
+        "screenshots/stage-offline-cold-restart.png",
+        "screenshots/console-offline-cold-restart.png",
+        "screenshots/cross-origin-embed.png"
+      ],
+      "artifact_root": "C:/Users/steve/Desktop/projects/impromptu-r2-qa-st_019ffe97",
+      "cleanup": {
+        "console_server": "stopped",
+        "stage_server": "stopped",
+        "embed_server": "stopped",
+        "dedicated_browser_processes": 0,
+        "ports_closed": [45173, 45174, 45175, 45222, 45223],
+        "temporary_browser_profiles_and_driver_scripts": "removed",
+        "branch_tracked_diff": "none",
+        "receipt": "logs/cleanup.log"
+      }
+    }
+  }
+}

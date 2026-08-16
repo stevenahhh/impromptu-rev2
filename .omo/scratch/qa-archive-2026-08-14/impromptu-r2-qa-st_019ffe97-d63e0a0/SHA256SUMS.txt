@@ -1,0 +1,11 @@
+a18b6ab7e52591e7409ace016f59ad6ce07c8eff0e437427d28ea0ad9e430671 *./artifact-comparison.json
+a5c8e17b3a96397b5035b3cc16b1ff4322f2abc02fceb7dbaaa86a2026585b88 *./environment.json
+c4d53a044db6164c5fe5b48d30dbcbd0fe82307d80e4910ee81d70544406fb7e *./logs/check-browser-runtime-headed.log
+d3074654745e33bf2e6cca24302b4d068fc4e6542b63685e6ba80f8c493e78bc *./logs/cleanup.log
+39c8a25b4d3e6cd895bc06abe00fb97486a73a5271ce982efbf42ba845c12c8e *./logs/current-build-sha256.log
+14b15421ecc9f34e5f2543f5f2fb076871c609ab609ec7643f6045ee3e08467a *./logs/full-check.log
+b2d1c43fc82e2cd7817be55718dc1696aabfa3ab57953099e3bc5078c480ee82 *./logs/observer-audit.log
+0bc7c81b90114a2ae99b34e2ee207cf3b508e081e124a8d007f9c926f6aa8dec *./logs/pre-headless-build.log
+f99b5cdf93b538b6ca8dff030f77b8f4324bf459fd805a58cbf2dd39a8e84956 *./logs/pre-status.log
+65aca867b8c8ca4377f1de98bdd63b319605a76e23015c7834cd01b2f0a37b5b *./logs/previous-artifact-checksums.log
+924224b8466ecba36e8be563a73a3b27a368e8f5fafd8ce261f216d8e6d44643 *./verdict.json

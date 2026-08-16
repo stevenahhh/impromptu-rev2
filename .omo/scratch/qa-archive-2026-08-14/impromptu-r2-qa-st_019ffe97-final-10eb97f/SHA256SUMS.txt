@@ -1,0 +1,9 @@
+fff54ceb18a148b7f468da2dbb952f86b832a39015e03042eaabd854a1f4095a *./logs/chain.log
+d73b1f80b6ed4d4249ad69cff769e2f8c2e12e60cc06982fb53ff6d19c0e3800 *./logs/check-browser-runtime-headed.log
+a01ba4e821c73b84ec8a1a7ba1eb2384fdd72cb73451c805c71a5f36e8dc9f20 *./logs/cleanup.log
+cd26ccc1dd7aebeb0ef0f0bbf73bf7a7a74a0e5d3d533f6cf53589ae4f24dc36 *./logs/current-build-checksums.log
+d5dc8b0eb2518028b6b26085a44218b17572deb1bee63e9dde6dba98ae42efca *./logs/environment.log
+5ee0e2d7a76366f4a174d2c6dbbc2d1c97f7c4bd0cda2e0c3b295c0ebeaec3d1 *./logs/full-check.log
+7f1d920d3e6d1cee9a5b8f5109f0473088a071a014431062feaf5823e687645a *./logs/pre-headed-build.log
+65aca867b8c8ca4377f1de98bdd63b319605a76e23015c7834cd01b2f0a37b5b *./logs/previous-checksums.log
+ab37a50b43b6c50e106b968e7ce23f07e5269b03b7bf9e96d3b325f435a70739 *./verdict.json

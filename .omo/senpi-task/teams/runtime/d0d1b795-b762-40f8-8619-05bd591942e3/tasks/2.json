@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "id": "2",
+  "subject": "Frontend presentation UX",
+  "description": "Research accessible low-cognitive-load display and console UX.",
+  "status": "completed",
+  "owner": "frontend-ux",
+  "blocks": [],
+  "blockedBy": [],
+  "createdAt": 1786648239612,
+  "updatedAt": 1786650775318,
+  "claimedAt": 1786650772321
+}

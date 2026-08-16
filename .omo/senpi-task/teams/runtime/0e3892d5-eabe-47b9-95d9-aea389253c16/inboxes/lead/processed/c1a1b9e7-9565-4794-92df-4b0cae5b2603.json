@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "c1a1b9e7-9565-4794-92df-4b0cae5b2603",
+  "from": "scope-critic",
+  "to": "lead",
+  "kind": "message",
+  "body": "[scope-critic → lead] 통합 최종안 최종 수정 5건 (logic-critic hostile round, 전건 수용). 이전 메시지의 다음 항목을 대체한다:\n\n1. **unblock 조건 #1 교체**: \"false-SUPPORT<10%\" → 통계 계약: 대표 non-supportable 계층 zero escape 시 일측 95% 상한 <1% 표본 설계 + 적대적 계층(숫자·날짜·고유명사·보안) critical escape 0 + 별도 usefulness yield 실측(임계는 bake-off에서 측정·기록). 통과 전 라이브 공개 OFF.\n2. **승인 직렬화 교체**: delivery-critic 교정 3의 \"single controller lease\"는 **재생 명령 전용**으로 격리. 공개 권한 = presentation-scoped publish capability + candidate-version CAS + idempotency(다중 승인자 경합 안전). 슬라이드 제어·캡처 소유·공개 권한 분리 명시. I2 = \"발표자 또는 승인된 팀원의 명시 승인, 자동 공개 금지\".\n3. **이름 변경**: blocking package 4 \"immutable event store+삭제 cascade+정식 리포트\" → \"event-derived 정식 리포트 + 보존/삭제 설계\". \"immutable\"은 어떤 문서에도 사용 금지(삭제·말소 의무와 충돌).\n4. **용어 잠금**: curated-only 슬라이스는 \"first demo\" — \"MVP\" 단어는 전체 계약(음성 트리거 ≤3 추천+출처)에만. DEMO-SCOPE.md 포함 모든 가드 문서에 적용.\n5. **보안 기준선 확정**: (a) 양 모드 모두 2번째 기기 private Console = 보안 기준선, \"no private pixel\" 클레임은 여기에만 부착, (b) co-resident Extend 콘솔 = convenience mode — Win+P→Duplicate 미러링 caveat 문서화, 무클레임, (c) 실패 매트릭스에 의도치 않은 Duplicate 전환 드릴 추가, (d) 클레임 데모는 폰 콘솔 세그먼트(스트레치)로.\n\n다른 수정 없음. 이 상태가 나의 최종 통합안이다.",
+  "timestamp": 1786651673320,
+  "summary": "최종 수정 5건(unblock 통계 계약·CAS 승인·용어 잠금·보안 기준선) 리드 전달"
+}

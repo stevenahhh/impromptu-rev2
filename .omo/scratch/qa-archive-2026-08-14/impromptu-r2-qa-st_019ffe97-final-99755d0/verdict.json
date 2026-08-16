@@ -1,0 +1,65 @@
+{
+  "head": "99755d05cef9745f4ed0117467acb1e39158e6e3",
+  "verdict": "needs-fix",
+  "observerAudit": {
+    "activatedStatechangeQueuesExactlyOneMicrotask": true,
+    "microtaskRechecksAuthoritativeActiveState": true,
+    "immediateAuthoritativePath": true,
+    "boundedFailureTimeout": true,
+    "cleanupRemovesUpdatefoundAndStatechangeListeners": true,
+    "pollingNetworkidleSleepsReady": false,
+    "deterministicDelayedPromotionRegression": "pass",
+    "firstInstallUpdateCalls": 0,
+    "laterUpdateCallsInDeterministicTest": 1
+  },
+  "headedRuntime": {
+    "command": "BROWSER_HEADED=true bun run check:browser-runtime",
+    "runs": 1,
+    "deadlineSeconds": 300,
+    "result": "failed",
+    "firstFailingPhase": "Console first-install activation observation",
+    "error": "page.evaluate: Error: First service worker activation timed out",
+    "stack": [
+      "eval at evaluate (:311:30), <anonymous>:18:14",
+      "scripts/verify-browser-runtime.ts:331:16 in verifyUpdateLifecycle",
+      "scripts/verify-browser-runtime.ts:479:5 in verifyUpdateLifecycles",
+      "scripts/verify-browser-runtime.ts:717:3"
+    ],
+    "expected": "authoritative registration.active.state activated; first tab uncontrolled; zero controllerchange",
+    "actual": "observer timed out before authoritative state and control assertions were captured"
+  },
+  "aggregate": {
+    "command": "bun run check",
+    "result": "failed at check:browser-runtime with the same first-install timeout",
+    "repoPolicy": "pass",
+    "lint": "pass: 49 files",
+    "typecheck": "pass",
+    "tests": "pass: 29 tests, 766 assertions",
+    "builds": "pass",
+    "scanner": "pass: 2 isolated shells, zero forbidden provider/model tokens"
+  },
+  "currentBrowserAcceptance": {
+    "lifecycle16Of16": "not completed; required verifier aborted in first Console lifecycle phase",
+    "originalFive": "not reached",
+    "routesManifestsA11yFullscreen": "runtime reconfirmation not reached",
+    "previousEvidenceChecksumsVerified": 43,
+    "generatedWorkersByteIdenticalToPreviousFunctionalEvidence": true,
+    "consoleWorkerSha256": "b2989f1475f13efe745092b3833b2393a8d9131f73f4a6d26a4b82ae52fcafe0",
+    "stageWorkerSha256": "4b0326b977720f81134dfe25b91973461d7404110e601361452452cfad1e61ea"
+  },
+  "cleanup": {
+    "serversStopped": true,
+    "dedicatedChromeProcesses": 0,
+    "profilesRemoved": true,
+    "portsClosed": [
+      43173,
+      43174,
+      43175,
+      43176,
+      43177,
+      43178,
+      43179
+    ],
+    "worktreeClean": true
+  }
+}

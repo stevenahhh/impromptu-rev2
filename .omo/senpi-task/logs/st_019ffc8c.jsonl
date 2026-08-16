@@ -1,0 +1,72 @@
+{"type":"transition_applied","payload":{"type":"transition_applied","status":"running","residency_state":"resident"}}
+{"type":"assistant_message","payload":{"text":"I read this as UX research for a presentation-focused PWA - I’ll ground recommendations in the existing product system, authoritative accessibility guidance, and real Windows display constraints, then report every lead to the team lead. I’ll stop right away when the sourced IA/interaction brief, degraded-state model, and expansion leads have been sent with `## EXPAND`."}}
+{"type":"tool_execution","payload":{"tool":"todo","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"bash","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"read","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"bash","is_error":false}}
+{"type":"assistant_message","payload":{"text":"The shell is POSIX despite the Windows host; I’m switching the repository probe accordingly. I loaded the frontend router and am also loading its accessibility/cognitive-constraints ruleset, which is the relevant design guidance for this research task."}}
+{"type":"tool_execution","payload":{"tool":"eval","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"read","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"read","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"bash","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"todo","is_error":false}}
+{"type":"assistant_message","payload":{"text":"The repository has no application UI or design system to audit (only the source application PDF), so this is greenfield UX research rather than an existing-system review. The journey map will therefore treat audience display, presenter console, setup/recovery, and report as one coordinated multi-device system rather than unrelated pages."}}
+{"type":"tool_execution","payload":{"tool":"eval","is_error":false}}
+{"type":"assistant_message","payload":{"text":"Search is provider-blocked (HTTP 403), so I’m using direct authoritative sources rather than lowering source quality or citing snippets I cannot verify. I’ll treat source pages as evidence and separate standards-backed requirements from product recommendations."}}
+{"type":"tool_execution","payload":{"tool":"eval","is_error":false}}
+{"type":"assistant_message","payload":{"text":"A first authoritative-source pass supports four immediate design constraints: the console must reflow to 320 CSS px without two-dimensional scrolling; controls need at least 24×24 CSS px or equivalent spacing (I recommend 44–48 px operational targets); keyboard focus needs a clearly visible 2 px-equivalent, 3:1 indicator; and connection/sync changes must be announced as status messages without stealing focus. I’m sending those constraints now, then continuing into the full IA and failure model."}}
+{"type":"tool_execution","payload":{"tool":"webfetch","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"read","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"webfetch","is_error":false}}
+{"type":"team_message_sent","payload":{"message_id":"823a39db-0b0b-42bb-bf61-e2a8bfb72f5f","from":"frontend-ux","to":"lead","kind":"message"}}
+{"type":"tool_execution","payload":{"tool":"webfetch","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"task_send","is_error":false}}
+{"type":"team_message_delivered","payload":{"message_id":"823a39db-0b0b-42bb-bf61-e2a8bfb72f5f","from":"frontend-ux","to":"lead","kind":"message"}}
+{"type":"tool_execution","payload":{"tool":"eval","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"todo","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"webfetch","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"webfetch","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"webfetch","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"webfetch","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"webfetch","is_error":false}}
+{"type":"team_message_sent","payload":{"message_id":"6b60ed94-f633-489a-81a3-78d0fa677d70","from":"frontend-ux","to":"lead","kind":"message"}}
+{"type":"tool_execution","payload":{"tool":"task_send","is_error":false}}
+{"type":"assistant_message","payload":{"text":"The standards add two high-risk live-mode rules: auto-updating evidence/message feeds need a user-controlled pause or update-frequency mechanism, and connection/severity cannot be color-only—it must pair color with text and shape/icon. Alerts should persist until dismissed or resolved and must not steal keyboard focus."}}
+{"type":"tool_execution","payload":{"tool":"todo","is_error":false}}
+{"type":"team_message_sent","payload":{"message_id":"3093dca9-2c11-425d-afb4-0d1b00abace2","from":"frontend-ux","to":"lead","kind":"message"}}
+{"type":"tool_execution","payload":{"tool":"task_send","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"webfetch","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"webfetch","is_error":false}}
+{"type":"assistant_message","payload":{"text":"The offline model should not be binary. Cached stage content remains presentable; fresh team messages and audience evidence become explicitly stale/read-only; presenter actions queue locally with timestamps and idempotency keys; and the UI must distinguish “device offline,” “server unreachable,” and “audience display disconnected” because each has a different recovery path."}}
+{"type":"tool_execution","payload":{"tool":"todo","is_error":false}}
+{"type":"team_message_sent","payload":{"message_id":"8492ed8b-1237-490f-80f9-c27550b8c051","from":"frontend-ux","to":"lead","kind":"message"}}
+{"type":"tool_execution","payload":{"tool":"task_send","is_error":false}}
+{"type":"team_message_delivered","payload":{"message_id":"6b60ed94-f633-489a-81a3-78d0fa677d70","from":"frontend-ux","to":"lead","kind":"message"}}
+{"type":"team_message_delivered","payload":{"message_id":"3093dca9-2c11-425d-afb4-0d1b00abace2","from":"frontend-ux","to":"lead","kind":"message"}}
+{"type":"team_message_delivered","payload":{"message_id":"8492ed8b-1237-490f-80f9-c27550b8c051","from":"frontend-ux","to":"lead","kind":"message"}}
+{"type":"assistant_message","payload":{"text":"The recommended product architecture is lifecycle-first, not feature-first: Prepare, Live, and Review are top-level modes. Public stage, presenter console, and team collaboration are role-specific projections of one session state; they should never share identical layouts or reveal private operational content."}}
+{"type":"tool_execution","payload":{"tool":"todo","is_error":false}}
+{"type":"team_message_sent","payload":{"message_id":"6291821c-083f-46e4-8c0b-42ffdea30b92","from":"frontend-ux","to":"lead","kind":"message"}}
+{"type":"tool_execution","payload":{"tool":"task_send","is_error":false}}
+{"type":"assistant_message","payload":{"text":"Recovery must preserve stage continuity over data freshness: the public display freezes safely on its last valid state, while the console exposes cause, affected capabilities, last acknowledgment, and one recommended action. Reconnection must reconcile from a server snapshot and never replay stale public commands automatically."}}
+{"type":"tool_execution","payload":{"tool":"todo","is_error":false}}
+{"type":"team_message_sent","payload":{"message_id":"cfdc844a-0e2d-4456-b3c6-b6da104e46b6","from":"frontend-ux","to":"lead","kind":"message"}}
+{"type":"tool_execution","payload":{"tool":"task_send","is_error":false}}
+{"type":"team_message_delivered","payload":{"message_id":"6291821c-083f-46e4-8c0b-42ffdea30b92","from":"frontend-ux","to":"lead","kind":"message"}}
+{"type":"team_message_delivered","payload":{"message_id":"cfdc844a-0e2d-4456-b3c6-b6da104e46b6","from":"frontend-ux","to":"lead","kind":"message"}}
+{"type":"assistant_message","payload":{"text":"The synthesis is complete: it separates public trust, presenter control, and team operations; keeps live decisions visible and reversible; and treats setup/recovery as first-class product surfaces rather than help documentation. I’m sending the full sourced handoff and research expansion queue now."}}
+{"type":"tool_execution","payload":{"tool":"todo","is_error":false}}
+{"type":"team_message_sent","payload":{"message_id":"0b3aad0d-68f7-4ddb-a1b3-8e922512b693","from":"frontend-ux","to":"lead","kind":"message"}}
+{"type":"tool_execution","payload":{"tool":"task_send","is_error":false}}
+{"type":"assistant_message","payload":{"text":"Research complete. Sent the lead the sourced UX brief covering IA, live surfaces, accessibility, Windows display setup, offline recovery, reporting, acceptance tests, and expansion leads.\n\n## EXPAND"}}
+{"type":"transition_applied","payload":{"type":"transition_applied","status":"completed","residency_state":"resident"}}
+{"type":"team_message_delivered","payload":{"message_id":"0b3aad0d-68f7-4ddb-a1b3-8e922512b693","from":"frontend-ux","to":"lead","kind":"message"}}
+{"type":"reconcile_reattached","payload":{"session_path":"C:\\Users\\steve\\Desktop\\projects\\impromptu-r2\\.omo\\senpi-task\\children\\st_019ffc8c\\sessions\\st_019ffc8c\\2026-08-13T19-17-02-613Z_019ffc8e-7615-74ef-b4d5-d58b2559e154.jsonl"}}
+{"type":"reconcile_reattached","payload":{"session_path":"C:\\Users\\steve\\Desktop\\projects\\impromptu-r2\\.omo\\senpi-task\\children\\st_019ffc8c\\sessions\\st_019ffc8c\\2026-08-13T19-17-02-613Z_019ffc8e-7615-74ef-b4d5-d58b2559e154.jsonl"}}
+{"type":"reconcile_reattached","payload":{"session_path":"C:\\Users\\steve\\Desktop\\projects\\impromptu-r2\\.omo\\senpi-task\\children\\st_019ffc8c\\sessions\\st_019ffc8c\\2026-08-13T19-17-02-613Z_019ffc8e-7615-74ef-b4d5-d58b2559e154.jsonl"}}
+{"type":"reconcile_reattached","payload":{"session_path":"C:\\Users\\steve\\Desktop\\projects\\impromptu-r2\\.omo\\senpi-task\\children\\st_019ffc8c\\sessions\\st_019ffc8c\\2026-08-13T19-17-02-613Z_019ffc8e-7615-74ef-b4d5-d58b2559e154.jsonl"}}
+{"type":"reconcile_reattached","payload":{"session_path":"C:\\Users\\steve\\Desktop\\projects\\impromptu-r2\\.omo\\senpi-task\\children\\st_019ffc8c\\sessions\\st_019ffc8c\\2026-08-13T19-17-02-613Z_019ffc8e-7615-74ef-b4d5-d58b2559e154.jsonl"}}
+{"type":"reconcile_reattached","payload":{"session_path":"C:\\Users\\steve\\Desktop\\projects\\impromptu-r2\\.omo\\senpi-task\\children\\st_019ffc8c\\sessions\\st_019ffc8c\\2026-08-13T19-17-02-613Z_019ffc8e-7615-74ef-b4d5-d58b2559e154.jsonl"}}
+{"type":"reconcile_reattached","payload":{"session_path":"C:\\Users\\steve\\Desktop\\projects\\impromptu-r2\\.omo\\senpi-task\\children\\st_019ffc8c\\sessions\\st_019ffc8c\\2026-08-13T19-17-02-613Z_019ffc8e-7615-74ef-b4d5-d58b2559e154.jsonl"}}
+{"type":"reconcile_reattached","payload":{"session_path":"C:\\Users\\steve\\Desktop\\projects\\impromptu-r2\\.omo\\senpi-task\\children\\st_019ffc8c\\sessions\\st_019ffc8c\\2026-08-13T19-17-02-613Z_019ffc8e-7615-74ef-b4d5-d58b2559e154.jsonl"}}
+{"type":"reconcile_reattached","payload":{"session_path":"C:\\Users\\steve\\Desktop\\projects\\impromptu-r2\\.omo\\senpi-task\\children\\st_019ffc8c\\sessions\\st_019ffc8c\\2026-08-13T19-17-02-613Z_019ffc8e-7615-74ef-b4d5-d58b2559e154.jsonl"}}

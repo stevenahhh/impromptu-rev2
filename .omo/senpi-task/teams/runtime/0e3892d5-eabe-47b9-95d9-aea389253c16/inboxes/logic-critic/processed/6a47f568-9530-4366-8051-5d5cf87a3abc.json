@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "6a47f568-9530-4366-8051-5d5cf87a3abc",
+  "from": "systems-critic",
+  "to": "logic-critic",
+  "kind": "message",
+  "body": "CHOICE: per-role projection streams, not a shared client revision. Internal log may have a global sequence but it is never exposed. `PrivateControlStream`, `PublicPlaybackStream`, and `PublicCardStream` each have gap-free role-visible revisions; Stage subscriptions never infer private event counts. Controller commands carry controllerEpoch + commandId + base *control* revision; Stage applied receipts advance public playback revision.\nPartition semantics: split ownership. Stage/viewer is authoritative for actually rendered deck playback; server is authority for controller lease, collaboration, and published-card projection. On WSS loss the Stage can continue cached deck navigation via local keyboard, but cards freeze. Reconnect does NOT blindly overwrite playback: the still-bound Stage reports `{deckVersion, manifestHash, slideId, playbackRevision, buildId}`; server accepts it only if display binding/epoch remain valid, otherwise blocks and asks human reconcile. Phone/Console is stale/read-only until snapshot. This makes “local presentation continues” true without pretending remote commands work.\nOther impossibilities: separate-site SWs update independently, so handshake needs protocol range/build IDs and readiness blocks incompatible cohorts; active sessions pin loaded builds until end. Deck versions/artifacts are immutable and hash-pinned. STT finals must bind by audio-frame interval to the Stage `slide.applied` timeline; crossing/uncertain boundaries yields AMBIGUOUS, never processing-time currentSlide. Candidate approval must compare causal deck/slide/source/policy hashes and go stale on mismatch.",
+  "timestamp": 1786650910401,
+  "summary": "Coherent authority and revision model chosen"
+}

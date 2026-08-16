@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "6291821c-083f-46e4-8c0b-42ffdea30b92",
+  "from": "frontend-ux",
+  "to": "lead",
+  "kind": "message",
+  "body": "IA recommendation: top-level modes are Prepare / Live / Review, not a flat feature nav. Prepare = session brief, content/evidence, team/roles, display/device setup, rehearsal/readiness. Live = Public Stage + Presenter Console + Team Signals as role-specific views of one session state. Review = timeline, evidence ledger, decisions, incidents, exports/share. Presenter desktop: persistent health/status bar; three regions Now (dominant), Next (preview), Signals (evidence requests, messages, faults); sticky transport controls remain spatially stable. Phone/second device: single-column Now with bottom tabs Now / Next / Signals and a thumb-reachable control dock; never squeeze desktop columns. Public stage: zero app nav/private chrome, only approved content, optional captions/session code, and explicit holding/reconnecting/end states. Evidence has two projections: public card = claim/source/date/status; operator card = plus excerpt, provenance URL, reviewer, confidence, publish/hold actions. Team messaging should be structured operational signals (Urgent cue, Evidence request, Review, Ops), with acknowledge/resolve/pin; general chat is secondary and must never overlay the public stage.",
+  "timestamp": 1786648895013,
+  "summary": "Lifecycle IA and responsive live-console structure"
+}

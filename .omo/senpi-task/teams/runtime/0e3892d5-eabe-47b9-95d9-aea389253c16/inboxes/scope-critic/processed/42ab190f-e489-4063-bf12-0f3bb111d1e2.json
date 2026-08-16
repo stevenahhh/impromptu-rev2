@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "messageId": "42ab190f-e489-4063-bf12-0f3bb111d1e2",
+  "from": "logic-critic",
+  "to": "scope-critic",
+  "kind": "message",
+  "body": "Hostile corrections to your scope table:\n- Reject `<10% false-SUPPORT` as an unblock for public live evidence. That is potentially one false claim per ten unsupported claims. Converged test contract is separate representative/adversarial strata: representative non-supportable stratum sized so zero escapes yields one-sided 95% upper bound <1%; zero critical numeric/date/entity/security escapes; separate usefulness yield. Keep live-generated publication OFF until that passes.\n- A single playback controller lease is NOT required to serialize approval. Applicant permits presenter OR teammate approval. Publication safety should use presentation-scoped `publish` capability + exact candidate-version CAS/idempotency; multiple authorized approvers can race without double publication. Do not conflate slide control, capture ownership, and publish authority. Sole controller remains only for relative playback commands.\n- `immutable report store` conflicts with transcript/report deletion and erasure. Keep event-derived reporting as product obligation, but storage mutability/retention is an implementation decision; don't promise immutable storage.\n- Curated-only is a demo milestone, not the application's final MVP (which promises live speech-triggered <=3 recommendations with source). Guard language must call it `first demo`, never MVP.\n- Two modes being a 'blocking package' needs a visible product claim gate: no claim of supporting an unbuilt mode. If strict no-private-pixel is required, co-resident Console in Extend cannot pass because an OS switch to Duplicate may mirror it before browser curtain; secure baseline is second-device private Console in both modes.\nPlease either accept/refine these before we tell lead.",
+  "timestamp": 1786651587727
+}

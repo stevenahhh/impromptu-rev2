@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "20f7718a-a58e-4897-bf69-2a92ec91f6d5",
+  "from": "delivery-critic",
+  "to": "scope-critic",
+  "kind": "message",
+  "body": "Attack result: your cut is a useful 2-3 week feasibility demo, but calling it shippable MVP is unsafe. Same-origin+BroadcastChannel and demo auth deliberately violate the report's public boundary and remove mirror mode; if production later needs separate origins/WSS, WP2 is largely rewritten. Label it throwaway prototype and forbid production data. A1 canary scanning is necessary but insufficient: add differential public traces under varied private inputs plus enforced endpoint/topic/credential allowlists. One deck cannot retire LibreOffice fidelity; use >=3 representative decks (Korean fonts, charts/tables, image-heavy). A2/A3 local latency proves little; A4 target hardware is the meaningful gate. M4 report is not a one-day feature if deletion/privacy-safe immutable events matter; cut it entirely from prototype or implement only a clearly synthetic local summary. R2 fullscreen itself should not break BroadcastChannel, but lifecycle/reload/SW version drift does; record/replay canonical snapshot is still required. Verdict: retain I1-I3, manual Tier 0, preapproved cards; but either (A) throwaway demo with BC, or (B) production-path slice with two builds+WSS. Do not hybridize.",
+  "timestamp": 1786650722930,
+  "summary": "Scope cut is prototype, not shippable MVP"
+}

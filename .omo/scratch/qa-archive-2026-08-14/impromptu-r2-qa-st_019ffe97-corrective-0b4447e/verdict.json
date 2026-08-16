@@ -1,0 +1,131 @@
+{
+  "Sisyphus": {
+    "AdversarialVerify": {
+      "task_id": "st_019ffe97",
+      "branch": "feat/wp2-frontend",
+      "head": "0b4447e5bfbed4a72e4b741933698f3f3f7d3b8c",
+      "commits_reviewed": [
+        "8385ae240e69913313a57b251e4f5c12e1ec0dc7",
+        "93a1f16b4d56ea4660de5193a9a46bd607176ec8",
+        "df7f0351ccf785e5ed25cc4eb466528a51e2e17b",
+        "ab537a2d9120280cb0ba70db40ef2512f9a1276d",
+        "c27dd290d469f372b186ec9f9809187ea5f852bc",
+        "0b4447e5bfbed4a72e4b741933698f3f3f7d3b8c"
+      ],
+      "verdict": "rejected",
+      "confirmed": false,
+      "original_five_findings_fixed": true,
+      "reason": "All five original findings are corrected, but the generated Console and Stage workers now call skipWaiting() and clients.claim(). A real active-session update immediately replaced each controller instead of waiting, violating the required service-worker update deferral and active-session build pinning. The shipped headed runtime validator also hung until the external 360-second deadline.",
+      "environment": {
+        "os": "Windows_NT 10.0.29639 x64",
+        "browser": "headed Chrome 151.0.7922.138",
+        "bun": "1.3.14",
+        "origins": {
+          "console": "http://console.localhost:46173",
+          "stage": "http://stage.localhost:46174",
+          "cross_origin_parent": "http://evil.localhost:46175"
+        }
+      },
+      "original_findings": [
+        {
+          "id": "offline-shell-assets-not-cached",
+          "result": "fixed",
+          "evidence": "After clearing HTTP cache, closing headed Chrome, stopping both origins and cold-restarting the same profile, both applications rendered nonblank. Hashed JS and CSS each returned status 200 with fromServiceWorker=true.",
+          "artifacts": ["adversarial-browser.json", "screenshots/console-cold-offline.png", "screenshots/stage-cold-offline.png"]
+        },
+        {
+          "id": "stage-stale-cache-wins",
+          "result": "fixed",
+          "evidence": "A matching FOREIGN_CACHE_CANARY response in a foreign cache did not render online or through the cold app-scoped fallback. Generated workers contain no global caches.match call.",
+          "artifacts": ["adversarial-browser.json", "static-audit.json"]
+        },
+        {
+          "id": "frame-ancestors-ineffective",
+          "result": "fixed",
+          "evidence": "Console and Stage dev and preview responses carried frame-ancestors 'none'; deployment _headers artifacts matched. Headed Chrome rejected an evil.localhost iframe and emitted the expected CSP console violation.",
+          "artifacts": ["adversarial-browser.json", "screenshots/cross-origin-frame-rejected.png", "logs/static-details.log"]
+        },
+        {
+          "id": "reduced-motion-specificity",
+          "result": "fixed",
+          "evidence": "Every computed animation duration/delay and transition duration/delay was <=1ms on Console and Stage. .ui-reveal computed animation-duration was 0.001s.",
+          "artifacts": ["adversarial-browser.json", "screenshots/console-reduced-motion.png", "screenshots/stage-reduced-motion.png"]
+        },
+        {
+          "id": "fullscreen-stage-scrollbar",
+          "result": "fixed",
+          "evidence": "Document width and height equaled the viewport, no required control rectangle was clipped, and no scrollbar appeared at 1440x900, 768x900, 320x800, 720x450/DPR2 or physical fullscreen. Decorative transformed content retains 5-7px hidden-container scroll geometry but stays inside the physical viewport and clips no control.",
+          "artifacts": ["layout-acceptance.json", "screenshots/stage-display-1440x900.png", "screenshots/stage-display-768x900.png", "screenshots/stage-display-320x800.png", "screenshots/stage-display-200pct-equivalent.png", "screenshots/stage-physical-fullscreen.png"]
+        }
+      ],
+      "blocking_findings": [
+        {
+          "severity": "blocker",
+          "id": "active-session-sw-auto-activation",
+          "introduced_by": "8385ae2",
+          "finding": "Both generated workers call self.skipWaiting() during install and self.clients.claim() during activate. Registering /sw.js?qa-active-session-update=1 caused controllerchange once and immediately changed active/controller from /sw.js to the update URL on both Console and Stage; no waiting worker remained.",
+          "required_fix": "Remove unconditional skipWaiting/clients.claim from active presentation sessions and preserve the new release in waiting until an explicit session-safe activation boundary.",
+          "artifact": "adversarial-browser.json"
+        },
+        {
+          "severity": "high",
+          "id": "headed-runtime-validator-hangs",
+          "introduced_by": "c27dd29/0b4447e runtime path",
+          "finding": "BROWSER_HEADED=true bun run check:browser-runtime printed through 'Installing console offline shell...' and then made no progress before the external 360-second timeout. The independent headed runner completed, so this is the shipped validator rather than a Chrome capability limitation.",
+          "artifact": "logs/check-browser-runtime-headed.log"
+        }
+      ],
+      "other_acceptance": {
+        "routes_and_malformed_paths": "pass",
+        "public_private_canaries": "pass",
+        "distinct_origins_identities_cache_prefixes": "pass",
+        "stage_forbidden_provider_model_private_import_scan": "pass: zero hits",
+        "keyboard_focus_order": "pass",
+        "forced_colors": "pass",
+        "manifest_identity_parse_installability": "pass",
+        "physical_fullscreen_exact_fullscreenchange_and_exit": "pass",
+        "popup": "not applicable: no popup/window.open path exists",
+        "worktree": "clean before and after"
+      },
+      "commands": [
+        { "command": "bun run check:repo", "result": "pass", "artifact": "logs/check-repo.log" },
+        { "command": "bun run lint", "result": "pass: 45 files", "artifact": "logs/lint.log" },
+        { "command": "bun run typecheck", "result": "pass: root, UI, Console, Stage", "artifact": "logs/typecheck.log" },
+        { "command": "bun test", "result": "pass: 19 tests, 695 assertions", "artifact": "logs/test.log" },
+        { "command": "bun run build", "result": "pass: UI, Console, Stage", "artifact": "logs/build.log" },
+        { "command": "bun run check:browser", "result": "pass", "artifact": "logs/check-browser.log" },
+        { "command": "bun run test:browser", "result": "pass: 9 tests, 609 assertions", "artifact": "logs/test-browser.log" },
+        { "command": "BROWSER_HEADED=true bun run check:browser-runtime", "result": "fail: timed out after 360 seconds", "artifact": "logs/check-browser-runtime-headed.log" },
+        { "command": "independent headed Chrome adversarial runner", "result": "completed: 23 raw passes, 2 substantive SW-deferral failures, 6 strict internal-overflow warnings normalized by control/document criteria", "artifact": "adversarial-browser.json" },
+        { "command": "git show --check and range git diff --check", "result": "pass", "artifact": "logs/git-integrity.log" }
+      ],
+      "safe_cherry_pick": {
+        "acceptance_safe_now": false,
+        "reason": "The first corrective commit introduces the active-session update blocker, so this series should not be integrated as accepted without a follow-up correction and rerun.",
+        "dependency_order_after_fixing_8385ae2": [
+          "8385ae2",
+          "93a1f16",
+          "df7f035",
+          "ab537a2",
+          "c27dd29",
+          "0b4447e"
+        ],
+        "required_before_integration": [
+          "Add a follow-up after 8385ae2 that defers activation during an active session",
+          "Bound and repair check:browser-runtime so the headed gate terminates reliably",
+          "Rerun the active/controller/waiting lifecycle probe and aggregate check"
+        ]
+      },
+      "artifact_root": "C:/Users/steve/Desktop/projects/impromptu-r2-qa-st_019ffe97-corrective-0b4447e",
+      "comparison": "artifact-comparison.json",
+      "cleanup": {
+        "servers_stopped": true,
+        "dedicated_chrome_processes": 0,
+        "ports_closed": [43173, 43174, 43175, 43176, 43177, 46173, 46174, 46175, 46176, 46177],
+        "temporary_profiles_and_driver_scripts": "removed",
+        "branch_tracked_diff": "none",
+        "receipt": "logs/cleanup.log"
+      }
+    }
+  }
+}

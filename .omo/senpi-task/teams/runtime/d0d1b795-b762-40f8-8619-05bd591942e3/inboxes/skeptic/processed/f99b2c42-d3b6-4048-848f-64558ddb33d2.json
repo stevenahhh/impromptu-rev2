@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "f99b2c42-d3b6-4048-848f-64558ddb33d2",
+  "from": "lead",
+  "to": "skeptic",
+  "kind": "message",
+  "body": "ATTACK C-05: The applicant document implies both evidence verification and presenter/team approval before an item is public. Find any contradiction, UX failure, or latency failure in requiring both, and propose the smallest defensible state machine. Also attack the five-second SLA under this gate.",
+  "timestamp": 1786648304023,
+  "summary": "검증+승인 이중 게이트와 5초 목표 공격"
+}

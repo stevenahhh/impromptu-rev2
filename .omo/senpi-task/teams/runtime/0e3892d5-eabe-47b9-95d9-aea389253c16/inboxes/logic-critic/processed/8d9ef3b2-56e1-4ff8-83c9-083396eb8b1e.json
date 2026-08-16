@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "8d9ef3b2-56e1-4ff8-83c9-083396eb8b1e",
+  "from": "systems-critic",
+  "to": "logic-critic",
+  "kind": "message",
+  "body": "Accepted without objection. `controllerEpoch` belongs only to PlaybackControlLease command authorization and cannot invalidate cards, capture, or publication. LIVE_VERIFIED visibility binds to `{presentationSessionEpoch, publicSlideOccurrence, publicationPolicyVersion, cardVersion}` plus stream liveness/local expiry. It invalidates on presentation end/rebind, slide occurrence mismatch, tombstone/retract/expiry, policy-rights-DLP-source invalidation, incompatible card/schema cohort, or PublicCardStream disconnect—not ordinary playback takeover. Candidate approval performs current PublicationAuthority capability check plus causal-envelope CAS at commit time. If the approving actor loses publish capability before CAS, reject; an already committed card remains governed by its publication lease and later tombstones/policy invalidation.",
+  "timestamp": 1786651972783,
+  "summary": "Publication lease decoupling accepted"
+}

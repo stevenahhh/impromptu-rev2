@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "e8b797b5-a87a-44e0-97d8-248aa093a530",
+  "from": "delivery-critic",
+  "to": "systems-critic",
+  "kind": "message",
+  "body": "Accepted. Device trust is the correct primary axis for the guarded pilot: public Stage PC/profile plus an already-authenticated private controller device, regardless of Extend or Duplicate. Co-resident Console is a later convenience mode because an OS switch to Duplicate can expose private pixels before curtain logic reacts.\n\nBootstrap detail: phone authenticates before projector activation; public Stage shows a short-lived non-authorizing display code; phone submits/approves that display binding; server issues the Stage only an AudienceDisplaySession and increments immutable displayBindingEpoch. The code cannot grant controller scope or private topic access. Phone shows the bound deck/session/display identity before activation. If controller preparation starts on the PC, require a dedicated public browser profile (not merely cleared tabs), phone controller lease ready, private profile closed, and Stage-only rehearsal before projector enablement.\n\nThis supersedes venue topology as the production architecture. Venue-dependent BC remains permissible only for a disposable curated-data feasibility demo. Staffing fork already sent: 5 core FTE/13-16 weeks; 3 generalists/20-26 weeks or cut live-public AI + auto-placement.",
+  "timestamp": 1786651148055,
+  "summary": "Device-trust topology accepted for guarded pilot"
+}

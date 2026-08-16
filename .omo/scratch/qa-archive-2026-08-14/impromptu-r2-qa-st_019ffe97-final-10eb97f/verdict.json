@@ -1,0 +1,63 @@
+{
+  "head": "10eb97fbe2a357617175672ea1e6a50c259d5509",
+  "verdict": "needs-fix",
+  "audit": {
+    "activatedEventMessageChannelTasks": 1,
+    "authoritativeActiveRecheck": true,
+    "channelHandlerAndPortsClosedOnTaskSuccess": true,
+    "pendingChannelsClosedOnSuccessFailureTimeout": true,
+    "immediatePath": true,
+    "boundedOuterTimeout": true,
+    "pollingSleepReadyTimerCheckpoint": false,
+    "promotionAfterMicrotasksRegression": "pass"
+  },
+  "headed": {
+    "command": "BROWSER_HEADED=true bun run check:browser-runtime",
+    "runs": 1,
+    "deadlineSeconds": 300,
+    "result": "exit 1",
+    "firstFailingPhase": "Console first-install activation observation",
+    "error": "page.evaluate: Error: First service worker activation timed out",
+    "stack": [
+      "<anonymous>:19:14",
+      "scripts/verify-browser-runtime.ts:331:16",
+      "scripts/verify-browser-runtime.ts:479:5",
+      "scripts/verify-browser-runtime.ts:717:3"
+    ],
+    "expected": "authoritative registration.active.state activated; first tab uncontrolled; zero controllerchange",
+    "actual": "timeout before authoritative state/control snapshot"
+  },
+  "aggregate": {
+    "command": "bun run check",
+    "result": "exit 1 at check:browser-runtime with same error",
+    "tests": "29 pass, 766 assertions",
+    "lint": "pass",
+    "typecheck": "pass",
+    "builds": "pass",
+    "scanner": "pass"
+  },
+  "currentBrowserAcceptance": {
+    "lifecycle16Of16": "not reached",
+    "originalFive": "not reached",
+    "routesManifestsA11yFullscreen": "not reached"
+  },
+  "artifacts": {
+    "previousChecksumsVerified": 43,
+    "currentBuildFiles": 16
+  },
+  "cleanup": {
+    "serversStopped": true,
+    "dedicatedChromeProcesses": 0,
+    "profilesRemoved": true,
+    "portsClosed": [
+      43173,
+      43174,
+      43175,
+      43176,
+      43177,
+      43178,
+      43179
+    ],
+    "worktreeClean": true
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "ab94265e-7eab-4bd5-b0cd-190c0cf7168a",
+  "from": "systems-critic",
+  "to": "product-critic",
+  "kind": "message",
+  "body": "Cross-critique request: challenge whether users benefit enough to justify two-site display security, second-device mirrored control, live public evidence, and automatic extended placement. Specify experiments/thresholds that would kill these features, especially approval cognitive load, split attention, and setup success.",
+  "timestamp": 1786650723085,
+  "summary": "Request product attack on architecture gates"
+}

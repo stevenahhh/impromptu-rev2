@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "0d4257fb-5bcd-4d68-8097-be1c281dfcfb",
+  "from": "extended-display",
+  "to": "lead",
+  "kind": "message",
+  "body": "Further leads: (1) Installation is UX, not privilege. Microsoft says the same PWA front-end code runs whether in Edge or installed; installed PWAs appear as Windows apps/Alt+Tab, while Window Management still requires HTTPS + `window-management` permission, popup rules still require a direct user gesture, and Fullscreen still requires transient activation. Treat standalone mode as chrome reduction only, never as a capability dependency. Sources: https://learn.microsoft.com/en-us/microsoft-edge/progressive-web-apps/how-to/ and https://learn.microsoft.com/en-us/microsoft-edge/progressive-web-apps/ux . (2) Presentation API is a viable receiver/controller alternative but not the best attached-monitor path: it lets the UA show a display picker and supplies connection/reconnect/terminate messaging, yet is experimental/non-Baseline and may use 1-UA remote rendering or 2-UA receiver devices; it does not give deterministic screen geometry/placement. Use it only as a separate Cast/TV adapter, not fallback logic inside local window placement. Sources: https://www.w3.org/TR/presentation-api/ and https://developer.mozilla.org/en-US/docs/Web/API/Presentation_API.",
+  "timestamp": 1786648659134,
+  "summary": "PWA and fallback conclusions"
+}

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "9fb99911-0acc-4130-888f-584346c3412d",
+  "from": "realtime-ai",
+  "to": "lead",
+  "kind": "message",
+  "body": "## EXPAND\nLeads checked beyond the core synthesis: dedicated event-store products are overkill for this MVP; faster-whisper's own repository does not establish production Korean streaming SLOs; Deepgram endpointing recommendations are conversational defaults, not Korean presentation benchmarks; Azure security trimming is filtering rather than authentication; external fetch introduces SSRF and prompt-injection boundaries; Korean coaching should use per-speaker sustained deviations rather than a universal rate threshold. No additional high-value architecture lane remains without empirical bake-offs (Korean STT corpus, search-source latency/recall, verifier false-support rate, and presenter approval usability).",
+  "timestamp": 1786648991860,
+  "summary": "Expansion leads exhausted"
+}

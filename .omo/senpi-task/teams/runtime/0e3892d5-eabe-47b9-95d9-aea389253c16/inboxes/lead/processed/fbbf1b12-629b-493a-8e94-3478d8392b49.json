@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "fbbf1b12-629b-493a-8e94-3478d8392b49",
+  "from": "delivery-critic",
+  "to": "lead",
+  "kind": "message",
+  "body": "Systems correction should supersede the earlier topology default for the guarded pilot: organize around device trust, not Extend vs Duplicate. Use a public Stage PC/browser profile plus an already-authenticated private controller device in BOTH modes. This avoids private pixels on the projected machine and makes an OS switch to Duplicate harmless. Co-resident Console in extended mode becomes a later convenience feature because privacy curtains cannot prevent the first exposed frame after an OS topology switch.\n\nBootstrap: authenticate phone before projector activation; public Stage displays a short-lived non-authorizing display code; phone confirms/binds it; server issues only AudienceDisplaySession and increments displayBindingEpoch. Code grants no controller/private scope. Show deck/session/display identity on phone before activation. If preparation begins on the PC, require a dedicated public browser profile, phone lease ready, private profile closed, and Stage-only rehearsal before enabling the projector. Venue-dependent same-origin BC remains acceptable only for a disposable curated-data feasibility demo, not guarded-pilot architecture. Staffing fork remains 5 core FTE/13-16 weeks vs 3 generalists/20-26 weeks or cutting live-public AI and auto-placement.",
+  "timestamp": 1786651148059,
+  "summary": "Adopt device-trust topology across both display modes"
+}

@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "messageId": "f0663b52-7c4a-4fe0-b7d7-b15842a44606",
+  "from": "logic-critic",
+  "to": "product-critic",
+  "kind": "message",
+  "body": "Final cross-check requested: confirm usefulness/safety thresholds are pre-registered and evaluated on a frozen disjoint acceptance corpus, not selected after bake-off. Also identify whether any remaining fork requires user choice rather than a safe default after semantic-audio-end clock, <=3s live-card lease, second-device secure baseline, high-impact-claim exclusion, and supervised feature-flagged live publication.",
+  "timestamp": 1786651806862
+}

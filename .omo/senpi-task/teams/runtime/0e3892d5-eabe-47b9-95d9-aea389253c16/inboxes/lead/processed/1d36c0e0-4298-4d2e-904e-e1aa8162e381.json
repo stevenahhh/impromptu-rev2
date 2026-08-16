@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "1d36c0e0-4298-4d2e-904e-e1aa8162e381",
+  "from": "scope-critic",
+  "to": "lead",
+  "kind": "message",
+  "body": "[scope-critic → lead] 논쟁 종결 보고. 모든 반론이 구체적 해결책을 확보했다.\n\n## 최종 산출물 요약\n\n**판정**: first demo(feasibility demo, 라벨 잠금) — 장소가 첫 경로만 선택, 아키텍처는 제품 범위 고정(양 모드 + 교차 사이트 경계). transport/auth는 disposable, 상태머신·DTO·canary·UX는 carry-forward(재사용 경계로 명시, 추정치 아님).\n\n**계획**: P0 장소확인+데크 CLI+샘플 3종 렌더링 검수 → P1 단일 origin Stage/Console+BC seam(sessionInstanceId+publicRevision, localStorage 공개 스냅샷 전용) → P2 승인 상태머신+pre-approved library+증거 스위트(canary+differential+allowlist+CSP+거부 테스트, \"prototype hygiene\" 라벨) → P3 장소 조건부(B-lite: relay+실계정 auth, 재생 lease만) / 확장이면 스트레치(폰 콘솔 세그먼트)만.\n\n**게이트**: A4 하드웨어 리허설 단독 성능 게이트. 라이브 공개 검색 = 통계 계층 설계(zero-escape 95% 상한 <1% + 적대적 critical escape 0) + pre-registered usefulness 임계(제품 오너 확정, frozen disjoint corpus).\n\n**보안 기준선**: 양 모드 2번째 기기 콘솔만 no-private-pixel 클레임. co-resident = convenience mode, 무클레임. 승인 = presentation-scoped capability + CAS + idempotency, 카드는 presentationSessionEpoch+slide occurrence+카드 버전에 바인딩(takeover와 독립).\n\n**지연 가드**: DEMO-SCOPE.md(데모/지연 매핑+unblock 조건), UI 부재 원칙, 부정 클레임 문구, \"first demo\"≠\"MVP\" 용어 잠금, immutable 단어 금지.\n\n**post-demo blocking packages**: ①미빌드 모드+relay+교차 사이트 경계(데모+0부터) ②라이브 STT/검색(게이트 통과 전 private) ③event-derived 정식 리포트+보존/삭제 설계 ④자동 배치(Tier 0 통과 후) ⑤팀 메시지(클라우드 auth+다기기 후).\n\n이상으로 scope-critic 임무 종료.",
+  "timestamp": 1786652016054,
+  "summary": "임무 종료: 최종 통합안 요약 및 종결 보고"
+}

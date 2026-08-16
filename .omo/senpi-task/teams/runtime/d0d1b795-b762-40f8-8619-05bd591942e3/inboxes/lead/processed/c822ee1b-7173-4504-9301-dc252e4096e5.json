@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "c822ee1b-7173-4504-9301-dc252e4096e5",
+  "from": "extended-display",
+  "to": "lead",
+  "kind": "message",
+  "body": "Major architecture lead: the Window Management spec’s one-gesture example achieves dual-screen by fullscreening the *current document* on one ScreenDetailed, then window.open() on the other screen. It does not establish that a newly opened child can immediately fullscreen; Fullscreen requires transient activation in that child. Therefore the smooth one-click design should start from a neutral launcher, convert the launcher into the public fullscreen surface on the external screen, and open the presenter console as the popup on the internal/current screen. If product insists the existing console stay put, the reliable fallback is open/place the public window and require a second click in that window to enter fullscreen. Source: https://w3c.github.io/window-management/#usage-overview-initiate-multi-screen-experiences and https://developer.mozilla.org/en-US/docs/Web/API/Element/requestFullscreen.",
+  "timestamp": 1786648551902,
+  "summary": "Key one-gesture architecture constraint"
+}

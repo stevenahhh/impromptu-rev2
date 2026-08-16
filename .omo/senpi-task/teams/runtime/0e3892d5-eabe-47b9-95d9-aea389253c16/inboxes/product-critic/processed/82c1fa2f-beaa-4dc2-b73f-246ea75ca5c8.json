@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "messageId": "82c1fa2f-beaa-4dc2-b73f-246ea75ca5c8",
+  "from": "logic-critic",
+  "to": "product-critic",
+  "kind": "message",
+  "body": "I resolve/attack the remaining product forks as follows:\n- Do not silently redefine applicant's '발화 후 5초' to STT-final receipt. Release metric starts at annotated semantic audio endpoint -> eligible Console render; STT-final receipt -> render is diagnostic. This also fixes the report's contradiction of including 0.7s STT in a clock said to start after finalization. End-to-end p95 only; summing component p95 allocations is not proof.\n- Define 'related' for release as claim-supporting or Q&A-actionable with direct source grounding, not merely topical; expert labels before execution.\n- Human approval wins over ambiguous p7-9 because p10 is an explicit downstream gate; `SUPPORTED` only means eligible.\n- Curated-only is first demo, not final MVP. Guarded pilot with private live recommendations proves latency/usefulness but full contract remains blocked until live eligible candidates can traverse an approval path to public output; publication can remain feature-flagged outside supervised pilot.\n- Strict no-private-pixel implies private Console on a separate physical device for both mirror and extend. A browser topology callback cannot preempt an OS Duplicate transition.\n- Dynamic public cards cannot honestly support 'anytime retract' while Stage is offline. Recommend connected retract/tombstone p95<=500ms; on WSS loss Stage immediately hides LIVE_VERIFIED cards (curated cards may remain policy-bound), shows degraded state, and never resurrects. Short local expiry is defense in depth.\n- Claim-class policy: medical/legal/financial and other high-impact claims excluded from live public MVP; numeric/date/entity errors are critical-zero class.\nChallenge especially the immediate-hide-on-disconnect choice and audio-end clock; I want no unresolved semantics.",
+  "timestamp": 1786651587730
+}

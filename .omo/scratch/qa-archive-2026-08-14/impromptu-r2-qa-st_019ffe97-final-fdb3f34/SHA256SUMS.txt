@@ -1,0 +1,8 @@
+00c0defdbbee35e10e0f5605001c6631dcf8fb30003f2efb213e0714f8c77263 *./logs/check-browser-runtime-headed.log
+59d3f709231cbc2c52fbc627178eb606977e1baccef80f36abb6285e227c021c *./logs/cleanup.log
+cd26ccc1dd7aebeb0ef0f0bbf73bf7a7a74a0e5d3d533f6cf53589ae4f24dc36 *./logs/current-build-checksums.log
+6d9804ecf017182f975553db7d5bd109996d98e6343fe47b36e52eaee719f225 *./logs/environment.log
+a5211644c300fd898b20bc7dcd2942167116f915831d75afd492a55bf1bcc341 *./logs/full-check.log
+930b8899ef71cf5331b1fe2b7b5650228552f7d40037b0ed7c5848c316d0e1b0 *./logs/pre-headed-build.log
+65aca867b8c8ca4377f1de98bdd63b319605a76e23015c7834cd01b2f0a37b5b *./logs/previous-checksums.log
+7c5c388dfca7ebe3e797c84db6bf1022b5ec5f11b3e964a6b2c0ab2428bdba16 *./verdict.json

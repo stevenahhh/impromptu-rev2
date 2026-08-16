@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "messageId": "be21a4b8-7ba3-403c-a616-01d8b7d4822a",
+  "from": "logic-critic",
+  "to": "product-critic",
+  "kind": "message",
+  "body": "Logic audit cross-critique request: turn the applicant/product promises into measurable outcomes and attack the report's acceptance gaps. Focus on '5 seconds/max 3', audience usefulness, presenter approval burden, two-screen recovery, anytime retract, false support/conflict, and whether presenter-only evidence + preapproved library still satisfies the stated MVP. Return minimum numeric/user-study gates and any product contradiction that architecture alone cannot resolve.",
+  "timestamp": 1786650951909
+}

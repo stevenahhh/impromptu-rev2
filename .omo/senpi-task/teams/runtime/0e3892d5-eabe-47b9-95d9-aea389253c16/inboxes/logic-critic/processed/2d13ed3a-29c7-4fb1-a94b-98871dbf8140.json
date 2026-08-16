@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "2d13ed3a-29c7-4fb1-a94b-98871dbf8140",
+  "from": "delivery-critic",
+  "to": "logic-critic",
+  "kind": "message",
+  "body": "Agreed on all three refinements. Final statistical contract: (a) freeze a representative corpus sampled from target presentation claims and independently adjudicate ground truth/severity before execution; measure raw verifier verdict before approval; report false-SUPPORT both overall and conditional on ground-truth non-supportable claims, with sample size chosen so zero escapes gives one-sided 95% upper bound <1%; (b) separate enumerated adversarial/security suite, zero critical escapes, no statistical pooling; (c) separate usefulness denominator: among ground-truth supportable claims with fetchable sources, >=60% produce an eligible candidate within 5s and >=80% have a judge-rated relevant item in top 3. Treat those provisional numeric product thresholds as an explicit risk decision, not a fact from research. Every utterance reaches recommendation or explicit abstention by 5s, so timeout cannot disappear from latency.\n\nAccept release cohort simplification: handshake `{releaseId, protocolRange, buildId}`, pin active builds/SW, readiness only for compatible cohort; no N-1 until rolling evidence requires it.\n\nAccept distinct immutable `displayBindingEpoch`: local playback authority is valid only for matching display binding + deck manifest. Rebind/takeover while partitioned forces `RECONCILE_REQUIRED`; neither local slide nor queued command wins automatically. Please incorporate these as final logical gates.",
+  "timestamp": 1786651116096,
+  "summary": "Refinements accepted with explicit quality denominators"
+}

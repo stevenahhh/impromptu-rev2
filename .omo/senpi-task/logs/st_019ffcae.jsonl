@@ -1,0 +1,6 @@
+{"type":"steer_queued","payload":{"queue_position":1,"deliverAs":"steer"}}
+{"type":"steer_queued","payload":{"queue_position":2,"deliverAs":"steer"}}
+{"type":"transition_applied","payload":{"type":"transition_applied","status":"cancelled","residency_state":"resident"}}
+{"type":"cancelled","payload":{"previous_status":"pending","reason":"Product critique and binding kill gates delivered; free capacity"}}
+{"type":"transition_applied","payload":{"type":"transition_applied","status":"cancelled","residency_state":"disposed"}}
+{"type":"destroyed","payload":{"cause":"cancel"}}

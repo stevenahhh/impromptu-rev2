@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "8492ed8b-1237-490f-80f9-c27550b8c051",
+  "from": "frontend-ux",
+  "to": "lead",
+  "kind": "message",
+  "body": "Offline/PWA lead: do not show a dead generic offline page during a session. Precache the shell, active presentation, current evidence deck, and setup/recovery instructions (cache-first/versioned); treat messages/evidence as network-first with last-known cache; queue presenter-authored notes/commands locally and label them Pending sync. Distinguish Device offline vs Server unreachable vs Audience display disconnected. Show last successful sync time and data freshness on every stale panel. Sources: web.dev service-worker strategies https://web.dev/learn/pwa/serving/ ; web.dev offline fallback https://web.dev/articles/offline-fallback-page ; MDN caching guidance (cache-first UI, network-first recent messages) https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Caching ; MDN service workers https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API/Using_Service_Workers. Do not activate a new app/service-worker version mid-session; defer update to session end to avoid split-version display/console.",
+  "timestamp": 1786648869450,
+  "summary": "Tiered offline model and cache strategy"
+}

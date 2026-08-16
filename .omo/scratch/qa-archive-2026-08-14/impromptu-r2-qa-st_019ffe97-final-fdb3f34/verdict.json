@@ -1,0 +1,67 @@
+{
+  "head": "fdb3f3459607d718ebb9fd0e447c58016fa9070e",
+  "verdict": "needs-fix",
+  "observerAudit": {
+    "firstInstallUpdateCalls": 0,
+    "observes": [
+      "installing",
+      "waiting",
+      "active"
+    ],
+    "authoritativeCompletion": "registration.active.state === activated",
+    "laterUpdatePreconditions": [
+      "registration exists",
+      "active.state === activated",
+      "active.scriptURL non-empty",
+      "active worker remains stable immediately before trigger"
+    ],
+    "laterUpdateCalls": 1,
+    "forbiddenWaitingPatterns": []
+  },
+  "headedRuntime": {
+    "runs": 1,
+    "result": "failed",
+    "error": "First service worker activation timed out",
+    "location": "scripts/verify-browser-runtime.ts:331"
+  },
+  "aggregate": {
+    "result": "failed at check:browser-runtime",
+    "tests": "28/28",
+    "assertions": 763,
+    "lint": true,
+    "typecheck": true,
+    "builds": true,
+    "scanner": true
+  },
+  "currentBrowserAcceptance": {
+    "lifecycle": "not completed: runtime gate timed out during first worker activation",
+    "originalFive": "not reached"
+  },
+  "artifactIdentity": {
+    "generatedWorkersMatchPreviouslyAcceptedFunctionalArtifacts": true,
+    "current": {
+      "console": "b2989f1475f13efe745092b3833b2393a8d9131f73f4a6d26a4b82ae52fcafe0",
+      "stage": "4b0326b977720f81134dfe25b91973461d7404110e601361452452cfad1e61ea"
+    },
+    "previous": {
+      "console": "b2989f1475f13efe745092b3833b2393a8d9131f73f4a6d26a4b82ae52fcafe0",
+      "stage": "4b0326b977720f81134dfe25b91973461d7404110e601361452452cfad1e61ea"
+    },
+    "previousChecksumsVerified": true
+  },
+  "cleanup": {
+    "serversStopped": true,
+    "dedicatedChromeProcesses": 0,
+    "profilesRemoved": true,
+    "portsClosed": [
+      43173,
+      43174,
+      43175,
+      43176,
+      43177,
+      43178,
+      43179
+    ],
+    "worktreeClean": true
+  }
+}

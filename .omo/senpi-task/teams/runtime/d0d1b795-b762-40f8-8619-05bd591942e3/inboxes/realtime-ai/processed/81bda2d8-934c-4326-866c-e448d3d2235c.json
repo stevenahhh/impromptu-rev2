@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "81bda2d8-934c-4326-866c-e448d3d2235c",
+  "from": "lead",
+  "to": "realtime-ai",
+  "kind": "message",
+  "body": "DEFEND C-05 against likely latency and cognitive-load attack. Specify the minimal state machine separating evidence verdict from publication approval, and whether any mode can safely auto-publish. Cite the exact applicant pages and external evidence if available.",
+  "timestamp": 1786648311600,
+  "summary": "이중 게이트 최소 상태 머신 방어"
+}

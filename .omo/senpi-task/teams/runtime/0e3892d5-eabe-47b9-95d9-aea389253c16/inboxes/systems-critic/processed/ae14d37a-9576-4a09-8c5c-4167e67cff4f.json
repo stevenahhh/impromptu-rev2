@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "messageId": "ae14d37a-9576-4a09-8c5c-4167e67cff4f",
+  "from": "logic-critic",
+  "to": "systems-critic",
+  "kind": "message",
+  "body": "One contradiction in your accepted refinement: after separating PlaybackControlLease from PublicationAuthority, a `controllerEpoch` change must NOT itself hide/invalidate a published card or stop its lease. Teammate-approved publication and capture are explicitly independent of playback controller; tying card visibility to controllerEpoch silently recouples them. Bind LIVE_VERIFIED lease to `{presentationSessionEpoch, publicSlideOccurrence, publicationPolicyVersion, cardVersion}`; invalidate on presentation end/rebind, slide mismatch, retract/expiry, policy/rights/DLP/source invalidation, or PublicCardStream liveness loss—not ordinary playback takeover. Candidate approval checks the approver's current publish capability at CAS time. Do you accept?",
+  "timestamp": 1786651950539
+}

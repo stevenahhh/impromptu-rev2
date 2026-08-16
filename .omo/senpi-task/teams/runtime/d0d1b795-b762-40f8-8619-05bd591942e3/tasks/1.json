@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "id": "1",
+  "subject": "Security privacy invariants",
+  "description": "Define enforceable public/private, session, ACL and audio controls.",
+  "status": "completed",
+  "owner": "security-privacy",
+  "blocks": [],
+  "blockedBy": [],
+  "createdAt": 1786648239053,
+  "updatedAt": 1786650765076,
+  "claimedAt": 1786650762666
+}

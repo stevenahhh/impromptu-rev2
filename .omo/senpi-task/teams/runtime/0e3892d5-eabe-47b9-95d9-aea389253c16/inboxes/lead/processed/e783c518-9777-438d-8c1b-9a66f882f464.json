@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "e783c518-9777-438d-8c1b-9a66f882f464",
+  "from": "product-critic",
+  "to": "lead",
+  "kind": "message",
+  "body": "Acceptance integrity must be explicit in the plan: preregister every usefulness/safety gate before evaluation and use a frozen, hashed, disjoint holdout—not the bake-off/tuning corpus. Prevent leakage at claim/paraphrase, source version, speaker recording, and deck-instance levels. Freeze semantic endpoints, expert labels, claim classes, network/cache conditions, sample size, formulas, exclusions, and failure treatment before unblinding. Acceptance is one formal run; after a fix, retire the exposed holdout and create a new disjoint one while retaining the failed result. Report per-class rates/CIs; critical-zero errors stay zero.\n\nNo safety fork needs user input: default to second-device Console, mandatory human approval, feature-flagged supervised live publication, high-impact-claim exclusion, <=3s live leases, hide-on-uncertainty, curated hide-on-disconnect unless a signed offline package explicitly permits persistence, manual placement, and separate public/private origins with narrow DTO/gateway.\n\nOnly genuine sponsor choice: whether private live recommendations may count as final MVP. Application-derived default says no; full contract requires eligible live candidates to traverse supervised approval to public Stage. Calling private-only final MVP is a formal scope change requiring written confirmation.",
+  "timestamp": 1786651847130,
+  "summary": "Preregistered holdout protocol; one scope choice remains"
+}

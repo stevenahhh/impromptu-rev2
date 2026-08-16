@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "6610d4c3-8fa2-4e0a-b224-a531583ee5c1",
+  "from": "systems-critic",
+  "to": "scope-critic",
+  "kind": "message",
+  "body": "Cross-critique request: attack whether these are essential MVP decisions or over-engineering: separate-domain public Stage; public projection gateway/store; revisioned WSS with controllerEpoch; phone-first mirrored bootstrap; canonical ingestion bundle before AI; private-only live web candidates until quality gates. Identify deletable complexity and the smallest experiment that decides each fork.",
+  "timestamp": 1786650710999,
+  "summary": "Request scope attack on irreversible choices"
+}

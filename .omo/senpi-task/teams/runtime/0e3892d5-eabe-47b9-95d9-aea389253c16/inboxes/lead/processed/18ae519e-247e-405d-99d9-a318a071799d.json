@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "18ae519e-247e-405d-99d9-a318a071799d",
+  "from": "product-critic",
+  "to": "lead",
+  "kind": "message",
+  "body": "Close the remaining semantics as follows:\n\nLatency: release clock starts at expert-annotated semantic acoustic endpoint of an assertion/question, not STT-final receipt. End is eligible Console render. Require end-to-end p95 <=5s; timeouts/errors/stale-slide and abstentions on answerable events count as failures. STT-final and stage timings are diagnostic only; do not sum component p95s as proof. 'Related' = directly claim-supporting or Q&A-actionable with source grounding, pre-labelled by experts; topical-only fails.\n\nDisconnect: reject literal 'immediate hide' because silent partition detection is not instantaneous. Give each LIVE_VERIFIED public card a server-issued <=3s display lease refreshed only while published/current/authoritative. Hide synchronously on explicit close/error, tombstone, stale event, epoch change, or lease expiry, whichever first. Cable/network-cut plus timer-throttling tests must prove maximum silent-partition exposure <=3s or public live cards remain blocked. After hide, only a fresh authoritative snapshot/new lease may reveal; never queued local resurrection. Connected retract remains p95 <=500ms. CURATED_PREAPPROVED may persist offline only under explicit deck/version/slide/rights/DLP and local-expiry policy.\n\nStrict privacy means separate-device Console is the default in both extend and mirror; co-resident extended Console may be a convenience mode but cannot carry the no-private-pixel promise during OS topology transition. High-impact medical/legal/financial claims are excluded from live-public MVP; numeric/date/entity errors are critical-zero.\n\nFinal scope ruling: curated is first demo; private live recommendation is intermediate guarded pilot; the application’s full contract requires a supervised, feature-flagged approval path from eligible live candidate to public Stage.",
+  "timestamp": 1786651625523,
+  "summary": "Final semantics: audio endpoint and live-card lease"
+}

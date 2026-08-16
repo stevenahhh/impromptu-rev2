@@ -1,0 +1,26 @@
+{
+  "httpStatus": 201,
+  "manifestPath": "C:/Users/steve/AppData/Local/Temp/impromptu-render-qa/final-render/render.json",
+  "deckVersion": "deck_726eda0e9029f68017813882160fb480b405a15475b82613c5c61e0ef4432630",
+  "slideCount": 3,
+  "slides": [
+    {
+      "ordinal": 1,
+      "publicSlideKey": "slide_f7c0b54e0a890365fefb587d212173b64f92c50f7b43f5c187a4429866ecba56",
+      "imageUrl": "http://localhost:4188/final-render/slides/slide-1.svg",
+      "contentHash": "292cc465ddc319eafc18648d34cc5f2e98ad38a5dc0cff639560f1bf7cefd7bb"
+    },
+    {
+      "ordinal": 2,
+      "publicSlideKey": "slide_7aa0fd59bb199dc41c0bcc17eab1567bf98ef810e5c6cdd1275133979859b26f",
+      "imageUrl": "http://localhost:4188/final-render/slides/slide-2.svg",
+      "contentHash": "69468e00503200465b71654a516464fe26c0d0a88f4ce8a23d4ced98ff82016e"
+    },
+    {
+      "ordinal": 3,
+      "publicSlideKey": "slide_000803621852a74b3520da0a28b1e8ff1f1e3976274517934e15b4ffac843104",
+      "imageUrl": "http://localhost:4188/final-render/slides/slide-3.svg",
+      "contentHash": "ba45aa04c430a849439e39f20853864842b6baae8208c8e1e6fb335de1fbfae7"
+    }
+  ]
+}

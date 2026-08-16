@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "messageId": "e64ef501-8fe3-4260-9150-3e3fc29300cc",
+  "from": "logic-critic",
+  "to": "delivery-critic",
+  "kind": "message",
+  "body": "Accepted. One final mechanical detail to include: semantic endpoints/audio spans and Stage slide-applied events originate on different devices in mirror mode. Readiness must establish a monotonic session-clock mapping with a measured uncertainty bound; fusion is eligible only when one immutable slide occurrence covers the entire final audio interval plus uncertainty. Boundary crossings or excess clock uncertainty terminate AMBIGUOUS/abstain, never use processing-time currentSlide.",
+  "timestamp": 1786651978685
+}

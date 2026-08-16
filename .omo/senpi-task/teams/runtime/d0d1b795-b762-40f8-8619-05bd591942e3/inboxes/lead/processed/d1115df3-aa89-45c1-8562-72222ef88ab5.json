@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "d1115df3-aa89-45c1-8562-72222ef88ab5",
+  "from": "security-privacy",
+  "to": "lead",
+  "kind": "message",
+  "body": "BOUNDARY LEAD (sourced): Use two origins, e.g. audience.example and console.example, not paths. OWASP warns path/domain cookie scoping cannot isolate apps of different security levels and localStorage is origin-wide. Audience origin: no auth cookie for presenter, no CORS to private APIs, CSP frame-ancestors 'none', Permissions-Policy disables microphone/camera/display-capture, Referrer-Policy no-referrer, no third-party scripts, public-only SW. Console origin: __Host- session cookie (Secure/HttpOnly/SameSite=Strict/no Domain), Cache-Control no-store, Clear-Site-Data on logout, no sensitive Cache API/IndexedDB/localStorage. Both connect to distinct server namespaces; Audience principal has only session_id + audience:read. Audience event schema is an immutable allowlist DTO emitted only after a server-side candidate->verified->published transition. Never send private events then hide them. Prefer server relay; do not use BroadcastChannel (any same-origin context can subscribe). If postMessage is unavoidable, exact targetOrigin plus exact event.origin/event.source and schema validation. Sever opener with COOP: same-origin or noopener/noreferrer. Sources: https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html ; https://cheatsheetseries.owasp.org/cheatsheets/HTML5_Security_Cheat_Sheet.html ; https://developer.mozilla.org/en-US/docs/Web/API/Broadcast_Channel_API ; https://developer.mozilla.org/en-US/docs/Web/API/Window/postMessage ; https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy/frame-ancestors",
+  "timestamp": 1786648401070,
+  "summary": "Public-private display invariants"
+}

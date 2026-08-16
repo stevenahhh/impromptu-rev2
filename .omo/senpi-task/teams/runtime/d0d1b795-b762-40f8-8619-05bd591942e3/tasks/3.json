@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "id": "3",
+  "subject": "Remote console architecture",
+  "description": "Prove the second-device presenter console flow for mirrored displays.",
+  "status": "completed",
+  "owner": "remote-console",
+  "blocks": [],
+  "blockedBy": [],
+  "createdAt": 1786648240190,
+  "updatedAt": 1786650786336,
+  "claimedAt": 1786650783316
+}

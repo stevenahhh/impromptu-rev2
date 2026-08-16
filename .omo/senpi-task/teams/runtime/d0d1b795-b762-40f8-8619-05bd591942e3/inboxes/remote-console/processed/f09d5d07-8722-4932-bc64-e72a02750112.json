@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "f09d5d07-8722-4932-bc64-e72a02750112",
+  "from": "lead",
+  "to": "remote-console",
+  "kind": "message",
+  "body": "Close EXPAND leads with a final recommendation: choose takeover UX and pairing UX for MVP. Use explicit assumptions: account-authenticated presenter is available; anonymous mode is out of MVP; operator confidentiality/E2EE is not required in MVP. Reconcile QR fragment secret vs no bearer token and return a single safe protocol plus dead-end list.",
+  "timestamp": 1786648997348,
+  "summary": "원격 콘솔 페어링과 takeover 결론 확정"
+}

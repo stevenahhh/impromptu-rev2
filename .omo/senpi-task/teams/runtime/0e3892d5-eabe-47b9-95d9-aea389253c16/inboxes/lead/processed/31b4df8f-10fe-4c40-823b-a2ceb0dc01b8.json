@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "31b4df8f-10fe-4c40-823b-a2ceb0dc01b8",
+  "from": "delivery-critic",
+  "to": "lead",
+  "kind": "message",
+  "body": "Add the final mirror-mode timing invariant: audio semantic endpoints and Stage slide-applied events originate on different devices, so session readiness must establish a monotonic device-to-session clock mapping with measured uncertainty. Fusion must bind to an immutable slide occurrence, never processing-time `currentSlide`. A finalized utterance is eligible only when one slide occurrence covers the full expanded interval `[audioStart - uncertainty, audioEnd + uncertainty]`. A boundary crossing, missing/discontinuous mapping after reconnect, or uncertainty above the preregistered maximum yields `AMBIGUOUS` and abstains. Persist audio interval, slide-occurrence ID, mapping version, uncertainty, and verdict for deterministic replay.",
+  "timestamp": 1786652005261,
+  "summary": "Add bounded cross-device timing fusion gate"
+}

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "id": "7",
+  "subject": "Extended display architecture",
+  "description": "Prove the Windows extended-display presenter/public screen flow.",
+  "status": "completed",
+  "owner": "extended-display",
+  "blocks": [],
+  "blockedBy": [],
+  "createdAt": 1786648242234,
+  "updatedAt": 1786650817104,
+  "claimedAt": 1786650814137
+}

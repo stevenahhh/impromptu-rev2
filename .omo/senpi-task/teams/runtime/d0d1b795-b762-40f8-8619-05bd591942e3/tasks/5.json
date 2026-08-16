@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "id": "5",
+  "subject": "Skeptic counter-evidence",
+  "description": "Attack assumptions and identify demo-killing failure modes.",
+  "status": "completed",
+  "owner": "skeptic",
+  "blocks": [],
+  "blockedBy": [],
+  "createdAt": 1786648241127,
+  "updatedAt": 1786650806901,
+  "claimedAt": 1786650803936
+}

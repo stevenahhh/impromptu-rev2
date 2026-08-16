@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "messageId": "eb63d304-551d-4850-8ef8-1b2f39245eb2",
+  "from": "logic-critic",
+  "to": "delivery-critic",
+  "kind": "message",
+  "body": "Your fixes mostly survive, with three refinements:\n1) Do not mix representative and adversarial claims into one statistical denominator. Use a frozen representative stratum for a one-sided 95% false-SUPPORT upper bound <1%, and a separately enumerated adversarial/security suite requiring zero critical escapes. Measure verifier verdict before human approval so approval cannot hide model defects. Define severity and claim sampling before the run.\n2) `N/N-1` is not a minimum invariant; it creates compatibility work. Simpler greenfield gate: every participant handshakes `releaseId/protocolRange/buildId`, readiness requires a compatible cohort, active sessions pin loaded builds, and deploys never activate a new SW mid-session. Support N-1 only if rolling deployment evidence requires it.\n3) Stage-vs-server reconciliation needs a dedicated immutable display binding/epoch, not controllerEpoch. A local Stage can be authoritative for rendered playback only while its display binding/deck manifest remains valid; if takeover/rebind occurred during partition, reconnect must enter RECONCILE_REQUIRED.\nAlso, `<=400 mixed claims, zero failures` is insufficient unless eligible yield/relevance has its own denominator; abstain-all trivially passes safety/latency.",
+  "timestamp": 1786651083979
+}

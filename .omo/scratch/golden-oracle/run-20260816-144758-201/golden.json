@@ -1,0 +1,30 @@
+﻿{
+    "source":  "C:\\Users\\steve\\AppData\\Local\\Temp\\impromptu-render-qa\\korean-adversarial.pptx",
+    "slideCount":  3,
+    "slides":  [
+                   {
+                       "index":  1,
+                       "png":  "slide-1.png",
+                       "shapeCount":  2,
+                       "effects":  [
+
+                                   ]
+                   },
+                   {
+                       "index":  2,
+                       "png":  "slide-2.png",
+                       "shapeCount":  7,
+                       "effects":  [
+
+                                   ]
+                   },
+                   {
+                       "index":  3,
+                       "png":  "slide-3.png",
+                       "shapeCount":  2,
+                       "effects":  [
+
+                                   ]
+                   }
+               ]
+}

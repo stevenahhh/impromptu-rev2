@@ -29,8 +29,6 @@ __pycache__/
 
 # User and runtime state
 .senpi/
-.omo/senpi-task/
-.omo/boulder.json
 NUL
 
 # Local presentation data and model artifacts

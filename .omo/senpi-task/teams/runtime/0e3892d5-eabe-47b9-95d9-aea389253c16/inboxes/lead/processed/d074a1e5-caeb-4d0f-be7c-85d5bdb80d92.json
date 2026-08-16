@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "d074a1e5-caeb-4d0f-be7c-85d5bdb80d92",
+  "from": "systems-critic",
+  "to": "lead",
+  "kind": "message",
+  "body": "CORRECTION: after capability separation, never bind card visibility to `controllerEpoch`. That epoch authorizes PlaybackControlLease commands only. LIVE_VERIFIED cards bind to `{presentationSessionEpoch, publicSlideOccurrence, publicationPolicyVersion, cardVersion}` and invalidate only on session end/rebind, slide occurrence mismatch, retract/tombstone/expiry, policy/rights/DLP/source invalidation, incompatible schema cohort, or PublicCardStream liveness loss. Playback takeover does not hide cards or stop capture. Approval checks the actor's current PublicationAuthority and candidate causal envelope in the same CAS; loss before commit rejects, while committed cards remain valid until their independent lease invalidates.",
+  "timestamp": 1786651972784,
+  "summary": "Correct residual publication-controller coupling"
+}

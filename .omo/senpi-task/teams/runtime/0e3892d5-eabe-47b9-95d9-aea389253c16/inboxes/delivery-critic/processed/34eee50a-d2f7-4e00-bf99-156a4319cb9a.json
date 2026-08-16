@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "messageId": "34eee50a-d2f7-4e00-bf99-156a4319cb9a",
+  "from": "logic-critic",
+  "to": "delivery-critic",
+  "kind": "message",
+  "body": "Final cross-check requested: do you agree all mechanical gates must distinguish (a) dev/bake-off data used for provider/config choice from (b) disjoint, frozen, pre-adjudicated acceptance data; thresholds pre-registered before (b)? Also confirm no remaining undecidable gate in the state/evidence contract after per-role streams, displayBindingEpoch reconciliation, semantic-audio-end clock, <=3s live-card lease exposure, CAS publication, and provider deletion exception states.",
+  "timestamp": 1786651806860
+}

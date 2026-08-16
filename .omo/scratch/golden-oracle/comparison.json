@@ -1,0 +1,24 @@
+{
+  "powerpointRunStatus": "OK 20260816-145437-801",
+  "slide": 2,
+  "powerpointComEffectCount": 0,
+  "parsedTimelineEffectCount": 3,
+  "parsedEffects": [
+    {
+      "effectClass": "entrance",
+      "presetId": 1,
+      "shapeId": 2
+    },
+    {
+      "effectClass": "entrance",
+      "presetId": 2,
+      "shapeId": 3
+    },
+    {
+      "effectClass": "emphasis",
+      "presetId": 11,
+      "shapeId": 2
+    }
+  ],
+  "interpretation": "PowerPoint COM consistently exposes zero effects for this hand-authored OOXML timing tree; the package parser reads the three raw timing nodes."
+}

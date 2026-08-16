@@ -1,0 +1,31 @@
+{"type":"steer_queued","payload":{"queue_position":1,"deliverAs":"steer"}}
+{"type":"transition_applied","payload":{"type":"transition_applied","status":"running","residency_state":"resident"}}
+{"type":"steered","payload":{"delivered":"steer","queued":true}}
+{"type":"assistant_message","payload":{"text":"I read this as a hostile architecture audit - I’ll inspect the report and ledgers, reconcile the critics against the explicit two-mode requirement, and return only the invariants and go/no-go gates needed to eliminate logical forks."}}
+{"type":"tool_execution","payload":{"tool":"bash","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"bash","is_error":true}}
+{"type":"tool_execution","payload":{"tool":"bash","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"read","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"read","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"read","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"bash","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"read","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"read","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"read","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"read","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"read","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"read","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"read","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"read","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"read","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"read","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"read","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"bash","is_error":false}}
+{"type":"tool_execution","payload":{"tool":"read","is_error":false}}
+{"type":"steered","payload":{"delivered":"steer"}}
+{"type":"steered","payload":{"delivered":"steer"}}
+{"type":"transition_applied","payload":{"type":"transition_applied","status":"cancelled","residency_state":"resident"}}
+{"type":"cancelled","payload":{"previous_status":"running","reason":"Logic review did not synthesize after two steers; peer convergence supplied decidable invariants"}}
+{"type":"late_transition_ignored","payload":{"type":"late_transition_ignored","attempted_status":"cancelled","current_status":"cancelled"}}
+{"type":"transition_applied","payload":{"type":"transition_applied","status":"cancelled","residency_state":"disposed"}}
+{"type":"destroyed","payload":{"cause":"cancel"}}

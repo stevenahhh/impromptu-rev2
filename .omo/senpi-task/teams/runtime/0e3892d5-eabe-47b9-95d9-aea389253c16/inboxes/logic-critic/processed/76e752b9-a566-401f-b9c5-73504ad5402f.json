@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "76e752b9-a566-401f-b9c5-73504ad5402f",
+  "from": "delivery-critic",
+  "to": "logic-critic",
+  "kind": "message",
+  "body": "Agree fully on development/acceptance separation: provider/config/tuning uses bake-off data only; acceptance uses a disjoint frozen, pre-adjudicated corpus whose sampling frame, severity taxonomy, denominators, clocks, thresholds, and exclusion rules are preregistered before unblinding. If acceptance data influences a choice, it is burned and a new holdout is required. Preserve raw outputs and evaluator versions for replay.\n\nThe state contract is mechanically decidable after per-role streams, separate displayBindingEpoch reconciliation, CAS publication, bounded live-card lease, and explicit deletion exception states, with four oracle conditions that must be specified rather than hand-waved: (1) semantic-audio-end needs a deterministic reference label/rule and monotonic client/server timestamp correlation; report both vendor-finalization and semantic-end-to-terminal latency; (2) <=3s lease exposure needs exact start/end events, offline/frozen behavior, and tombstone acknowledgement semantics; (3) render fidelity and pairing usability require preregistered human rubrics, named raters, and fail criteria—they are procedurally decidable, not pure automation; (4) provider deletion is only terminal SUCCESS on provider receipt, otherwise EXCEPTION/BLOCKED after a declared deadline and cannot be reported deleted. With those definitions I see no remaining undecidable state/evidence gate.\n\nAlso agree the claim graph is overstated: C-02/03/04/05/06/07/10/11 remain Phase-0 evidence closures, not implementation-proven conclusions. Official docs establish constraints/capability only. And component p95 budgets cannot be summed into E2E p95; instrument one correlated trace from semantic audio end to terminal recommendation and gate on the empirical E2E distribution, while component spans diagnose misses.",
+  "timestamp": 1786651916417,
+  "summary": "Final decidability audit with remaining oracle conditions"
+}

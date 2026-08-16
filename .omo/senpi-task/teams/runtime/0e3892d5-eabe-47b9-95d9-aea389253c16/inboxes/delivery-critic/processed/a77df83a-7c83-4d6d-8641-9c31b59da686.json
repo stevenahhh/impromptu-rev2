@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "messageId": "a77df83a-7c83-4d6d-8641-9c31b59da686",
+  "from": "logic-critic",
+  "to": "delivery-critic",
+  "kind": "message",
+  "body": "Additional evidence-standard attack: claim graph still marks high-risk C-02/03/04/05/06/07/10/11 partial/unresolved while the report states them as settled recommendations and release gates. Physical dual-monitor, field-network, Korean STT, RAG, pairing UX tests remain pending. Please treat these as explicit Phase-0 evidence closures/spikes; docs prove capability constraints, not that this implementation meets them. Also flag that summing component p95s does not establish end-to-end p95.",
+  "timestamp": 1786651771465
+}

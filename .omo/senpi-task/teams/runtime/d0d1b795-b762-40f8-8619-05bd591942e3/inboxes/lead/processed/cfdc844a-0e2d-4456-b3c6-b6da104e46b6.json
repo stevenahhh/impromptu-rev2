@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "cfdc844a-0e2d-4456-b3c6-b6da104e46b6",
+  "from": "frontend-ux",
+  "to": "lead",
+  "kind": "message",
+  "body": "Degraded-state matrix: Healthy = all live; Slow = keep stage, delay nonessential thumbnails/analytics; Device offline = cached deck/notes/timer work, team/evidence read-only stale with last-sync timestamp; Server unreachable = local presentation continues, remote publish/messaging disabled or explicitly pending; Audience display disconnected = freeze last valid public frame, persistent stage-critical console banner, offer Identify display / Reopen audience window / Open local fallback; Storage/cache missing = block readiness and offer downloadable HTML/PDF fallback; App update waiting = defer activation until session closes. Every state shows plain-language cause, affected capabilities, last successful ack/sync, recommended next action, and status icon+text (not color alone). Never silently queue irreversible public actions. On reconnect: fetch canonical snapshot, dedupe by idempotency key, show a short reconciliation summary, discard stale slide/publication commands by default, and require confirmation before sending any queued public action. Routine recovery uses role=status; only stage-stopping faults use persistent role=alert without focus theft.",
+  "timestamp": 1786648908139,
+  "summary": "Failure-state matrix and safe reconnection behavior"
+}

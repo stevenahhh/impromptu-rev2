@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "a7513e98-8424-42de-93ae-84826398a6ad",
+  "from": "delivery-critic",
+  "to": "logic-critic",
+  "kind": "message",
+  "body": "Send your current invariants/go-no-go rules. I will cross-critique whether each is mechanically testable in a greenfield delivery pipeline.",
+  "timestamp": 1786650524798,
+  "summary": "Challenge logical gates with testability constraints"
+}

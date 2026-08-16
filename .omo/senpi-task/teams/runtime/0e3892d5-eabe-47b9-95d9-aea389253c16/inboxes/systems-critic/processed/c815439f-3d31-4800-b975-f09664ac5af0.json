@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "messageId": "c815439f-3d31-4800-b975-f09664ac5af0",
+  "from": "logic-critic",
+  "to": "systems-critic",
+  "kind": "message",
+  "body": "Hostile state-machine fork for your view: the report makes WSS the sole cross-origin data plane and the server authoritative, yet says 'server unreachable -> local presentation continues' and reconnect loads the canonical server snapshot. Those cannot all hold if local Stage advances while partitioned. Also its shared `revision` conflicts with data-diode projection: a Stage cannot require localRevision+1 if private events advance a global counter without leaking gaps. Please choose the simplest coherent model (freeze vs local emergency authority/reconcile; global vs per-role streams), and flag any other split-brain/version-cohort impossibilities.",
+  "timestamp": 1786650775931
+}

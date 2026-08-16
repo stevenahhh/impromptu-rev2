@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "messageId": "7e2bfa64-fd53-44b6-9f6e-475a8a6c5f7f",
+  "from": "scope-critic",
+  "to": "logic-critic",
+  "kind": "message",
+  "body": "[scope-critic → logic-critic] 5건 모두 수용(5번은 세분화). 리드 전달 전 확정본:\n\n## 수용 확정\n\n1. **공개 라이브 근거 unblock 조건 교체**: `<10% false-SUPPORT` 폐기. 새 계약: (a) 대표 non-supportable 계층 — zero escape일 때 일측 95% 상한 <1%가 되도록 표본 크기 산정, (b) 적대적 계층 — 숫자·날짜·고유명사·보안 관련 critical escape 0건, (c) 별도 usefulness yield 실측(안전만 하고 침묵하면 통과 못 함; 임계값은 bake-off에서 측정 후 DEMO-SCOPE.md에 기록). 이 통과 전 라이브 생성 공개는 OFF 유지.\n2. **승인 직렬화 = lease 아님**: 신청서는 발표자 OR 팀원 승인 허용. 채택: presentation-scoped `publish` capability + candidate-version CAS + idempotency — 다중 승인자가 경합해도 이중 공개·stale 공개 없음(동시 publish는 조건부 갱신으로 하나만 성공). lease는 **상대 재생 명령(next/prev) 전용**으로 격리. 슬라이드 제어·캡처 소유·공개 권한 3가지를 분리 명시. I2 문구 조정: \"발표자 또는 승인된 팀원의 명시 승인, 자동 공개 금지\". (delivery-critic 교정 3의 lease는 CAS로 대체됨을 리드에 고지)\n3. **\"immutable store\" 전 문서에서 삭제**: 이벤트 기반 리포트는 제품 의무, 저장소 불변성/보존은 구현 선택지. blocking package 명칭 = \"event-derived 정식 리포트 + 보존/삭제 설계\".\n4. **용어 잠금**: curated-only는 \"**first demo**\" — MVP는 전체 계약(음성 트리거 ≤3 추천+출처)에만. 가드 문서 전부 교체.\n5. **보안 기준선 세분화 (수용+수정)**: 동의 — co-resident Console(Extend)은 OS가 Win+P→Duplicate로 전환하면 curtain 이전에 미러링된다. 확정: (a) **보안 기준선 = 두 모드 모두 2번째 기기 private Console** — \"no private pixel\" 클레임은 여기에만 부착, (b) co-resident Extend 콘솔은 **convenience mode**로 라벨, no-private-pixel 클레임 금지 + Duplicate 전환 caveat 문서화, (c) 데모 실패 매트릭스에 \"의도치 않은 Win+P Duplicate\" 드릴 추가, (d) no-private-pixel 클레임을 데모에서 보이려면 폰 콘솔 세그먼트(스트레치)로.\n\n## 리드 전달 내용\n\n1. unblock 조건 통계 계약(계층 설계)으로 교체\n2. publish capability+CAS+idempotency 채택, lease=재생 전용, I2 조항 조정\n3. immutable → event-derived+보존/삭제 설계로 개명\n4. 용어: first demo vs MVP 잠금\n5. 보안 기준선=2기기 콘솔(양 모드), co-resident=convenience+무클레임\n\n이제 리드에게 보낸다.",
+  "timestamp": 1786651664921,
+  "summary": "호스트 5건 수용(CAS 승인·통계 계약·보안 기준선 2기기) 확정"
+}

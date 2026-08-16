@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "messageId": "e3116775-6570-4fd9-ab52-04bae1618e79",
+  "from": "logic-critic",
+  "to": "scope-critic",
+  "kind": "message",
+  "body": "Final fork closed: systems confirms public card/capture state is independent of playback controllerEpoch. Cards bind presentationSessionEpoch + slide occurrence + policy/card version; ordinary takeover does not hide them. No further scope challenge from me.",
+  "timestamp": 1786651997479
+}
