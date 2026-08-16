@@ -1,3 +1,5 @@
+import { statSync } from "node:fs";
+import { isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   ModelRoutingRegistry,
@@ -7,6 +9,9 @@ import {
 } from "@impromptu/model-router";
 import { z } from "zod";
 import { parsePrivateBackendConfig } from "./config.ts";
+import { createDeckRenderSubprocess } from "./deck-render-subprocess.ts";
+import { createDeckUploadService } from "./deck-upload-service.ts";
+import { createDeckUploadWorker } from "./deck-upload-worker.ts";
 import { createPrivateBackendHandler } from "./http.ts";
 import {
   createPreparedEvidenceStore,
@@ -26,6 +31,38 @@ function required(name: string): string {
   return value;
 }
 
+function existingAbsoluteDirectory(path: string, name: string): string {
+  if (!isAbsolute(path)) {
+    throw new Error(`${name} must be an existing absolute directory: ${path}`);
+  }
+  let stats: ReturnType<typeof statSync>;
+  try {
+    stats = statSync(path);
+  } catch {
+    throw new Error(`${name} must be an existing absolute directory: ${path}`);
+  }
+  if (!stats.isDirectory()) {
+    throw new Error(`${name} must be an existing absolute directory: ${path}`);
+  }
+  return path;
+}
+
+function renderDeadlineMs(value: string | undefined): number {
+  if (value === undefined) return 60_000;
+  if (!/^[1-9]\d*$/.test(value)) {
+    throw new Error("DECK_RENDER_DEADLINE_MS must be a positive integer of milliseconds");
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new Error("DECK_RENDER_DEADLINE_MS must be a positive integer of milliseconds");
+  }
+  return parsed;
+}
+
+const DEFAULT_INGESTION_PROJECT = fileURLToPath(
+  new URL("../../../services/ingestion", import.meta.url),
+);
+
 const config = parsePrivateBackendConfig(Bun.env);
 const internalAuthToken = required("SERVICE_AUTH_TOKEN");
 const expectedAuthorizationCode = required("CONTROLLER_AUTHORIZATION_CODE");
@@ -36,7 +73,29 @@ const takeoverActorId = Bun.env.TAKEOVER_ACTOR_ID;
 if ((takeoverAuthorizationCode === undefined) !== (takeoverActorId === undefined)) {
   throw new Error("TAKEOVER_AUTHORIZATION_CODE and TAKEOVER_ACTOR_ID must be configured together");
 }
-const projection = new ProjectionHttpPort(required("PROJECTION_GATEWAY_ORIGIN"), internalAuthToken);
+const projectionGatewayOrigin = required("PROJECTION_GATEWAY_ORIGIN");
+const projection = new ProjectionHttpPort(projectionGatewayOrigin, internalAuthToken);
+const deckStagingRoot = existingAbsoluteDirectory(
+  required("DECK_STAGING_ROOT"),
+  "DECK_STAGING_ROOT",
+);
+const deckArtifactRoot = existingAbsoluteDirectory(
+  required("DECK_ARTIFACT_ROOT"),
+  "DECK_ARTIFACT_ROOT",
+);
+const ingestionProject = existingAbsoluteDirectory(
+  Bun.env.INGESTION_PROJECT_PATH ?? DEFAULT_INGESTION_PROJECT,
+  "INGESTION_PROJECT_PATH",
+);
+const deckUploadService = createDeckUploadService({
+  projectionGatewayOrigin,
+  worker: createDeckUploadWorker({
+    subprocess: createDeckRenderSubprocess({ ingestionProject }),
+    stagingRoot: deckStagingRoot,
+    artifactRoot: deckArtifactRoot,
+    deadlineMs: renderDeadlineMs(Bun.env.DECK_RENDER_DEADLINE_MS),
+  }),
+});
 const snapshotPath = required("PRIVATE_SNAPSHOT_PATH");
 const snapshotFile = Bun.file(snapshotPath);
 let store = createPreparedEvidenceStore();
@@ -225,6 +284,7 @@ const server = Bun.serve({
     now: Date.now,
     recommendations,
     persist,
+    uploads: deckUploadService,
   }),
 });
 

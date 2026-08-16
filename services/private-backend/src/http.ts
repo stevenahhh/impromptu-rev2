@@ -1,3 +1,5 @@
+import type { PrivateDeckContext } from "@impromptu/contracts/private";
+import type { PublishedDeckArtifact } from "@impromptu/contracts/public";
 import type { RecommendationOutcome } from "@impromptu/contracts/retrieval";
 import type { ExactOrigin, PrivateBackendConfig } from "./config.ts";
 import { createPreparedDeckArtifacts } from "./prepared-deck-upload.ts";
@@ -13,6 +15,31 @@ export interface AccountIdentityVerifier {
   } | null>;
 }
 
+export type DeckUploadContentType =
+  | "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+  | "application/pdf";
+
+export interface RawDeckUpload {
+  readonly filename: string;
+  readonly contentType: DeckUploadContentType;
+  readonly byteLength: number;
+  readonly body: ReadableStream<Uint8Array>;
+}
+
+export interface DeckUploadReceipt {
+  readonly privateDeck: PrivateDeckContext;
+  readonly publicDeck: PublishedDeckArtifact;
+  readonly sourceHash: string;
+}
+
+export interface DeckUploadService {
+  acceptRawDeck(input: {
+    readonly accountId: string;
+    readonly actorId: string;
+    readonly upload: RawDeckUpload;
+  }): Promise<DeckUploadReceipt>;
+}
+
 export interface PrivateBackendHttpDependencies {
   readonly coordinator: PreparedEvidenceCoordinator;
   readonly identityVerifier: AccountIdentityVerifier;
@@ -22,6 +49,7 @@ export interface PrivateBackendHttpDependencies {
     recommend(accountSessionId: string, input: unknown): Promise<RecommendationOutcome>;
   };
   readonly persist?: () => Promise<void>;
+  readonly uploads?: DeckUploadService;
 }
 
 function json(body: unknown, status: number, headers?: Headers): Response {
@@ -80,6 +108,13 @@ async function requestBody(request: Request): Promise<unknown> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isDeckUploadContentType(value: string): value is DeckUploadContentType {
+  return (
+    value === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
+    value === "application/pdf"
+  );
 }
 
 function controllerEventStream(
@@ -269,6 +304,63 @@ export function createPrivateBackendHandler(
         result.outcome === "APPLIED" ? 200 : 401,
         origin,
       );
+    }
+
+    if (request.method === "POST" && url.pathname === "/v1/deck-uploads") {
+      if (dependencies.uploads === undefined) {
+        return json({ error: "uploads_unavailable" }, 503, origin);
+      }
+      const contentType = request.headers.get("content-type");
+      if (contentType === null || !isDeckUploadContentType(contentType)) {
+        return json({ error: "unsupported_content_type" }, 400, origin);
+      }
+      const contentLengthHeader = request.headers.get("content-length");
+      if (contentLengthHeader === null) {
+        return json({ error: "content_length_required" }, 400, origin);
+      }
+      const contentLength = Number(contentLengthHeader);
+      if (!Number.isInteger(contentLength) || contentLength < 0) {
+        return json({ error: "invalid_content_length" }, 400, origin);
+      }
+      const rawFilename = request.headers.get("x-filename");
+      if (rawFilename === null || rawFilename.length === 0) {
+        return json({ error: "filename_required" }, 400, origin);
+      }
+      let filename: string;
+      try {
+        filename = decodeURIComponent(rawFilename);
+      } catch {
+        return json({ error: "unsafe_filename" }, 400, origin);
+      }
+      if (filename.length === 0 || filename.includes("/") || filename.includes("\\")) {
+        return json({ error: "unsafe_filename" }, 400, origin);
+      }
+      const rawBody = request.body;
+      if (rawBody === null) {
+        return json({ error: "body_required" }, 400, origin);
+      }
+      let receipt: DeckUploadReceipt;
+      try {
+        receipt = await dependencies.uploads.acceptRawDeck({
+          accountId: account.value.accountId,
+          actorId: account.value.actorId,
+          // Content-Length is declared metadata; the upload service verifies the
+          // actual streamed length against it without the HTTP boundary buffering.
+          upload: { filename, contentType, byteLength: contentLength, body: rawBody },
+        });
+      } catch {
+        return json({ error: "deck_upload_rejected" }, 400, origin);
+      }
+      const presentation = dependencies.coordinator.createPresentation(
+        accountSessionId,
+        { privateDeck: receipt.privateDeck, publicDeck: receipt.publicDeck },
+        dependencies.now(),
+      );
+      if (presentation.outcome === "REJECTED") {
+        return json({ error: presentation.reason }, 400, origin);
+      }
+      await dependencies.persist?.();
+      return json(receipt, 201, origin);
     }
 
     const body = await requestBody(request);
