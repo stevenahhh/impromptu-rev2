@@ -1,6 +1,6 @@
 import { type ChildProcessByStdio, spawn } from "node:child_process";
 import { once } from "node:events";
-import { rmSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import { createServer as createNetServer } from "node:net";
 import { join } from "node:path";
 import type { Readable } from "node:stream";
@@ -378,9 +378,13 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
     temporaryRoot,
     `impromptu-r2-wp3-projection-database-${process.pid}.json`,
   );
+  const deckStagingRoot = join(temporaryRoot, `impromptu-r2-wp3-deck-staging-${process.pid}`);
+  const deckArtifactRoot = join(temporaryRoot, `impromptu-r2-wp3-deck-artifacts-${process.pid}`);
   rmSync(profilePath, { force: true, recursive: true });
   rmSync(privateSnapshotPath, { force: true });
   rmSync(projectionDatabasePath, { force: true });
+  mkdirSync(deckStagingRoot, { recursive: true });
+  mkdirSync(deckArtifactRoot, { recursive: true });
   const projectionEnvironment = {
     PRIVATE_BACKEND_ORIGIN: privateOrigin,
     PROJECTION_GATEWAY_HOST: "127.0.0.1",
@@ -401,6 +405,8 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
     PRIVATE_SNAPSHOT_PATH: privateSnapshotPath,
     PROJECTION_GATEWAY_ORIGIN: projectionOrigin,
     SERVICE_AUTH_TOKEN: serviceToken,
+    DECK_STAGING_ROOT: deckStagingRoot,
+    DECK_ARTIFACT_ROOT: deckArtifactRoot,
   };
   try {
     let projectionProcess = await startProcess(

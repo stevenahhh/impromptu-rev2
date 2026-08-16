@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer as createNetServer } from "node:net";
 import { join } from "node:path";
 
@@ -21,6 +21,8 @@ async function availablePort(): Promise<number> {
 
 const privateSnapshotPath = join(import.meta.dir, ".restart-private-snapshot.json");
 const projectionDatabasePath = join(import.meta.dir, ".restart-projection-database.json");
+const deckStagingRoot = join(import.meta.dir, ".restart-deck-staging");
+const deckArtifactRoot = join(import.meta.dir, ".restart-deck-artifacts");
 const privatePort = await availablePort();
 const projectionPort = await availablePort();
 const privateOrigin = `http://127.0.0.1:${privatePort}`;
@@ -130,18 +132,24 @@ const privateEnvironment = {
   PRIVATE_SNAPSHOT_PATH: privateSnapshotPath,
   PROJECTION_GATEWAY_ORIGIN: projectionOrigin,
   SERVICE_AUTH_TOKEN: serviceToken,
+  DECK_STAGING_ROOT: deckStagingRoot,
+  DECK_ARTIFACT_ROOT: deckArtifactRoot,
 };
 
 afterEach(async () => {
   for (const process of processes.splice(0).toReversed()) await stop(process);
   rmSync(privateSnapshotPath, { force: true });
   rmSync(projectionDatabasePath, { force: true });
+  rmSync(deckStagingRoot, { recursive: true, force: true });
+  rmSync(deckArtifactRoot, { recursive: true, force: true });
 });
 
 describe("durable service-main restore boundary", () => {
   test("restores account, presentation, binding, and an unclaimed display session", async () => {
     rmSync(privateSnapshotPath, { force: true });
     rmSync(projectionDatabasePath, { force: true });
+    mkdirSync(deckStagingRoot, { recursive: true });
+    mkdirSync(deckArtifactRoot, { recursive: true });
     let projection = await start(
       "services/projection-gateway/src/main.ts",
       projectionEnvironment,

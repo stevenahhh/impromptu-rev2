@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
+import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 type ServiceProcess = ReturnType<typeof Bun.spawn<"ignore", "pipe", "pipe">>;
@@ -7,6 +7,18 @@ type ServiceProcess = ReturnType<typeof Bun.spawn<"ignore", "pipe", "pipe">>;
 const processes: ServiceProcess[] = [];
 const privateSnapshotPath = join(import.meta.dir, ".runtime-private-snapshot.json");
 const projectionDatabasePath = join(import.meta.dir, ".runtime-projection-database.json");
+const deckStagingRoot = join(import.meta.dir, ".runtime-deck-staging");
+const deckArtifactRoot = join(import.meta.dir, ".runtime-deck-artifacts");
+
+beforeAll(() => {
+  mkdirSync(deckStagingRoot, { recursive: true });
+  mkdirSync(deckArtifactRoot, { recursive: true });
+});
+
+afterAll(() => {
+  rmSync(deckStagingRoot, { force: true, recursive: true });
+  rmSync(deckArtifactRoot, { force: true, recursive: true });
+});
 
 afterEach(async () => {
   for (const process of processes.splice(0).toReversed()) {
@@ -105,6 +117,8 @@ describe("runnable WP3 service composition", () => {
         PRIVATE_SNAPSHOT_PATH: privateSnapshotPath,
         PROJECTION_GATEWAY_ORIGIN: "http://127.0.0.1:44102",
         SERVICE_AUTH_TOKEN: serviceToken,
+        DECK_STAGING_ROOT: deckStagingRoot,
+        DECK_ARTIFACT_ROOT: deckArtifactRoot,
       },
       "private-backend listening",
     );
