@@ -22,6 +22,8 @@ _MAX_SVG_CHARACTERS, _MAX_ASSETS = 16_000_000, 2_000
 _MAX_ASSET_BYTES, _MAX_TOTAL_ASSET_BYTES = 16_000_000, 128_000_000
 _MAX_ZIP_PARTS, _MAX_FONT_PARTS = 10_000, 128
 _MAX_FONT_BYTES, _MAX_XML_BYTES = 8_000_000, 2_000_000
+_SFNT_TRUETYPE_MAGIC = b"\x00\x01\x00\x00"
+_SFNT_OPENTYPE_MAGIC = b"OTTO"
 _A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
 _P_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"
 _R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -154,9 +156,14 @@ def extract_fonts(pptx_path: Path, output_dir: Path) -> tuple[EmbeddedFont, ...]
             root.mkdir(parents=True, exist_ok=True)
             results: list[EmbeddedFont] = []
             used_paths: set[str] = set()
-            for family, info in embedded:
-                relative_path = _font_relative_path(family, info, used_paths)
+            for family, info, guid in embedded:
                 payload = _bounded_read(archive, info)
+                if guid is not None:
+                    payload = _deobfuscate_font(payload, guid)
+                    extension = _sfnt_extension(payload)
+                else:
+                    extension = ".fntdata"
+                relative_path = _font_relative_path(family, info, used_paths, extension)
                 destination = (root / Path(relative_path)).resolve()
                 if not destination.is_relative_to(root):
                     raise FontExtractionError("font_path_escape", "font path escapes output")
@@ -202,17 +209,17 @@ def _xml_root(archive: ZipFile, name: str) -> ET.Element:
 
 def _embedded_font_bindings(
     archive: ZipFile, font_infos: tuple[ZipInfo, ...]
-) -> tuple[tuple[str, ZipInfo], ...]:
+) -> tuple[tuple[str, ZipInfo, str | None], ...]:
     names = {info.filename: info for info in font_infos}
     if "ppt/presentation.xml" not in archive.namelist():
         return ()
     presentation = _xml_root(archive, "ppt/presentation.xml")
     relationships = _xml_root(archive, "ppt/_rels/presentation.xml.rels")
     targets = {
-        node.get("Id", ""): f"ppt/{node.get('Target', '')}"
+        node.get("Id", ""): (f"ppt/{node.get('Target', '')}", node.get("Guid"))
         for node in relationships.findall(f"{{{_REL_NS}}}Relationship")
     }
-    bindings: list[tuple[str, ZipInfo]] = []
+    bindings: list[tuple[str, ZipInfo, str | None]] = []
     for embedded in presentation.findall(f".//{{{_P_NS}}}embeddedFont"):
         font = embedded.find(f"{{{_P_NS}}}font")
         family = font.get("typeface", "").strip() if font is not None else ""
@@ -221,8 +228,8 @@ def _embedded_font_bindings(
         for variant in embedded:
             relationship_id = variant.get(f"{{{_R_NS}}}id")
             target = targets.get(relationship_id or "")
-            if target in names:
-                bindings.append((family, names[target]))
+            if target is not None and target[0] in names:
+                bindings.append((family, names[target[0]], target[1]))
     return tuple(bindings)
 
 
@@ -239,10 +246,47 @@ def _theme_font_families(archive: ZipFile, infos: list[ZipInfo]) -> set[str]:
     return families
 
 
-def _font_relative_path(family: str, info: ZipInfo, used: set[str]) -> str:
+def _deobfuscate_font(payload: bytes, guid: str) -> bytes:
+    """Undo ECMA-376 Part 1 §17.8.1 font obfuscation.
+
+    The relationship GUID, byte-reversed, is XORed against the first 32 bytes
+    of the font part (bytes 0-15 and 16-31). XOR is its own inverse, so
+    deobfuscation is the same operation as obfuscation.
+    """
+    try:
+        key = bytes.fromhex(guid.strip("{}").replace("-", ""))[::-1]
+    except ValueError as error:
+        raise FontExtractionError(
+            "font_guid_invalid", "embedded font relationship GUID is malformed"
+        ) from error
+    if len(key) != 16:
+        raise FontExtractionError(
+            "font_guid_invalid", "embedded font relationship GUID is malformed"
+        )
+    decoded = bytearray(payload)
+    for i in range(min(len(decoded), 32)):
+        decoded[i] ^= key[i % 16]
+    return bytes(decoded)
+
+
+def _sfnt_extension(payload: bytes) -> str:
+    """Return the browser-loadable extension for a validated sfnt payload."""
+    if payload.startswith(_SFNT_TRUETYPE_MAGIC):
+        return ".ttf"
+    if payload.startswith(_SFNT_OPENTYPE_MAGIC):
+        return ".otf"
+    raise FontExtractionError(
+        "font_payload_invalid",
+        "embedded font does not start with a supported sfnt magic",
+    )
+
+
+def _font_relative_path(
+    family: str, info: ZipInfo, used: set[str], extension: str = ".fntdata"
+) -> str:
     safe_family = re.sub(r"[^A-Za-z0-9._-]+", "_", family).strip("._-") or "font"
-    candidate = f"fonts/{safe_family}.fntdata"
+    candidate = f"fonts/{safe_family}{extension}"
     if candidate in used:
-        candidate = f"fonts/{safe_family}_{Path(info.filename).stem}.fntdata"
+        candidate = f"fonts/{safe_family}_{Path(info.filename).stem}{extension}"
     used.add(candidate)
     return candidate

@@ -96,6 +96,62 @@ def _write_font_deck(path: Path) -> None:
         archive.writestr("ppt/fonts/font1.fntdata", b"opaque-font")
 
 
+_FONT_GUID = "{001B70DC-AA60-4AD5-90EC-18A0948E1EAE}"
+
+
+# ECMA-376 Part 1 §17.8.1 Font Embedding: obfuscation reverses the byte order
+# of the GUID and XORs it against the first 32 bytes of the font (bytes 0-15
+# and 16-31). XOR is its own inverse, so deobfuscation is the same operation.
+def _obfuscate_font(font_bytes: bytes, guid: str = _FONT_GUID) -> bytes:
+    key = bytes.fromhex(guid.strip("{}").replace("-", ""))[::-1]
+    obfuscated = bytearray(font_bytes)
+    for i in range(min(len(obfuscated), 32)):
+        obfuscated[i] ^= key[i % 16]
+    return bytes(obfuscated)
+
+
+def _sfnt_font_bytes() -> bytes:
+    """A small deterministic TrueType payload with a valid sfnt magic."""
+    header = b"\x00\x01\x00\x00" + (1).to_bytes(2, "big") + b"\x00" * 6
+    table = b"cmap" + b"\x00" * 12
+    return header + table + hashlib.sha256(b"browser-font-fixture").digest() * 2
+
+
+def _write_obfuscated_font_deck(path: Path, font_bytes: bytes) -> None:
+    presentation = """<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+      xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+      <p:embeddedFontLst><p:embeddedFont><p:font typeface="Embedded Family"/>
+      <p:regular r:id="rIdFont"/></p:embeddedFont></p:embeddedFontLst>
+    </p:presentation>"""
+    relationships = f"""<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+      <Relationship Id="rIdFont" Target="fonts/font1.fntdata"
+       Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/font"
+       Guid="{_FONT_GUID}"/>
+    </Relationships>"""
+    with ZipFile(path, "w", ZIP_DEFLATED) as archive:
+        archive.writestr("ppt/presentation.xml", presentation)
+        archive.writestr("ppt/_rels/presentation.xml.rels", relationships)
+        archive.writestr("ppt/fonts/font1.fntdata", _obfuscate_font(font_bytes))
+
+
+def test_extract_fonts_publishes_deobfuscated_browser_font(tmp_path: Path) -> None:
+    font_bytes = _sfnt_font_bytes()
+    source = tmp_path / "fonts.pptx"
+    _write_obfuscated_font_deck(source, font_bytes)
+
+    fonts = extract_fonts(source, tmp_path / "render")
+
+    embedded = next(font for font in fonts if font.embedded)
+    assert embedded.family == "Embedded Family"
+    assert embedded.relative_path is not None
+    assert embedded.relative_path.endswith(".ttf")
+    assert ".fntdata" not in embedded.relative_path
+    published = (tmp_path / "render" / embedded.relative_path).read_bytes()
+    assert published == font_bytes
+    assert published.startswith(b"\x00\x01\x00\x00")
+
+
 def test_extract_fonts_writes_embedded_and_reports_theme_only_fonts(tmp_path: Path) -> None:
     source = tmp_path / "fonts.pptx"
     _write_font_deck(source)
