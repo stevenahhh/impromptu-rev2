@@ -21,6 +21,7 @@ const dependencySections = [
 ] as const;
 const manifestProperties = new Set([
   "browserRoots",
+  "cspSources",
   "forbiddenPackagePrefixes",
   "forbiddenPathFragments",
   "forbiddenArtifactExtensions",
@@ -30,6 +31,7 @@ const manifestProperties = new Set([
 
 export interface BrowserDependencyManifest {
   readonly browserRoots: readonly string[];
+  readonly cspSources: readonly string[];
   readonly forbiddenPackagePrefixes: readonly string[];
   readonly forbiddenPathFragments: readonly string[];
   readonly forbiddenArtifactExtensions: readonly string[];
@@ -67,6 +69,7 @@ export function loadBrowserDependencyManifest(
   }
   return Object.freeze({
     browserRoots: readStringArray(parsed, "browserRoots"),
+    cspSources: readStringArray(parsed, "cspSources"),
     forbiddenPackagePrefixes: readStringArray(parsed, "forbiddenPackagePrefixes"),
     forbiddenPathFragments: readStringArray(parsed, "forbiddenPathFragments"),
     forbiddenArtifactExtensions: readStringArray(parsed, "forbiddenArtifactExtensions"),
@@ -84,7 +87,8 @@ export function scanBrowserDependencies(
     return [violation(".", "empty-root", ".", "at least one browser root is required")];
   }
   const violations: BrowserDependencyViolation[] = [];
-  for (const root of roots) scanRoot(manifest, root, cwd, violations);
+  const configuredCspFound = scanConfiguredCspSources(manifest, cwd, violations);
+  for (const root of roots) scanRoot(manifest, root, cwd, configuredCspFound, violations);
   return violations.sort((left, right) =>
     `${left.file}\u0000${left.kind}\u0000${left.specifier}`.localeCompare(
       `${right.file}\u0000${right.kind}\u0000${right.specifier}`,
@@ -116,6 +120,7 @@ function scanRoot(
   manifest: BrowserDependencyManifest,
   root: string,
   cwd: string,
+  configuredCspFound: boolean,
   violations: BrowserDependencyViolation[],
 ): void {
   const absoluteRoot = resolve(cwd, root);
@@ -174,11 +179,34 @@ function scanRoot(
     }
   }
 
-  if (rootIsDirectory && !cspFound) {
+  if (rootIsDirectory && !cspFound && !configuredCspFound) {
     violations.push(
       violation(relativeRoot, "missing-csp", relativeRoot, "browser root must define a CSP"),
     );
   }
+}
+
+function scanConfiguredCspSources(
+  manifest: BrowserDependencyManifest,
+  cwd: string,
+  violations: BrowserDependencyViolation[],
+): boolean {
+  let cspFound = false;
+  for (const sourcePath of manifest.cspSources) {
+    const absolutePath = resolve(cwd, sourcePath);
+    const relativePath = toPosix(relative(cwd, absolutePath));
+    if (!existsSync(absolutePath) || !statSync(absolutePath).isFile()) {
+      violations.push(
+        violation(relativePath, "missing-csp", relativePath, "configured CSP source must exist"),
+      );
+      continue;
+    }
+    const source = readFileSync(absolutePath, "utf8");
+    if (!containsCsp(source)) continue;
+    cspFound = true;
+    violations.push(...findForbiddenCspViolations(manifest, relativePath, source));
+  }
+  return cspFound;
 }
 
 function collectDirectoryFiles(directory: string, manifest: BrowserDependencyManifest): string[] {

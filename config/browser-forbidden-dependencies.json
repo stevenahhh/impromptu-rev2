@@ -1,5 +1,6 @@
 {
   "browserRoots": ["apps/console", "apps/stage"],
+  "cspSources": ["packages/ui/vite/securityHeaders.ts"],
   "forbiddenPackagePrefixes": [
     "@impromptu/model-router",
     "@anthropic-ai/sdk",

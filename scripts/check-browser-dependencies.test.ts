@@ -6,6 +6,12 @@ import {
 } from "./check-browser-dependencies.ts";
 
 describe("browser forbidden dependency checker", () => {
+  test("accepts the configured browser roots and shared CSP source", () => {
+    const manifest = loadBrowserDependencyManifest();
+
+    expect(scanBrowserDependencies(manifest)).toEqual([]);
+  });
+
   test("accepts a non-empty browser fixture with a provider-blocking CSP", () => {
     const manifest = loadBrowserDependencyManifest();
 
