@@ -47,7 +47,7 @@ class EffectClass(StrEnum):
 class RendererInfo(ContractModel):
     """The exact converter that produced the artifacts."""
 
-    name: Literal["libreoffice"] = "libreoffice"
+    name: Literal["libreoffice", "pymupdf"] = "libreoffice"
     version: Annotated[str, Field(min_length=1, max_length=64)]
 
 

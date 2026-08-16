@@ -22,6 +22,7 @@ from impromptu_ingestion.render.libreoffice import (
     converter_version,
     discover_soffice,
 )
+from impromptu_ingestion.render.pdf import render_pdf_pages
 from impromptu_ingestion.render.pipeline import RenderError, RenderRequest, render_deck
 from impromptu_ingestion.validation import InputValidationError
 from impromptu_ingestion.worker import ingest
@@ -57,7 +58,7 @@ def _parser() -> argparse.ArgumentParser:
     render_command = commands.add_parser(
         "render", help="render a deck to per-slide SVG, assets, and animation timelines"
     )
-    render_command.add_argument("source", help="local .pptx input")
+    render_command.add_argument("source", help="local .pptx or .pdf input")
     render_command.add_argument(
         "--output-dir",
         required=True,
@@ -242,6 +243,14 @@ def _run_doctor(as_json: bool) -> int:
 def _run_render(
     source_argument: str, output_dir_argument: str, allow_mapping_mismatch: bool
 ) -> int:
+    source = _absolute_without_resolving(Path(source_argument))
+    output_dir = _absolute_without_resolving(Path(output_dir_argument))
+    if source.suffix.lower() == ".pdf":
+        rendered = render_pdf_pages(source, output_dir)
+        print(f"rendered {len(rendered.slides)} static PDF pages")
+        if rendered.ineligible_reason is not None:
+            print(f"animation withheld: {rendered.ineligible_reason}")
+        return 0
     soffice = discover_soffice()
     if soffice is None:
         raise CliOperationError(
@@ -250,8 +259,8 @@ def _run_render(
         )
     rendered = render_deck(
         RenderRequest(
-            source=_absolute_without_resolving(Path(source_argument)),
-            output_dir=_absolute_without_resolving(Path(output_dir_argument)),
+            source=source,
+            output_dir=output_dir,
             converter=LibreOfficeSvgConverter(soffice),
             renderer_version=converter_version(soffice),
             strict_mapping=not allow_mapping_mismatch,

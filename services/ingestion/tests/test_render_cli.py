@@ -42,6 +42,26 @@ def test_render_reports_the_missing_renderer_instead_of_pretending(
     assert "renderer_not_configured" in capsys.readouterr().err
 
 
+def test_render_publishes_static_png_pages_for_pdf_without_libreoffice(
+    sample_pdf: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    output_dir = tmp_path / "pdf-out"
+    monkeypatch.setattr("impromptu_ingestion.cli.discover_soffice", lambda: None)
+
+    exit_code = main(["render", str(sample_pdf), "--output-dir", str(output_dir)])
+
+    assert exit_code == 0
+    manifest = json.loads((output_dir / "render.json").read_text(encoding="utf-8"))
+    assert manifest["animation_eligible"] is False
+    assert len(manifest["slides"]) == 2
+    assert all(slide["relative_path"].endswith(".png") for slide in manifest["slides"])
+    assert all((output_dir / slide["relative_path"]).is_file() for slide in manifest["slides"])
+    assert "rendered 2 static PDF pages" in capsys.readouterr().out
+
+
 @pytest.mark.skipif(_requires_libreoffice(), reason="LibreOffice is not installed")
 def test_render_publishes_artifacts_a_manifest_and_a_summary(
     simple_deck: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
