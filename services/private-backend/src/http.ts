@@ -2,6 +2,7 @@ import type { RecommendationOutcome } from "@impromptu/contracts/retrieval";
 import type { ExactOrigin, PrivateBackendConfig } from "./config.ts";
 import { createPreparedDeckArtifacts } from "./prepared-deck-upload.ts";
 import type { ControllerSocket, PreparedEvidenceCoordinator } from "./prepared-evidence.ts";
+import { renderedDeckArtifacts } from "./rendered-deck-artifacts.ts";
 
 export type PrivateBackendHandler = (request: Request) => Response | Promise<Response>;
 
@@ -296,10 +297,24 @@ export function createPrivateBackendHandler(
       );
     }
     if (request.method === "POST" && url.pathname === "/v1/deck-artifacts") {
-      if (typeof body.title !== "string" || typeof body.content !== "string") {
+      if (typeof body.title !== "string") {
         return json({ error: "invalid_request" }, 400, origin);
       }
       try {
+        if (body.renderManifest !== undefined || body.publicBaseUrl !== undefined) {
+          return json(
+            renderedDeckArtifacts(account.value.accountId, {
+              title: body.title,
+              manifest: body.renderManifest,
+              publicBaseUrl: body.publicBaseUrl,
+            }),
+            201,
+            origin,
+          );
+        }
+        if (typeof body.content !== "string") {
+          return json({ error: "invalid_request" }, 400, origin);
+        }
         return json(
           createPreparedDeckArtifacts(account.value.accountId, {
             title: body.title,
