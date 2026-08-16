@@ -48,7 +48,7 @@ const projectionOrigin = `http://127.0.0.1:${projectionPort}`;
 const consoleOrigin = `http://127.0.0.1:${await availablePort()}`;
 const stageOrigin = `http://127.0.0.1:${stagePort}`;
 const serviceToken = "prepared-evidence-real-e2e-token";
-const chromeExecutable = "C:/Program Files/Google/Chrome/Application/chrome.exe";
+const chromeExecutable = process.env.CHROME_EXECUTABLE_PATH ?? chromium.executablePath();
 
 function trace(message: string): void {
   if (process.env.DEBUG_WP3_E2E === "true") console.log(`[wp3-e2e] ${message}`);
@@ -153,6 +153,7 @@ async function jsonRecord(response: Response): Promise<JsonRecord> {
 
 function browserHeaders(csrfToken?: string, cookie?: string): HeadersInit {
   return {
+    connection: "close",
     origin: consoleOrigin,
     referer: `${consoleOrigin}/`,
     "content-type": "application/json",
@@ -672,6 +673,7 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
         method: "POST",
         headers: {
           authorization: `Bearer ${serviceToken}`,
+          connection: "close",
           "content-type": "application/json",
         },
         body: JSON.stringify({
@@ -718,6 +720,7 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
         method: "POST",
         headers: {
           authorization: `Bearer ${serviceToken}`,
+          connection: "close",
           "content-type": "application/json",
         },
         body: JSON.stringify({

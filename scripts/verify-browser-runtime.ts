@@ -25,7 +25,7 @@ async function availablePort(): Promise<number> {
   return address.port;
 }
 
-const chromeExecutable = "C:/Program Files/Google/Chrome/Application/chrome.exe";
+const chromeExecutable = process.env.CHROME_EXECUTABLE_PATH ?? chromium.executablePath();
 const chromeHeadless = process.env.BROWSER_HEADED !== "true";
 const consolePort = await availablePort();
 const stagePort = await availablePort();

@@ -78,7 +78,7 @@ interface CoResidentCycleEvidence {
 }
 
 type ServiceProcess = ChildProcessByStdio<null, Readable, Readable>;
-const chromeExecutable = "C:/Program Files/Google/Chrome/Application/chrome.exe";
+const chromeExecutable = process.env.CHROME_EXECUTABLE_PATH ?? chromium.executablePath();
 async function availablePort(): Promise<number> {
   const server = createNetServer();
   await new Promise<void>((resolve, reject) => {
