@@ -195,6 +195,21 @@ export function createSlidePlayerFromRoot(options: RuntimePlayerOptions): SlideP
   );
 }
 
+const TEXTUAL_SVG_TAGS = ["text", "tspan", "textPath", "altGlyph"] as const;
+
+/**
+ * Decide whether one painted SVG node belongs to a colour emphasis.
+ *
+ * LibreOffice paints a shape's geometry and its label as siblings that both carry `fill`.
+ * PowerPoint's change-fill-colour emphasis repaints the shape only, so recolouring the label
+ * too would bury the text in its own new background colour.
+ */
+export function isColourPaintTarget(tagName: string, fill: string | null): boolean {
+  if (fill === null || fill === "none") return false;
+  const tag = tagName.toLowerCase();
+  return !TEXTUAL_SVG_TAGS.some((textual) => textual.toLowerCase() === tag);
+}
+
 function wrapElement(element: Element): RuntimeAnimationElement {
   return {
     getAttribute: (name) => element.getAttribute(name),
@@ -202,10 +217,9 @@ function wrapElement(element: Element): RuntimeAnimationElement {
     removeAttribute: (name) => element.removeAttribute(name),
     animate: (keyframes, animationOptions) => element.animate([...keyframes], animationOptions),
     paintTargets: () => {
-      const painted = [...element.querySelectorAll("[fill]")].filter((candidate) => {
-        const fill = candidate.getAttribute("fill");
-        return fill !== null && fill !== "none";
-      });
+      const painted = [...element.querySelectorAll("[fill]")].filter((candidate) =>
+        isColourPaintTarget(candidate.tagName, candidate.getAttribute("fill")),
+      );
       return painted.length > 0 ? painted.map(wrapElement) : [wrapElement(element)];
     },
   };

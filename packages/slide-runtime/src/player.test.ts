@@ -4,6 +4,7 @@ import {
   computeGroupSchedule,
   createSlidePlayerFromRoot,
   entranceTargetIds,
+  isColourPaintTarget,
   motionPathToKeyframes,
   type RuntimeAnimation,
   type RuntimeAnimationElement,
@@ -279,5 +280,22 @@ describe("slide player", () => {
         timeline: timeline([[effect("missing", "on_click", { kind: "fade", direction: "in" })]]),
       }),
     ).toThrow(SlideRuntimeError);
+  });
+
+  test("colour targets cover shape geometry but never the shape's own text", () => {
+    // LibreOffice paints a shape as <path fill="..."> and its label as <tspan fill="...">.
+    // PowerPoint's "change fill colour" emphasis recolours the shape only; recolouring the
+    // label too would hide the text behind its own background.
+    const geometry = ["path", "rect", "ellipse", "polygon", "circle"];
+    const textual = ["text", "tspan"];
+
+    for (const tag of geometry) {
+      expect(isColourPaintTarget(tag, "rgb(0,112,192)")).toBe(true);
+    }
+    for (const tag of textual) {
+      expect(isColourPaintTarget(tag, "rgb(255,255,255)")).toBe(false);
+    }
+    expect(isColourPaintTarget("path", "none")).toBe(false);
+    expect(isColourPaintTarget("path", null)).toBe(false);
   });
 });
