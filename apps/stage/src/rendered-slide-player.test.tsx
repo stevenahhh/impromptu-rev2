@@ -256,6 +256,29 @@ describe("RenderedSlidePlayer", () => {
     expect(preload).not.toBeNull();
   });
 
+  test("drops inert LibreOffice foreign-namespace metadata but mounts the SVG drawing", async () => {
+    const libreOfficeSvg = [
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:anim="urn:oasis:names:tc:opendocument:xmlns:animation:1.0" viewBox="0 0 1920 1080">',
+      '  <defs id="presentation-animations"><anim:par><anim:seq /></anim:par></defs>',
+      '  <g id="title" />',
+      '  <g id="body" />',
+      "</svg>",
+    ].join("\n");
+    stubFetch(libreOfficeSvg);
+    render(
+      <RenderedSlidePlayer
+        slide={{ ...slide, imageContentHash: await sha256(libreOfficeSvg) }}
+        runtime={animatedRuntime}
+      />,
+    );
+    await settleRuntimeStatus("active");
+
+    expect(host()?.querySelector("svg")).not.toBeNull();
+    expect(host()?.querySelector('[id="presentation-animations"]')).not.toBeNull();
+    expect(host()?.querySelector("anim\\:par")).toBeNull();
+    expect(host()?.querySelector('[id="title"]')).not.toBeNull();
+  });
+
   test("advances click groups before firing the exhaustion callback", async () => {
     stubFetch(SVG_DOCUMENT);
     const ref = createRef<RenderedSlidePlayerHandle>();

@@ -22,6 +22,7 @@ from impromptu_ingestion.render.libreoffice import SvgConverter, split_slides
 from impromptu_ingestion.render.mapping import map_slide
 from impromptu_ingestion.render.source import (
     RenderError,
+    normalize_renderer_svg,
     private_note_fragments,
     slide_parts,
     slide_size_points,
@@ -91,7 +92,7 @@ def render_deck(request: RenderRequest) -> RenderedDeck:
     for index, ((part_name, slide_xml), converted) in enumerate(
         zip(parts, slide_svgs, strict=True), 1
     ):
-        raw_svg = stamp_container_ids(converted, index)
+        raw_svg = normalize_renderer_svg(stamp_container_ids(converted, index))
         mapping = map_slide(slide_xml, raw_svg, index)
         issues.extend(mapping.issues)
         targets: dict[int, ResolvedTarget] = {target.shape_id: target for target in mapping.targets}

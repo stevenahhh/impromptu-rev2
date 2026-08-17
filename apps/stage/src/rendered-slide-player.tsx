@@ -133,7 +133,13 @@ function cloneSafeSvgElement(source: Element, sourceUrl: string): SVGElement | n
     }
     if (child.nodeType === Node.COMMENT_NODE) continue;
     if (child.nodeType !== Node.ELEMENT_NODE) return null;
-    const childClone = cloneSafeSvgElement(child as Element, sourceUrl);
+    const childElement = child as Element;
+    // LibreOffice emits inert SMIL/OOo metadata in foreign namespaces inside <defs>.
+    // The runtime uses the separately verified PPTX timeline, so drop those subtrees while
+    // retaining the SVG drawing tree. Active or malformed content in the SVG namespace still
+    // fails closed below.
+    if (childElement.namespaceURI !== SVG_NAMESPACE) continue;
+    const childClone = cloneSafeSvgElement(childElement, sourceUrl);
     if (childClone === null) return null;
     clone.append(childClone);
   }
@@ -206,6 +212,7 @@ function RenderedSlidePlayerComponent(
 ) {
   const { publicSlideKey, imageUrl, imageContentHash, accessibilityLabel } = slide;
   const hostRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<SlidePlayer | null>(null);
   const statusRef = useRef<RuntimeStatus>("loading");
   const currentGroupRef = useRef(0);
@@ -214,7 +221,13 @@ function RenderedSlidePlayerComponent(
   const callbackRef = useRef(onAllClickGroupsExhausted);
   const [status, setStatus] = useState<RuntimeStatus>("loading");
   const [currentGroup, setCurrentGroup] = useState(0);
-  const transition = supportedTransition(runtime);
+  const runtimeIdentity = `${publicSlideKey}:${imageContentHash}:${occurrenceSeq}`;
+  const stableRuntimeRef = useRef({ identity: runtimeIdentity, value: runtime });
+  if (stableRuntimeRef.current.identity !== runtimeIdentity) {
+    stableRuntimeRef.current = { identity: runtimeIdentity, value: runtime };
+  }
+  const stableRuntime = stableRuntimeRef.current.value;
+  const transition = supportedTransition(stableRuntime);
   const [transitionFinished, setTransitionFinished] = useState(transition === "none");
   const groupCount = runtime.timeline.click_groups.length;
   const displayedTransition = status === "error" ? "none" : transition;
@@ -258,7 +271,7 @@ function RenderedSlidePlayerComponent(
             resetPlayer(player);
             statusRef.current = "error";
             const host = hostRef.current;
-            host?.replaceChildren();
+            canvasRef.current?.replaceChildren();
             if (host !== null) host.dataset.slideRuntime = "error";
             setStatus("error");
           }
@@ -273,7 +286,8 @@ function RenderedSlidePlayerComponent(
 
   useEffect(() => {
     const host = hostRef.current;
-    if (host === null) return;
+    const canvas = canvasRef.current;
+    if (host === null || canvas === null) return;
 
     const abortController = new AbortController();
     const preloads: HTMLLinkElement[] = [];
@@ -292,10 +306,10 @@ function RenderedSlidePlayerComponent(
     setTransitionFinished(transition === "none");
     host.dataset.occurrenceSeq = String(occurrenceSeq);
     host.dataset.slideRuntime = "loading";
-    host.replaceChildren();
+    canvas.replaceChildren();
 
     const fontReadiness = Promise.all(
-      runtime.fonts.map(async (font) => {
+      stableRuntime.fonts.map(async (font) => {
         if (
           isEmbeddedFont(font) &&
           typeof FontFace !== "undefined" &&
@@ -325,11 +339,11 @@ function RenderedSlidePlayerComponent(
     ])
       .then(([svg]) => {
         if (!active) return;
-        host.replaceChildren(svg);
-        const player = createSlidePlayer({ svgRoot: svg, timeline: runtime.timeline });
+        canvas.replaceChildren(svg);
+        const player = createSlidePlayer({ svgRoot: svg, timeline: stableRuntime.timeline });
         if (!active) {
           resetPlayer(player);
-          host.replaceChildren();
+          canvas.replaceChildren();
           return;
         }
         playerRef.current = player;
@@ -344,7 +358,7 @@ function RenderedSlidePlayerComponent(
         advancingRef.current = null;
         resetPlayer(player);
         statusRef.current = "error";
-        host.replaceChildren();
+        canvas.replaceChildren();
         host.dataset.slideRuntime = "error";
         setStatus("error");
       });
@@ -357,7 +371,7 @@ function RenderedSlidePlayerComponent(
       advancingRef.current = null;
       statusRef.current = "loading";
       resetPlayer(player);
-      host.replaceChildren();
+      canvas.replaceChildren();
       for (const preload of preloads) preload.remove();
       for (const face of loadedFaces) document.fonts.delete(face);
     };
@@ -367,7 +381,7 @@ function RenderedSlidePlayerComponent(
     imageContentHash,
     imageUrl,
     publicSlideKey,
-    runtime,
+    stableRuntime,
     transition,
   ]);
 
@@ -401,6 +415,7 @@ function RenderedSlidePlayerComponent(
       data-transition-complete={displayedTransition === "none" || transitionFinished}
       onAnimationEnd={onAnimationEnd}
     >
+      <div ref={canvasRef} className="stage-slide-runtime" />
       {status === "error" ? (
         <img className="stage-slide" src={imageUrl} alt={accessibilityLabel} />
       ) : null}

@@ -9,6 +9,8 @@ from lxml import etree
 _SLIDE_PART = re.compile(r"^ppt/slides/slide(\d+)\.xml$")
 _NOTES_PART = re.compile(r"^ppt/notesSlides/notesSlide\d+\.xml$")
 _A_TEXT = "{http://schemas.openxmlformats.org/drawingml/2006/main}t"
+_LIBREOFFICE_ANIMATION_NS = "urn:oasis:names:tc:opendocument:xmlns:animation:1.0"
+_SVG_NS = "http://www.w3.org/2000/svg"
 _MIN_LEAK_LENGTH = 4
 _MAX_NOTE_FRAGMENTS = 2_000
 _MAX_SLIDE_XML_BYTES = 8_000_000
@@ -97,6 +99,61 @@ def stamp_container_ids(svg_text: str, slide_index: int) -> str:
                 element.set("id", f"impromptu-s{slide_index}-{ordinal}")
             if class_name == "Group":
                 pending.append(element)
+    return etree.tostring(root, encoding="unicode")
+
+
+def normalize_renderer_svg(svg_text: str) -> str:
+    """Normalize LibreOffice-only markup into inert, CSP-compatible standalone SVG.
+
+    The verified OOXML timeline drives the browser runtime, so LibreOffice's separate
+    ``anim:*`` tree cannot remain as a second playback authority. LibreOffice also emits
+    dangling ``use`` references and safe presentation properties as inline CSS; remove the
+    former and express the latter as SVG attributes that survive Stage's no-inline-style CSP.
+    """
+    root = etree.fromstring(
+        svg_text.encode("utf-8"),
+        parser=etree.XMLParser(resolve_entities=False, no_network=True, huge_tree=False),
+    )
+    for element in tuple(root.iter(f"{{{_LIBREOFFICE_ANIMATION_NS}}}*")):
+        parent = element.getparent()
+        if parent is not None and not parent.tag.startswith(f"{{{_LIBREOFFICE_ANIMATION_NS}}}"):
+            parent.remove(element)
+
+    identifiers = {value for element in root.iter() if (value := element.get("id")) is not None}
+    for element in tuple(root.iter(f"{{{_SVG_NS}}}use")):
+        href = next(
+            (
+                value
+                for name, value in element.attrib.items()
+                if etree.QName(name).localname == "href"
+            ),
+            None,
+        )
+        parent = element.getparent()
+        dangling = isinstance(href, str) and href.startswith("#") and href[1:] not in identifiers
+        if dangling and parent is not None:
+            parent.remove(element)
+
+    safe_styles = {
+        "opacity": re.compile(r"^(?:0(?:\.\d+)?|1(?:\.0+)?)$"),
+        "white-space": re.compile(r"^(?:normal|pre|pre-wrap|pre-line)$"),
+    }
+    for element in root.iter():
+        style = element.get("style")
+        if style is None:
+            continue
+        declarations = [part.strip() for part in style.split(";") if part.strip()]
+        parsed = [tuple(part.split(":", 1)) for part in declarations if ":" in part]
+        if len(parsed) != len(declarations):
+            continue
+        normalized = [(name.strip(), value.strip()) for name, value in parsed]
+        if all(
+            name in safe_styles and safe_styles[name].fullmatch(value) is not None
+            for name, value in normalized
+        ):
+            for name, value in normalized:
+                element.set(name, value)
+            del element.attrib["style"]
     return etree.tostring(root, encoding="unicode")
 
 

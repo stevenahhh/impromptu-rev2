@@ -148,6 +148,32 @@ def test_containers_without_a_renderer_id_are_stamped_and_stay_targetable(tmp_pa
     assert 'id="impromptu-s1-2"' in written
 
 
+def test_libreoffice_animation_tree_is_removed_before_browser_publication(tmp_path: Path) -> None:
+    """Stage owns playback from verified OOXML; LibreOffice's active SMIL must not be published."""
+    deck_path = tmp_path / "deck.pptx"
+    shape_ids = _two_shape_deck(deck_path)
+    svg = _svg_for(shape_ids).replace(
+        "</g></g></svg>",
+        '<g style="opacity: 0.35"><use xlink:href="#missing-libreoffice-bitmap"/></g>'
+        '<text style="white-space: pre">kept text</text>'
+        '<anim:seq xmlns:anim="urn:oasis:names:tc:opendocument:xmlns:animation:1.0">'
+        '<anim:par><anim:animate attributeName="opacity"/></anim:par></anim:seq>'
+        "</g></g></svg>",
+    )
+    output_dir = tmp_path / "out"
+
+    rendered = render_deck(_request(deck_path, output_dir, _FakeConverter(svg)))
+
+    written = (output_dir / rendered.slides[0].relative_path).read_text(encoding="utf-8")
+    assert "animation:1.0" not in written
+    assert "animate" not in written
+    assert "missing-libreoffice-bitmap" not in written
+    assert 'opacity="0.35"' in written
+    assert 'white-space="pre"' in written
+    assert "style=" not in written
+    assert "BoundingBox" in written
+
+
 def test_libreoffice_doctype_prologue_is_normalized_before_parsing(tmp_path: Path) -> None:
     """LibreOffice always emits an XML declaration and an SVG DOCTYPE; both must be tolerated."""
     deck_path = tmp_path / "deck.pptx"
