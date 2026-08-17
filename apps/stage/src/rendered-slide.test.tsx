@@ -153,15 +153,16 @@ const renderedSlides: readonly RenderedSlide[] = [
 
 function nextStageEvent(type: string): Promise<unknown> {
   return new Promise((resolve, reject) => {
-    const signal = AbortSignal.timeout(2_000);
-    window.addEventListener(
-      type,
-      (event) => resolve(event instanceof CustomEvent ? event.detail : null),
-      { once: true, signal },
-    );
-    signal.addEventListener("abort", () => reject(new Error(`Stage event timeout: ${type}`)), {
-      once: true,
-    });
+    const onEvent = (event: Event) => {
+      clearTimeout(timeout);
+      window.removeEventListener(type, onEvent);
+      resolve(event instanceof CustomEvent ? event.detail : null);
+    };
+    window.addEventListener(type, onEvent);
+    const timeout = setTimeout(() => {
+      window.removeEventListener(type, onEvent);
+      reject(new Error(`Stage event timeout: ${type}`));
+    }, 2_000);
   });
 }
 
@@ -186,48 +187,59 @@ function snapshotFixture(occurrenceKey: string): StageSnapshotView {
   };
 }
 
-function waitForRuntimeActive(): Promise<void> {
-  const current = document.body.querySelector("[data-slide-runtime]");
-  if (current?.getAttribute("data-slide-runtime") === "active") return Promise.resolve();
+function deferred<Value>() {
+  let resolve: ((value: Value) => void) | null = null;
+  const promise = new Promise<Value>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return {
+    promise,
+    resolve(value: Value) {
+      if (resolve === null) throw new Error("deferred already resolved");
+      const current = resolve;
+      resolve = null;
+      current(value);
+    },
+  };
+}
+
+function nextRuntimeActive(): Promise<void> {
+  const player = document.body.querySelector("[data-slide-runtime]");
+  if (player === null) throw new Error("rendered slide player was not mounted");
   return new Promise((resolve, reject) => {
-    const observer = new MutationObserver(() => {
-      const player = document.body.querySelector("[data-slide-runtime]");
-      if (player?.getAttribute("data-slide-runtime") !== "active") return;
-      observer.disconnect();
-      resolve();
-    });
-    observer.observe(document.body, {
-      attributes: true,
-      attributeFilter: ["data-slide-runtime"],
-      childList: true,
-      subtree: true,
-    });
-    const signal = AbortSignal.timeout(2_000);
-    signal.addEventListener(
-      "abort",
-      () => {
-        observer.disconnect();
-        reject(
-          new Error(
-            `rendered slide player did not become active; current=${document.body
-              .querySelector("[data-slide-runtime]")
-              ?.getAttribute("data-slide-runtime")}`,
-          ),
-        );
+    const originalSetAttribute = player.setAttribute;
+    Object.defineProperty(player, "setAttribute", {
+      configurable: true,
+      value(name: string, value: string) {
+        originalSetAttribute.call(player, name, value);
+        if (name !== "data-slide-runtime" || value !== "active") return;
+        clearTimeout(timeout);
+        Reflect.deleteProperty(player, "setAttribute");
+        resolve();
       },
-      { once: true },
-    );
+    });
+    const timeout = setTimeout(() => {
+      Reflect.deleteProperty(player, "setAttribute");
+      reject(
+        new Error(
+          `rendered slide player did not become active; current=${player.getAttribute(
+            "data-slide-runtime",
+          )}`,
+        ),
+      );
+    }, 2_000);
   });
 }
 
 function renderRenderedSlide(occurrenceKey: string) {
+  const svgBytes = deferred<ArrayBuffer>();
   globalThis.fetch = Object.assign(
     async () =>
       ({
         ok: true,
         status: 200,
         text: async () => renderedSvg,
-        arrayBuffer: async () => Uint8Array.from(renderedSvgBytes).buffer,
+        arrayBuffer: async () => svgBytes.promise,
       }) as Response,
     { preconnect: originalFetch.preconnect },
   );
@@ -246,19 +258,29 @@ function renderRenderedSlide(occurrenceKey: string) {
       return null;
     },
   };
-  return render(
+  const rendered = render(
     <MemoryRouter initialEntries={["/display/display_alpha"]}>
       <StageRoutes client={client} />
     </MemoryRouter>,
   );
+  return {
+    ...rendered,
+    releaseSvg() {
+      svgBytes.resolve(Uint8Array.from(renderedSvgBytes).buffer);
+    },
+  };
 }
 
 describe("rendered slide consumption", () => {
   test("mounts a slide-runtime player for an eligible SVG and loads its embedded FontFace URLs", async () => {
     const snapshotApplied = nextStageEvent("impromptu:snapshot-applied");
-    renderRenderedSlide(ANIMATED_SLIDE_KEY);
+    const rendered = renderRenderedSlide(ANIMATED_SLIDE_KEY);
     await act(async () => snapshotApplied);
-    await act(async () => waitForRuntimeActive());
+    const runtimeActive = nextRuntimeActive();
+    await act(async () => {
+      rendered.releaseSvg();
+      await runtimeActive;
+    });
 
     // The eligible SVG mounts the slide-runtime player instead of a static image.
     const player = document.body.querySelector("[data-slide-runtime]");
@@ -281,9 +303,13 @@ describe("rendered slide consumption", () => {
 
   test("next action advances the click group before navigating", async () => {
     const snapshotApplied = nextStageEvent("impromptu:snapshot-applied");
-    renderRenderedSlide(ANIMATED_SLIDE_KEY);
+    const rendered = renderRenderedSlide(ANIMATED_SLIDE_KEY);
     await act(async () => snapshotApplied);
-    await act(async () => waitForRuntimeActive());
+    const runtimeActive = nextRuntimeActive();
+    await act(async () => {
+      rendered.releaseSvg();
+      await runtimeActive;
+    });
 
     const player = () => document.body.querySelector("[data-slide-runtime]");
     expect(player()).not.toBeNull();
@@ -312,9 +338,13 @@ describe("rendered slide consumption", () => {
 
   test("ignores modified ArrowRight without advancing or navigating", async () => {
     const snapshotApplied = nextStageEvent("impromptu:snapshot-applied");
-    renderRenderedSlide(ANIMATED_SLIDE_KEY);
+    const rendered = renderRenderedSlide(ANIMATED_SLIDE_KEY);
     await act(async () => snapshotApplied);
-    await act(async () => waitForRuntimeActive());
+    const runtimeActive = nextRuntimeActive();
+    await act(async () => {
+      rendered.releaseSvg();
+      await runtimeActive;
+    });
 
     await act(async () => fireEvent.keyDown(window, { key: "ArrowRight", ctrlKey: true }));
 
@@ -325,9 +355,13 @@ describe("rendered slide consumption", () => {
 
   test("uses PageDown for the next click group instead of skipping the slide", async () => {
     const snapshotApplied = nextStageEvent("impromptu:snapshot-applied");
-    renderRenderedSlide(ANIMATED_SLIDE_KEY);
+    const rendered = renderRenderedSlide(ANIMATED_SLIDE_KEY);
     await act(async () => snapshotApplied);
-    await act(async () => waitForRuntimeActive());
+    const runtimeActive = nextRuntimeActive();
+    await act(async () => {
+      rendered.releaseSvg();
+      await runtimeActive;
+    });
 
     await act(async () => fireEvent.keyDown(window, { key: "PageDown" }));
 
