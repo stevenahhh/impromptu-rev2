@@ -32,6 +32,11 @@ export interface DeckUploadReceipt {
   readonly sourceHash: string;
 }
 
+export interface DeckUploadAccepted extends DeckUploadReceipt {
+  readonly presentationSessionId: string;
+  readonly deckVersion: string;
+}
+
 export interface DeckUploadService {
   acceptRawDeck(input: {
     readonly accountId: string;
@@ -360,7 +365,15 @@ export function createPrivateBackendHandler(
         return json({ error: presentation.reason }, 400, origin);
       }
       await dependencies.persist?.();
-      return json(receipt, 201, origin);
+      return json(
+        {
+          presentationSessionId: presentation.value.lifecycle.presentationSessionId,
+          deckVersion: receipt.privateDeck.deckVersion,
+          ...receipt,
+        } satisfies DeckUploadAccepted,
+        201,
+        origin,
+      );
     }
 
     const body = await requestBody(request);

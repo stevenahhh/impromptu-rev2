@@ -33,6 +33,11 @@ interface DeckUploadReceipt {
   readonly sourceHash: string;
 }
 
+interface DeckUploadAccepted extends DeckUploadReceipt {
+  readonly presentationSessionId: string;
+  readonly deckVersion: string;
+}
+
 interface DeckUploadService {
   acceptRawDeck(input: {
     readonly accountId: string;
@@ -181,10 +186,13 @@ describe("raw deck upload HTTP boundary", () => {
     );
 
     expect(response.status).toBe(201);
-    const payload = await response.json();
+    const payload = (await response.json()) as DeckUploadAccepted;
     const privateDeck = PrivateDeckContextSchema.parse(payload.privateDeck);
     const publicDeck = PublishedDeckArtifactSchema.parse(payload.publicDeck);
-    expect(payload).toEqual(receipt);
+    expect(payload).toMatchObject(receipt);
+    expect(payload.presentationSessionId.length).toBeGreaterThan(0);
+    expect(payload.presentationSessionId).toMatch(/^ps_/);
+    expect(payload.deckVersion).toBe(receipt.privateDeck.deckVersion);
     expect(String(privateDeck.ownerAccountId)).toBe("account_alpha");
     expect(publicDeck.slides).toHaveLength(1);
 
