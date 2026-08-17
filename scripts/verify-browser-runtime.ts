@@ -324,20 +324,22 @@ async function readServiceWorkerReleasePin(page: Page) {
 
 async function waitForUpdateCoordinator(page: Page) {
   return page.evaluate(async () => {
-    if (Reflect.get(window, "__impromptuUpdateCoordinatorReady") === true) return;
-    await new Promise<void>((resolve, reject) => {
-      const signal = AbortSignal.timeout(10_000);
-      const ready = () => {
-        signal.removeEventListener("abort", aborted);
-        resolve();
-      };
-      const aborted = () => {
-        window.removeEventListener("impromptu:update-coordinator-ready", ready);
-        reject(new Error("Update coordinator readiness timed out"));
-      };
-      window.addEventListener("impromptu:update-coordinator-ready", ready, { once: true });
-      signal.addEventListener("abort", aborted, { once: true });
-    });
+    const ready = Reflect.get(window, "__browserRuntimeUpdateCoordinatorReady");
+    if (!(ready instanceof Promise)) {
+      throw new Error("Update coordinator readiness listener was not prepared");
+    }
+
+    await Promise.race([
+      ready,
+      new Promise<never>((_, reject) => {
+        const signal = AbortSignal.timeout(10_000);
+        signal.addEventListener(
+          "abort",
+          () => reject(new Error("Update coordinator readiness timed out")),
+          { once: true },
+        );
+      }),
+    ]);
   });
 }
 
@@ -405,6 +407,15 @@ async function verifyUpdateLifecycle(surface: AppSurface, index: number) {
     const closeContext = cleanup.add(() => context.close());
     await context.addInitScript(() => {
       (window as unknown as { __controllerChanges: number }).__controllerChanges = 0;
+      Reflect.set(
+        window,
+        "__browserRuntimeUpdateCoordinatorReady",
+        new Promise<void>((resolve) => {
+          window.addEventListener("impromptu:update-coordinator-ready", () => resolve(), {
+            once: true,
+          });
+        }),
+      );
       navigator.serviceWorker.addEventListener("controllerchange", () => {
         (window as unknown as { __controllerChanges: number }).__controllerChanges += 1;
       });

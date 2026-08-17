@@ -34,6 +34,7 @@ class FakeRegistration extends EventTarget {
 class FakeContainer extends EventTarget {
   controller: ServiceWorker | null;
   readonly registration: FakeRegistration;
+  readonly registeredScripts: string[] = [];
 
   constructor(registration: FakeRegistration, controlled: boolean) {
     super();
@@ -41,7 +42,8 @@ class FakeContainer extends EventTarget {
     this.controller = controlled ? ({} as ServiceWorker) : null;
   }
 
-  async register() {
+  async register(scriptUrl: string) {
+    this.registeredScripts.push(scriptUrl);
     return this.registration as unknown as ServiceWorkerRegistration;
   }
 }
@@ -73,6 +75,17 @@ describe("UpdateCoordinator", () => {
     expect(coordinator.sessionActive).toBe(true);
     expect(coordinator.updateReady).toBe(true);
     expect(worker?.messages).toEqual([]);
+  });
+
+  test("shares concurrent registration so a readiness observer cannot replace the release pin", async () => {
+    const { container, coordinator } = coordinatorFixture();
+
+    await Promise.all([
+      coordinator.register("/sw.js?cohort=stable"),
+      coordinator.register("/sw.js"),
+    ]);
+
+    expect(container.registeredScripts).toEqual(["/sw.js?cohort=stable"]);
   });
 
   test("activates only after explicit operator confirmation", async () => {

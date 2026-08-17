@@ -48,6 +48,7 @@ export class UpdateCoordinator {
   readonly #container: ServiceWorkerContainer;
   readonly #timeoutMilliseconds: number;
   #registration: ServiceWorkerRegistration | null = null;
+  #registrationPromise: Promise<ServiceWorkerRegistration> | null = null;
   #sessionActive = false;
   #waitingWorker: ServiceWorker | null = null;
 
@@ -64,16 +65,30 @@ export class UpdateCoordinator {
     return this.#waitingWorker !== null;
   }
 
-  async register(scriptUrl: string) {
-    const registration = await this.#container.register(scriptUrl, { scope: "/" });
-    this.#registration = registration;
-    this.#observeRegistration(registration);
-
-    if (registration.waiting && this.#container.controller) {
-      this.#rememberWaitingWorker(registration.waiting);
+  register(scriptUrl: string) {
+    if (this.#registrationPromise) {
+      return this.#registrationPromise;
     }
 
-    return registration;
+    const registrationPromise = this.#container
+      .register(scriptUrl, { scope: "/" })
+      .then((registration) => {
+        this.#registration = registration;
+        this.#observeRegistration(registration);
+
+        if (registration.waiting && this.#container.controller) {
+          this.#rememberWaitingWorker(registration.waiting);
+        }
+
+        return registration;
+      });
+    this.#registrationPromise = registrationPromise;
+    void registrationPromise.catch(() => {
+      if (this.#registrationPromise === registrationPromise) {
+        this.#registrationPromise = null;
+      }
+    });
+    return registrationPromise;
   }
 
   startSession() {
