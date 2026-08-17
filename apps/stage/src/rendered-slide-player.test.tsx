@@ -220,8 +220,12 @@ describe("RenderedSlidePlayer", () => {
   test("keeps completed static and rendered slides fully legible", () => {
     const stageCss = readFileSync(new URL("./stage.css", import.meta.url), "utf8");
 
-    expect(stageCss).toMatch(/\.stage-slide,\s*\.stage-slide-runtime\s*\{[^}]*opacity:\s*1;/s);
-    expect(stageCss).toMatch(/@keyframes stage-slide-fade\s*\{.*to\s*\{\s*opacity:\s*1;/s);
+    expect(stageCss).toMatch(
+      /\.stage-slide,\s*\.stage-slide-runtime\s*\{[^}]*opacity:\s*var\(--opacity-full\);/s,
+    );
+    expect(stageCss).toMatch(
+      /@keyframes stage-slide-fade\s*\{.*to\s*\{\s*opacity:\s*var\(--opacity-full\);/s,
+    );
   });
 
   test("mounts the fetched SVG and exposes deterministic runtime state", async () => {

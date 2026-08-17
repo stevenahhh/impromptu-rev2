@@ -133,7 +133,7 @@
   height: var(--size-full);
   min-width: var(--space-0);
   min-height: var(--space-0);
-  opacity: 1;
+  opacity: var(--opacity-full);
 }
 
 .stage-slide {
@@ -159,11 +159,11 @@
 
 @keyframes stage-slide-fade {
   from {
-    opacity: 0;
+    opacity: var(--opacity-none);
   }
 
   to {
-    opacity: 1;
+    opacity: var(--opacity-full);
   }
 }
 
@@ -229,7 +229,7 @@
   }
 }
 
-@media (max-height: calc(540px * 1)) {
+@media (max-height: 540px) {
   .stage-display {
     --space-stage: var(--space-2);
   }

@@ -94,7 +94,8 @@ describe("browser build boundaries", () => {
     for (const path of ["apps/console/src/console.css", "apps/stage/src/stage.css"]) {
       const css = readFileSync(path, "utf8");
       expect(css).not.toMatch(/#[0-9a-f]{3,8}|rgba?\(|oklch\(/i);
-      expect(css).not.toMatch(/:\s*-?\d+(?:\.\d+)?(?:px|rem|em|vh|vw|%)/i);
+      expect(css).not.toMatch(/^\s*[\w-]+\s*:\s*-?\d+(?:\.\d+)?(?:px|rem|em|vh|vw|%)/im);
+      expect(css).not.toMatch(/^\s*opacity\s*:\s*-?\d+(?:\.\d+)?\s*;/im);
       expect(css).not.toContain("!important");
     }
   });

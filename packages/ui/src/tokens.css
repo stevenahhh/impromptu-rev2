@@ -100,6 +100,8 @@
   --delay-2: 140ms;
   --delay-3: 210ms;
   --delay-motion-reduced: 0ms;
+  --opacity-none: 0;
+  --opacity-full: 1;
   --opacity-muted: 0.72;
   --opacity-soft: 0.48;
   --count-once: 1;
