@@ -125,13 +125,23 @@ describe("rendered deck artifacts", () => {
     ).toThrow(/render_manifest_empty/);
   });
 
-  test("attaches exact per-slide timeline and font URL runtime for animation-eligible slides", () => {
+  test("attaches exact timelines and structured font runtime for animation-eligible slides", () => {
     const artifacts = renderedDeckArtifacts(ACCOUNT, {
       title: "발표",
       manifest: manifest({
         fonts: [
-          { family: "Pretendard", relative_path: "fonts/serif-regular.woff2", embedded: true },
-          { family: "Noto Sans KR", relative_path: null, embedded: false },
+          {
+            family: "Pretendard",
+            relative_path: "fonts/Pretendard.ttf",
+            embedded: true,
+            format: "truetype",
+          },
+          {
+            family: "Noto Sans KR",
+            relative_path: null,
+            embedded: false,
+            format: null,
+          },
         ],
         timelines: [TIMELINE_FOR_SLIDE_B, TIMELINE_FOR_SLIDE_D],
       }),
@@ -143,7 +153,11 @@ describe("rendered deck artifacts", () => {
     expect(first?.runtime).toBeDefined();
     expect(first?.runtime?.timeline).toEqual(TIMELINE_FOR_SLIDE_B);
     expect(first?.runtime?.fonts).toEqual([
-      "https://public.example.test/decks/fonts/serif-regular.woff2",
+      {
+        family: "Pretendard",
+        url: "https://public.example.test/decks/fonts/Pretendard.ttf",
+        format: "truetype",
+      },
     ]);
     expect(second?.runtime?.timeline).toEqual(TIMELINE_FOR_SLIDE_D);
   });
@@ -155,7 +169,12 @@ describe("rendered deck artifacts", () => {
         animation_eligible: false,
         ineligible_reason: "pdf export carries no animation",
         fonts: [
-          { family: "Pretendard", relative_path: "fonts/serif-regular.woff2", embedded: true },
+          {
+            family: "Pretendard",
+            relative_path: "fonts/Pretendard.ttf",
+            embedded: true,
+            format: "truetype",
+          },
         ],
         timelines: [TIMELINE_FOR_SLIDE_B, TIMELINE_FOR_SLIDE_D],
       }),
@@ -169,6 +188,26 @@ describe("rendered deck artifacts", () => {
       );
       expect(slide.image.contentHash).toMatch(/^[0-9a-f]{64}$/);
     }
+  });
+
+  test("does not publish an opaque embedded font without a browser format", () => {
+    const artifacts = renderedDeckArtifacts(ACCOUNT, {
+      title: "발표",
+      manifest: manifest({
+        fonts: [
+          {
+            family: "Legacy Font",
+            relative_path: "fonts/Legacy_Font.fntdata",
+            embedded: true,
+            format: null,
+          },
+        ],
+        timelines: [TIMELINE_FOR_SLIDE_B, TIMELINE_FOR_SLIDE_D],
+      }),
+      publicBaseUrl: "https://public.example.test/decks",
+    });
+
+    expect(artifacts.publicDeck.slides[0]?.runtime?.fonts).toEqual([]);
   });
 
   test("rejects a timeline keyed to a slide that is not in this render", () => {
@@ -216,7 +255,14 @@ describe("rendered deck artifacts", () => {
       renderedDeckArtifacts(ACCOUNT, {
         title: "발표",
         manifest: manifest({
-          fonts: [{ family: "Pretendard", relative_path: "../../etc/passwd", embedded: true }],
+          fonts: [
+            {
+              family: "Pretendard",
+              relative_path: "../../etc/passwd",
+              embedded: true,
+              format: "truetype",
+            },
+          ],
           timelines: [TIMELINE_FOR_SLIDE_B, TIMELINE_FOR_SLIDE_D],
         }),
         publicBaseUrl: "https://public.example.test/decks",

@@ -47,7 +47,14 @@ const VALID_RENDER_JSON = {
     },
   ],
   assets: [],
-  fonts: [],
+  fonts: [
+    {
+      family: "Pretendard",
+      relative_path: "fonts/Pretendard.ttf",
+      embedded: true,
+      format: "truetype",
+    },
+  ],
   timelines: [],
   mapping_issues: [],
   animation_eligible: true,

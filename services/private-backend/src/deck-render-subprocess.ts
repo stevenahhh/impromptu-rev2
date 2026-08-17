@@ -99,6 +99,7 @@ const RenderJsonFontSchema = z
     family: z.string().min(1).max(128),
     relative_path: RelativePathSchema.nullable(),
     embedded: z.boolean(),
+    format: z.enum(["woff2", "woff", "truetype", "opentype"]).nullable(),
   })
   .strict();
 

@@ -109,7 +109,7 @@ export const RuntimeEmbeddedFontSchema = z
   })
   .strict();
 
-/** A bare FontFace URL or a full embedded-font entry. */
+/** Legacy URL-only metadata or the structured format emitted by current publication. */
 export const RuntimeFontReferenceSchema = z.union([RuntimeEmbeddedFontSchema, z.url()]);
 
 export const PublishedSlideRuntimeSchema = z

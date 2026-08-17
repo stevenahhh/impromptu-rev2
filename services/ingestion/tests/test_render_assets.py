@@ -146,6 +146,7 @@ def test_extract_fonts_publishes_deobfuscated_browser_font(tmp_path: Path) -> No
     assert embedded.family == "Embedded Family"
     assert embedded.relative_path is not None
     assert embedded.relative_path.endswith(".ttf")
+    assert embedded.format == "truetype"
     assert ".fntdata" not in embedded.relative_path
     published = (tmp_path / "render" / embedded.relative_path).read_bytes()
     assert published == font_bytes
@@ -165,6 +166,7 @@ def test_extract_fonts_writes_embedded_and_reports_theme_only_fonts(tmp_path: Pa
     ]
     embedded = fonts[0]
     assert embedded.relative_path == "fonts/Embedded_Family.fntdata"
+    assert embedded.format is None
     assert (tmp_path / "render" / embedded.relative_path).read_bytes() == b"opaque-font"
 
 

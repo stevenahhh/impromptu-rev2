@@ -61,16 +61,19 @@ class RenderAsset(ContractModel):
 
 
 class EmbeddedFont(ContractModel):
-    """One font the deck depends on, with the file that satisfies it when embedded."""
+    """One font dependency and its verified browser format when one is available."""
 
     family: Annotated[str, Field(min_length=1, max_length=128)]
     relative_path: RelativeArtifactPath | None = None
     embedded: bool = False
+    format: Literal["woff2", "woff", "truetype", "opentype"] | None = None
 
     @model_validator(mode="after")
     def embedded_fonts_need_a_file(self) -> Self:
         if self.embedded and self.relative_path is None:
             raise ValueError("an embedded font must reference its extracted file")
+        if self.format is not None and not self.embedded:
+            raise ValueError("only an embedded font may declare a browser format")
         return self
 
 

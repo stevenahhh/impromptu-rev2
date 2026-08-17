@@ -15,7 +15,9 @@ const RenderManifestFontSchema = z
     family: z.string().min(1).max(128),
     relative_path: z.string().min(1).max(191).nullable(),
     embedded: z.boolean(),
+    format: z.enum(["woff2", "woff", "truetype", "opentype"]).nullable().default(null),
   })
+  .strict()
   .superRefine((font, ctx) => {
     if (font.embedded && font.relative_path === null) {
       ctx.addIssue({
@@ -238,16 +240,22 @@ export function renderedDeckArtifacts(ownerAccountId: AccountId, value: unknown)
     (left, right) => left.source_index - right.source_index,
   );
 
-  // Only embedded fonts get published URLs; a declared-but-not-embedded font
-  // (relative_path present, embedded false) stays out of the public surface.
-  const fontUrls = manifest.fonts.flatMap((font) => {
-    if (!font.embedded || font.relative_path === null) return [];
-    return [`${base}/${requireContainedPath(font.relative_path)}`];
+  // Only browser-usable embedded fonts cross the public boundary. Opaque legacy
+  // fntdata remains in the render manifest but cannot become a valid FontFace.
+  const publishedFonts = manifest.fonts.flatMap((font) => {
+    if (!font.embedded || font.relative_path === null || font.format === null) return [];
+    return [
+      {
+        family: font.family,
+        url: `${base}/${requireContainedPath(font.relative_path)}`,
+        format: font.format,
+      },
+    ];
   });
 
   const runtimeBySlideKey = new Map<
     string,
-    { timeline: RenderManifestTimeline; fonts: string[] }
+    { timeline: RenderManifestTimeline; fonts: typeof publishedFonts }
   >();
   if (manifest.animation_eligible) {
     for (const timeline of timelines.values()) {
@@ -257,7 +265,7 @@ export function renderedDeckArtifacts(ownerAccountId: AccountId, value: unknown)
           `timeline for ${timeline.slide_key} records unsupported effects on an animation-eligible deck`,
         );
       }
-      runtimeBySlideKey.set(timeline.slide_key, { timeline, fonts: fontUrls });
+      runtimeBySlideKey.set(timeline.slide_key, { timeline, fonts: publishedFonts });
     }
   }
 

@@ -5,6 +5,7 @@ from impromptu_ingestion.render.contracts import (
     ColorBehavior,
     EffectClass,
     EffectTrigger,
+    EmbeddedFont,
     FadeBehavior,
     MappingIssue,
     MotionBehavior,
@@ -81,6 +82,22 @@ def _deck(
         animation_eligible=animation_eligible,
         ineligible_reason=ineligible_reason,
     )
+
+
+def test_embedded_font_carries_browser_format_metadata() -> None:
+    font = EmbeddedFont(
+        family="Pretendard",
+        relative_path="fonts/Pretendard.ttf",
+        embedded=True,
+        format="truetype",
+    )
+
+    assert font.model_dump(mode="json") == {
+        "family": "Pretendard",
+        "relative_path": "fonts/Pretendard.ttf",
+        "embedded": True,
+        "format": "truetype",
+    }
 
 
 def test_rendered_artifacts_are_frozen_and_closed() -> None:

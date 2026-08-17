@@ -4,6 +4,7 @@ import hashlib
 import re
 from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
+from typing import Literal
 from xml.etree import ElementTree as ET
 from zipfile import BadZipFile, ZipFile, ZipInfo
 
@@ -160,9 +161,16 @@ def extract_fonts(pptx_path: Path, output_dir: Path) -> tuple[EmbeddedFont, ...]
                 payload = _bounded_read(archive, info)
                 if guid is not None:
                     payload = _deobfuscate_font(payload, guid)
-                    extension = _sfnt_extension(payload)
+                font_metadata = _sfnt_metadata(payload)
+                if font_metadata is None:
+                    if guid is not None:
+                        raise FontExtractionError(
+                            "font_payload_invalid",
+                            "embedded font does not start with a supported sfnt magic",
+                        )
+                    extension, font_format = ".fntdata", None
                 else:
-                    extension = ".fntdata"
+                    extension, font_format = font_metadata
                 relative_path = _font_relative_path(family, info, used_paths, extension)
                 destination = (root / Path(relative_path)).resolve()
                 if not destination.is_relative_to(root):
@@ -170,7 +178,12 @@ def extract_fonts(pptx_path: Path, output_dir: Path) -> tuple[EmbeddedFont, ...]
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 destination.write_bytes(payload)
                 results.append(
-                    EmbeddedFont(family=family, relative_path=relative_path, embedded=True)
+                    EmbeddedFont(
+                        family=family,
+                        relative_path=relative_path,
+                        embedded=True,
+                        format=font_format,
+                    )
                 )
             embedded_families = {font.family.casefold() for font in results}
             for family in sorted(theme_families, key=str.casefold):
@@ -269,16 +282,15 @@ def _deobfuscate_font(payload: bytes, guid: str) -> bytes:
     return bytes(decoded)
 
 
-def _sfnt_extension(payload: bytes) -> str:
-    """Return the browser-loadable extension for a validated sfnt payload."""
+def _sfnt_metadata(
+    payload: bytes,
+) -> tuple[str, Literal["truetype", "opentype"]] | None:
+    """Return browser metadata only when the payload has a verified sfnt magic."""
     if payload.startswith(_SFNT_TRUETYPE_MAGIC):
-        return ".ttf"
+        return ".ttf", "truetype"
     if payload.startswith(_SFNT_OPENTYPE_MAGIC):
-        return ".otf"
-    raise FontExtractionError(
-        "font_payload_invalid",
-        "embedded font does not start with a supported sfnt magic",
-    )
+        return ".otf", "opentype"
+    return None
 
 
 def _font_relative_path(

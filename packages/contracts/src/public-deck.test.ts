@@ -7,7 +7,7 @@ import { PublishedDeckArtifactSchema } from "./public-deck.ts";
  * A rendered SVG slide may carry optional strict runtime metadata:
  *   - runtime.timeline — the slide-runtime SVG timeline document
  *   - runtime.timeline.transition — slide transition metadata
- *   - runtime.fonts — embedded FontFace URLs
+ *   - runtime.fonts — embedded FontFace family, URL, and format metadata
  * Slides without runtime (PDF exports, PPTX sources) keep the static image
  * fallback. PublishedDeckArtifactSchema does not yet carry `runtime`, so the
  * acceptance test below is expected to be RED (schema rejection) until the
@@ -40,7 +40,7 @@ const runtimeTimeline = {
 
 const runtimeMetadata = {
   timeline: runtimeTimeline,
-  fonts: [FONT_URL],
+  fonts: [{ family: "Serif Regular", url: FONT_URL, format: "woff2" }],
 } as const;
 
 const baseSlide = {
@@ -91,14 +91,17 @@ describe("public deck artifact render metadata contract", () => {
       }),
     ).toThrow();
 
-    // Embedded font entries must be URLs.
+    // Structured embedded font entries require a valid URL and browser format.
     expect(() =>
       PublishedDeckArtifactSchema.parse({
         ...baseArtifact,
         slides: [
           {
             ...baseSlide,
-            runtime: { timeline: runtimeTimeline, fonts: ["not-a-url"] },
+            runtime: {
+              timeline: runtimeTimeline,
+              fonts: [{ family: "Serif Regular", url: "not-a-url", format: "fntdata" }],
+            },
           },
         ],
       }),
