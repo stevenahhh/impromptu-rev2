@@ -227,19 +227,35 @@ test("uploadDeck strictly parses the typed 201 receipt requiring nonempty sessio
   }
 });
 
-test("uploadDeck rejects non-201 responses as typed backend errors", async () => {
-  const harness = createUploadHarness();
-  const upload = createConsoleSessionClient("https://private.example.test").uploadDeck(
-    "csrf-error",
-    deckFile(),
-    { transport: harness.transport },
-  );
-  harness.complete(400, { error: "deck_upload_rejected" });
+test("uploadDeck maps closed backend rejection codes, including 413", async () => {
+  const cases = [
+    { status: 400, backendCode: "empty_input", expectedCode: "empty_input" },
+    {
+      status: 400,
+      backendCode: "unsupported_extension",
+      expectedCode: "unsupported_extension",
+    },
+    { status: 400, backendCode: "malformed_input", expectedCode: "malformed_input" },
+    { status: 413, backendCode: "input_too_large", expectedCode: "input_too_large" },
+    { status: 400, backendCode: "unsafe_filename", expectedCode: "unsafe_filename" },
+    { status: 400, backendCode: "size_mismatch", expectedCode: "size_mismatch" },
+    { status: 400, backendCode: "not_a_closed_code", expectedCode: "deck_upload_rejected" },
+    { status: 400, backendCode: "input_too_large", expectedCode: "deck_upload_rejected" },
+  ];
+  for (const { status, backendCode, expectedCode } of cases) {
+    const harness = createUploadHarness();
+    const upload = createConsoleSessionClient("https://private.example.test").uploadDeck(
+      "csrf-error",
+      deckFile(),
+      { transport: harness.transport },
+    );
+    harness.complete(status, { error: "deck_upload_rejected", code: backendCode });
 
-  const rejection = await rejectionOf(upload);
-  expect(rejection).toBeInstanceOf(DeckUploadError);
-  expect(rejection).toMatchObject({ code: "deck_upload_rejected", status: 400 });
-  expect((rejection as Error).message).toBe("deck_upload_rejected");
+    const rejection = await rejectionOf(upload);
+    expect(rejection).toBeInstanceOf(DeckUploadError);
+    expect(rejection).toMatchObject({ code: expectedCode, status });
+    expect((rejection as Error).message).toBe(expectedCode);
+  }
 });
 
 test("uploadDeck maps server and non-JSON failures to deterministic error codes", async () => {

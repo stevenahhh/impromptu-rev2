@@ -79,6 +79,17 @@ export const DECK_UPLOAD_MIME_TYPES = {
 export type DeckUploadMimeType =
   (typeof DECK_UPLOAD_MIME_TYPES)[keyof typeof DECK_UPLOAD_MIME_TYPES];
 
+const DECK_UPLOAD_REJECTION_STATUS = {
+  empty_input: 400,
+  unsupported_extension: 400,
+  malformed_input: 400,
+  input_too_large: 413,
+  unsafe_filename: 400,
+  size_mismatch: 400,
+} as const;
+
+type DeckUploadRejectionCode = keyof typeof DECK_UPLOAD_REJECTION_STATUS;
+
 export interface DeckUploadView {
   readonly presentationSessionId: string;
   readonly deckVersion: string;
@@ -262,8 +273,18 @@ function decodeBackendError(text: string, status: number): DeckUploadError {
   try {
     const body: unknown = JSON.parse(text);
     if (typeof body === "object" && body !== null) {
-      const reported = (body as Record<string, unknown>).error;
-      if (typeof reported === "string" && reported.length > 0) code = reported;
+      const payload = body as Record<string, unknown>;
+      const reported = payload.error;
+      const rejectionCode = payload.code;
+      if (
+        reported === "deck_upload_rejected" &&
+        typeof rejectionCode === "string" &&
+        DECK_UPLOAD_REJECTION_STATUS[rejectionCode as DeckUploadRejectionCode] === status
+      ) {
+        code = rejectionCode;
+      } else if (typeof reported === "string" && reported.length > 0) {
+        code = reported;
+      }
     }
   } catch {
     // The body is not a JSON backend error payload; keep the fallback code.
