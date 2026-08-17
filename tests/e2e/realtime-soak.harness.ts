@@ -1,8 +1,9 @@
 import { type ChildProcessByStdio, spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdirSync, rmSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import type { Readable } from "node:stream";
+import { type HarnessDeckWorkspace, withHarnessDeckWorkspace } from "./harness-deck-workspace.ts";
 
 export interface RealtimeSoakEvidence {
   readonly profile: "venue-like-real-network-exact-event";
@@ -199,17 +200,20 @@ interface SocketController {
   close(): Promise<void>;
 }
 
-export async function runRealtimeSoak(): Promise<RealtimeSoakEvidence> {
+export function runRealtimeSoak(): Promise<RealtimeSoakEvidence> {
+  return withHarnessDeckWorkspace({ prefix: "impromptu-r2-wp5" }, runRealtimeSoakWithWorkspace);
+}
+
+async function runRealtimeSoakWithWorkspace({
+  temporaryRoot,
+  deckStagingRoot,
+  deckArtifactRoot,
+}: HarnessDeckWorkspace): Promise<RealtimeSoakEvidence> {
   const processes: ServiceProcess[] = [];
-  const temporaryRoot = process.env.TEMP ?? process.cwd();
   const privateSnapshotPath = join(temporaryRoot, "impromptu-r2-wp5-private.json");
   const projectionDatabasePath = join(temporaryRoot, "impromptu-r2-wp5-projection.json");
-  const deckStagingRoot = join(temporaryRoot, "impromptu-r2-wp5-deck-staging");
-  const deckArtifactRoot = join(temporaryRoot, "impromptu-r2-wp5-deck-artifacts");
   rmSync(privateSnapshotPath, { force: true });
   rmSync(projectionDatabasePath, { force: true });
-  mkdirSync(deckStagingRoot, { recursive: true });
-  mkdirSync(deckArtifactRoot, { recursive: true });
   const projectionEnvironment = {
     PRIVATE_BACKEND_ORIGIN: privateOrigin,
     PROJECTION_GATEWAY_HOST: "127.0.0.1",

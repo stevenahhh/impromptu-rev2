@@ -1,10 +1,11 @@
 import { type ChildProcessByStdio, spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdirSync, rmSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { createServer as createNetServer } from "node:net";
 import { join } from "node:path";
 import type { Readable } from "node:stream";
 import { type Browser, type BrowserContext, chromium, type Page } from "playwright-core";
+import { type HarnessDeckWorkspace, withHarnessDeckWorkspace } from "./harness-deck-workspace.ts";
 
 export interface PreparedEvidenceEvidence {
   readonly milestones: readonly string[];
@@ -362,13 +363,23 @@ function percentile95(samples: readonly number[]): number {
   return value;
 }
 
-export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence> {
+export function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence> {
+  return withHarnessDeckWorkspace(
+    { prefix: "impromptu-r2-wp3", suffix: `-${process.pid}` },
+    runPreparedEvidenceE2EWithWorkspace,
+  );
+}
+
+async function runPreparedEvidenceE2EWithWorkspace({
+  temporaryRoot,
+  deckStagingRoot,
+  deckArtifactRoot,
+}: HarnessDeckWorkspace): Promise<PreparedEvidenceEvidence> {
   const processes: ServiceProcess[] = [];
   let browser: Browser | null = null;
   let context: BrowserContext | null = null;
   let chromeProcess: ServiceProcess | null = null;
   let chromeExited: Promise<unknown[]> | null = null;
-  const temporaryRoot = process.env.TEMP ?? process.cwd();
   const profilePath = join(temporaryRoot, `impromptu-r2-wp3-clean-stage-${process.pid}`);
   const privateSnapshotPath = join(
     temporaryRoot,
@@ -378,13 +389,9 @@ export async function runPreparedEvidenceE2E(): Promise<PreparedEvidenceEvidence
     temporaryRoot,
     `impromptu-r2-wp3-projection-database-${process.pid}.json`,
   );
-  const deckStagingRoot = join(temporaryRoot, `impromptu-r2-wp3-deck-staging-${process.pid}`);
-  const deckArtifactRoot = join(temporaryRoot, `impromptu-r2-wp3-deck-artifacts-${process.pid}`);
   rmSync(profilePath, { force: true, recursive: true });
   rmSync(privateSnapshotPath, { force: true });
   rmSync(projectionDatabasePath, { force: true });
-  mkdirSync(deckStagingRoot, { recursive: true });
-  mkdirSync(deckArtifactRoot, { recursive: true });
   const projectionEnvironment = {
     PRIVATE_BACKEND_ORIGIN: privateOrigin,
     PROJECTION_GATEWAY_HOST: "127.0.0.1",
