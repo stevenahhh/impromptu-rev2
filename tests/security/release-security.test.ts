@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { PublishedDeckArtifactSchema } from "@impromptu/contracts/public";
 import {
   createProjectionGatewayStore,
   PreparedEvidenceProjectionGateway,
@@ -15,7 +16,7 @@ const consoleOrigin = "https://console.example.test";
 const stageOrigin = "https://stage.example.test";
 const internalToken = "release-security-internal-token";
 const privateMarker = "private://tenant-alpha/source";
-const deck = {
+const deck = PublishedDeckArtifactSchema.parse({
   deckVersion: "deck_release",
   manifestHash: "a".repeat(64),
   title: "Release deck",
@@ -32,7 +33,7 @@ const deck = {
       },
     },
   ],
-};
+});
 
 function stageRequest(path: string, init: RequestInit = {}): Request {
   return new Request(`https://projection.example.test${path}`, {

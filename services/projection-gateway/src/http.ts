@@ -1,9 +1,12 @@
+import {
+  type PublishedDeckArtifact,
+  PublishedDeckArtifactSchema,
+} from "@impromptu/contracts/public";
 import type { ExactOrigin, ProjectionGatewayConfig } from "./config.ts";
 import type {
   PlaybackProjectionInput,
   PreparedEvidenceProjectionGateway,
   PublicCardEvent,
-  PublicDeckArtifact,
   StageSocket,
 } from "./prepared-evidence.ts";
 
@@ -11,9 +14,9 @@ export type ProjectionGatewayHandler = (request: Request) => Response | Promise<
 
 // Public deck artifact containment contract.
 //
-// GET /v1/deck-assets/:manifestHash/:fileName must serve only assets contained
-// inside the deck store root as immutable bytes with the exact MIME type for
-// the extension and Stage CORS headers.
+// GET /v1/deck-assets/:artifactId/*artifactPath serves nested render outputs
+// contained inside the deck store root as immutable bytes with the exact MIME
+// type for the extension and Stage CORS headers.
 
 export interface DeckAsset {
   readonly bytes: Uint8Array;
@@ -26,7 +29,7 @@ export type DeckAssetReadResult =
   | { readonly outcome: "ESCAPE" };
 
 export interface DeckAssetReader {
-  readonly read: (manifestHash: string, fileName: string) => Promise<DeckAssetReadResult>;
+  readonly read: (artifactId: string, artifactPath: string) => Promise<DeckAssetReadResult>;
 }
 
 interface DeckAssetFilesystem {
@@ -44,9 +47,13 @@ function nodeDeckAssetFilesystem(): DeckAssetFilesystem {
 }
 
 function contentTypeForDeckAsset(fileName: string): string | null {
-  if (fileName.endsWith(".svg")) return "image/svg+xml";
-  if (fileName.endsWith(".png")) return "image/png";
-  if (fileName.endsWith(".woff2")) return "font/woff2";
+  const normalized = fileName.toLowerCase();
+  if (normalized.endsWith(".svg")) return "image/svg+xml";
+  if (normalized.endsWith(".png")) return "image/png";
+  if (normalized.endsWith(".woff2")) return "font/woff2";
+  if (normalized.endsWith(".woff")) return "font/woff";
+  if (normalized.endsWith(".ttf")) return "font/ttf";
+  if (normalized.endsWith(".otf")) return "font/otf";
   return null;
 }
 
@@ -58,25 +65,25 @@ export function createDeckAssetReader(root: string): DeckAssetReader {
   const filesystem = nodeDeckAssetFilesystem();
   const rootReal = filesystem.realpathSync(root);
   return {
-    async read(manifestHash, fileName) {
+    async read(artifactId, artifactPath) {
       const separator = process.platform === "win32" ? "\\" : "/";
+      const pathSegments = artifactPath.split("/");
       if (
-        manifestHash === "" ||
-        manifestHash === "." ||
-        manifestHash === ".." ||
-        manifestHash.includes("/") ||
-        manifestHash.includes("\\") ||
-        fileName === "" ||
-        fileName === "." ||
-        fileName === ".." ||
-        fileName.includes("/") ||
-        fileName.includes("\\")
+        artifactId === "" ||
+        artifactId === "." ||
+        artifactId === ".." ||
+        artifactId.includes("/") ||
+        artifactId.includes("\\") ||
+        pathSegments.some(
+          (segment) =>
+            segment === "" || segment === "." || segment === ".." || segment.includes("\\"),
+        )
       ) {
         return { outcome: "UNKNOWN" };
       }
-      const manifestDir = deckAssetJoin(root, manifestHash);
-      if (!filesystem.existsSync(manifestDir)) return { outcome: "UNKNOWN" };
-      const candidate = deckAssetJoin(manifestDir, fileName);
+      const artifactDir = deckAssetJoin(root, artifactId);
+      if (!filesystem.existsSync(artifactDir)) return { outcome: "UNKNOWN" };
+      const candidate = deckAssetJoin(artifactDir, artifactPath);
       if (!filesystem.existsSync(candidate)) return { outcome: "UNKNOWN" };
       let resolved: string;
       try {
@@ -87,12 +94,16 @@ export function createDeckAssetReader(root: string): DeckAssetReader {
       if (resolved !== rootReal && !resolved.startsWith(`${rootReal}${separator}`)) {
         return { outcome: "ESCAPE" };
       }
-      const contentType = contentTypeForDeckAsset(fileName);
+      const contentType = contentTypeForDeckAsset(artifactPath);
       if (contentType === null) return { outcome: "UNKNOWN" };
-      return {
-        outcome: "FOUND",
-        asset: { bytes: filesystem.readFileSync(candidate), contentType },
-      };
+      try {
+        return {
+          outcome: "FOUND",
+          asset: { bytes: filesystem.readFileSync(resolved), contentType },
+        };
+      } catch {
+        return { outcome: "UNKNOWN" };
+      }
     },
   };
 }
@@ -122,7 +133,7 @@ function json(body: unknown, status: number, headers?: Headers): Response {
   return new Response(JSON.stringify(body), { status, headers: responseHeaders });
 }
 
-const DECK_ASSET_PATH_PATTERN = /^\/v1\/deck-assets\/([^/]+)\/([^/]+)$/;
+const DECK_ASSET_PATH_PREFIX = "/v1/deck-assets/";
 
 function isDeckAssetPathComponent(component: string): boolean {
   return (
@@ -160,58 +171,9 @@ function hasOnlyKeys(value: Record<string, unknown>, allowed: readonly string[])
   return Object.keys(value).every((key) => allowedKeys.has(key));
 }
 
-function publicDeck(value: unknown): PublicDeckArtifact | null {
-  if (
-    !isRecord(value) ||
-    !hasOnlyKeys(value, ["deckVersion", "manifestHash", "title", "slides"]) ||
-    !Array.isArray(value.slides)
-  ) {
-    return null;
-  }
-  const slides: PublicDeckArtifact["slides"][number][] = [];
-  for (const candidate of value.slides) {
-    if (
-      !isRecord(candidate) ||
-      !hasOnlyKeys(candidate, ["publicSlideKey", "ordinal", "accessibilityLabel", "image"]) ||
-      !isRecord(candidate.image) ||
-      !hasOnlyKeys(candidate.image, ["url", "contentHash", "width", "height"])
-    ) {
-      return null;
-    }
-    if (
-      typeof candidate.publicSlideKey !== "string" ||
-      typeof candidate.ordinal !== "number" ||
-      typeof candidate.accessibilityLabel !== "string" ||
-      typeof candidate.image.url !== "string" ||
-      typeof candidate.image.contentHash !== "string" ||
-      typeof candidate.image.width !== "number" ||
-      typeof candidate.image.height !== "number"
-    ) {
-      return null;
-    }
-    slides.push({
-      publicSlideKey: candidate.publicSlideKey,
-      ordinal: candidate.ordinal,
-      accessibilityLabel: candidate.accessibilityLabel,
-      image: {
-        url: candidate.image.url,
-        contentHash: candidate.image.contentHash,
-        width: candidate.image.width,
-        height: candidate.image.height,
-      },
-    });
-  }
-  return typeof value.deckVersion === "string" &&
-    typeof value.manifestHash === "string" &&
-    typeof value.title === "string" &&
-    slides.length > 0
-    ? {
-        deckVersion: value.deckVersion,
-        manifestHash: value.manifestHash,
-        title: value.title,
-        slides,
-      }
-    : null;
+function publicDeck(value: unknown): PublishedDeckArtifact | null {
+  const parsed = PublishedDeckArtifactSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
 }
 
 function playbackEvent(value: unknown): PlaybackProjectionInput | null {
@@ -710,22 +672,30 @@ export function createProjectionGatewayHandler(
         : json(snapshot, 200, origin);
     }
     if (request.method === "GET" && url.pathname.startsWith("/v1/deck-assets/")) {
-      const match = url.pathname.match(DECK_ASSET_PATH_PATTERN);
-      if (match === null || dependencies.deckAssets === undefined) {
+      if (dependencies.deckAssets === undefined) {
         return json({ error: "not_found" }, 404, origin);
       }
-      let manifestHash: string;
-      let fileName: string;
+      const encodedPath = url.pathname.slice(DECK_ASSET_PATH_PREFIX.length);
+      if (/%(?:2f|5c)/i.test(encodedPath)) {
+        return json({ error: "invalid_asset_path" }, 400, origin);
+      }
+      const encodedSegments = encodedPath.split("/");
+      let segments: string[];
       try {
-        manifestHash = decodeURIComponent(match[1] ?? "");
-        fileName = decodeURIComponent(match[2] ?? "");
+        segments = encodedSegments.map((segment) => decodeURIComponent(segment));
       } catch {
         return json({ error: "invalid_asset_path" }, 400, origin);
       }
-      if (!isDeckAssetPathComponent(manifestHash) || !isDeckAssetPathComponent(fileName)) {
+      const [artifactId, ...artifactSegments] = segments;
+      if (
+        artifactId === undefined ||
+        !isDeckAssetPathComponent(artifactId) ||
+        artifactSegments.length === 0 ||
+        artifactSegments.some((segment) => !isDeckAssetPathComponent(segment))
+      ) {
         return json({ error: "invalid_asset_path" }, 400, origin);
       }
-      const result = await dependencies.deckAssets.read(manifestHash, fileName);
+      const result = await dependencies.deckAssets.read(artifactId, artifactSegments.join("/"));
       if (result.outcome === "ESCAPE") {
         return json({ error: "asset_escape_forbidden" }, 403, origin);
       }

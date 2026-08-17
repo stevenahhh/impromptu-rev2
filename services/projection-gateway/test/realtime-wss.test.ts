@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { PublishedDeckArtifactSchema } from "@impromptu/contracts/public";
 import { PreparedEvidenceProjectionGateway } from "../src/prepared-evidence.ts";
 import {
   createProjectionRealtimeProtocol,
@@ -29,7 +30,7 @@ function signal<Value>(label: string) {
 describe("projection WSS runtime surface", () => {
   test("upgrades the authenticated Stage and exchanges command and receipt frames", async () => {
     const gateway = new PreparedEvidenceProjectionGateway();
-    const deck = {
+    const deck = PublishedDeckArtifactSchema.parse({
       deckVersion: "deck_wss",
       manifestHash: "a".repeat(64),
       title: "WSS",
@@ -46,7 +47,7 @@ describe("projection WSS runtime surface", () => {
           accessibilityLabel: "One",
         },
       ],
-    };
+    });
     const join = gateway.createDisplayJoin(
       {
         displayId: "display_wss",

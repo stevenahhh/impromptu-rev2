@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { PublishedDeckArtifactSchema } from "@impromptu/contracts/public";
 import { PreparedEvidenceProjectionGateway } from "../src/prepared-evidence.ts";
 
-const deck = {
+const deck = PublishedDeckArtifactSchema.parse({
   deckVersion: "deck_alpha",
   manifestHash: "a".repeat(64),
   title: "Pinned deck",
@@ -18,7 +19,7 @@ const deck = {
       accessibilityLabel: "One",
     },
   ],
-};
+});
 
 function bound() {
   const gateway = new PreparedEvidenceProjectionGateway();

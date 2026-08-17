@@ -16,11 +16,13 @@ const runtimeOutsideSecret = join(import.meta.dir, ".runtime-deck-outside-secret
 
 beforeAll(() => {
   mkdirSync(deckStagingRoot, { recursive: true });
-  mkdirSync(runtimeArtifactDir, { recursive: true });
+  mkdirSync(join(runtimeArtifactDir, "slides"), { recursive: true });
+  mkdirSync(join(runtimeArtifactDir, "fonts"), { recursive: true });
   writeFileSync(
-    join(runtimeArtifactDir, "slide-01.svg"),
+    join(runtimeArtifactDir, "slides", "slide-01.svg"),
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"/>',
   );
+  writeFileSync(join(runtimeArtifactDir, "fonts", "Family.ttf"), new Uint8Array([0, 1, 0, 0]));
   writeFileSync(runtimeOutsideSecret, "not for public serving");
   symlinkSync(runtimeOutsideSecret, join(runtimeArtifactDir, "leak.svg"));
 });
@@ -172,7 +174,7 @@ describe("runnable WP3 service composition", () => {
     });
     expect(applied.status).not.toBe(404);
     const deckAsset = await fetch(
-      `http://127.0.0.1:44102/v1/deck-assets/${RUNTIME_MANIFEST_HASH}/slide-01.svg`,
+      `http://127.0.0.1:44102/v1/deck-assets/${RUNTIME_MANIFEST_HASH}/slides/slide-01.svg`,
       { headers: { origin: stageOrigin } },
     );
     expect(deckAsset.status).toBe(200);
@@ -182,6 +184,13 @@ describe("runnable WP3 service composition", () => {
     expect(await deckAsset.text()).toBe(
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"/>',
     );
+    const nestedFont = await fetch(
+      `http://127.0.0.1:44102/v1/deck-assets/${RUNTIME_MANIFEST_HASH}/fonts/Family.ttf`,
+      { headers: { origin: stageOrigin } },
+    );
+    expect(nestedFont.status).toBe(200);
+    expect(nestedFont.headers.get("content-type")).toBe("font/ttf");
+    expect(new Uint8Array(await nestedFont.arrayBuffer())).toEqual(new Uint8Array([0, 1, 0, 0]));
     const escapedAsset = await fetch(
       `http://127.0.0.1:44102/v1/deck-assets/${RUNTIME_MANIFEST_HASH}/leak.svg`,
       { headers: { origin: stageOrigin } },

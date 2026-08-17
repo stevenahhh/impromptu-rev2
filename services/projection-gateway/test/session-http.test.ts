@@ -1,10 +1,16 @@
 import { describe, expect, test } from "bun:test";
+import { PublishedDeckArtifactSchema } from "@impromptu/contracts/public";
 import { parseProjectionGatewayConfig } from "../src/config.ts";
 import { createProjectionGatewayHandler } from "../src/http.ts";
-import { PreparedEvidenceProjectionGateway } from "../src/prepared-evidence.ts";
+import {
+  createProjectionGatewayStore,
+  PreparedEvidenceProjectionGateway,
+  restoreProjectionGatewayStore,
+  snapshotProjectionGatewayStore,
+} from "../src/prepared-evidence.ts";
 
 const stageOrigin = "https://stage.example.test";
-const deck = {
+const deck = PublishedDeckArtifactSchema.parse({
   deckVersion: "deck_alpha",
   manifestHash: "a".repeat(64),
   title: "Prepared deck",
@@ -21,7 +27,7 @@ const deck = {
       accessibilityLabel: "Slide one",
     },
   ],
-};
+});
 
 function stageRequest(path: string, init: RequestInit = {}) {
   return new Request(`https://projection.example.test${path}`, {
@@ -35,6 +41,102 @@ function stageRequest(path: string, init: RequestInit = {}) {
 }
 
 describe("Stage display session HTTP boundary", () => {
+  test("preserves shared slide runtime metadata through binding, persistence, and snapshots", async () => {
+    const runtime = {
+      timeline: {
+        slide_key: "slide_one",
+        click_groups: [],
+        transition: { kind: "fade", advance_on_click: true },
+        unsupported: [],
+      },
+      fonts: ["https://projection.example.test/v1/deck-assets/artifact_alpha/fonts/Family.ttf"],
+    } as const;
+    const runtimeDeck = PublishedDeckArtifactSchema.parse({
+      ...deck,
+      slides: [{ ...deck.slides[0], runtime }],
+    });
+    const expectedRuntime = runtimeDeck.slides[0]?.runtime;
+    if (expectedRuntime === undefined) throw new Error("runtime fixture was stripped");
+    const store = createProjectionGatewayStore();
+    const gateway = new PreparedEvidenceProjectionGateway(store);
+    let persisted: unknown = null;
+    const handler = createProjectionGatewayHandler(
+      parseProjectionGatewayConfig({ STAGE_ORIGIN: stageOrigin }),
+      {
+        gateway,
+        internalAuthToken: "internal-test-token-alpha",
+        now: () => 1_000,
+        async persist() {
+          persisted = snapshotProjectionGatewayStore(store);
+        },
+        stageReceiptWriter: {
+          async recordApplied() {
+            return null;
+          },
+        },
+      },
+    );
+    const join = await (
+      await handler(
+        stageRequest("/v1/display-joins", {
+          method: "POST",
+          body: JSON.stringify({
+            displayId: "display_runtime",
+            deckVersion: runtimeDeck.deckVersion,
+            displayFingerprint: "fingerprint-stage-runtime",
+          }),
+        }),
+      )
+    ).json();
+    const binding = await handler(
+      new Request("https://projection.example.test/internal/display-bindings", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer internal-test-token-alpha",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          displayJoinId: join.displayJoinId,
+          presentationSessionId: "ps_runtime",
+          presentationSessionEpoch: "pse_1",
+          publicationPolicyVersion: "policy-runtime-1",
+          expectedDisplayBindingEpoch: "dbe_0",
+          expectedDeckVersion: runtimeDeck.deckVersion,
+          approvedDisplayId: join.displayId,
+          approvedDisplayFingerprint: join.displayFingerprint,
+          deck: runtimeDeck,
+          nowMs: 1_000,
+        }),
+      }),
+    );
+    expect(binding.status).toBe(200);
+
+    const claimed = await handler(
+      stageRequest("/v1/display-session", {
+        method: "POST",
+        body: JSON.stringify(join),
+      }),
+    );
+    expect(claimed.status).toBe(201);
+    const claimedBody = await claimed.json();
+    const cookie = claimed.headers.get("set-cookie")?.split(";", 1)[0];
+    expect(cookie).toBeDefined();
+    const snapshot = await handler(
+      stageRequest("/v1/snapshot", { headers: { cookie: cookie ?? "" } }),
+    );
+    expect(snapshot.status).toBe(200);
+    expect((await snapshot.json()).deck.slides[0].runtime).toEqual(expectedRuntime);
+
+    const restored = restoreProjectionGatewayStore(persisted);
+    expect(restored.outcome).toBe("RESTORED");
+    if (restored.outcome !== "RESTORED") throw new Error("runtime snapshot restore failed");
+    const restoredSnapshot = new PreparedEvidenceProjectionGateway(restored.store).snapshot(
+      claimedBody.audienceDisplaySessionId,
+      1_000,
+    );
+    expect(restoredSnapshot?.deck.slides[0]?.runtime).toEqual(expectedRuntime);
+  });
+
   test("issues a locator, then sets only a public display cookie after approval", async () => {
     const gateway = new PreparedEvidenceProjectionGateway();
     const handler = createProjectionGatewayHandler(

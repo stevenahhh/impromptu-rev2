@@ -126,6 +126,9 @@
     "services/projection-gateway": {
       "name": "@impromptu/projection-gateway",
       "version": "0.0.0",
+      "dependencies": {
+        "@impromptu/contracts": "workspace:*",
+      },
     },
   },
   "packages": {

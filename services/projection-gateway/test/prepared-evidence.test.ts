@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
+import { PublishedDeckArtifactSchema } from "@impromptu/contracts/public";
 import {
   createProjectionGatewayStore,
   PreparedEvidenceProjectionGateway,
-  type PublicDeckArtifact,
   restoreProjectionGatewayStore,
   snapshotProjectionGatewayStore,
 } from "../src/prepared-evidence.ts";
 
-const deck: PublicDeckArtifact = {
+const deck = PublishedDeckArtifactSchema.parse({
   deckVersion: "deck_alpha",
   manifestHash: "a".repeat(64),
   title: "Prepared deck",
@@ -24,7 +24,7 @@ const deck: PublicDeckArtifact = {
       accessibilityLabel: "Slide one",
     },
   ],
-};
+});
 
 function approval(gateway: PreparedEvidenceProjectionGateway, nowMs = 1_000) {
   const join = gateway.createDisplayJoin(

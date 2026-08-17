@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { PublishedDeckArtifactSchema } from "@impromptu/contracts/public";
 import { parseProjectionGatewayConfig } from "../src/config.ts";
 import { createProjectionGatewayHandler } from "../src/http.ts";
 import { PreparedEvidenceProjectionGateway } from "../src/prepared-evidence.ts";
 
 const origin = "https://stage.example.test";
-const deck = {
+const deck = PublishedDeckArtifactSchema.parse({
   deckVersion: "deck_alpha",
   manifestHash: "a".repeat(64),
   title: "Prepared deck",
@@ -21,7 +22,7 @@ const deck = {
       accessibilityLabel: "Slide one",
     },
   ],
-};
+});
 
 async function nextServerEvent(reader: ReadableStreamDefaultReader<Uint8Array>, timeoutMs = 2_000) {
   const timeout = AbortSignal.timeout(timeoutMs);

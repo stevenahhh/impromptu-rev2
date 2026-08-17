@@ -70,11 +70,16 @@ function aliasTargets(specifier: string, aliases: readonly PathAlias[]): readonl
   return null;
 }
 
+const ALLOWED_PUBLIC_PACKAGES = new Set(["@impromptu/contracts/public"]);
+
 function checkSpecifier(
   file: string,
   specifier: string,
   policy: SourceBoundaryPolicy,
 ): readonly ArchitectureViolation[] {
+  if (ALLOWED_PUBLIC_PACKAGES.has(specifier)) {
+    return [];
+  }
   if (specifier.startsWith(".")) {
     const target = resolve(dirname(file), specifier);
     return isInside(policy.sourceRoot, target)

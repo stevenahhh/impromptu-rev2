@@ -1,19 +1,9 @@
-export interface PublicDeckArtifact {
-  readonly deckVersion: string;
-  readonly manifestHash: string;
-  readonly title: string;
-  readonly slides: readonly {
-    readonly publicSlideKey: string;
-    readonly ordinal: number;
-    readonly image: {
-      readonly url: string;
-      readonly contentHash: string;
-      readonly width: number;
-      readonly height: number;
-    };
-    readonly accessibilityLabel: string;
-  }[];
-}
+import {
+  type PublishedDeckArtifact,
+  PublishedDeckArtifactSchema,
+} from "@impromptu/contracts/public";
+
+export type PublicDeckArtifact = PublishedDeckArtifact;
 
 export interface PublicCardUpsert {
   readonly projectionId: string;
@@ -218,63 +208,8 @@ function parseDisplayJoin(value: unknown): DisplayJoinLocator | null {
 }
 
 function parseDeck(value: unknown): PublicDeckArtifact | null {
-  if (
-    !snapshotRecord(value) ||
-    !exactKeys(value, ["deckVersion", "manifestHash", "title", "slides"]) ||
-    !validId(value.deckVersion, "deck_") ||
-    !validHash(value.manifestHash) ||
-    typeof value.title !== "string" ||
-    value.title.length < 1 ||
-    value.title.length > 500 ||
-    !Array.isArray(value.slides) ||
-    value.slides.length === 0
-  ) {
-    return null;
-  }
-  const slides: PublicDeckArtifact["slides"][number][] = [];
-  for (const slide of value.slides) {
-    if (
-      !snapshotRecord(slide) ||
-      !exactKeys(slide, ["publicSlideKey", "ordinal", "image", "accessibilityLabel"]) ||
-      !validId(slide.publicSlideKey, "slide_") ||
-      typeof slide.ordinal !== "number" ||
-      !Number.isSafeInteger(slide.ordinal) ||
-      slide.ordinal <= 0 ||
-      typeof slide.accessibilityLabel !== "string" ||
-      slide.accessibilityLabel.length < 1 ||
-      slide.accessibilityLabel.length > 1_000 ||
-      !snapshotRecord(slide.image) ||
-      !exactKeys(slide.image, ["url", "contentHash", "width", "height"]) ||
-      typeof slide.image.url !== "string" ||
-      !URL.canParse(slide.image.url) ||
-      !validHash(slide.image.contentHash) ||
-      typeof slide.image.width !== "number" ||
-      !Number.isSafeInteger(slide.image.width) ||
-      slide.image.width <= 0 ||
-      typeof slide.image.height !== "number" ||
-      !Number.isSafeInteger(slide.image.height) ||
-      slide.image.height <= 0
-    ) {
-      return null;
-    }
-    slides.push({
-      publicSlideKey: slide.publicSlideKey,
-      ordinal: slide.ordinal,
-      image: {
-        url: slide.image.url,
-        contentHash: slide.image.contentHash,
-        width: slide.image.width,
-        height: slide.image.height,
-      },
-      accessibilityLabel: slide.accessibilityLabel,
-    });
-  }
-  return {
-    deckVersion: value.deckVersion,
-    manifestHash: value.manifestHash,
-    title: value.title,
-    slides,
-  };
+  const parsed = PublishedDeckArtifactSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
 }
 
 function parseDisplaySession(value: unknown): AudienceDisplaySessionRecord | null {

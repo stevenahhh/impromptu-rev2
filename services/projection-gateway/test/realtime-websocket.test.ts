@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { PublishedDeckArtifactSchema } from "@impromptu/contracts/public";
 import { PreparedEvidenceProjectionGateway } from "../src/prepared-evidence.ts";
 import { createProjectionRealtimeProtocol } from "../src/realtime.ts";
 
 function fixture() {
   const gateway = new PreparedEvidenceProjectionGateway();
-  const deck = {
+  const deck = PublishedDeckArtifactSchema.parse({
     deckVersion: "deck_alpha",
     manifestHash: "a".repeat(64),
     title: "Realtime",
@@ -21,7 +22,7 @@ function fixture() {
         accessibilityLabel: "One",
       },
     ],
-  };
+  });
   const join = gateway.createDisplayJoin(
     {
       displayId: "display_alpha",

@@ -25,6 +25,12 @@ import { join } from "node:path";
 import { PrivateDeckContextSchema } from "@impromptu/contracts/private";
 import { PublishedDeckArtifactSchema } from "@impromptu/contracts/public";
 import {
+  createDeckAssetReader,
+  createProjectionGatewayHandler,
+  PreparedEvidenceProjectionGateway,
+  parseProjectionGatewayConfig,
+} from "@impromptu/projection-gateway";
+import {
   createDeckRenderSubprocess,
   type RenderSpawn,
   type RenderSpawnedProcess,
@@ -198,6 +204,27 @@ describe("deck upload service", () => {
     expect(readFileSync(join(artifactRoot, artifactId, "slides", "slide-1.svg"), "utf8")).toBe(
       SLIDE_SVG,
     );
+
+    const publicAssetHandler = createProjectionGatewayHandler(
+      parseProjectionGatewayConfig({ STAGE_ORIGIN: "https://stage.example.test" }),
+      {
+        gateway: new PreparedEvidenceProjectionGateway(),
+        internalAuthToken: "internal-test-token-alpha",
+        now: () => 1_000,
+        stageReceiptWriter: {
+          async recordApplied() {
+            return null;
+          },
+        },
+        deckAssets: createDeckAssetReader(artifactRoot),
+      },
+    );
+    const emittedAsset = await publicAssetHandler(
+      new Request(publicDeck.slides[0]?.image.url ?? ""),
+    );
+    expect(emittedAsset.status).toBe(200);
+    expect(emittedAsset.headers.get("content-type")).toBe("image/svg+xml");
+    expect(await emittedAsset.text()).toBe(SLIDE_SVG);
     expect(readdirSync(stagingRoot)).toEqual([]);
 
     // The render went through the real subprocess adapter argv contract.
