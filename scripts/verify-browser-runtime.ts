@@ -4,7 +4,7 @@ import { createServer as createNetServer } from "node:net";
 import { extname, join, resolve } from "node:path";
 
 import { type BrowserContext, chromium, type Page } from "playwright-core";
-import { createServer as createViteServer, preview } from "vite";
+import { build as buildVite, createServer as createViteServer, preview } from "vite";
 
 import {
   waitForFirstServiceWorkerActivation,
@@ -107,6 +107,34 @@ function address(surface: AppSurface) {
   return `http://127.0.0.1:${surface.port}${surface.route}`;
 }
 
+function runtimeDistributionRoot(surface: AppSurface) {
+  return join(runtimeRoot, "distributions", surface.app);
+}
+
+async function buildRuntimeDistributions() {
+  const previousNodeEnvironment = process.env.NODE_ENV;
+  process.env.NODE_ENV = "production";
+  try {
+    for (const surface of surfaces) {
+      await buildVite({
+        root: `apps/${surface.app}`,
+        mode: "production",
+        build: {
+          emptyOutDir: true,
+          outDir: runtimeDistributionRoot(surface),
+        },
+      });
+    }
+  } finally {
+    if (previousNodeEnvironment === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = previousNodeEnvironment;
+    }
+  }
+  console.log("Built isolated production distributions for Console and Stage.");
+}
+
 async function verifyDevResponseHeaders() {
   for (const [index, surface] of surfaces.entries()) {
     const port = devPorts[index];
@@ -151,7 +179,7 @@ async function closeHttpServer(server: Server) {
 }
 
 async function startLifecycleOrigin(surface: AppSurface, port: number): Promise<LifecycleOrigin> {
-  const distributionRoot = resolve(`apps/${surface.app}/dist`);
+  const distributionRoot = runtimeDistributionRoot(surface);
   const baseWorker = readFileSync(join(distributionRoot, "sw.js"), "utf8");
   const baseCacheName = baseWorker.match(/const CACHE_NAME = "([^"]+)"/)?.[1];
   const deploymentHeaders = readFileSync(join(distributionRoot, "_headers"), "utf8");
@@ -1062,6 +1090,7 @@ async function verifyColdOfflineRestart() {
     for (const surface of surfaces) {
       const server = await preview({
         root: `apps/${surface.app}`,
+        build: { outDir: runtimeDistributionRoot(surface) },
         preview: { host: "127.0.0.1", port: surface.port, strictPort: true },
       });
       closePreviewOrigins.push(cleanup.add(() => server.close()));
@@ -1127,6 +1156,7 @@ mkdirSync(runtimeRoot, { recursive: true });
 mkdirSync(artifactPath, { recursive: true });
 
 try {
+  await buildRuntimeDistributions();
   await verifyDevResponseHeaders();
   await verifyUpdateLifecycles();
   await verifyColdOfflineRestart();
