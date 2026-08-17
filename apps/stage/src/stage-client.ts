@@ -1,3 +1,5 @@
+import { PublishedSlideRuntimeSchema } from "@impromptu/contracts";
+
 export interface DisplayIdentity {
   readonly displayId: string;
   readonly displayFingerprint: string;
@@ -68,6 +70,7 @@ export interface StageSnapshotView {
     imageUrl: string;
     imageContentHash: string;
     accessibilityLabel: string;
+    runtime?: unknown;
   }>[];
   readonly publicPlaybackRevision: string;
   readonly publicationPolicyVersion: string | null;
@@ -233,12 +236,18 @@ function snapshot(value: unknown): StageSnapshotView | null {
     ) {
       return null;
     }
+    const parsedRuntime =
+      slide.runtime === undefined
+        ? undefined
+        : PublishedSlideRuntimeSchema.safeParse(slide.runtime);
+    if (parsedRuntime !== undefined && !parsedRuntime.success) return null;
     deckSlides.push({
       publicSlideKey: slide.publicSlideKey,
       ordinal: slide.ordinal,
       imageUrl: image.url,
       imageContentHash: image.contentHash,
       accessibilityLabel: slide.accessibilityLabel,
+      ...(parsedRuntime?.success === true ? { runtime: parsedRuntime.data } : {}),
     });
   }
   const cards: StageCardView[] = [];

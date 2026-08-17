@@ -110,18 +110,42 @@
   overflow: hidden;
 }
 
-.stage-claim > :not(.stage-slide) {
+.stage-claim > :not(.stage-slide, .stage-slide-runtime) {
   position: relative;
   z-index: 1;
 }
 
-.stage-slide {
+.stage-slide,
+.stage-slide-runtime {
   position: absolute;
   z-index: 0;
   width: var(--size-full);
   height: var(--size-full);
-  object-fit: cover;
   opacity: 0.14;
+}
+
+.stage-slide {
+  object-fit: cover;
+}
+
+.stage-slide-runtime > svg {
+  width: var(--size-full);
+  height: var(--size-full);
+  object-fit: cover;
+}
+
+.stage-slide-runtime[data-transition="fade"][data-slide-runtime="active"] {
+  animation: stage-slide-fade var(--duration-reveal) var(--ease-out) both;
+}
+
+@keyframes stage-slide-fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 0.14;
+  }
 }
 
 .stage-evidence {

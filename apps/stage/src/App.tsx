@@ -1,3 +1,4 @@
+import { type PublishedSlideRuntime, PublishedSlideRuntimeSchema } from "@impromptu/contracts";
 import {
   applyRealtimeTransition,
   createRealtimeStageState,
@@ -7,6 +8,7 @@ import {
 import { Badge, Brand, Button, Panel, Shell, StatusDot } from "@impromptu/ui";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { RenderedSlidePlayer, type RenderedSlidePlayerHandle } from "./rendered-slide-player";
 import {
   createStageSessionClient,
   type DisplayJoinView,
@@ -30,6 +32,18 @@ import {
 
 function publishStageEvent(name: string, detail: unknown): void {
   window.dispatchEvent(new CustomEvent(name, { detail }));
+}
+
+function renderedSlideRuntime(
+  slide: StageSnapshotView["deckSlides"][number],
+): PublishedSlideRuntime | null {
+  if (!new URL(slide.imageUrl, window.location.href).pathname.toLowerCase().endsWith(".svg")) {
+    return null;
+  }
+  const parsed = PublishedSlideRuntimeSchema.safeParse(slide.runtime);
+  return parsed.success && parsed.data.timeline.slide_key === slide.publicSlideKey
+    ? parsed.data
+    : null;
 }
 
 function StageHeader() {
@@ -250,6 +264,7 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
   const [placementMessage, setPlacementMessage] = useState(manualPlacementSummary(requestedMode));
   const detailsRef = useRef<ScreenDetailsLike | null>(null);
   const targetRef = useRef<ScreenLike | null>(null);
+  const renderedSlidePlayerRef = useRef<RenderedSlidePlayerHandle>(null);
   const [snapshot, setSnapshot] = useState<StageSnapshotView | null>(null);
 
   useEffect(() => {
@@ -748,6 +763,15 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target;
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
+      const unmodified = !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
+      if (unmodified && (event.key === "ArrowRight" || event.key === "PageDown")) {
+        const player = renderedSlidePlayerRef.current;
+        if (player !== null && !player.exhausted) {
+          event.preventDefault();
+          void player.advance();
+          return;
+        }
+      }
       if (mode === "single" && snapshot !== null) {
         const command = emergencyPublicSlideSet(
           event,
@@ -771,8 +795,8 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
           return;
         }
       }
-      if (event.key === "ArrowLeft") navigateCachedSlide(-1);
-      if (event.key === "ArrowRight") navigateCachedSlide(1);
+      if (unmodified && event.key === "ArrowLeft") navigateCachedSlide(-1);
+      if (unmodified && event.key === "ArrowRight") navigateCachedSlide(1);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -781,6 +805,8 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
   const currentSlide = snapshot?.deckSlides.find(
     (slide) => slide.publicSlideKey === snapshot.occurrence.publicSlideKey,
   );
+  const currentSlideRuntime =
+    currentSlide === undefined ? null : renderedSlideRuntime(currentSlide);
 
   return (
     <div className="stage-display">
@@ -805,7 +831,15 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
       </header>
       <main className="stage-display__content" aria-labelledby={titleId}>
         <section className="stage-claim ui-reveal">
-          {currentSlide === undefined ? null : (
+          {currentSlide === undefined ? null : currentSlideRuntime !== null ? (
+            <RenderedSlidePlayer
+              key={`${currentSlide.publicSlideKey}:${snapshot?.occurrence.occurrenceSeq ?? 0}`}
+              ref={renderedSlidePlayerRef}
+              slide={currentSlide}
+              runtime={currentSlideRuntime}
+              occurrenceSeq={snapshot?.occurrence.occurrenceSeq ?? 0}
+            />
+          ) : (
             <img
               className="stage-slide"
               src={currentSlide.imageUrl}

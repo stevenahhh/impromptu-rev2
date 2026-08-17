@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@impromptu/contracts": "workspace:*",
+    "@impromptu/slide-runtime": "workspace:*",
     "@impromptu/state": "workspace:*",
     "@impromptu/ui": "workspace:*",
     "react": "19.1.1",
