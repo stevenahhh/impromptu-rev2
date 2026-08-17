@@ -809,7 +809,10 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
     currentSlide === undefined ? null : renderedSlideRuntime(currentSlide);
 
   return (
-    <div className="stage-display">
+    <div
+      className="stage-display"
+      data-audience-readiness={snapshot === null ? "RECOVERING" : "READY"}
+    >
       <header className="stage-display__bar">
         <Brand eyebrow="Public Stage" />
         <div className="stage-display__actions">

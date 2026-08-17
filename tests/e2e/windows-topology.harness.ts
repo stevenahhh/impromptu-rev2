@@ -327,7 +327,8 @@ async function observeAudienceReady(
   const matches = vocabularyMatches.length + privateControls;
   return {
     privatePixelCount: matches,
-    audienceReady: text.includes("Public only") && text.includes("Evidence, without the detour"),
+    audienceReady:
+      (await page.locator("[data-audience-readiness='READY']").count()) === 1 && matches === 0,
   };
 }
 
