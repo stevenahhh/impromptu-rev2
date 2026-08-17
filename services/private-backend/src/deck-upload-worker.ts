@@ -426,12 +426,17 @@ export function createDeckUploadWorker(options: DeckUploadWorkerOptions): DeckUp
         return { outcome: "REJECTED", ...declaredRejection };
       }
 
-      // Server-generated paths only; the user-supplied file name never touches the filesystem.
+      // Preserve only the validated format suffix for renderer dispatch. The staged basename
+      // remains server-generated; no user-controlled filename segment reaches the filesystem.
+      const sourceExtension = SIGNATURES.find(([extension]) =>
+        input.fileName.toLowerCase().endsWith(extension),
+      )?.[0];
+      if (sourceExtension === undefined) throw new Error("validated deck extension missing");
       const stagingDir = mkdtempSync(join(stagingRoot, "staging-"));
       let partFd: number | null = null;
       let artifactPartDir: string | null = null;
       try {
-        const sourcePath = join(stagingDir, "upload");
+        const sourcePath = join(stagingDir, `upload${sourceExtension}`);
         const partPath = join(stagingDir, "upload.part");
         partFd = openSync(partPath, "wx");
 

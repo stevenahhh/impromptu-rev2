@@ -24,6 +24,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { createServer as createNetServer } from "node:net";
@@ -34,10 +35,13 @@ import { PublishedDeckArtifactSchema } from "@impromptu/contracts/public";
 
 type ServiceProcess = ReturnType<typeof Bun.spawn<"ignore", "pipe", "pipe">>;
 const processes: ServiceProcess[] = [];
+const fixtureRoots: string[] = [];
 
 const PPTX_CONTENT_TYPE =
   "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 const PPTX_MAGIC = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x06, 0x00, 0x08, 0x00]);
+const PDF_CONTENT_TYPE = "application/pdf";
+const PDF_MAGIC = new TextEncoder().encode("%PDF-1.7\nmain integration fixture");
 
 async function availablePort(): Promise<number> {
   const server = createNetServer();
@@ -143,6 +147,7 @@ interface MainFixture {
 
 async function fixture(): Promise<MainFixture> {
   const root = mkdtempSync(join(tmpdir(), "deck-upload-main-"));
+  fixtureRoots.push(root);
   const stagingRoot = join(root, "staging");
   const artifactRoot = join(root, "artifacts");
   const binDir = join(root, "bin");
@@ -177,6 +182,7 @@ function baseEnvironment(fixtureInput: MainFixture): Record<string, string> {
     DECK_STAGING_ROOT: fixtureInput.stagingRoot,
     DECK_ARTIFACT_ROOT: fixtureInput.artifactRoot,
     DECK_RENDER_DEADLINE_MS: "5000",
+    FAKE_UV_SOURCE_LOG: join(fixtureInput.binDir, "source-paths.log"),
     PATH: `${fixtureInput.binDir}:${process.env.PATH ?? ""}`,
   };
 }
@@ -186,12 +192,16 @@ function installFakeUv(binDir: string): void {
   const script = `#!/usr/bin/env bash
 set -euo pipefail
 out=""
+source_path=""
 prev=""
 for arg in "$@"; do
   if [ "$prev" = "--output-dir" ]; then out="$arg"; fi
+  if [ "$prev" = "render" ]; then source_path="$arg"; fi
   prev="$arg"
 done
 if [ -z "$out" ]; then echo "fake-uv: --output-dir missing" >&2; exit 2; fi
+if [ -z "$source_path" ]; then echo "fake-uv: render source missing" >&2; exit 2; fi
+printf '%s\n' "$source_path" >> "$FAKE_UV_SOURCE_LOG"
 mkdir -p "$out/slides"
 cat > "$out/render.json" <<'JSON'
 {"deck_id":"deck_${"a".repeat(64)}","renderer":{"name":"libreoffice","version":"7.6.5.2"},"slides":[{"slide_key":"slide_${"b".repeat(64)}","source_index":1,"relative_path":"slides/slide-1.svg","content_sha256":"${"c".repeat(64)}","width_points":960,"height_points":540}],"assets":[],"fonts":[],"timelines":[],"mapping_issues":[],"animation_eligible":true,"ineligible_reason":null}
@@ -233,6 +243,9 @@ afterEach(async () => {
     process.kill();
     await process.exited;
   }
+  for (const root of fixtureRoots.splice(0)) {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 describe("production main deck upload wiring", () => {
@@ -271,6 +284,41 @@ describe("production main deck upload wiring", () => {
       { ...env, DECK_RENDER_DEADLINE_MS: "not-a-number" },
       "DECK_RENDER_DEADLINE_MS must be a positive integer",
     );
+  });
+
+  test("preserves validated PPTX and PDF suffixes through the production main renderer argv", async () => {
+    const fixtureInput = await fixture();
+    installFakeUv(fixtureInput.binDir);
+    await startMain(baseEnvironment(fixtureInput));
+    const { cookie, csrfToken } = await signIn(fixtureInput.privateOrigin, fixtureInput);
+
+    for (const upload of [
+      { contentType: PPTX_CONTENT_TYPE, body: PPTX_MAGIC, filename: "board-review.pptx" },
+      { contentType: PDF_CONTENT_TYPE, body: PDF_MAGIC, filename: "board-handout.PDF" },
+    ]) {
+      const response = await fetch(`${fixtureInput.privateOrigin}/v1/deck-uploads`, {
+        method: "POST",
+        headers: {
+          ...browserHeaders(fixtureInput.consoleOrigin, csrfToken, cookie),
+          "Content-Type": upload.contentType,
+          "Content-Length": String(upload.body.byteLength),
+          "X-Filename": upload.filename,
+        },
+        body: upload.body,
+      });
+      expect(response.status, await response.text()).toBe(201);
+    }
+
+    const stagedSources = readFileSync(join(fixtureInput.binDir, "source-paths.log"), "utf8")
+      .trim()
+      .split("\n");
+    expect(stagedSources).toHaveLength(2);
+    expect(stagedSources.map((source) => source.split("/").at(-1))).toEqual([
+      "upload.pptx",
+      "upload.pdf",
+    ]);
+    expect(stagedSources.every((source) => source.startsWith(fixtureInput.stagingRoot))).toBe(true);
+    expect(readdirSync(fixtureInput.stagingRoot)).toEqual([]);
   });
 
   test("accepts an authenticated raw upload through the real adapter chain and returns matching artifacts and session receipt", async () => {

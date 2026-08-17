@@ -89,6 +89,7 @@ import {
 } from "../src/deck-upload-worker.ts";
 
 const PPTX_MAGIC = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x06, 0x00]);
+const PDF_MAGIC = new TextEncoder().encode("%PDF-1.7\nfixture");
 
 const SLIDE_SVG = new TextEncoder().encode("<svg xmlns='http://www.w3.org/2000/svg'/>");
 const RENDER_JSON = new TextEncoder().encode(JSON.stringify({ closed: true, slide_count: 1 }));
@@ -301,6 +302,53 @@ describe("deck upload worker", () => {
     }
     expect(renderer.calls).toHaveLength(0);
     assertNoResidue(stagingRoot, artifactRoot, renderer.calls);
+  });
+
+  test("routes validated PPTX and PDF uploads with generated suffix-preserving staged paths", async () => {
+    const routes: string[] = [];
+    const stagedNames: string[] = [];
+    const routingRenderer: RenderSubprocessAdapter = {
+      async run(request) {
+        const stagedName = request.sourcePath.split(/[/\\]/).at(-1) ?? "";
+        stagedNames.push(stagedName);
+        const route = stagedName.endsWith(".pdf")
+          ? "pdf"
+          : stagedName.endsWith(".pptx")
+            ? "pptx"
+            : "unknown";
+        routes.push(route);
+        mkdirSync(request.outputDir, { recursive: true });
+        writeFileSync(join(request.outputDir, "render.json"), RENDER_JSON);
+        writeFileSync(
+          join(request.outputDir, `slide-1.${route === "pdf" ? "png" : "svg"}`),
+          SLIDE_SVG,
+        );
+        return { ok: true, renderManifest: { route } };
+      },
+    };
+    const instance = createDeckUploadWorker({
+      subprocess: routingRenderer,
+      stagingRoot,
+      artifactRoot,
+    });
+
+    expect((await instance.processUpload(validInput())).outcome).toBe("RENDERED");
+    expect(
+      (
+        await instance.processUpload(
+          validInput({
+            fileName: "BOARD-HANDOUT.PDF",
+            byteLength: PDF_MAGIC.byteLength,
+            content: chunkedStream([PDF_MAGIC]),
+          }),
+        )
+      ).outcome,
+    ).toBe("RENDERED");
+
+    expect(routes).toEqual(["pptx", "pdf"]);
+    expect(stagedNames).toEqual(["upload.pptx", "upload.pdf"]);
+    expect(readdirSync(stagingRoot)).toEqual([]);
+    expect(readdirSync(artifactRoot).filter((entry) => entry.endsWith(".part"))).toEqual([]);
   });
 
   test("rejects a declared over-limit upload from the declaration alone", async () => {
