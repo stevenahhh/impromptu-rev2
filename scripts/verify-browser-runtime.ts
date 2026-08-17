@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { createServer as createHttpServer, type Server } from "node:http";
 import { createServer as createNetServer } from "node:net";
 import { extname, join, resolve } from "node:path";
@@ -6,6 +6,7 @@ import { extname, join, resolve } from "node:path";
 import { type BrowserContext, chromium, type Page } from "playwright-core";
 import { build as buildVite, createServer as createViteServer, preview } from "vite";
 
+import { withBrowserRuntimeWorkspace } from "./browser-runtime-workspace.ts";
 import {
   waitForFirstServiceWorkerActivation,
   waitForInstalledServiceWorkerUpdate,
@@ -32,15 +33,9 @@ const stagePort = await availablePort();
 const embedPort = await availablePort();
 const devPorts = [await availablePort(), await availablePort()] as const;
 const lifecyclePorts = [await availablePort(), await availablePort()] as const;
-const runtimeRoot = join(
-  process.env.TEMP ?? process.cwd(),
-  `impromptu-r2-browser-runtime-${process.pid}`,
-);
-const profilePath = join(runtimeRoot, "offline-profile");
-export const artifactPath = join(
-  process.env.TEMP ?? process.cwd(),
-  `impromptu-r2-browser-artifacts-${process.pid}`,
-);
+let runtimeRoot: string;
+let profilePath: string;
+export let artifactPath: string;
 
 interface AppSurface {
   app: "console" | "stage";
@@ -1146,21 +1141,27 @@ async function verifyColdOfflineRestart() {
   }
 }
 
-if (!existsSync(chromeExecutable)) {
-  throw new Error(`Chrome executable not found at ${chromeExecutable}`);
-}
+const completedWorkspace = await withBrowserRuntimeWorkspace(
+  async (workspace) => {
+    runtimeRoot = workspace.runtimeRoot;
+    profilePath = join(runtimeRoot, "offline-profile");
+    artifactPath = workspace.artifactPath;
 
-rmSync(runtimeRoot, { force: true, recursive: true });
-rmSync(artifactPath, { force: true, recursive: true });
-mkdirSync(runtimeRoot, { recursive: true });
-mkdirSync(artifactPath, { recursive: true });
+    if (!existsSync(chromeExecutable)) {
+      throw new Error(`Chrome executable not found at ${chromeExecutable}`);
+    }
 
-try {
-  await buildRuntimeDistributions();
-  await verifyDevResponseHeaders();
-  await verifyUpdateLifecycles();
-  await verifyColdOfflineRestart();
-  console.log(`Chrome runtime verified; artifacts: ${artifactPath}`);
-} finally {
-  rmSync(runtimeRoot, { force: true, recursive: true });
-}
+    await buildRuntimeDistributions();
+    await verifyDevResponseHeaders();
+    await verifyUpdateLifecycles();
+    await verifyColdOfflineRestart();
+    return workspace;
+  },
+  { retainArtifacts: process.env.BROWSER_RUNTIME_RETAIN_ARTIFACTS === "true" },
+);
+
+console.log(
+  completedWorkspace.retainArtifacts
+    ? `Chrome runtime verified; retained artifacts: ${completedWorkspace.artifactPath}`
+    : "Chrome runtime verified; temporary artifacts cleaned.",
+);
