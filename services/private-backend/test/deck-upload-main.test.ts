@@ -36,6 +36,7 @@ import { PublishedDeckArtifactSchema } from "@impromptu/contracts/public";
 type ServiceProcess = ReturnType<typeof Bun.spawn<"ignore", "pipe", "pipe">>;
 const processes: ServiceProcess[] = [];
 const fixtureRoots: string[] = [];
+const privateBackendRoot = join(import.meta.dir, "..");
 
 const PPTX_CONTENT_TYPE =
   "application/vnd.openxmlformats-officedocument.presentationml.presentation";
@@ -94,6 +95,7 @@ function waitForOutput(stream: ReadableStream<Uint8Array>, expected: string): Pr
 async function startMain(environment: Record<string, string>, ready = "private-backend listening") {
   const process = Bun.spawn<"ignore", "pipe", "pipe">({
     cmd: ["bun", "run", "src/main.ts"],
+    cwd: privateBackendRoot,
     env: { ...Bun.env, ...environment },
     stdin: "ignore",
     stdout: "pipe",
@@ -110,6 +112,7 @@ async function expectRejectedStartup(
 ): Promise<void> {
   const process = Bun.spawn<"ignore", "pipe", "pipe">({
     cmd: ["bun", "run", "src/main.ts"],
+    cwd: privateBackendRoot,
     env: { ...Bun.env, ...environment },
     stdin: "ignore",
     stdout: "pipe",
