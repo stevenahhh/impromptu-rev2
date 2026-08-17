@@ -43,7 +43,7 @@ class ModelGates implements PolicyVersionAuthority, TenantQuotaPolicy, TenantBud
   async reconcile() {}
 }
 
-function modelRouter(pendingEmbedding = false): ServerModelRouter {
+function modelRouter(): ServerModelRouter {
   const registry = new ModelRoutingRegistry();
   const outputs = {
     embedding: { vector: [0.1, 0.2] },
@@ -74,8 +74,14 @@ function modelRouter(pendingEmbedding = false): ServerModelRouter {
         inputSchema: z.unknown(),
         outputSchema: z.unknown(),
         steps:
-          pendingEmbedding && capability === "embedding"
-            ? [{ kind: "pending" }]
+          capability === "embedding"
+            ? [
+                ...Array.from({ length: 100 }, () => ({
+                  kind: "output" as const,
+                  output: outputs.embedding,
+                })),
+                { kind: "pending" },
+              ]
             : [{ kind: "output", output: outputs[capability] }],
       }),
     );
@@ -150,10 +156,10 @@ function internalRetrieval(): InternalRetrievalService {
   });
 }
 
-async function httpHarness(pendingEmbedding = false) {
+async function httpHarness() {
   const coordinator = new PreparedEvidenceCoordinator(new PreparedEvidenceProjectionGateway());
   const pipeline = new PrivateRecommendationPipeline({
-    router: modelRouter(pendingEmbedding),
+    router: modelRouter(),
     contexts: {
       async resolve() {
         return {
@@ -212,7 +218,6 @@ async function httpHarness(pendingEmbedding = false) {
 
 test("real loopback TCP recommendation chain meets p95 and wall-clock terminal deadline", async () => {
   const harness = await httpHarness();
-  let pending: Awaited<ReturnType<typeof httpHarness>> | undefined;
   try {
     const latencies: number[] = [];
     for (let index = 0; index < 100; index += 1) {
@@ -228,9 +233,8 @@ test("real loopback TCP recommendation chain meets p95 and wall-clock terminal d
     console.log(JSON.stringify({ privateRecommendationTcpP95Ms: Number(p95.toFixed(3)) }));
     expect(p95).toBeLessThanOrEqual(5_000);
 
-    pending = await httpHarness(true);
     const deadlineStartedAtMs = performance.now();
-    const terminal = await pending.recommend();
+    const terminal = await harness.recommend();
     const deadlineWallMs = performance.now() - deadlineStartedAtMs;
     expect(await terminal.json()).toMatchObject({
       outcome: "ABSTAIN",
@@ -241,7 +245,6 @@ test("real loopback TCP recommendation chain meets p95 and wall-clock terminal d
     );
     expect(deadlineWallMs).toBeLessThan(5_000);
   } finally {
-    await pending?.close();
     await harness.close();
   }
   // The p95 and wall-clock deadline assertions above are the SLA. This argument is only
