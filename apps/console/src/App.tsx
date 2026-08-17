@@ -12,8 +12,10 @@ import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation } from "rea
 import { AudioConsentControl } from "./audio-capture";
 import {
   type AccountSessionView,
+  type ConsoleDeckUploadClient,
   type ConsoleSessionClient,
   createConsoleSessionClient,
+  type DeckUploadView,
   type LiveCandidateSnapshotView,
 } from "./session-client";
 
@@ -22,7 +24,7 @@ interface AuthState {
   pending: boolean;
   error: string | null;
   session: AccountSessionView | null;
-  client: ConsoleSessionClient;
+  client: ConsoleDeckUploadClient;
   signIn: (authorizationCode: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -40,7 +42,12 @@ export function AuthProvider({
   initialAuthenticated = false,
   client,
 }: AuthProviderProps) {
-  const sessionClient = useMemo(() => client ?? createConsoleSessionClient(), [client]);
+  // The production client is already the typed deck-upload client; injected test
+  // clients are narrower and never reach the upload panel.
+  const sessionClient = useMemo(
+    () => (client ?? createConsoleSessionClient()) as ConsoleDeckUploadClient,
+    [client],
+  );
   const [session, setSession] = useState<AccountSessionView | null>(
     initialAuthenticated
       ? {
@@ -406,8 +413,95 @@ function LivePublicationPage() {
   );
 }
 
+/**
+ * The public Stage resolves its canonical entry for a deck through the landing
+ * URL (`/?deck=<version>`, see apps/stage/src/App.tsx). The origin is the stage
+ * dev server by default and can be overridden with VITE_STAGE_ORIGIN for
+ * deployed rehearsal topologies.
+ */
+const STAGE_ORIGIN = import.meta.env.VITE_STAGE_ORIGIN ?? "http://localhost:4174";
+
+function SessionUploadPanel({
+  client,
+  csrfToken,
+}: {
+  readonly client: ConsoleDeckUploadClient;
+  readonly csrfToken: string;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [phase, setPhase] = useState<"IDLE" | "UPLOADING" | "SUCCESS" | "ERROR">("IDLE");
+  const [message, setMessage] = useState(
+    "Select the .pptx or .pdf deck to publish to this session.",
+  );
+  const [view, setView] = useState<DeckUploadView | null>(null);
+
+  const selectFile = (selected: File | null) => {
+    setFile(selected);
+    setView(null);
+    setPhase("IDLE");
+    setMessage("Select the .pptx or .pdf deck to publish to this session.");
+  };
+
+  const upload = async () => {
+    if (file === null) return;
+    setView(null);
+    setPhase("UPLOADING");
+    setMessage("Uploading deck...");
+    try {
+      const next = await client.uploadDeck(csrfToken, file);
+      setView(next);
+      setPhase("SUCCESS");
+    } catch (cause) {
+      setPhase("ERROR");
+      setMessage(cause instanceof Error ? cause.message : "Deck upload failed.");
+    }
+  };
+
+  return (
+    <Panel title="Upload the deck" tone="inset">
+      <p>
+        The uploaded deck becomes the presentation-scoped deck for this session. Only browser-safe
+        slide and font assets reach the public Stage.
+      </p>
+      <label className="console-field">
+        <span>Deck file</span>
+        <input
+          accept=".pptx,.pdf"
+          disabled={phase === "UPLOADING"}
+          type="file"
+          onChange={(event) => selectFile(event.currentTarget.files?.[0] ?? null)}
+        />
+      </label>
+      <Button disabled={file === null || phase === "UPLOADING"} onClick={() => void upload()}>
+        Upload deck
+      </Button>
+      {phase === "SUCCESS" && view !== null ? (
+        <div className="console-upload-ready" aria-live="polite">
+          <p className="ui-eyebrow">Deck accepted</p>
+          <p className="console-upload-heading">Presentation ready</p>
+          <p className="console-caption">Session {view.presentationSessionId}</p>
+          <a
+            className="ui-button ui-button--primary console-action"
+            href={`${STAGE_ORIGIN}/?deck=${encodeURIComponent(view.deckVersion)}`}
+          >
+            Open the public Stage
+          </a>
+        </div>
+      ) : (
+        <p
+          className={`console-caption${phase === "ERROR" ? " console-caption--error" : ""}`}
+          aria-live="polite"
+        >
+          {message}
+        </p>
+      )}
+    </Panel>
+  );
+}
+
 function SessionPage() {
   const titleId = useId();
+  const { client, session } = useAuth();
 
   return (
     <section className="console-stack ui-reveal" aria-labelledby={titleId}>
@@ -419,6 +513,9 @@ function SessionPage() {
           publication remain bound to that session.
         </p>
       </div>
+      {session === null ? null : (
+        <SessionUploadPanel client={client} csrfToken={session.csrfToken} />
+      )}
       <div className="console-grid">
         <Panel title="1. Choose the room" tone="inset">
           <p>

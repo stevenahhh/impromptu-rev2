@@ -99,6 +99,24 @@
   font-size: var(--text-caption);
 }
 
+.console-caption--error {
+  color: var(--color-danger);
+}
+
+.console-upload-ready {
+  display: grid;
+  gap: var(--space-2);
+  margin-block-start: var(--space-5);
+}
+
+.console-upload-heading {
+  margin: var(--space-0);
+  color: var(--color-success);
+  font-family: var(--font-display);
+  font-size: var(--text-title);
+  line-height: var(--line-title);
+}
+
 .console-field {
   display: grid;
   max-width: var(--size-copy);
@@ -109,6 +127,7 @@
 }
 
 .console-field input {
+  min-width: 0;
   padding: var(--space-3) var(--space-4);
   border: var(--size-hairline) solid var(--border-emphasis);
   border-radius: var(--radius-md);
@@ -120,6 +139,11 @@
 .console-action {
   width: fit-content;
   margin-block-start: var(--space-4);
+}
+
+.console-upload-ready .console-caption,
+.console-upload-ready .console-action {
+  margin-block: var(--space-0);
 }
 
 .console-grid {
