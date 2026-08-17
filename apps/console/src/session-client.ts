@@ -98,7 +98,7 @@ export interface DeckUploadProgressEvent {
   readonly total?: number;
 }
 
-/** Minimal transport surface of XMLHttpRequest used by the raw deck upload. */
+/** Minimal transport surface of XMLHttpRequest used by the multipart deck upload. */
 export interface DeckUploadXhr {
   withCredentials: boolean;
   open(method: string, url: string): void;
@@ -419,8 +419,6 @@ export function createConsoleSessionClient(baseUrl = ""): ConsoleDeckUploadClien
         };
         signal?.addEventListener("abort", onAbort, { once: true });
         transport.open("POST", url);
-        transport.setRequestHeader("content-type", contentType);
-        transport.setRequestHeader("x-filename", encodeURIComponent(file.name));
         transport.setRequestHeader("x-csrf-token", csrfToken);
         transport.upload.onprogress = (event: DeckUploadProgressEvent) => {
           options.onProgress?.({
@@ -429,7 +427,9 @@ export function createConsoleSessionClient(baseUrl = ""): ConsoleDeckUploadClien
               typeof event.total === "number" && event.total > 0 ? event.total : file.size,
           });
         };
-        transport.send(file);
+        const form = new FormData();
+        form.append("file", file);
+        transport.send(form);
       });
     },
   };

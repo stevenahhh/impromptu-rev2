@@ -61,7 +61,8 @@ export type DeckUploadRejectionCode =
 
 export interface DeckUploadInput {
   readonly fileName: string;
-  readonly byteLength: number; // declared by the client; verified against the streamed body
+  /** Optional for multipart file parts, which do not carry their own Content-Length. */
+  readonly byteLength?: number;
   readonly content: ReadableStream<Uint8Array>;
 }
 
@@ -145,7 +146,7 @@ function validateDeclaration(input: DeckUploadInput): Rejection | null {
   if (byteLength === 0) {
     return rejection("empty_input", "Upload is empty");
   }
-  if (byteLength > MAX_DECK_UPLOAD_BYTES) {
+  if (byteLength !== undefined && byteLength > MAX_DECK_UPLOAD_BYTES) {
     return rejection("input_too_large", `Upload exceeds the ${MAX_DECK_UPLOAD_BYTES}-byte limit`);
   }
   if (isUnsafeFileName(fileName)) {
@@ -249,11 +250,14 @@ async function streamUploadToFile(input: DeckUploadInput, fd: number): Promise<R
     reader.releaseLock();
   }
 
-  if (counted !== declared) {
+  if (declared !== undefined && counted !== declared) {
     return rejection(
       "size_mismatch",
       `Upload declared ${declared} bytes but the body contained ${counted}`,
     );
+  }
+  if (counted === 0) {
+    return rejection("empty_input", "Upload is empty");
   }
   // A body shorter than the signature never completed the prefix; validate the
   // short prefix directly so it rejects as malformed rather than passing.

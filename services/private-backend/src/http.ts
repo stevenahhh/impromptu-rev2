@@ -2,6 +2,9 @@ import type { PrivateDeckContext } from "@impromptu/contracts/private";
 import type { PublishedDeckArtifact } from "@impromptu/contracts/public";
 import type { RecommendationOutcome } from "@impromptu/contracts/retrieval";
 import type { ExactOrigin, PrivateBackendConfig } from "./config.ts";
+import { type ParsedDeckMultipart, parseDeckUploadMultipart } from "./deck-upload-multipart.ts";
+import { DeckUploadRejectedError } from "./deck-upload-service.ts";
+import type { DeckUploadRejectionCode } from "./deck-upload-worker.ts";
 import { createPreparedDeckArtifacts } from "./prepared-deck-upload.ts";
 import type { ControllerSocket, PreparedEvidenceCoordinator } from "./prepared-evidence.ts";
 import { renderedDeckArtifacts } from "./rendered-deck-artifacts.ts";
@@ -22,7 +25,7 @@ export type DeckUploadContentType =
 export interface RawDeckUpload {
   readonly filename: string;
   readonly contentType: DeckUploadContentType;
-  readonly byteLength: number;
+  readonly byteLength?: number;
   readonly body: ReadableStream<Uint8Array>;
 }
 
@@ -36,6 +39,20 @@ export interface DeckUploadAccepted extends DeckUploadReceipt {
   readonly presentationSessionId: string;
   readonly deckVersion: string;
 }
+
+export type DeckUploadRejectedResponse = Readonly<{
+  error: "deck_upload_rejected";
+  code: DeckUploadRejectionCode;
+}>;
+
+const DECK_UPLOAD_REJECTION_STATUS = {
+  empty_input: 400,
+  unsupported_extension: 400,
+  malformed_input: 400,
+  input_too_large: 413,
+  unsafe_filename: 400,
+  size_mismatch: 400,
+} as const satisfies Record<DeckUploadRejectionCode, 400 | 413>;
 
 export interface DeckUploadService {
   acceptRawDeck(input: {
@@ -63,6 +80,14 @@ function json(body: unknown, status: number, headers?: Headers): Response {
   responseHeaders.set("content-type", "application/json; charset=utf-8");
 
   return new Response(JSON.stringify(body), { status, headers: responseHeaders });
+}
+
+function deckUploadRejected(code: DeckUploadRejectionCode, headers: Headers): Response {
+  return json(
+    { error: "deck_upload_rejected", code } satisfies DeckUploadRejectedResponse,
+    DECK_UPLOAD_REJECTION_STATUS[code],
+    headers,
+  );
 }
 
 function browserOriginHeaders(request: Request, allowedOrigin: ExactOrigin): Headers | Response {
@@ -115,11 +140,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isDeckUploadContentType(value: string): value is DeckUploadContentType {
-  return (
-    value === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
-    value === "application/pdf"
-  );
+function isMultipartFormData(value: string | null): boolean {
+  return value?.split(";", 1)[0]?.trim().toLowerCase() === "multipart/form-data";
 }
 
 function controllerEventStream(
@@ -315,45 +337,38 @@ export function createPrivateBackendHandler(
       if (dependencies.uploads === undefined) {
         return json({ error: "uploads_unavailable" }, 503, origin);
       }
-      const contentType = request.headers.get("content-type");
-      if (contentType === null || !isDeckUploadContentType(contentType)) {
+      if (!isMultipartFormData(request.headers.get("content-type"))) {
         return json({ error: "unsupported_content_type" }, 400, origin);
       }
-      const contentLengthHeader = request.headers.get("content-length");
-      if (contentLengthHeader === null) {
-        return json({ error: "content_length_required" }, 400, origin);
-      }
-      const contentLength = Number(contentLengthHeader);
-      if (!Number.isInteger(contentLength) || contentLength < 0) {
-        return json({ error: "invalid_content_length" }, 400, origin);
-      }
-      const rawFilename = request.headers.get("x-filename");
-      if (rawFilename === null || rawFilename.length === 0) {
-        return json({ error: "filename_required" }, 400, origin);
-      }
-      let filename: string;
-      try {
-        filename = decodeURIComponent(rawFilename);
-      } catch {
-        return json({ error: "unsafe_filename" }, 400, origin);
-      }
-      if (filename.length === 0 || filename.includes("/") || filename.includes("\\")) {
-        return json({ error: "unsafe_filename" }, 400, origin);
-      }
-      const rawBody = request.body;
-      if (rawBody === null) {
-        return json({ error: "body_required" }, 400, origin);
-      }
+      let parsed: ParsedDeckMultipart | undefined;
       let receipt: DeckUploadReceipt;
       try {
+        parsed = await parseDeckUploadMultipart(request);
         receipt = await dependencies.uploads.acceptRawDeck({
           accountId: account.value.accountId,
           actorId: account.value.actorId,
-          // Content-Length is declared metadata; the upload service verifies the
-          // actual streamed length against it without the HTTP boundary buffering.
-          upload: { filename, contentType, byteLength: contentLength, body: rawBody },
+          upload: parsed.upload,
         });
-      } catch {
+        await parsed.finished;
+      } catch (error) {
+        let rejection = error;
+        if (parsed !== undefined) {
+          await parsed.cancel(error);
+          try {
+            await parsed.finished;
+          } catch (parserError) {
+            if (
+              parserError instanceof DeckUploadRejectedError &&
+              (!(rejection instanceof DeckUploadRejectedError) ||
+                parserError.code === "input_too_large")
+            ) {
+              rejection = parserError;
+            }
+          }
+        }
+        if (rejection instanceof DeckUploadRejectedError) {
+          return deckUploadRejected(rejection.code, origin);
+        }
         return json({ error: "deck_upload_rejected" }, 400, origin);
       }
       const presentation = dependencies.coordinator.createPresentation(

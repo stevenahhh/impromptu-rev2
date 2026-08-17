@@ -127,7 +127,7 @@ test("createConsoleSessionClient exposes a typed uploadDeck method", () => {
   expect(typeof client.uploadDeck).toBe("function");
 });
 
-test("uploadDeck streams raw File bytes over an injected XHR with exact metadata", async () => {
+test("uploadDeck sends a PPTX as one multipart file part over credentialed XHR", async () => {
   const harness = createUploadHarness();
   const file = deckFile("quarterly-review.pptx");
   const upload = createConsoleSessionClient("https://private.example.test").uploadDeck(
@@ -140,15 +140,22 @@ test("uploadDeck streams raw File bytes over an injected XHR with exact metadata
     { method: "POST", url: "https://private.example.test/v1/deck-uploads" },
   ]);
   expect(harness.transport.withCredentials).toBe(true);
-  expect(harness.headers.get("content-type")).toBe(PPTX_CONTENT_TYPE);
-  // Browsers derive Content-Length from the raw File body; the XHR must not attempt
-  // to set the forbidden header itself.
+  // XMLHttpRequest must generate the multipart boundary and Content-Length.
+  expect(harness.headers.has("content-type")).toBe(false);
   expect(harness.headers.has("content-length")).toBe(false);
-  expect(harness.headers.size).toBe(3);
-  expect(harness.headers.get("x-filename")).toBe(encodeURIComponent(file.name));
-  expect(harness.headers.get("x-csrf-token")).toBe("csrf-upload");
+  expect(harness.headers.has("x-filename")).toBe(false);
+  expect(harness.headers).toEqual(new Map([["x-csrf-token", "csrf-upload"]]));
   expect(harness.sent).toHaveLength(1);
-  expect(harness.sent[0]).toBe(file);
+  expect(harness.sent[0]).toBeInstanceOf(FormData);
+  const parts = [...(harness.sent[0] as FormData).entries()];
+  expect(parts).toHaveLength(1);
+  expect(parts[0]?.[0]).toBe("file");
+  expect(parts[0]?.[1]).toBeInstanceOf(File);
+  expect(parts[0]?.[1]).toMatchObject({
+    name: file.name,
+    type: file.type,
+    size: file.size,
+  });
 
   harness.complete(201, {
     presentationSessionId: "ps_deck-upload-1",
@@ -168,7 +175,7 @@ test("uploadDeck streams raw File bytes over an injected XHR with exact metadata
   expect(harness.aborts).toBe(0);
 });
 
-test("uploadDeck preserves exact PDF MIME and a percent-encoded X-Filename", async () => {
+test("uploadDeck preserves PDF filename and MIME inside the multipart file part", async () => {
   const harness = createUploadHarness();
   const file = deckFile("rehearsal handout.pdf", PDF_CONTENT_TYPE);
   const upload = createConsoleSessionClient("https://private.example.test").uploadDeck(
@@ -177,8 +184,16 @@ test("uploadDeck preserves exact PDF MIME and a percent-encoded X-Filename", asy
     { transport: harness.transport },
   );
 
-  expect(harness.headers.get("content-type")).toBe(PDF_CONTENT_TYPE);
-  expect(harness.headers.get("x-filename")).toBe("rehearsal%20handout.pdf");
+  expect(harness.headers).toEqual(new Map([["x-csrf-token", "csrf-pdf"]]));
+  const form = harness.sent[0];
+  expect(form).toBeInstanceOf(FormData);
+  const part = (form as FormData).get("file");
+  expect(part).toBeInstanceOf(File);
+  expect(part).toMatchObject({
+    name: "rehearsal handout.pdf",
+    type: PDF_CONTENT_TYPE,
+    size: file.size,
+  });
   harness.complete(201, { presentationSessionId: "ps_pdf-1", deckVersion: "deck_pdf" });
   await expect(upload).resolves.toMatchObject({
     presentationSessionId: "ps_pdf-1",

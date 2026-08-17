@@ -226,6 +226,14 @@ function browserHeaders(origin: string, csrfToken?: string, cookie?: string): He
   };
 }
 
+function uploadForm(filename: string, contentType: string, body: Uint8Array): FormData {
+  const copy = new Uint8Array(body.byteLength);
+  copy.set(body);
+  const form = new FormData();
+  form.append("file", new File([copy.buffer], filename, { type: contentType }));
+  return form;
+}
+
 async function signIn(origin: string, fixtureInput: MainFixture) {
   const response = await fetch(`${origin}/v1/account-sessions`, {
     method: "POST",
@@ -301,13 +309,8 @@ describe("production main deck upload wiring", () => {
     ]) {
       const response = await fetch(`${fixtureInput.privateOrigin}/v1/deck-uploads`, {
         method: "POST",
-        headers: {
-          ...browserHeaders(fixtureInput.consoleOrigin, csrfToken, cookie),
-          "Content-Type": upload.contentType,
-          "Content-Length": String(upload.body.byteLength),
-          "X-Filename": upload.filename,
-        },
-        body: upload.body,
+        headers: browserHeaders(fixtureInput.consoleOrigin, csrfToken, cookie),
+        body: uploadForm(upload.filename, upload.contentType, upload.body),
       });
       expect(response.status, await response.text()).toBe(201);
     }
@@ -324,7 +327,7 @@ describe("production main deck upload wiring", () => {
     expect(readdirSync(fixtureInput.stagingRoot)).toEqual([]);
   });
 
-  test("accepts an authenticated raw upload through the real adapter chain and returns matching artifacts and session receipt", async () => {
+  test("accepts authenticated multipart through the real adapter chain and returns matching artifacts and session receipt", async () => {
     const fixtureInput = await fixture();
     installFakeUv(fixtureInput.binDir);
     const env = baseEnvironment(fixtureInput);
@@ -337,13 +340,8 @@ describe("production main deck upload wiring", () => {
     const { cookie, csrfToken } = await signIn(fixtureInput.privateOrigin, fixtureInput);
     const response = await fetch(`${fixtureInput.privateOrigin}/v1/deck-uploads`, {
       method: "POST",
-      headers: {
-        ...browserHeaders(fixtureInput.consoleOrigin, csrfToken, cookie),
-        "Content-Type": PPTX_CONTENT_TYPE,
-        "Content-Length": String(PPTX_MAGIC.byteLength),
-        "X-Filename": "quarterly-review.pptx",
-      },
-      body: PPTX_MAGIC,
+      headers: browserHeaders(fixtureInput.consoleOrigin, csrfToken, cookie),
+      body: uploadForm("quarterly-review.pptx", PPTX_CONTENT_TYPE, PPTX_MAGIC),
     });
 
     expect(response.status).toBe(201);

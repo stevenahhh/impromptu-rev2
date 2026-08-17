@@ -13,6 +13,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@fastify/busboy": "3.2.1",
     "@impromptu/contracts": "workspace:*",
     "@impromptu/model-router": "workspace:*",
     "@impromptu/state": "workspace:*",

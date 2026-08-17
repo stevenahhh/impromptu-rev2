@@ -18,8 +18,8 @@
  *
  * A REJECTED worker outcome (empty, malformed, unsafe, oversized, or
  * size-mismatched upload) throws a typed DeckUploadRejectedError without ever
- * invoking the renderer; the HTTP boundary maps every service failure to a
- * 400 deck_upload_rejected.
+ * invoking the renderer; the HTTP boundary returns its closed code without
+ * exposing the diagnostic message or server paths.
  */
 import type { AccountId } from "@impromptu/contracts/private";
 import type { DeckUploadRejectionCode, DeckUploadWorker } from "./deck-upload-worker.ts";
@@ -61,7 +61,7 @@ export function createDeckUploadService(options: DeckUploadServiceOptions): Deck
     async acceptRawDeck(input) {
       const outcome = await worker.processUpload({
         fileName: input.upload.filename,
-        byteLength: input.upload.byteLength,
+        ...(input.upload.byteLength === undefined ? {} : { byteLength: input.upload.byteLength }),
         content: input.upload.body,
       });
       if (outcome.outcome === "REJECTED") {
