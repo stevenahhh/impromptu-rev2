@@ -186,9 +186,8 @@ describe("public Stage boundary", () => {
       });
       await snapshotSignal.promise;
     });
-    expect(
-      within(document.body).getByRole("heading", { name: "Evidence, without the detour" }),
-    ).toBeTruthy();
+    expect(within(document.body).getByRole("img", { name: "One" })).toBeTruthy();
+    expect(document.body.querySelector(".stage-claim")).toBeNull();
     expect(actions).toEqual([
       "join-created",
       "display-claimed",

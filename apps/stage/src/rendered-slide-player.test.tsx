@@ -1,4 +1,5 @@
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { PublishedSlideRuntime } from "@impromptu/contracts";
 import { createRef } from "react";
@@ -216,6 +217,13 @@ async function settleRuntimeStatus(expected: "active" | "error"): Promise<void> 
 }
 
 describe("RenderedSlidePlayer", () => {
+  test("keeps completed static and rendered slides fully legible", () => {
+    const stageCss = readFileSync(new URL("./stage.css", import.meta.url), "utf8");
+
+    expect(stageCss).toMatch(/\.stage-slide,\s*\.stage-slide-runtime\s*\{[^}]*opacity:\s*1;/s);
+    expect(stageCss).toMatch(/@keyframes stage-slide-fade\s*\{.*to\s*\{\s*opacity:\s*1;/s);
+  });
+
   test("mounts the fetched SVG and exposes deterministic runtime state", async () => {
     const fetches = stubFetch(SVG_DOCUMENT);
     const ref = createRef<RenderedSlidePlayerHandle>();

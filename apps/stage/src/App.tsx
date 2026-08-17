@@ -829,30 +829,43 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
           </Button>
         </div>
       </header>
-      <main className="stage-display__content" aria-labelledby={titleId}>
-        <section className="stage-claim ui-reveal">
-          {currentSlide === undefined ? null : currentSlideRuntime !== null ? (
-            <RenderedSlidePlayer
-              key={`${currentSlide.publicSlideKey}:${snapshot?.occurrence.occurrenceSeq ?? 0}`}
-              ref={renderedSlidePlayerRef}
-              slide={currentSlide}
-              runtime={currentSlideRuntime}
-              occurrenceSeq={snapshot?.occurrence.occurrenceSeq ?? 0}
-            />
-          ) : (
-            <img
-              className="stage-slide"
-              src={currentSlide.imageUrl}
-              alt={currentSlide.accessibilityLabel}
-            />
-          )}
-          <p className="ui-eyebrow">Curated evidence preview</p>
-          <h1 id={titleId}>Evidence, without the detour</h1>
-          <p className="stage-lead">
-            A single, presenter-approved card supports the current idea while the main presentation
-            keeps moving.
-          </p>
-        </section>
+      <main
+        className={`stage-display__content${currentSlide === undefined ? "" : " stage-display__content--slide"}`}
+        aria-labelledby={currentSlide === undefined ? titleId : undefined}
+      >
+        {currentSlide === undefined ? (
+          <section className="stage-claim ui-reveal">
+            <p className="ui-eyebrow">Curated evidence preview</p>
+            <h1 id={titleId}>Evidence, without the detour</h1>
+            <p className="stage-lead">
+              A single, presenter-approved card supports the current idea while the main
+              presentation keeps moving.
+            </p>
+          </section>
+        ) : (
+          <section
+            className="stage-slide-surface ui-reveal"
+            data-stage-slide-surface="uploaded"
+            aria-label={currentSlide.accessibilityLabel}
+          >
+            {currentSlideRuntime !== null ? (
+              <RenderedSlidePlayer
+                key={`${currentSlide.publicSlideKey}:${snapshot?.occurrence.occurrenceSeq ?? 0}`}
+                ref={renderedSlidePlayerRef}
+                slide={currentSlide}
+                runtime={currentSlideRuntime}
+                occurrenceSeq={snapshot?.occurrence.occurrenceSeq ?? 0}
+              />
+            ) : (
+              <img
+                className="stage-slide"
+                data-slide-fit="contain"
+                src={currentSlide.imageUrl}
+                alt={currentSlide.accessibilityLabel}
+              />
+            )}
+          </section>
+        )}
         <Panel className="stage-evidence ui-reveal ui-reveal--2">
           <Badge tone="accent">Pre-approved</Badge>
           <blockquote>
