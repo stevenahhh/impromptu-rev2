@@ -191,7 +191,8 @@ a {
 }
 
 .ui-badge--success {
-  color: var(--color-success);
+  color: var(--text-primary);
+  border-color: var(--color-success);
 }
 
 .ui-badge--warning {
@@ -204,6 +205,10 @@ a {
   flex: none;
   border-radius: var(--radius-pill);
   background: currentColor;
+}
+
+.ui-badge--success .ui-status-dot {
+  background: var(--color-success);
 }
 
 .ui-panel {

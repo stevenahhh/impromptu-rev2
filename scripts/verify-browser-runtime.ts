@@ -28,7 +28,6 @@ async function availablePort(): Promise<number> {
 
 const chromeExecutable = process.env.CHROME_EXECUTABLE_PATH ?? chromium.executablePath();
 const chromeHeadless = process.env.BROWSER_HEADED !== "true";
-const consolePort = await availablePort();
 const stagePort = await availablePort();
 const embedPort = await availablePort();
 const devPorts = [await availablePort(), await availablePort()] as const;
@@ -83,16 +82,9 @@ class CleanupStack {
 
 const surfaces: AppSurface[] = [
   {
-    app: "console",
-    cachePrefix: "impromptu-console-shell-",
-    expectedText: "Private presentation control",
-    port: consolePort,
-    route: "/session",
-  },
-  {
     app: "stage",
     cachePrefix: "impromptu-stage-shell-",
-    expectedText: "Evidence, without the detour",
+    expectedText: "흐름을 끊지 않는 근거",
     port: stagePort,
     route: "/display/rehearsal",
   },
@@ -127,7 +119,7 @@ async function buildRuntimeDistributions() {
       process.env.NODE_ENV = previousNodeEnvironment;
     }
   }
-  console.log("Built isolated production distributions for Console and Stage.");
+  console.log("Built isolated production distribution for Stage.");
 }
 
 async function verifyDevResponseHeaders() {
@@ -150,7 +142,7 @@ async function verifyDevResponseHeaders() {
       await server.close();
     }
   }
-  console.log("Console and Stage dev responses enforce frame-ancestors denial.");
+  console.log("Stage dev response enforces frame-ancestors denial.");
 }
 
 async function startEmbedOrigin(): Promise<Server> {
@@ -685,9 +677,7 @@ async function verifyStageLayouts(context: BrowserContext) {
   await fullscreenPage.goto(`http://127.0.0.1:${stagePort}/display/rehearsal`, {
     waitUntil: "domcontentloaded",
   });
-  await fullscreenPage
-    .getByRole("button", { name: "Enter fullscreen" })
-    .waitFor({ state: "visible" });
+  await fullscreenPage.locator("[data-stage-fullscreen]").waitFor({ state: "visible" });
   const enteredMarker = "IMPROMPTU_FULLSCREEN_ENTERED";
   const enterFullscreen = fullscreenPage.waitForEvent("console", {
     predicate: (message) => message.text() === enteredMarker,
@@ -695,7 +685,7 @@ async function verifyStageLayouts(context: BrowserContext) {
   await fullscreenPage.evaluate((marker) => {
     document.addEventListener("fullscreenchange", () => console.info(marker), { once: true });
   }, enteredMarker);
-  await fullscreenPage.getByRole("button", { name: "Enter fullscreen" }).click();
+  await fullscreenPage.locator("[data-stage-fullscreen]").click();
   await enterFullscreen;
   if (!(await fullscreenPage.evaluate(() => document.fullscreenElement !== null))) {
     throw new Error("Fullscreen enter event fired without an active fullscreen element");
@@ -709,7 +699,7 @@ async function verifyStageLayouts(context: BrowserContext) {
   await fullscreenPage.evaluate((marker) => {
     document.addEventListener("fullscreenchange", () => console.info(marker), { once: true });
   }, exitedMarker);
-  await fullscreenPage.getByRole("button", { name: "Exit fullscreen" }).click();
+  await fullscreenPage.locator("[data-stage-fullscreen]").click();
   await exitFullscreen;
   if (await fullscreenPage.evaluate(() => document.fullscreenElement !== null)) {
     throw new Error("Fullscreen exit event fired while fullscreen remained active");
@@ -726,9 +716,6 @@ interface AccessibilityRoute {
 }
 
 const accessibilityRoutes: readonly AccessibilityRoute[] = [
-  { app: "console", name: "sign-in", path: "/sign-in" },
-  { app: "console", authenticated: true, name: "overview", path: "/" },
-  { app: "console", authenticated: true, name: "session", path: "/session" },
   { app: "stage", name: "landing", path: "/" },
   { app: "stage", name: "display", path: "/display/rehearsal" },
 ];
@@ -1002,9 +989,7 @@ async function verifyAccessibilityMatrix(context: BrowserContext) {
     await page.screenshot({ path: join(artifactPath, `a11y-${route.app}-${route.name}.png`) });
     await page.close();
   }
-  console.log(
-    `Console and Stage accessibility route matrix passed: ${contrastEvidence.join("; ")}.`,
-  );
+  console.log(`Stage accessibility route matrix passed: ${contrastEvidence.join("; ")}.`);
 }
 
 async function verifyReducedMotion(context: BrowserContext) {
