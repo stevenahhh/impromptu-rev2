@@ -49,6 +49,41 @@ describe("account session HTTP boundary", () => {
     expect(payload.csrfToken).toMatch(/^[0-9a-f]{48}$/);
   });
 
+  test("uses an HttpOnly development cookie when the Console runs over HTTP", async () => {
+    const developmentOrigin = "http://localhost:4173";
+    const handler = createPrivateBackendHandler(
+      parsePrivateBackendConfig({ CONSOLE_ORIGIN: developmentOrigin }),
+      {
+        coordinator: new PreparedEvidenceCoordinator(new PreparedEvidenceProjectionGateway()),
+        identityVerifier: {
+          async exchangeAuthorizationCode() {
+            return { accountId: "account_local", actorId: "actor_local" };
+          },
+        },
+        internalAuthToken: "internal-test-token-local",
+        now: () => 1_000,
+      },
+    );
+    const response = await handler(
+      new Request("http://localhost:3001/v1/account-sessions", {
+        method: "POST",
+        headers: {
+          Origin: developmentOrigin,
+          Referer: `${developmentOrigin}/sign-in`,
+        },
+        body: JSON.stringify({ authorizationCode: "local-code" }),
+      }),
+    );
+    const cookie = response.headers.get("set-cookie");
+
+    expect(response.status).toBe(201);
+    expect(cookie).toContain("account=account_session_");
+    expect(cookie).toContain("HttpOnly");
+    expect(cookie).toContain("SameSite=Strict");
+    expect(cookie).not.toContain("__Host-account");
+    expect(cookie).not.toContain(" Secure");
+  });
+
   test("requires exact navigation origin and synchronizer CSRF for mutations", async () => {
     const handler = createPrivateBackendHandler(config, {
       coordinator: new PreparedEvidenceCoordinator(new PreparedEvidenceProjectionGateway()),

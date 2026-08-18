@@ -107,12 +107,22 @@ function browserOriginHeaders(request: Request, allowedOrigin: ExactOrigin): Hea
   return headers;
 }
 
-function accountCookie(request: Request): string | null {
+function accountCookieName(allowedOrigin: ExactOrigin): "__Host-account" | "account" {
+  return new URL(allowedOrigin).protocol === "https:" ? "__Host-account" : "account";
+}
+
+function accountCookieAttributes(allowedOrigin: ExactOrigin): string {
+  const secure = new URL(allowedOrigin).protocol === "https:" ? "; Secure" : "";
+  return `Path=/; HttpOnly${secure}; SameSite=Strict`;
+}
+
+function accountCookie(request: Request, allowedOrigin: ExactOrigin): string | null {
   const cookie = request.headers.get("cookie");
   if (cookie === null) return null;
+  const expectedName = accountCookieName(allowedOrigin);
   for (const part of cookie.split(";")) {
     const [name, ...value] = part.trim().split("=");
-    if (name === "__Host-account") return value.join("=") || null;
+    if (name === expectedName) return value.join("=") || null;
   }
   return null;
 }
@@ -246,9 +256,11 @@ export function createPrivateBackendHandler(
       const session = dependencies.coordinator.createAccountSession(identity, dependencies.now());
       const sessionCsrfToken = csrfToken(dependencies.internalAuthToken, session.accountSessionId);
       await dependencies.persist?.();
+      const cookieName = accountCookieName(config.allowedOrigin);
+      const cookieAttributes = accountCookieAttributes(config.allowedOrigin);
       origin.append(
         "set-cookie",
-        `__Host-account=${session.accountSessionId}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${Math.max(0, Math.floor((session.expiresAtMs - dependencies.now()) / 1_000))}`,
+        `${cookieName}=${session.accountSessionId}; ${cookieAttributes}; Max-Age=${Math.max(0, Math.floor((session.expiresAtMs - dependencies.now()) / 1_000))}`,
       );
       return json(
         {
@@ -261,7 +273,7 @@ export function createPrivateBackendHandler(
       );
     }
 
-    const accountSessionId = accountCookie(request);
+    const accountSessionId = accountCookie(request, config.allowedOrigin);
     if (accountSessionId === null) return json({ error: "account_session_required" }, 401, origin);
     const account = dependencies.coordinator.readAccountSession(
       accountSessionId,
@@ -322,9 +334,11 @@ export function createPrivateBackendHandler(
         dependencies.now(),
       );
       if (result.outcome === "APPLIED") await dependencies.persist?.();
+      const cookieName = accountCookieName(config.allowedOrigin);
+      const cookieAttributes = accountCookieAttributes(config.allowedOrigin);
       origin.append(
         "set-cookie",
-        "__Host-account=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0",
+        `${cookieName}=; ${cookieAttributes}; Max-Age=0`,
       );
       return json(
         result.outcome === "APPLIED" ? { status: "revoked" } : { error: result.reason },
