@@ -104,7 +104,7 @@ def externalize_assets(
                 )
                 assets_by_hash[digest] = existing
                 payloads[relative_path] = payload
-            element.set(attribute_name, existing.relative_path)
+            element.set(attribute_name, f"../{existing.relative_path}")
     rewritten = ET.tostring(root, encoding="unicode")
     if "data:image" in rewritten:
         raise AssetExternalizationError(

@@ -34,8 +34,8 @@ def test_externalize_assets_rewrites_deduplicates_and_returns_payloads() -> None
     png_hash = hashlib.sha256(png).hexdigest()
     jpeg_hash = hashlib.sha256(jpeg).hexdigest()
     assert "data:image" not in rewritten
-    assert rewritten.count(f"assets/asset_{png_hash}.png") == 2
-    assert f"assets/asset_{jpeg_hash}.jpg" in rewritten
+    assert rewritten.count(f"../assets/asset_{png_hash}.png") == 2
+    assert f"../assets/asset_{jpeg_hash}.jpg" in rewritten
     assert tuple(asset.content_sha256 for asset in assets) == (png_hash, jpeg_hash)
     assert payloads == {
         f"assets/asset_{png_hash}.png": png,
