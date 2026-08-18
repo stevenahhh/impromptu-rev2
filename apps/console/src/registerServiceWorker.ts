@@ -3,7 +3,7 @@ import { bindUpdateCoordinator, UPDATE_EVENTS, UpdateCoordinator } from "@improm
 let updateCoordinator: UpdateCoordinator | null = null;
 
 export function registerConsoleServiceWorker() {
-  if (!("serviceWorker" in navigator) || !import.meta.env.PROD) {
+  if (!("serviceWorker" in navigator) || process.env.NODE_ENV !== "production") {
     return null;
   }
   if (updateCoordinator) {
@@ -12,7 +12,7 @@ export function registerConsoleServiceWorker() {
 
   updateCoordinator = new UpdateCoordinator(navigator.serviceWorker);
   bindUpdateCoordinator(updateCoordinator);
-  const cohort = encodeURIComponent(import.meta.env.IMPROMPTU_SW_COHORT ?? "stable");
+  const cohort = encodeURIComponent(process.env.NEXT_PUBLIC_SW_COHORT ?? "stable");
   void updateCoordinator.register(`/sw.js?cohort=${cohort}`).catch((error: unknown) => {
     window.dispatchEvent(new CustomEvent(UPDATE_EVENTS.activationFailed, { detail: error }));
   });

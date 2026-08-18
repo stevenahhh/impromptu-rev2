@@ -2,8 +2,8 @@
 
 ## OVERVIEW
 
-Private React/Vite controller for authentication, session setup, audio consent, and supervised
-live-publication approval.
+Private Next.js controller with built-in presentation templates for authentication, session setup,
+audio consent, and supervised live-publication approval.
 
 ## WHERE TO LOOK
 
@@ -12,8 +12,10 @@ live-publication approval.
 | Routes and private UI | `src/App.tsx` | Auth guards, approval, co-resident interlock |
 | Private API transport | `src/session-client.ts` | Credentials, CSRF, authoritative snapshots |
 | Audio lifecycle | `src/audio-capture.tsx` | Consent, stream setup, teardown |
-| PWA boot/update | `src/main.tsx`, `src/registerServiceWorker.ts` | App entry and SW registration |
-| Security/build policy | `vite.config.ts` | Shared UI Vite plugins |
+| Next routes and boot | `src/app/(console)` | App Router shell and client bootstrap |
+| Presentation templates | `src/presentation-templates.ts` | Typed built-in catalog |
+| PWA update | `src/registerServiceWorker.ts` | Client-side SW registration |
+| Security/build policy | `next.config.ts`, `src/private-api-proxy.ts` | CSP and same-origin `/v1` proxy |
 
 ## CONVENTIONS
 

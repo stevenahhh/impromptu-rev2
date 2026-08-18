@@ -5,6 +5,7 @@ build/
 coverage/
 .turbo/
 .vite/
+.next/
 .cache/
 playwright-report/
 test-results/
@@ -61,3 +62,5 @@ Desktop.ini
 *.log
 npm-debug.log*
 bun-error.log
+
+apps/console/tsconfig.tsbuildinfo

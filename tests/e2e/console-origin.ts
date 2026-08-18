@@ -1,16 +1,7 @@
-import { resolve } from "node:path";
+export {};
 
 let backendOrigin = process.env.PRIVATE_BACKEND_ORIGIN;
 if (backendOrigin === undefined) throw new Error("PRIVATE_BACKEND_ORIGIN is required");
-const distributionRoot = resolve("apps/console/dist");
-const contentTypes: Readonly<Record<string, string>> = {
-  ".css": "text/css; charset=utf-8",
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".png": "image/png",
-  ".svg": "image/svg+xml",
-};
 
 const server = Bun.serve({
   hostname: "127.0.0.1",
@@ -38,19 +29,7 @@ const server = Bun.serve({
         redirect: "manual",
       });
     }
-    const requestedPath = url.pathname === "/" ? "/index.html" : url.pathname;
-    const candidate = Bun.file(resolve(distributionRoot, `.${requestedPath}`));
-    const file = (await candidate.exists())
-      ? candidate
-      : Bun.file(resolve(distributionRoot, "index.html"));
-    const extension = file.name?.match(/\.[^.]+$/)?.[0] ?? ".html";
-    return new Response(file, {
-      headers: {
-        "content-type": contentTypes[extension] ?? "application/octet-stream",
-        "content-security-policy":
-          "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
-      },
-    });
+    return Response.json({ error: "not_found" }, { status: 404 });
   },
 });
 

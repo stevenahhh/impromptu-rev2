@@ -18,7 +18,7 @@ const forbiddenImports = [
 function sourceFiles(root: string): string[] {
   const files: string[] = [];
   for (const entry of readdirSync(root, { withFileTypes: true })) {
-    if (entry.name === "dist" || entry.name === "node_modules") {
+    if (entry.name === ".next" || entry.name === "dist" || entry.name === "node_modules") {
       continue;
     }
     const path = join(root, entry.name);
@@ -78,15 +78,14 @@ describe("browser build boundaries", () => {
     expect(consoleManifest.start_url).toBe("/");
     expect(stageManifest.start_url).toBe("/");
 
-    const consoleConfig = readFileSync("apps/console/vite.config.ts", "utf8");
+    const consoleWorker = readFileSync("apps/console/public/sw.js", "utf8");
     const stageConfig = readFileSync("apps/stage/vite.config.ts", "utf8");
-    expect(consoleConfig).toContain(
-      'versionedOfflineShell({ appId: "console", cohort: serviceWorkerCohort })',
-    );
+    expect(consoleWorker).toContain('const APP_ID = "console"');
+    expect(consoleWorker).toContain("IMPROMPTU_ACTIVATE_UPDATE");
     expect(stageConfig).toContain(
       'versionedOfflineShell({ appId: "stage", cohort: serviceWorkerCohort })',
     );
-    expect(existsSync("apps/console/public/sw.js")).toBe(false);
+    expect(existsSync("apps/console/public/sw.js")).toBe(true);
     expect(existsSync("apps/stage/public/sw.js")).toBe(false);
   });
 
