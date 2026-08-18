@@ -6,14 +6,26 @@ export interface ShellProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
   focused?: boolean;
   header: ReactNode;
+  skipLabel?: string;
 }
 
-export function Shell({ children, className = "", focused = false, header, ...props }: ShellProps) {
+export function Shell({
+  children,
+  className = "",
+  focused = false,
+  header,
+  skipLabel,
+  ...props
+}: ShellProps) {
   const mainId = useId();
 
   return (
     <div className={`ui-shell ${className}`.trim()} {...props}>
-      <SkipLink targetId={mainId} />
+      {skipLabel === undefined ? (
+        <SkipLink targetId={mainId} />
+      ) : (
+        <SkipLink label={skipLabel} targetId={mainId} />
+      )}
       <header className="ui-shell__header">{header}</header>
       <main id={mainId} className={`ui-shell__body${focused ? " ui-shell__body--focused" : ""}`}>
         {children}

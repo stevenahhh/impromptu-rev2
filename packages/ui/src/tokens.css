@@ -1,35 +1,62 @@
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
-  --color-ink: oklch(96% 0.018 92deg);
-  --color-paper: oklch(16% 0.02 235deg);
-  --color-accent: oklch(78% 0.17 71deg);
-  --color-accent-strong: oklch(84% 0.17 76deg);
-  --color-success: oklch(76% 0.16 153deg);
-  --color-warning: oklch(82% 0.16 82deg);
-  --color-danger: oklch(69% 0.2 27deg);
-  --color-info: oklch(75% 0.12 225deg);
+  /* shadcn neutral theme */
+  --background: oklch(100% 0 0deg);
+  --foreground: oklch(14.5% 0 0deg);
+  --card: oklch(100% 0 0deg);
+  --card-foreground: oklch(14.5% 0 0deg);
+  --popover: oklch(100% 0 0deg);
+  --popover-foreground: oklch(14.5% 0 0deg);
+  --primary: oklch(20.5% 0 0deg);
+  --primary-foreground: oklch(98.5% 0 0deg);
+  --secondary: oklch(97% 0 0deg);
+  --secondary-foreground: oklch(20.5% 0 0deg);
+  --muted: oklch(97% 0 0deg);
+  --muted-foreground: oklch(55.6% 0 0deg);
+  --accent: oklch(97% 0 0deg);
+  --accent-foreground: oklch(20.5% 0 0deg);
+  --destructive: oklch(57.7% 0.245 27.325deg);
+  --border: oklch(92.2% 0 0deg);
+  --input: oklch(92.2% 0 0deg);
+  --ring: oklch(70.8% 0 0deg);
+  --chart-1: oklch(64.6% 0.222 41.116deg);
+  --chart-2: oklch(60% 0.118 184.704deg);
+  --chart-3: oklch(39.8% 0.07 227.392deg);
+  --chart-4: oklch(82.8% 0.189 84.429deg);
+  --chart-5: oklch(76.9% 0.188 70.08deg);
+
+  --color-ink: var(--foreground);
+  --color-paper: var(--background);
+  --color-accent: var(--primary);
+  --color-accent-strong: var(--foreground);
+  --color-success: var(--chart-2);
+  --color-warning: var(--chart-4);
+  --color-danger: var(--destructive);
+  --color-info: var(--chart-3);
   --color-transparent: transparent;
-  --color-shadow: oklch(5% 0.02 235deg / 45%);
-  --color-noise: oklch(100% 0 0deg / 4%);
+  --color-shadow: oklch(0% 0 0deg / 10%);
+  --color-noise: oklch(0% 0 0deg / 0%);
 
-  --surface-canvas: var(--color-paper);
-  --surface-panel: oklch(21% 0.026 235deg / 88%);
-  --surface-panel-strong: oklch(25% 0.03 235deg);
-  --surface-inset: oklch(12% 0.018 235deg / 72%);
-  --surface-accent: var(--color-accent);
-  --text-primary: var(--color-ink);
-  --text-secondary: oklch(78% 0.025 90deg);
-  --text-on-accent: oklch(16% 0.03 67deg);
-  --border-subtle: oklch(100% 0 0deg / 13%);
-  --border-emphasis: oklch(100% 0 0deg / 28%);
-  --focus-ring: var(--color-accent-strong);
-  --atmosphere-a: oklch(55% 0.13 228deg / 25%);
-  --atmosphere-b: oklch(65% 0.16 60deg / 12%);
+  --surface-canvas: var(--background);
+  --surface-panel: var(--card);
+  --surface-panel-strong: var(--secondary);
+  --surface-inset: var(--muted);
+  --surface-raised: var(--card);
+  --surface-accent: var(--primary);
+  --surface-blackout: #000;
+  --text-primary: var(--foreground);
+  --text-secondary: var(--muted-foreground);
+  --text-on-accent: var(--primary-foreground);
+  --border-subtle: var(--border);
+  --border-emphasis: var(--input);
+  --border-strong: var(--ring);
+  --focus-ring: var(--ring);
+  --status-success: var(--chart-2);
 
-  --font-display: "Book Antiqua", "Iowan Old Style", "Noto Serif KR", serif;
-  --font-body: Aptos, "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
-  --font-mono: "Cascadia Mono", "D2Coding", monospace;
+  --font-display: "Geist", "Noto Sans KR", "Apple SD Gothic Neo", system-ui, sans-serif;
+  --font-body: "Geist", "Noto Sans KR", "Apple SD Gothic Neo", system-ui, sans-serif;
+  --font-mono: "Geist Mono", "SFMono-Regular", "Cascadia Mono", "D2Coding", monospace;
   --text-caption: 0.75rem;
   --text-small: 0.875rem;
   --text-body: 1rem;
@@ -84,12 +111,13 @@
   --track-fluid: minmax(0, 1fr);
 
   --radius-sm: 0.375rem;
-  --radius-md: 0.75rem;
-  --radius-lg: 1.5rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.75rem;
   --radius-pill: 999rem;
-  --shadow-panel: 0 1.5rem 4rem var(--color-shadow);
+  --shadow-panel: 0 0.0625rem 0.1875rem var(--color-shadow);
   --shadow-focus: 0 0 0 0.2rem var(--focus-ring);
-  --shadow-accent: 0 1rem 3rem oklch(70% 0.15 65deg / 18%);
+  --shadow-accent: 0 0.0625rem 0.125rem var(--color-shadow);
 
   --duration-fast: 140ms;
   --duration-reveal: 520ms;
@@ -107,37 +135,35 @@
   --count-once: 1;
   --forced-border: CanvasText;
   --blur-atmosphere: 5rem;
-  --rotate-accent: -2deg;
-  --translate-reveal: 1rem;
+  --rotate-accent: 0deg;
+  --translate-reveal: 0.25rem;
   --layer-skip: 100;
 }
 
 [data-surface="console"] {
-  --surface-canvas: oklch(14% 0.027 244deg);
-  --surface-panel: oklch(20% 0.035 240deg / 90%);
-  --surface-panel-strong: oklch(24% 0.043 235deg);
-  --surface-inset: oklch(10% 0.022 244deg / 75%);
-  --color-accent: oklch(79% 0.17 73deg);
-  --atmosphere-a: oklch(51% 0.14 224deg / 30%);
-  --atmosphere-b: oklch(72% 0.14 66deg / 12%);
+  color-scheme: dark;
+  --background: oklch(14.5% 0 0deg);
+  --foreground: oklch(98.5% 0 0deg);
+  --card: oklch(20.5% 0 0deg);
+  --card-foreground: oklch(98.5% 0 0deg);
+  --popover: oklch(20.5% 0 0deg);
+  --popover-foreground: oklch(98.5% 0 0deg);
+  --primary: oklch(92.2% 0 0deg);
+  --primary-foreground: oklch(20.5% 0 0deg);
+  --secondary: oklch(26.9% 0 0deg);
+  --secondary-foreground: oklch(98.5% 0 0deg);
+  --muted: oklch(26.9% 0 0deg);
+  --muted-foreground: oklch(70.8% 0 0deg);
+  --accent: oklch(26.9% 0 0deg);
+  --accent-foreground: oklch(98.5% 0 0deg);
+  --destructive: oklch(70.4% 0.191 22.216deg);
+  --border: oklch(100% 0 0deg / 10%);
+  --input: oklch(100% 0 0deg / 15%);
+  --ring: oklch(55.6% 0 0deg);
 }
 
 [data-surface="stage"] {
   color-scheme: light;
-  --surface-canvas: oklch(94% 0.035 85deg);
-  --surface-panel: oklch(98% 0.018 87deg / 90%);
-  --surface-panel-strong: oklch(100% 0.01 90deg);
-  --surface-inset: oklch(90% 0.045 82deg / 80%);
-  --text-primary: oklch(20% 0.035 248deg);
-  --text-secondary: oklch(43% 0.035 248deg);
-  --border-subtle: oklch(25% 0.03 245deg / 14%);
-  --border-emphasis: oklch(25% 0.03 245deg / 30%);
-  --color-accent: oklch(58% 0.19 27deg);
-  --color-accent-strong: oklch(50% 0.2 26deg);
-  --color-success: oklch(38% 0.12 153deg);
-  --text-on-accent: oklch(100% 0 0deg);
-  --focus-ring: oklch(53% 0.18 232deg);
-  --color-shadow: oklch(35% 0.05 70deg / 18%);
-  --atmosphere-a: oklch(75% 0.15 72deg / 28%);
-  --atmosphere-b: oklch(68% 0.14 223deg / 18%);
+  --space-stage: 1rem;
+  --text-stage-display: clamp(2.75rem, 5vw, 4rem);
 }

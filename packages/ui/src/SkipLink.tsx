@@ -1,11 +1,12 @@
 export interface SkipLinkProps {
+  label?: string;
   targetId: string;
 }
 
-export function SkipLink({ targetId }: SkipLinkProps) {
+export function SkipLink({ label = "Skip to content", targetId }: SkipLinkProps) {
   return (
     <a className="ui-skip-link" href={`#${targetId}`}>
-      Skip to content
+      {label}
     </a>
   );
 }

@@ -53,6 +53,22 @@ export interface LiveCandidateSnapshotView {
   }>[];
 }
 
+export interface DisplayJoinView {
+  readonly displayJoinId: string;
+  readonly displayId: string;
+  readonly displayFingerprint: string;
+  readonly deckVersion: string;
+  readonly expiresAtMs: number;
+}
+
+export interface DisplayBindingView {
+  readonly displayBindingEpoch: string;
+}
+
+export interface PlaybackCommandView {
+  readonly acceptedControlRevision: string;
+}
+
 export interface ConsoleSessionClient {
   signIn(authorizationCode: string): Promise<AccountSessionView>;
   readSession(): Promise<AccountSessionView | null>;
@@ -69,6 +85,20 @@ export interface ConsoleSessionClient {
     candidate: LiveCandidateSnapshotView["candidates"][number],
     approvalId: string,
   ): Promise<void>;
+  approveDisplay?(
+    csrfToken: string,
+    presentation: ActivePresentationView,
+    join: DisplayJoinView,
+  ): Promise<DisplayBindingView>;
+  setSlide?(
+    csrfToken: string,
+    input: Readonly<{
+      presentationSessionId: string;
+      publicSlideKey: string;
+      displayBindingEpoch: string;
+      baseRevision: string;
+    }>,
+  ): Promise<PlaybackCommandView>;
 }
 
 export const DECK_UPLOAD_MIME_TYPES = {
@@ -96,6 +126,17 @@ export interface DeckUploadView {
   readonly sourceHash?: string;
   readonly privateDeck?: unknown;
   readonly publicDeck?: unknown;
+}
+
+export interface ActivePresentationView {
+  readonly presentationSessionId: string;
+  readonly deckVersion: string;
+  readonly manifestHash?: string;
+  readonly slides: readonly Readonly<{
+    publicSlideKey: string;
+    ordinal: number;
+    accessibilityLabel: string;
+  }>[];
 }
 
 export interface DeckUploadProgress {
@@ -170,6 +211,12 @@ function isAccountSessionView(value: unknown): value is AccountSessionView {
     typeof candidate.expiresAtMs === "number" &&
     typeof candidate.csrfToken === "string"
   );
+}
+
+function stringField(value: unknown, field: string): string | null {
+  if (typeof value !== "object" || value === null) return null;
+  const candidate = (value as Record<string, unknown>)[field];
+  return typeof candidate === "string" ? candidate : null;
 }
 
 function isRecommendationOutcome(value: unknown): value is RecommendationOutcome {
@@ -374,6 +421,46 @@ export function createConsoleSessionClient(baseUrl = ""): ConsoleDeckUploadClien
             : null;
         throw new Error(typeof reason === "string" ? reason : "approval_rejected");
       }
+    },
+    async approveDisplay(csrfToken, presentation, join) {
+      const response = await fetch(`${baseUrl}/v1/display-bindings`, {
+        method: "POST",
+        credentials: "include",
+        headers: mutationHeaders(csrfToken),
+        body: JSON.stringify({
+          presentationSessionId: presentation.presentationSessionId,
+          displayJoinId: join.displayJoinId,
+          expectedDisplayBindingEpoch: "dbe_0",
+          expectedDeckVersion: presentation.deckVersion,
+          approvedDisplayId: join.displayId,
+          approvedDisplayFingerprint: join.displayFingerprint,
+        }),
+      });
+      const body = await responseBody(response);
+      const binding =
+        typeof body === "object" && body !== null
+          ? (body as Record<string, unknown>).binding
+          : null;
+      const displayBindingEpoch =
+        stringField(body, "displayBindingEpoch") ?? stringField(binding, "displayBindingEpoch");
+      if (!response.ok || displayBindingEpoch === null) {
+        throw new Error("Audience screen approval failed.");
+      }
+      return { displayBindingEpoch };
+    },
+    async setSlide(csrfToken, input) {
+      const response = await fetch(`${baseUrl}/v1/playback/slide-set`, {
+        method: "POST",
+        credentials: "include",
+        headers: mutationHeaders(csrfToken),
+        body: JSON.stringify({ ...input, commandId: `cmd_${crypto.randomUUID()}` }),
+      });
+      const body = await responseBody(response);
+      const acceptedControlRevision = stringField(body, "acceptedControlRevision");
+      if (!response.ok || acceptedControlRevision === null) {
+        throw new Error("Slide change was rejected.");
+      }
+      return { acceptedControlRevision };
     },
     async createPresentation(csrfToken, artifacts) {
       const response = await fetch(`${baseUrl}/v1/presentation-sessions`, {

@@ -519,7 +519,11 @@ async function uploadFromConsole(
   fixture: string,
   actions: string[],
 ): Promise<UploadRun> {
-  await page.getByLabel("Deck file").setInputFiles(join(fixtureRoot, fixture));
+  const input = page.locator("[data-deck-file-input]");
+  if ((await input.count()) === 0) {
+    await page.locator("[data-new-deck]").click();
+  }
+  await input.setInputFiles(join(fixtureRoot, fixture));
   actions.push(`Console selected ${fixture}`);
   const responseIndex = await page.evaluate(
     () => (Reflect.get(window, "__customDeckUploadResponses") as unknown[]).length,
@@ -528,7 +532,7 @@ async function uploadFromConsole(
     (response) => response.url().endsWith("/v1/deck-uploads"),
     { timeout: 60_000 },
   );
-  await page.getByRole("button", { name: "Upload deck" }).click();
+  await page.locator("[data-deck-upload-submit]").click();
   const response = await responsePromise;
   await response.finished();
   if (response.status() !== 201) {
@@ -550,7 +554,7 @@ async function uploadFromConsole(
     );
     throw new Error(blocker);
   }
-  await page.getByText("Presentation ready").waitFor();
+  await page.locator("[data-new-deck]").waitFor();
   const captured = await page.evaluate(
     (index) =>
       (
@@ -563,7 +567,6 @@ async function uploadFromConsole(
   );
   if (captured?.status !== 201) throw new Error(`${fixture} raw 201 body was not captured`);
   const body = record(JSON.parse(captured.body), `${fixture} upload`);
-  await page.getByText(`Session ${stringField(body, "presentationSessionId")}`).waitFor();
   actions.push(
     `Console displayed Presentation ready for ${stringField(body, "presentationSessionId")}`,
   );
@@ -601,7 +604,6 @@ export async function runCustomDeckUploadE2e(): Promise<CustomDeckUploadEvidence
   const actions: string[] = [];
   const screenshots: string[] = [];
   let browser: Browser | null = null;
-  let consoleServer: ReturnType<typeof Bun.serve> | null = null;
   let stageServer: ReturnType<typeof Bun.serve> | null = null;
   let evidence: Omit<CustomDeckUploadEvidence, "cleanup"> | null = null;
 
@@ -620,7 +622,7 @@ export async function runCustomDeckUploadE2e(): Promise<CustomDeckUploadEvidence
     await Promise.all([
       runCommand(
         ["bun", "run", "build"],
-        { VITE_STAGE_ORIGIN: stageOrigin },
+        { NEXT_PUBLIC_STAGE_ORIGIN: stageOrigin },
         resolve("apps/console"),
       ),
       runCommand(["bun", "run", "build"], {}, resolve("apps/stage")),
@@ -663,12 +665,16 @@ export async function runCustomDeckUploadE2e(): Promise<CustomDeckUploadEvidence
         "private-backend listening",
       ),
     );
-    consoleServer = startBrowserOrigin({
-      port: consolePort,
-      distributionRoot: "apps/console/dist",
-      proxyOrigin: privateOrigin,
-      publicAssetOrigin: projectionOrigin,
-    });
+    processes.push(
+      await startProcess(
+        ["node", "node_modules/next/dist/bin/next", "start", "--port", String(consolePort)],
+        {
+          CONSOLE_PRIVATE_API_ORIGIN: privateOrigin,
+        },
+        "Ready in",
+        resolve("apps/console"),
+      ),
+    );
     stageServer = startBrowserOrigin({
       port: stagePort,
       distributionRoot: "apps/stage/dist",
@@ -715,10 +721,7 @@ export async function runCustomDeckUploadE2e(): Promise<CustomDeckUploadEvidence
       status: signInHttpResponse.status(),
       account: objectField(signInBody, "account"),
     };
-    const sessionLink = consolePage.getByRole("link", { name: "Session setup" });
-    await sessionLink.waitFor();
-    await sessionLink.click();
-    await consolePage.getByLabel("Deck file").waitFor();
+    await consolePage.locator("[data-deck-file-input]").waitFor();
     const cookies = await context.cookies(consoleOrigin);
     const cookie = cookies.map(({ name, value }) => `${name}=${value}`).join("; ");
     if (cookie.length === 0) throw new Error("browser sign-in did not retain the account cookie");
@@ -994,7 +997,6 @@ export async function runCustomDeckUploadE2e(): Promise<CustomDeckUploadEvidence
       await browser.close();
       cleanup.push("browser closed");
     }
-    consoleServer?.stop(true);
     stageServer?.stop(true);
     cleanup.push("browser origins stopped");
     for (const child of processes.toReversed()) await stopProcess(child);

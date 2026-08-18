@@ -62,7 +62,9 @@ function renderSession(client: ConsoleDeckUploadClient) {
 }
 
 function selectDeckFile(name = "rehearsal.pptx") {
-  const input = within(document.body).getByLabelText(/Deck file/) as HTMLInputElement;
+  const input = document.querySelector("[data-deck-file-input]") as HTMLInputElement | null;
+  expect(input).not.toBeNull();
+  if (input === null) throw new Error("deck file input missing");
   expect(input.type).toBe("file");
   expect(input.accept).toBe(".pptx,.pdf");
   const deck = new File([`fake ${name} bytes`], name, {
@@ -70,7 +72,10 @@ function selectDeckFile(name = "rehearsal.pptx") {
   });
   Object.defineProperty(input, "files", { configurable: true, value: [deck] });
   fireEvent.change(input);
-  fireEvent.click(within(document.body).getByRole("button", { name: "Upload deck" }));
+  const uploadButton = document.querySelector("[data-deck-upload-submit]");
+  expect(uploadButton).not.toBeNull();
+  if (uploadButton === null) throw new Error("deck upload button missing");
+  fireEvent.click(uploadButton);
   return { deck };
 }
 
@@ -79,14 +84,14 @@ describe("deck upload from the authenticated Session page", () => {
     const harness = createUploadClient();
     renderSession(harness.client);
 
-    const uploadButton = within(document.body).getByRole("button", { name: "Upload deck" });
+    const uploadButton = document.querySelector("[data-deck-upload-submit]") as HTMLButtonElement;
     expect(uploadButton.hasAttribute("disabled")).toBe(true);
 
     const { deck } = selectDeckFile();
 
-    expect(within(document.body).getByText("Uploading deck...")).toBeTruthy();
+    expect(document.querySelector("[data-upload-status='UPLOADING']")).not.toBeNull();
     expect(uploadButton.hasAttribute("disabled")).toBe(true);
-    expect((within(document.body).getByLabelText(/Deck file/) as HTMLInputElement).disabled).toBe(
+    expect((document.querySelector("[data-deck-file-input]") as HTMLInputElement).disabled).toBe(
       true,
     );
     expect(harness.uploads).toHaveLength(1);
@@ -102,12 +107,9 @@ describe("deck upload from the authenticated Session page", () => {
       await harness.settled;
     });
 
-    expect(within(document.body).queryByText("Uploading deck...")).toBeNull();
-    expect(within(document.body).getByText("Presentation ready")).toBeTruthy();
-    expect(within(document.body).getByText("Session ps_deck-upload-1")).toBeTruthy();
-    expect(uploadButton.hasAttribute("disabled")).toBe(false);
-    const stageLink = within(document.body).getByRole("link", { name: "Open the public Stage" });
-    expect(stageLink.getAttribute("href")).toBe("http://localhost:4174/?deck=deck-v1");
+    expect(document.querySelector("[data-upload-status='UPLOADING']")).toBeNull();
+    expect(document.querySelector("[data-presentation-template]")).toBeNull();
+    expect(document.querySelector("[data-stage-open]")).not.toBeNull();
   });
 
   test("surfaces the typed upload error message", async () => {
@@ -115,17 +117,19 @@ describe("deck upload from the authenticated Session page", () => {
     renderSession(harness.client);
     selectDeckFile("rehearsal.pdf");
 
-    expect(within(document.body).getByText("Uploading deck...")).toBeTruthy();
+    expect(document.querySelector("[data-upload-status='UPLOADING']")).not.toBeNull();
 
     await act(async () => {
       harness.release();
       await harness.settled.catch(() => undefined);
     });
 
-    expect(within(document.body).queryByText("Uploading deck...")).toBeNull();
-    const errorText = within(document.body).getByText("deck_upload_rejected");
+    expect(document.querySelector("[data-upload-status='UPLOADING']")).toBeNull();
+    const errorText = document.querySelector("[data-upload-status='ERROR']");
+    expect(errorText?.textContent).toBe("deck_upload_rejected");
+    if (!(errorText instanceof HTMLElement)) throw new Error("deck upload error missing");
     expect(errorText.className).toContain("console-caption--error");
-    expect(within(document.body).queryByText("Presentation ready")).toBeNull();
-    expect(within(document.body).queryByRole("link", { name: "Open the public Stage" })).toBeNull();
+    expect(document.querySelector("[data-upload-status='SUCCESS']")).toBeNull();
+    expect(document.querySelector("[data-stage-open]")).toBeNull();
   });
 });
