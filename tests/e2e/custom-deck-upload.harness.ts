@@ -488,7 +488,7 @@ async function openStage(options: {
   const snapshotResponse = page.waitForResponse(
     (response) => response.url().includes("/v1/snapshot") && response.status() === 200,
   );
-  await page.getByRole("button", { name: "Continue after approval" }).click();
+  await page.locator("[data-display-claim]").click();
   await snapshotResponse;
   const appliedResponse = page.waitForResponse(
     (response) => response.url().endsWith("/v1/stage-applied") && response.status() === 200,
@@ -709,11 +709,11 @@ export async function runCustomDeckUploadE2e(): Promise<CustomDeckUploadEvidence
     });
     const consolePage = await context.newPage();
     await consolePage.goto(`${consoleOrigin}/sign-in`, { waitUntil: "domcontentloaded" });
-    await consolePage.getByLabel("One-time sign-in code").fill("local-controller-code");
+    await consolePage.locator("[data-sign-in-code]").fill("local-controller-code");
     const signInResponse = consolePage.waitForResponse(
       (response) => response.url().endsWith("/v1/account-sessions") && response.status() === 201,
     );
-    await consolePage.getByRole("button", { name: "Enter private workspace" }).click();
+    await consolePage.locator("[data-sign-in-submit]").click();
     const signInHttpResponse = await signInResponse;
     const signInBody = record(await signInHttpResponse.json(), "sign-in response");
     const csrfToken = stringField(signInBody, "csrfToken");

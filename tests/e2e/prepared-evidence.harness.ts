@@ -538,7 +538,7 @@ async function runPreparedEvidenceE2EWithWorkspace({
       (response) => response.url().endsWith("/v1/events") && response.status() === 200,
       { timeout: 5_000 },
     );
-    await page.getByRole("button", { name: "Continue after approval" }).click();
+    await page.locator("[data-display-claim]").click();
     await eventChannel;
     trace("event-channel-ready");
     const waitApplied = await prepareBrowserEvent(page, {

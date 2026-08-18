@@ -108,6 +108,8 @@ export const privateSurfaceVocabulary = [
   "Private presentation control",
   "One-time sign-in code",
   "Enter private workspace",
+  "일회용 로그인 코드",
+  "비공개 워크스페이스 입장",
   "Private workspace",
   "Room overview",
   "Session setup",
@@ -336,7 +338,7 @@ async function enterFullscreen(page: Page): Promise<void> {
   if (await page.evaluate(() => document.fullscreenElement !== null)) return;
   await clearBufferedEvent(page, "fullscreenchange");
   const changed = await prepareEvent(page, "fullscreenchange");
-  await page.getByRole("button", { name: "Enter fullscreen" }).click();
+  await page.locator("[data-stage-fullscreen]").click();
   await changed();
   if (!(await page.evaluate(() => document.fullscreenElement !== null))) {
     throw new Error("Stage did not restore fullscreen locally");
@@ -422,8 +424,8 @@ async function observeCoResidentCycle(browser: Browser): Promise<CoResidentCycle
   const page = await context.newPage();
   try {
     await page.goto(`${consoleOrigin}/sign-in`, { waitUntil: "domcontentloaded" });
-    await page.getByLabel("One-time sign-in code").fill("co-resident-code");
-    await page.getByRole("button", { name: "Enter private workspace" }).click();
+    await page.locator("[data-sign-in-code]").fill("co-resident-code");
+    await page.locator("[data-sign-in-submit]").click();
     await page.locator("[data-co-resident-state='ENABLED']").waitFor({ state: "visible" });
     const enabledObserved =
       (await page.locator("[data-co-resident-state='ENABLED']").count()) === 1;
@@ -482,8 +484,8 @@ async function rehearse(
   await installEventBuffer(context);
   const controller = await context.newPage();
   await controller.goto(`${consoleOrigin}/sign-in`, { waitUntil: "domcontentloaded" });
-  await controller.getByLabel("One-time sign-in code").fill(`controller-${mode}-${rehearsal}`);
-  await controller.getByRole("button", { name: "Enter private workspace" }).click();
+  await controller.locator("[data-sign-in-code]").fill(`controller-${mode}-${rehearsal}`);
+  await controller.locator("[data-sign-in-submit]").click();
   await controller.locator("[data-co-resident-state='ENABLED']").waitFor({ state: "visible" });
   const page = await context.newPage();
   if (process.env.DEBUG_WP4_E2E === "true") {
@@ -532,7 +534,7 @@ async function rehearse(
     if (mode === "duplicate" || mode === "single") {
       await clearBufferedEvent(page, "impromptu:target-screen-placement");
       const placement = await prepareEvent(page, "impromptu:target-screen-placement");
-      await page.getByRole("button", { name: "Place on target screen" }).click();
+      await page.locator("[data-stage-placement]").click();
       const detail = await placement();
       if (
         typeof detail !== "object" ||
@@ -543,9 +545,7 @@ async function rehearse(
       }
       const status = (detail as Record<string, unknown>).status;
       if (status === "MANUAL_FALLBACK") {
-        const instruction =
-          mode === "duplicate" ? "only session on this PC" : "only app on the audience screen";
-        if (!((await page.locator("body").textContent()) ?? "").includes(instruction)) {
+        if ((await page.locator(`[data-manual-placement-mode="${mode}"]`).count()) !== 1) {
           throw new Error(`${mode} manual placement instructions were not rendered`);
         }
         manualPlacementFallback = "VERIFIED";

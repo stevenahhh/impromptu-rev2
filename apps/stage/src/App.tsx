@@ -163,7 +163,7 @@ function LandingPage({ client }: { readonly client: StageSessionClient }) {
               {join === null ? "----" : join.displayJoinId.slice(-8).toUpperCase()}
             </p>
           </div>
-          <Button disabled={join === null} onClick={() => void claim()}>
+          <Button data-display-claim disabled={join === null} onClick={() => void claim()}>
             {copy.continueAfterApproval}
           </Button>
         </Panel>
@@ -182,7 +182,10 @@ function LandingPage({ client }: { readonly client: StageSessionClient }) {
             </Button>
           </Panel>
         )}
-        <Panel title={`${mode[0]?.toUpperCase()}${mode.slice(1)} setup`}>
+        <Panel
+          data-topology-instructions={mode}
+          title={`${mode[0]?.toUpperCase()}${mode.slice(1)} setup`}
+        >
           <ol className="stage-setup-list">
             {topologyInstructions(mode).map((instruction) => (
               <li key={instruction}>{instruction}</li>
@@ -892,7 +895,7 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
           <Badge tone="accent">
             {displayModeLabel(mode)} / {copy.screenCount} {screenCount}개
           </Badge>
-          <Button variant="quiet" onClick={() => void fullscreen.toggle()}>
+          <Button data-stage-fullscreen variant="quiet" onClick={() => void fullscreen.toggle()}>
             {fullscreen.active ? copy.exitFullscreen : copy.enterFullscreen}
           </Button>
         </div>
@@ -940,8 +943,13 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
           </footer>
         </Panel>
       </main>
-      <aside className="stage-placement-message" aria-live="polite">
+      <aside
+        className="stage-placement-message"
+        data-manual-placement-mode={mode}
+        aria-live="polite"
+      >
         <Button
+          data-stage-placement
           variant="quiet"
           onClick={() => publishStageEvent("impromptu:target-screen-placement-request", null)}
         >

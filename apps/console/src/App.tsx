@@ -211,11 +211,13 @@ function SignInPage() {
           <span>{text.signInCode}</span>
           <input
             autoComplete="one-time-code"
+            data-sign-in-code
             value={authorizationCode}
             onChange={(event) => setAuthorizationCode(event.currentTarget.value)}
           />
         </label>
         <Button
+          data-sign-in-submit
           disabled={pending || authorizationCode.length === 0}
           onClick={() => void signIn(authorizationCode)}
         >
