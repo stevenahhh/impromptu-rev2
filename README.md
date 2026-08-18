@@ -28,7 +28,7 @@
 
 ```text
 apps/                    브라우저 PWA
-  console/               Private Presenter Console (Vite, port 4173)
+  console/               Private Presenter Console (Next.js, port 4173)
   stage/                 Public Stage (Vite, port 4174)
 services/                서버 배포 단위
   private-backend/       private 세션·증거·추천·AI 라우팅 백엔드 (Bun)
@@ -52,7 +52,7 @@ config/                  브라우저 금지 의존성 목록
 ## 기술 스택
 
 - **Bun 1.3+** — 런타임·패키지 매니저·테스트 러너 (`packageManager: bun@1.3.14`)
-- **TypeScript 5.9**, **React 19**, **Vite 7** (React Router 7)
+- **TypeScript 5.9**, **React 19**, **Next.js 15**(Console), **Vite 7**(Stage)
 - **Biome** — 린트/포맷
 - **happy-dom + Testing Library + fast-check** — 단위·속성 테스트
 - **playwright-core** — 브라우저 E2E/시각 QA
@@ -73,17 +73,31 @@ bun run check        # 전체 검증 게이트 (아래 참고)
 개발 서버:
 
 ```bash
+bun run dev              # 전체 로컬 스택, 로그인 코드 demo-2026
 bun run dev:console      # Console → http://localhost:4173
-bun run dev:stage        # Stage   → http://localhost:4174
+bun run dev:stage        # 내부 청중 화면 개발 서버
 bun run --cwd services/private-backend dev     # private 백엔드
 bun run --cwd services/projection-gateway dev  # projection 게이트웨이
 cd services/ingestion && uv sync && uv run ... # ingestion 워커
 ```
 
+전체 실행 후 `http://localhost:4173`의 Console만 열면 된다. 청중 화면은 Console의
+`청중 화면 열기` 동작으로 연다.
+
+샘플 발표 자료:
+
+```text
+docs/samples/impromptu-sample-deck.pptx  # fade/push 전환이 포함된 7장 샘플
+docs/samples/impromptu-sample-deck.pdf   # 같은 자료의 정적 PDF
+```
+
+`uv run scripts/generate-sample-deck.py`로 두 파일을 다시 만들 수 있다.
+
 ## 명령 모음 (루트 package.json)
 
 | 명령 | 용도 |
 |---|---|
+| `bun run dev` | Console, Stage, private backend, projection gateway 전체 실행 |
 | `bun run dev:console` / `bun run dev:stage` | PWA 개발 서버 |
 | `bun run build` | ui → console → stage 빌드 |
 | `bun run check` | **전체 게이트**: repo 정책 → 아키텍처 경계 → 빌드 → 브라우저 경계 → lint → typecheck → 전체 테스트 → 브라우저 런타임 |
@@ -154,6 +168,7 @@ omo/senpi로 작업을 이어갈 때 필요한 맥락이 전부 들어 있다.
 - `docs/PWA-구현-최적화-연구보고서.md/.html` — 연구 보고서
 - `docs/AI-BOUNDARY.md` — 서버 전용 AI 경계
 - `docs/DEMO-SCOPE.md` — 데모 범위
+- `docs/samples/impromptu-sample-deck.pptx/.pdf` — 제품 흐름 샘플 발표 자료
 - `docs/accessibility-matrix.md` — 접근성
 - `docs/final-manual-qa.md` — 최종 매뉴얼 QA
 - `docs/runbooks/*` — 운영 런북
