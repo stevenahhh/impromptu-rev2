@@ -58,14 +58,14 @@
   letter-spacing: var(--tracking-tight);
 }
 
-.stage-lead {
+.stage-welcome .stage-lead {
   max-width: var(--size-copy);
   margin: var(--space-0);
   color: var(--text-secondary);
   font-size: var(--text-lead);
 }
 
-.stage-join {
+.stage-welcome .stage-join {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-6);
@@ -82,7 +82,7 @@
   letter-spacing: var(--tracking-wide);
 }
 
-.stage-note {
+.stage-welcome .stage-note {
   max-width: var(--size-copy);
   margin: var(--space-0);
   color: var(--text-secondary);

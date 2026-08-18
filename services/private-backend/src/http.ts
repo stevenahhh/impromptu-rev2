@@ -336,10 +336,7 @@ export function createPrivateBackendHandler(
       if (result.outcome === "APPLIED") await dependencies.persist?.();
       const cookieName = accountCookieName(config.allowedOrigin);
       const cookieAttributes = accountCookieAttributes(config.allowedOrigin);
-      origin.append(
-        "set-cookie",
-        `${cookieName}=; ${cookieAttributes}; Max-Age=0`,
-      );
+      origin.append("set-cookie", `${cookieName}=; ${cookieAttributes}; Max-Age=0`);
       return json(
         result.outcome === "APPLIED" ? { status: "revoked" } : { error: result.reason },
         result.outcome === "APPLIED" ? 200 : 401,

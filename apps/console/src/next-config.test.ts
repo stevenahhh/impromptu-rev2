@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  consolePrivateApiOrigin,
-} from "./next-runtime-config";
+import { consolePrivateApiOrigin } from "./next-runtime-config";
 
 describe("Console Next.js private API boundary", () => {
   test("uses the local private backend when no origin is configured", () => {

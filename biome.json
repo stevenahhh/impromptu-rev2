@@ -6,6 +6,7 @@
       "!.git",
       "!node_modules",
       "!**/dist",
+      "!**/.next",
       "!docs/*.html",
       "!docs/*.pdf",
       "!.omo/boulder.json",

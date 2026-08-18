@@ -53,6 +53,7 @@ html[data-surface="console"] .ui-skip-link:focus:not(:focus-visible) {
   display: inline-flex;
   gap: var(--space-1);
   padding: var(--space-1);
+  margin: 0;
   border: var(--size-hairline) solid var(--border-subtle);
   border-radius: var(--radius-pill);
   background: var(--surface-inset);
@@ -295,6 +296,9 @@ html[data-surface="console"] .ui-skip-link:focus:not(:focus-visible) {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr));
   gap: var(--space-3);
+  padding: 0;
+  margin: 0;
+  border: 0;
 }
 
 .console-template-grid button {
@@ -317,7 +321,7 @@ html[data-surface="console"] .ui-skip-link:focus:not(:focus-visible) {
   border-color: var(--border-emphasis);
 }
 
-.console-template-grid button[aria-checked="true"] {
+.console-template-grid button[aria-pressed="true"] {
   border-color: var(--primary);
   background: var(--surface-inset);
 }
@@ -442,7 +446,7 @@ html[data-surface="console"] .ui-skip-link:focus:not(:focus-visible) {
 
 .console-slides__header {
   display: flex;
-    align-items: flex-end;
+  align-items: flex-end;
   justify-content: space-between;
   gap: var(--space-4);
 }

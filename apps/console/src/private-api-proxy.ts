@@ -10,7 +10,10 @@ export async function proxyPrivateApi(
   path: readonly string[],
   fetcher: Fetcher = fetch,
 ): Promise<Response> {
-  const target = new URL(`/v1/${path.map(encodeURIComponent).join("/")}`, consolePrivateApiOrigin());
+  const target = new URL(
+    `/v1/${path.map(encodeURIComponent).join("/")}`,
+    consolePrivateApiOrigin(),
+  );
   target.search = new URL(request.url).search;
   const headers = new Headers(request.headers);
   headers.delete("host");

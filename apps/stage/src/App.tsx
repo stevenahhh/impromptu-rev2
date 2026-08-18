@@ -933,10 +933,7 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
         )}
         <Panel className="stage-evidence ui-reveal ui-reveal--2">
           <Badge tone="accent">{copy.preApproved}</Badge>
-          <blockquote>
-            {card?.claim ??
-              copy.fallbackClaim}
-          </blockquote>
+          <blockquote>{card?.claim ?? copy.fallbackClaim}</blockquote>
           <footer>
             <span>{card?.sourceLabel ?? copy.fallbackSource}</span>
             <span>{card?.supportSummary ?? copy.fallbackSummary}</span>

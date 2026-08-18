@@ -4,7 +4,7 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register();
 afterAll(() => GlobalRegistrator.unregister());
 
-const { act, cleanup, fireEvent, render, within } = await import("@testing-library/react");
+const { act, cleanup, fireEvent, render } = await import("@testing-library/react");
 const { MemoryRouter } = await import("react-router-dom");
 
 const { AuthProvider, ConsoleRoutes } = await import("./App");

@@ -90,9 +90,7 @@ function renderStage(path: string) {
 describe("public Stage boundary", () => {
   test("loads immutable deck assets through the Stage same-origin boundary", () => {
     expect(
-      normalizeDeckAssetUrl(
-        "http://127.0.0.1:3002/v1/deck-assets/artifact_one/slides/slide-1.png",
-      ),
+      normalizeDeckAssetUrl("http://127.0.0.1:3002/v1/deck-assets/artifact_one/slides/slide-1.png"),
     ).toBe("/v1/deck-assets/artifact_one/slides/slide-1.png");
   });
 

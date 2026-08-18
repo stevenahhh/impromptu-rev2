@@ -2,6 +2,7 @@ import { Badge, Brand, Button, Panel, Shell, StatusDot } from "@impromptu/ui";
 import {
   createContext,
   type ReactNode,
+  useCallback,
   useContext,
   useEffect,
   useId,
@@ -9,7 +10,12 @@ import {
   useRef,
   useState,
 } from "react";
-import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, NavLink, Outlet, Route, Routes, useLocation } from "react-router-dom";
+import { type Locale, messages } from "./i18n";
+import {
+  DEFAULT_PRESENTATION_TEMPLATES,
+  type PresentationTemplate,
+} from "./presentation-templates";
 import {
   type AccountSessionView,
   type ActivePresentationView,
@@ -20,11 +26,6 @@ import {
   type DisplayJoinView,
   type LiveCandidateSnapshotView,
 } from "./session-client";
-import { messages, type Locale } from "./i18n";
-import {
-  DEFAULT_PRESENTATION_TEMPLATES,
-  type PresentationTemplate,
-} from "./presentation-templates";
 
 interface AuthState {
   authenticated: boolean;
@@ -156,7 +157,7 @@ function PublicOnly() {
 function LanguagePicker() {
   const { locale, setLocale } = useAuth();
   return (
-    <div className="console-language-picker" role="group" aria-label="Language">
+    <fieldset className="console-language-picker" aria-label="Language">
       <button
         type="button"
         aria-label="한국어"
@@ -175,7 +176,7 @@ function LanguagePicker() {
       >
         <span aria-hidden="true">🇺🇸</span>
       </button>
-    </div>
+    </fieldset>
   );
 }
 
@@ -348,7 +349,7 @@ function LivePublicationPage() {
   const [pendingCandidateId, setPendingCandidateId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
 
-  const loadSnapshot = async () => {
+  const loadSnapshot = useCallback(async () => {
     setMessage(text.loadingSnapshot);
     try {
       const next = await client.readLiveCandidates(presentationSessionId);
@@ -367,11 +368,11 @@ function LivePublicationPage() {
       setSnapshot(null);
       setMessage(cause instanceof Error ? cause.message : "Snapshot failed.");
     }
-  };
+  }, [client, locale, presentationSessionId, text]);
 
   useEffect(() => {
     if (activePresentation !== null) void loadSnapshot();
-  }, [activePresentation]);
+  }, [activePresentation, loadSnapshot]);
 
   const approve = async (candidate: LiveCandidateSnapshotView["candidates"][number]) => {
     if (snapshot === null || session === null) return;
@@ -510,9 +511,10 @@ function SessionUploadPanel({
 
   return (
     <Panel className="console-upload-panel" tone="inset">
-      <div
+      <section
         className={`console-dropzone${phase === "UPLOADING" ? " console-dropzone--busy" : ""}`}
         data-upload-dropzone
+        aria-label={text.uploadTitle}
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
           event.preventDefault();
@@ -540,7 +542,7 @@ function SessionUploadPanel({
         >
           {phase === "UPLOADING" ? text.uploading : text.upload}
         </Button>
-      </div>
+      </section>
       {phase === "SUCCESS" && view !== null ? (
         <div className="console-upload-ready" aria-live="polite" data-upload-status="SUCCESS">
           <p className="ui-eyebrow">{text.deckAccepted}</p>
@@ -598,19 +600,19 @@ function PresentationTemplateSelector({
 }) {
   const { locale } = useAuth();
   const text = messages(locale);
+  const titleId = useId();
   return (
-    <section className="console-template-library" aria-labelledby="template-library-title">
+    <section className="console-template-library" aria-labelledby={titleId}>
       <div>
-        <h2 id="template-library-title">{text.templateLibrary}</h2>
+        <h2 id={titleId}>{text.templateLibrary}</h2>
         <p>{text.templateLibraryLead}</p>
       </div>
-      <div className="console-template-grid" role="radiogroup" aria-label={text.templateLibrary}>
+      <fieldset className="console-template-grid" aria-label={text.templateLibrary}>
         {templates.map((template) => (
           <button
             key={template.id}
             type="button"
-            role="radio"
-            aria-checked={selectedId === template.id}
+            aria-pressed={selectedId === template.id}
             data-presentation-template={template.id}
             onClick={() => onSelect(template.id)}
           >
@@ -618,7 +620,7 @@ function PresentationTemplateSelector({
             <span>{template.description[locale]}</span>
           </button>
         ))}
-      </div>
+      </fieldset>
     </section>
   );
 }
@@ -820,10 +822,7 @@ function StageSetupPanel() {
         <Button data-stage-open onClick={openStage}>
           {text.openStage}
         </Button>
-        <Button
-          variant="quiet"
-          onClick={() => void navigator.clipboard?.writeText(stageUrl)}
-        >
+        <Button variant="quiet" onClick={() => void navigator.clipboard?.writeText(stageUrl)}>
           {text.copyStage}
         </Button>
         <Button variant="quiet" onClick={openStage}>
@@ -927,7 +926,8 @@ function PlaybackPanel() {
 
   const show = async (nextIndex: number) => {
     const slide = slides[nextIndex];
-    if (slide === undefined || displayBindingEpoch === null || client.setSlide === undefined) return;
+    if (slide === undefined || displayBindingEpoch === null || client.setSlide === undefined)
+      return;
     try {
       const receipt = await client.setSlide(session.csrfToken, {
         presentationSessionId: activePresentation.presentationSessionId,
@@ -996,7 +996,7 @@ export function ConsoleRoutes({
         <Route path="/sign-in" element={<SignInPage />} />
       </Route>
       <Route element={<RequireAuth />}>
-          <Route element={<PrivateLayout coResident={coResident} />}>
+        <Route element={<PrivateLayout coResident={coResident} />}>
           <Route index element={<PresentationWorkspacePage templates={templates} />} />
           <Route path="/session" element={<PresentationWorkspacePage templates={templates} />} />
           <Route path="/live-publication" element={<LivePublicationPage />} />

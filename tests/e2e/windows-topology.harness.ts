@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer as createNetServer } from "node:net";
-import { join, relative, resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import type { Readable } from "node:stream";
 import { type Browser, type BrowserContext, chromium, type Page } from "playwright-core";
 import type {
@@ -424,9 +424,7 @@ async function observeCoResidentCycle(browser: Browser): Promise<CoResidentCycle
     await page.goto(`${consoleOrigin}/sign-in`, { waitUntil: "domcontentloaded" });
     await page.getByLabel("One-time sign-in code").fill("co-resident-code");
     await page.getByRole("button", { name: "Enter private workspace" }).click();
-    await page
-      .locator("[data-co-resident-state='ENABLED']")
-      .waitFor({ state: "visible" });
+    await page.locator("[data-co-resident-state='ENABLED']").waitFor({ state: "visible" });
     const enabledObserved =
       (await page.locator("[data-co-resident-state='ENABLED']").count()) === 1;
     const leakPrivatePixelCount = await countPrivateSurfaceContent(page);
@@ -486,9 +484,7 @@ async function rehearse(
   await controller.goto(`${consoleOrigin}/sign-in`, { waitUntil: "domcontentloaded" });
   await controller.getByLabel("One-time sign-in code").fill(`controller-${mode}-${rehearsal}`);
   await controller.getByRole("button", { name: "Enter private workspace" }).click();
-  await controller
-    .locator("[data-co-resident-state='ENABLED']")
-    .waitFor({ state: "visible" });
+  await controller.locator("[data-co-resident-state='ENABLED']").waitFor({ state: "visible" });
   const page = await context.newPage();
   if (process.env.DEBUG_WP4_E2E === "true") {
     page.on("console", (message) => console.error(`[browser:${message.type()}] ${message.text()}`));

@@ -5,8 +5,7 @@ import { versionedOfflineShell } from "../../packages/ui/vite/offlineShell";
 import { responseSecurityHeaders } from "../../packages/ui/vite/securityHeaders";
 
 const serviceWorkerCohort = process.env.IMPROMPTU_RELEASE_COHORT ?? "stable";
-const projectionGatewayOrigin =
-  process.env.STAGE_PUBLIC_API_ORIGIN ?? "http://127.0.0.1:3002";
+const projectionGatewayOrigin = process.env.STAGE_PUBLIC_API_ORIGIN ?? "http://127.0.0.1:3002";
 const publicApiProxy: ProxyOptions = {
   target: projectionGatewayOrigin,
   changeOrigin: false,

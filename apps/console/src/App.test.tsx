@@ -124,7 +124,9 @@ describe("Console route boundary", () => {
 
     fireEvent.click(within(picker).getByRole("button", { name: "English" }));
     expect(document.documentElement.lang).toBe("en");
-    expect(within(document.body).getByRole("heading", { name: "Presentation workspace" })).toBeTruthy();
+    expect(
+      within(document.body).getByRole("heading", { name: "Presentation workspace" }),
+    ).toBeTruthy();
   });
 
   test("offers one selected structured template before upload", () => {
@@ -132,14 +134,14 @@ describe("Console route boundary", () => {
 
     const templates = document.querySelectorAll("[data-presentation-template]");
     expect(templates).toHaveLength(3);
-    expect(document.querySelectorAll("[data-presentation-template][aria-checked='true']")).toHaveLength(
-      1,
-    );
+    expect(
+      document.querySelectorAll("[data-presentation-template][aria-pressed='true']"),
+    ).toHaveLength(1);
 
     fireEvent.click(templates[1] as Element);
 
-    expect(templates[0]?.getAttribute("aria-checked")).toBe("false");
-    expect(templates[1]?.getAttribute("aria-checked")).toBe("true");
+    expect(templates[0]?.getAttribute("aria-pressed")).toBe("false");
+    expect(templates[1]?.getAttribute("aria-pressed")).toBe("true");
   });
 
   test("opens with an upload-first workspace and accepts a dropped deck", async () => {
@@ -190,7 +192,9 @@ describe("Console route boundary", () => {
     expect(document.querySelector("[data-evidence-status='PREPARING']")).toBeTruthy();
     expect(within(document.body).getByText("Preparing evidence")).toBeTruthy();
     switchToEnglish();
-    expect(within(document.body).getByRole("button", { name: "Open audience screen" })).toBeTruthy();
+    expect(
+      within(document.body).getByRole("button", { name: "Open audience screen" }),
+    ).toBeTruthy();
     expect(within(document.body).getByText(/start now/i)).toBeTruthy();
   });
 
@@ -222,7 +226,9 @@ describe("Console route boundary", () => {
     expect(
       within(document.body).getByRole("button", { name: "Copy audience screen link" }),
     ).toBeTruthy();
-    expect(within(document.body).getByRole("button", { name: "Use external display" })).toBeTruthy();
+    expect(
+      within(document.body).getByRole("button", { name: "Use external display" }),
+    ).toBeTruthy();
     const start = within(document.body).getByRole("button", { name: "Start presentation" });
     expect(start).toBeTruthy();
     expect(document.querySelector("[data-presentation-state='READY']")).toBeTruthy();
@@ -514,11 +520,7 @@ describe("Console route boundary", () => {
 
     render(
       <MemoryRouter initialEntries={["/live-publication"]}>
-        <AuthProvider
-          initialAuthenticated
-          initialPresentation={activePresentation}
-          client={client}
-        >
+        <AuthProvider initialAuthenticated initialPresentation={activePresentation} client={client}>
           <ConsoleRoutes />
         </AuthProvider>
       </MemoryRouter>,
@@ -583,21 +585,16 @@ describe("Console route boundary", () => {
 
     render(
       <MemoryRouter initialEntries={["/session"]}>
-        <AuthProvider
-          initialAuthenticated
-          initialPresentation={activePresentation}
-          client={client}
-        >
+        <AuthProvider initialAuthenticated initialPresentation={activePresentation} client={client}>
           <ConsoleRoutes />
         </AuthProvider>
       </MemoryRouter>,
     );
 
     switchToEnglish();
-    fireEvent.change(
-      within(document.body).getByLabelText("Audience screen connection code"),
-      { target: { value: joinCode } },
-    );
+    fireEvent.change(within(document.body).getByLabelText("Audience screen connection code"), {
+      target: { value: joinCode },
+    });
     await act(async () => {
       fireEvent.click(
         within(document.body).getByRole("button", { name: "Approve audience screen" }),
