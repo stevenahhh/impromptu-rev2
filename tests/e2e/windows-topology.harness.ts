@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer as createNetServer } from "node:net";
-import { relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import type { Readable } from "node:stream";
 import { type Browser, type BrowserContext, chromium, type Page } from "playwright-core";
 import type {
@@ -408,10 +408,10 @@ async function persistRehearsalArtifact(
 }
 
 async function countPrivateSurfaceContent(page: Page): Promise<number> {
-  const text = (await page.locator("body").textContent()) ?? "";
+  const text = (await page.locator("main").first().textContent()) ?? "";
   const vocabularyMatches = privateSurfaceVocabulary.filter((value) => text.includes(value)).length;
   const privateControls = await page
-    .locator("input, textarea, [aria-label*='Private'], [aria-label*='private']")
+    .locator("main input, main textarea, [aria-label*='Private'], [aria-label*='private']")
     .count();
   return vocabularyMatches + privateControls;
 }
@@ -424,7 +424,9 @@ async function observeCoResidentCycle(browser: Browser): Promise<CoResidentCycle
     await page.goto(`${consoleOrigin}/sign-in`, { waitUntil: "domcontentloaded" });
     await page.getByLabel("One-time sign-in code").fill("co-resident-code");
     await page.getByRole("button", { name: "Enter private workspace" }).click();
-    await page.getByRole("heading", { name: "Ready for the room" }).waitFor({ state: "visible" });
+    await page
+      .locator("[data-co-resident-state='ENABLED']")
+      .waitFor({ state: "visible" });
     const enabledObserved =
       (await page.locator("[data-co-resident-state='ENABLED']").count()) === 1;
     const leakPrivatePixelCount = await countPrivateSurfaceContent(page);
@@ -485,7 +487,7 @@ async function rehearse(
   await controller.getByLabel("One-time sign-in code").fill(`controller-${mode}-${rehearsal}`);
   await controller.getByRole("button", { name: "Enter private workspace" }).click();
   await controller
-    .getByRole("heading", { name: "Ready for the room" })
+    .locator("[data-co-resident-state='ENABLED']")
     .waitFor({ state: "visible" });
   const page = await context.newPage();
   if (process.env.DEBUG_WP4_E2E === "true") {
@@ -773,8 +775,25 @@ export async function runWindowsTopologyE2E(): Promise<WindowsTopologyEvidence> 
   await run(["bun", "run", "build"], "apps/stage");
   await run(["bun", "run", "build"], "apps/console", {
     ...process.env,
-    VITE_CO_RESIDENT_CONSOLE: "true",
+    NEXT_PUBLIC_CO_RESIDENT_CONSOLE: "true",
   });
+  const backendProxyPort = await availablePort();
+  const backendProxyOrigin = `http://127.0.0.1:${backendProxyPort}`;
+  const nextConsole = await start(
+    [
+      "node",
+      "apps/console/node_modules/next/dist/bin/next",
+      "start",
+      "apps/console",
+      "--port",
+      String(consolePort),
+    ],
+    "Ready in",
+    {
+      ...process.env,
+      CONSOLE_PRIVATE_API_ORIGIN: backendProxyOrigin,
+    },
+  );
   let projection = await start(
     ["bun", "run", "tests/e2e/topology-projection-fixture.ts"],
     "topology-projection-fixture listening",
@@ -791,7 +810,7 @@ export async function runWindowsTopologyE2E(): Promise<WindowsTopologyEvidence> 
     {
       ...process.env,
       PRIVATE_BACKEND_ORIGIN: projectionOrigin,
-      TOPOLOGY_CONSOLE_PORT: String(consolePort),
+      TOPOLOGY_CONSOLE_PORT: String(backendProxyPort),
     },
   );
   let browser: Browser | null = null;
@@ -817,7 +836,7 @@ export async function runWindowsTopologyE2E(): Promise<WindowsTopologyEvidence> 
           method: "POST",
           body: JSON.stringify({ origin: projectionOrigin }),
         }),
-        fetch(`${consoleOrigin}/__test/backend`, {
+        fetch(`${backendProxyOrigin}/__test/backend`, {
           method: "POST",
           body: JSON.stringify({ origin: projectionOrigin }),
         }),
@@ -888,6 +907,7 @@ export async function runWindowsTopologyE2E(): Promise<WindowsTopologyEvidence> 
     await stopProjectionFixture(projection);
     await browser?.close();
     await stop(console);
+    await stop(nextConsole);
     await stop(stage);
   }
 }

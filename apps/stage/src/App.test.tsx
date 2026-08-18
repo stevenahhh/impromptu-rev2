@@ -7,7 +7,7 @@ afterAll(() => GlobalRegistrator.unregister());
 const { act, cleanup, fireEvent, render, within } = await import("@testing-library/react");
 const { MemoryRouter } = await import("react-router-dom");
 
-const { StageRoutes } = await import("./App");
+const { normalizeDeckAssetUrl, StageRoutes } = await import("./App");
 const { signOfflineCard } = await import("./offline-signing.test-fixture");
 const { verifyOfflinePackage } = await import("./stage-client");
 
@@ -88,18 +88,55 @@ function renderStage(path: string) {
 }
 
 describe("public Stage boundary", () => {
+  test("loads immutable deck assets through the Stage same-origin boundary", () => {
+    expect(
+      normalizeDeckAssetUrl(
+        "http://127.0.0.1:3002/v1/deck-assets/artifact_one/slides/slide-1.png",
+      ),
+    ).toBe("/v1/deck-assets/artifact_one/slides/slide-1.png");
+  });
+
+  test("never renders private presenter workspace or evidence preparation controls", () => {
+    const inertClient: StageSessionClient = {
+      createJoin: () => new Promise<DisplayJoinView>(() => {}),
+      async claim() {
+        throw new Error("not used");
+      },
+      async snapshot() {
+        throw new Error("not used");
+      },
+      async subscribe() {
+        throw new Error("not used");
+      },
+      async recordApplied() {
+        throw new Error("not used");
+      },
+    };
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <StageRoutes client={inertClient} />
+      </MemoryRouter>,
+    );
+
+    expect(within(document.body).queryByText("Presenter console")).toBeNull();
+    expect(within(document.body).queryByText("Preparing evidence")).toBeNull();
+    expect(document.querySelector("[data-upload-dropzone]")).toBeNull();
+  });
+
   test("keeps both Stage routes public and audience-only", () => {
     renderStage("/");
     expect(
-      within(document.body).getByRole("heading", { name: "A clean screen for the room" }),
+      within(document.body).getByRole("heading", { name: "청중을 위한 깨끗한 화면" }),
     ).toBeTruthy();
+    expect(within(document.body).queryByText(/Stage/)).toBeNull();
     expect(within(document.body).queryByText("Private workspace")).toBeNull();
 
     cleanup();
     renderStage("/display/rehearsal");
     expect(
-      within(document.body).getByRole("heading", { name: "Evidence, without the detour" }),
+      within(document.body).getByRole("heading", { name: "흐름을 끊지 않는 근거" }),
     ).toBeTruthy();
+    expect(within(document.body).queryByText(/Stage/)).toBeNull();
     expect(within(document.body).queryByText("Private workspace")).toBeNull();
   });
 
@@ -152,7 +189,7 @@ describe("public Stage boundary", () => {
     });
     expect(within(document.body).getByText("AAAAAAAA")).toBeTruthy();
     expect(within(document.body).queryByText("Private workspace")).toBeNull();
-    fireEvent.click(within(document.body).getByRole("button", { name: "Continue after approval" }));
+    fireEvent.click(within(document.body).getByRole("button", { name: "승인 후 계속" }));
     await act(async () => {
       claimSignal.resolve(undefined);
       await claimSignal.promise;
@@ -622,7 +659,7 @@ describe("public Stage boundary", () => {
       }),
     );
 
-    expect(within(document.body).getByText("duplicate / 1 screen")).toBeTruthy();
+    expect(within(document.body).getByText("복제 / 화면 1개")).toBeTruthy();
 
     const recovered = nextStageEvent("impromptu:target-screen-recovery");
     fireEvent(
@@ -633,7 +670,7 @@ describe("public Stage boundary", () => {
     );
     expect(await recovered).toEqual({ status: "MANUAL_FALLBACK", privatePixelCount: 0 });
     expect(
-      within(document.body).getByText(/Manual placement: drag this public Stage/),
+      within(document.body).getByText(/수동 배치: 이 화면을 대상 화면으로 옮긴 뒤/),
     ).toBeTruthy();
   });
 
@@ -662,13 +699,13 @@ describe("public Stage boundary", () => {
     });
 
     renderStage("/display/rehearsal");
-    fireEvent.click(within(document.body).getByRole("button", { name: "Enter fullscreen" }));
+    fireEvent.click(within(document.body).getByRole("button", { name: "전체 화면 시작" }));
 
     expect(requestFullscreen).toHaveBeenCalledTimes(1);
-    expect(within(document.body).getByRole("button", { name: "Exit fullscreen" })).toBeTruthy();
+    expect(within(document.body).getByRole("button", { name: "전체 화면 종료" })).toBeTruthy();
 
-    fireEvent.click(within(document.body).getByRole("button", { name: "Exit fullscreen" }));
+    fireEvent.click(within(document.body).getByRole("button", { name: "전체 화면 종료" }));
     expect(exitFullscreen).toHaveBeenCalledTimes(1);
-    expect(within(document.body).getByRole("button", { name: "Enter fullscreen" })).toBeTruthy();
+    expect(within(document.body).getByRole("button", { name: "전체 화면 시작" })).toBeTruthy();
   });
 });

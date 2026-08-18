@@ -1,7 +1,7 @@
 {
   "id": "/?app=stage",
-  "name": "Impromptu Public Stage",
-  "short_name": "Stage",
+  "name": "Impromptu 청중 화면",
+  "short_name": "청중 화면",
   "description": "Audience-safe presentation evidence display.",
   "start_url": "/",
   "scope": "/",

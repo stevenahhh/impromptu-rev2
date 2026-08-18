@@ -19,16 +19,16 @@ const key = (value: string, overrides: Partial<KeyboardEvent> = {}) => ({
 });
 
 describe("Windows Stage topology", () => {
-  test("makes manual Extend, public-only Duplicate, and Stage-only fallback explicit", () => {
+  test("makes manual Extend, public-only Duplicate, and audience-screen fallback explicit", () => {
     expect(windowsDisplayMode("extend")).toBe("extend");
     expect(windowsDisplayMode("duplicate")).toBe("duplicate");
     expect(windowsDisplayMode("single")).toBe("single");
     expect(windowsDisplayMode("unknown")).toBe("extend");
-    expect(topologyInstructions("extend").join(" ")).toContain("Drag this Stage");
-    expect(topologyInstructions("duplicate").join(" ")).toContain("only session on this PC");
-    expect(topologyInstructions("single").join(" ")).toContain("public slides only");
-    expect(manualPlacementSummary("duplicate")).toContain("only session on this PC");
-    expect(manualPlacementSummary("single")).toContain("only app on the audience screen");
+    expect(topologyInstructions("extend").join(" ")).toContain("프로젝터로 옮긴 뒤");
+    expect(topologyInstructions("duplicate").join(" ")).toContain("청중 화면만 열린");
+    expect(topologyInstructions("single").join(" ")).toContain("공개 슬라이드만");
+    expect(manualPlacementSummary("duplicate")).toContain("청중 화면만 남기고");
+    expect(manualPlacementSummary("single")).toContain("청중 화면에는 이 화면만");
   });
 
   test("maps the emergency keyboard fallback only to absolute public slide sets", () => {

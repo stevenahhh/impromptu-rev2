@@ -49,33 +49,33 @@ export function windowsDisplayMode(value: string | null): WindowsDisplayMode {
 export function topologyInstructions(mode: WindowsDisplayMode): readonly string[] {
   if (mode === "extend") {
     return [
-      "Open only Public Stage on the presentation PC.",
-      "Drag this Stage to the projector, then enter fullscreen here.",
-      "Keep the private controller on a separate phone, tablet, or laptop.",
+      "발표 PC에는 청중 화면만 여세요.",
+      "이 화면을 프로젝터로 옮긴 뒤 전체 화면을 시작하세요.",
+      "비공개 발표자 제어는 별도의 휴대폰, 태블릿 또는 노트북에서 사용하세요.",
     ];
   }
   if (mode === "duplicate") {
     return [
-      "Use a clean Public Stage browser profile as the only session on this PC.",
-      "Keep the private controller on a separate phone, tablet, or laptop.",
-      "If Win+P changes the topology, keep Stage public and restore fullscreen here.",
+      "이 PC에는 청중 화면만 열린 깨끗한 브라우저 프로필을 사용하세요.",
+      "비공개 발표자 제어는 별도의 휴대폰, 태블릿 또는 노트북에서 사용하세요.",
+      "Win+P로 화면 구성이 바뀌면 청중 화면만 남기고 전체 화면을 다시 시작하세요.",
     ];
   }
   return [
-    "Keep Stage as the only app on the shared audience screen.",
-    "Keep the private controller on a separate phone, tablet, or laptop.",
-    "Emergency keyboard navigation changes public slides only.",
+    "공유 청중 화면에는 이 화면만 표시하세요.",
+    "비공개 발표자 제어는 별도의 휴대폰, 태블릿 또는 노트북에서 사용하세요.",
+    "비상 키보드 탐색은 공개 슬라이드만 변경합니다.",
   ];
 }
 
 export function manualPlacementSummary(mode: WindowsDisplayMode): string {
   if (mode === "duplicate") {
-    return "Manual placement: keep this public Stage as the only session on this PC; use a separate controller, then enter fullscreen.";
+    return "수동 배치: 이 PC에는 청중 화면만 남기고 별도 기기에서 제어한 뒤 전체 화면을 시작하세요.";
   }
   if (mode === "single") {
-    return "Manual placement: keep Stage as the only app on the audience screen, then enter fullscreen.";
+    return "수동 배치: 청중 화면에는 이 화면만 남긴 뒤 전체 화면을 시작하세요.";
   }
-  return "Manual placement: drag this public Stage to the target screen, then enter fullscreen.";
+  return "수동 배치: 이 화면을 대상 화면으로 옮긴 뒤 전체 화면을 시작하세요.";
 }
 
 export function emergencyPublicSlideSet(

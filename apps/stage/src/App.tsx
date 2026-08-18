@@ -8,6 +8,7 @@ import {
 import { Badge, Brand, Button, Panel, Shell, StatusDot } from "@impromptu/ui";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import copy from "./locales/ko.json";
 import { RenderedSlidePlayer, type RenderedSlidePlayerHandle } from "./rendered-slide-player";
 import {
   createStageSessionClient,
@@ -34,6 +35,23 @@ function publishStageEvent(name: string, detail: unknown): void {
   window.dispatchEvent(new CustomEvent(name, { detail }));
 }
 
+function displayModeLabel(mode: "extend" | "duplicate" | "single"): string {
+  if (mode === "duplicate") return copy.modeDuplicate;
+  if (mode === "single") return copy.modeSingle;
+  return copy.modeExtend;
+}
+
+export function normalizeDeckAssetUrl(url: string) {
+  try {
+    const parsed = new URL(url, "http://stage.invalid");
+    return parsed.pathname.startsWith("/v1/deck-assets/")
+      ? `${parsed.pathname}${parsed.search}`
+      : url;
+  } catch {
+    return url;
+  }
+}
+
 function renderedSlideRuntime(
   slide: StageSnapshotView["deckSlides"][number],
 ): PublishedSlideRuntime | null {
@@ -49,10 +67,10 @@ function renderedSlideRuntime(
 function StageHeader() {
   return (
     <>
-      <Brand eyebrow="Public Stage" />
+      <Brand eyebrow={copy.brandEyebrow} />
       <Badge tone="accent">
-        <StatusDot label="Audience-safe surface" />
-        Audience screen
+        <StatusDot label={copy.audienceSafeLabel} />
+        {copy.audienceScreen}
       </Badge>
     </>
   );
@@ -72,6 +90,18 @@ function LandingPage({ client }: { readonly client: StageSessionClient }) {
   const mode = windowsDisplayMode(new URL(window.location.href).searchParams.get("mode"));
   const [join, setJoin] = useState<DisplayJoinView | null>(null);
   const [message, setMessage] = useState("Creating a short-lived display code...");
+  const connectionCode =
+    join === null
+      ? ""
+      : btoa(
+          JSON.stringify({
+            displayJoinId: join.displayJoinId,
+            displayId: join.displayId,
+            displayFingerprint: join.displayFingerprint,
+            deckVersion: join.deckVersion,
+            expiresAtMs: join.expiresAtMs,
+          }),
+        );
 
   useEffect(() => {
     let active = true;
@@ -81,11 +111,11 @@ function LandingPage({ client }: { readonly client: StageSessionClient }) {
         if (active) {
           setJoin(created);
           publishStageEvent("impromptu:display-join", created);
-          setMessage("Waiting for an authenticated controller to approve this display.");
+          setMessage(copy.waitingApproval);
         }
       })
       .catch((error: unknown) => {
-        if (active) setMessage(error instanceof Error ? error.message : "Display join failed.");
+        if (active) setMessage(error instanceof Error ? error.message : copy.joinFailed);
       });
     return () => {
       active = false;
@@ -98,30 +128,60 @@ function LandingPage({ client }: { readonly client: StageSessionClient }) {
       await client.claim(join);
       navigate(`/display/${identity.displayId}`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Display approval failed.");
+      setMessage(error instanceof Error ? error.message : copy.approvalFailed);
     }
   };
+
+  useEffect(() => {
+    if (join === null) return;
+    let active = true;
+    const retry = globalThis.setInterval(() => {
+      if (!active || Date.now() >= join.expiresAtMs) return;
+      void client
+        .claim(join)
+        .then(() => {
+          if (active) navigate(`/display/${identity.displayId}`);
+        })
+        .catch(() => {});
+    }, 1_500);
+    return () => {
+      active = false;
+      globalThis.clearInterval(retry);
+    };
+  }, [client, identity.displayId, join, navigate]);
 
   return (
     <Shell className="stage-shell" focused header={<StageHeader />}>
       <section className="stage-welcome ui-reveal" aria-labelledby={titleId}>
-        <p className="ui-eyebrow">Display setup</p>
-        <h1 id={titleId}>A clean screen for the room</h1>
-        <p className="stage-lead">
-          This public-only surface contains no presenter controls, coaching, team notes, or private
-          session state.
-        </p>
+        <p className="ui-eyebrow">{copy.displaySetup}</p>
+        <h1 id={titleId}>{copy.cleanScreenTitle}</h1>
+        <p className="stage-lead">{copy.cleanScreenLead}</p>
         <Panel className="stage-join" tone="inset">
           <div>
-            <p className="ui-eyebrow">Display join code</p>
+            <p className="ui-eyebrow">{copy.joinCode}</p>
             <p className="stage-code">
               {join === null ? "----" : join.displayJoinId.slice(-8).toUpperCase()}
             </p>
           </div>
           <Button disabled={join === null} onClick={() => void claim()}>
-            Continue after approval
+            {copy.continueAfterApproval}
           </Button>
         </Panel>
+        {join === null ? null : (
+          <Panel title={copy.connectTitle}>
+            <p>{copy.copyLead}</p>
+            <label className="stage-connection-code">
+              <span>{copy.connectionCode}</span>
+              <input readOnly value={connectionCode} />
+            </label>
+            <Button
+              variant="quiet"
+              onClick={() => void navigator.clipboard.writeText(connectionCode)}
+            >
+              {copy.copyConnectionCode}
+            </Button>
+          </Panel>
+        )}
         <Panel title={`${mode[0]?.toUpperCase()}${mode.slice(1)} setup`}>
           <ol className="stage-setup-list">
             {topologyInstructions(mode).map((instruction) => (
@@ -129,7 +189,7 @@ function LandingPage({ client }: { readonly client: StageSessionClient }) {
             ))}
           </ol>
         </Panel>
-        <p className="stage-note" aria-live="polite">
+        <p className="stage-note ui-sr-only" aria-live="polite">
           {message} The code grants no controller access by itself.
         </p>
       </section>
@@ -175,7 +235,7 @@ function useStageFullscreen() {
       } else {
         setState((current) => ({
           ...current,
-          error: "Fullscreen is not available in this browser.",
+          error: copy.fullscreenUnavailable,
         }));
       }
     } catch {
@@ -284,9 +344,9 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
     ) => {
       setPlacementMessage(
         status === "TARGET_PLACED"
-          ? "Stage placed on the selected public target screen."
+          ? copy.targetPlaced
           : status === "TARGET_LOST_RECOVERED"
-            ? "Target screen disappeared. Stage recovered on a remaining public screen."
+            ? copy.targetRecovered
             : manualPlacementSummary(requestedMode),
       );
     };
@@ -802,9 +862,13 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [mode, navigateCachedSlide, snapshot]);
   const card = snapshot?.cards[0];
-  const currentSlide = snapshot?.deckSlides.find(
+  const projectedSlide = snapshot?.deckSlides.find(
     (slide) => slide.publicSlideKey === snapshot.occurrence.publicSlideKey,
   );
+  const currentSlide =
+    projectedSlide === undefined
+      ? undefined
+      : { ...projectedSlide, imageUrl: normalizeDeckAssetUrl(projectedSlide.imageUrl) };
   const currentSlideRuntime =
     currentSlide === undefined ? null : renderedSlideRuntime(currentSlide);
 
@@ -812,23 +876,24 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
     <div
       className="stage-display"
       data-audience-readiness={snapshot === null ? "RECOVERING" : "READY"}
+      data-blackout={snapshot?.blackout === true ? "true" : "false"}
     >
       <header className="stage-display__bar">
-        <Brand eyebrow="Public Stage" />
+        <Brand eyebrow={copy.brandEyebrow} />
         <div className="stage-display__actions">
           <Badge tone={snapshot !== null ? "success" : "accent"}>
-            <StatusDot label={snapshot !== null ? "Public Stage ready" : "Recovering Stage"} />
-            {snapshot !== null ? "Public only" : "Recovering"}
+            <StatusDot label={snapshot !== null ? copy.publicReady : copy.recovering} />
+            {snapshot !== null ? copy.publicOnly : copy.recovering}
           </Badge>
           <Badge tone="success">
-            <StatusDot label="Preview content visible" />
-            Preview
+            <StatusDot label={copy.previewVisible} />
+            {copy.preview}
           </Badge>
           <Badge tone="accent">
-            {mode} / {screenCount} screen{screenCount === 1 ? "" : "s"}
+            {displayModeLabel(mode)} / {copy.screenCount} {screenCount}개
           </Badge>
           <Button variant="quiet" onClick={() => void fullscreen.toggle()}>
-            {fullscreen.active ? "Exit fullscreen" : "Enter fullscreen"}
+            {fullscreen.active ? copy.exitFullscreen : copy.enterFullscreen}
           </Button>
         </div>
       </header>
@@ -838,12 +903,9 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
       >
         {currentSlide === undefined ? (
           <section className="stage-claim ui-reveal">
-            <p className="ui-eyebrow">Curated evidence preview</p>
-            <h1 id={titleId}>Evidence, without the detour</h1>
-            <p className="stage-lead">
-              A single, presenter-approved card supports the current idea while the main
-              presentation keeps moving.
-            </p>
+            <p className="ui-eyebrow">{copy.evidenceEyebrow}</p>
+            <h1 id={titleId}>{copy.evidenceTitle}</h1>
+            <p className="stage-lead">{copy.evidenceLead}</p>
           </section>
         ) : (
           <section
@@ -870,14 +932,14 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
           </section>
         )}
         <Panel className="stage-evidence ui-reveal ui-reveal--2">
-          <Badge tone="accent">Pre-approved</Badge>
+          <Badge tone="accent">{copy.preApproved}</Badge>
           <blockquote>
             {card?.claim ??
-              "Supporting material stays legible at distance, cites its origin, and never reveals the presenter's private workspace."}
+              copy.fallbackClaim}
           </blockquote>
           <footer>
-            <span>{card?.sourceLabel ?? "Impromptu demo principle"}</span>
-            <span>{card?.supportSummary ?? "Prepared for rehearsal"}</span>
+            <span>{card?.sourceLabel ?? copy.fallbackSource}</span>
+            <span>{card?.supportSummary ?? copy.fallbackSummary}</span>
           </footer>
         </Panel>
       </main>
@@ -886,12 +948,12 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
           variant="quiet"
           onClick={() => publishStageEvent("impromptu:target-screen-placement-request", null)}
         >
-          Place on target screen
+          {copy.placeTarget}
         </Button>
         <span>{placementMessage}</span>
       </aside>
       <p className="stage-fullscreen-message" aria-live="polite">
-        {fullscreen.error ?? (fullscreen.active ? "Fullscreen is active." : "Fullscreen is ready.")}
+        {fullscreen.error ?? (fullscreen.active ? copy.fullscreenActive : copy.fullscreenReady)}
       </p>
     </div>
   );
