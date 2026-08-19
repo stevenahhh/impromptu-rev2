@@ -39,7 +39,7 @@ interface AuthState {
   setDisplayBindingEpoch: (epoch: string) => void;
   locale: Locale;
   setLocale: (locale: Locale) => void;
-  signIn: (authorizationCode: string) => Promise<void>;
+  signIn: (username: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -100,11 +100,11 @@ export function AuthProvider({
       setDisplayBindingEpoch,
       locale,
       setLocale,
-      async signIn(authorizationCode: string) {
+      async signIn(username: string, password: string) {
         setPending(true);
         setError(null);
         try {
-          setSession(await sessionClient.signIn(authorizationCode));
+          setSession(await sessionClient.signIn(username, password));
         } catch (cause) {
           setError(cause instanceof Error ? cause.message : "Sign-in failed.");
         } finally {
@@ -200,7 +200,8 @@ function ConsoleHeader() {
 function SignInPage() {
   const { error, locale, pending, signIn } = useAuth();
   const text = messages(locale);
-  const [authorizationCode, setAuthorizationCode] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
 
   return (
     <Shell focused header={<ConsoleHeader />} skipLabel={text.skipToContent}>
@@ -208,18 +209,28 @@ function SignInPage() {
         <h1>{text.signInTitle}</h1>
         <p className="console-lead">{text.signInLead}</p>
         <label className="console-field">
-          <span>{text.signInCode}</span>
+          <span>{text.username}</span>
           <input
-            autoComplete="one-time-code"
-            data-sign-in-code
-            value={authorizationCode}
-            onChange={(event) => setAuthorizationCode(event.currentTarget.value)}
+            autoComplete="username"
+            data-sign-in-username
+            value={username}
+            onChange={(event) => setUsername(event.currentTarget.value)}
+          />
+        </label>
+        <label className="console-field">
+          <span>{text.password}</span>
+          <input
+            autoComplete="current-password"
+            data-sign-in-password
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.currentTarget.value)}
           />
         </label>
         <Button
           data-sign-in-submit
-          disabled={pending || authorizationCode.length === 0}
-          onClick={() => void signIn(authorizationCode)}
+          disabled={pending || username.length === 0 || password.length === 0}
+          onClick={() => void signIn(username, password)}
         >
           {pending ? text.signingIn : text.enterWorkspace}
         </Button>
@@ -714,7 +725,9 @@ function PresentationWorkspacePage({
             <PlaybackPanel index={activeIndex} onIndexChange={setActiveIndex} />
           </div>
           <div className="console-cockpit__side">
-            <EvidencePreparationPanel />
+            <EvidencePreparationPanel
+              key={`${activePresentation.presentationSessionId}:${activePresentation.deckVersion}:${activePresentation.manifestHash ?? ""}`}
+            />
             <StageSetupPanel />
             <DisplayPairingPanel />
           </div>
@@ -787,61 +800,116 @@ function SlidePreview({ index }: { readonly index: number }) {
   );
 }
 
+interface PreparedEvidenceCard {
+  readonly id: string;
+  readonly title: string;
+  readonly summary: string;
+  readonly source: string;
+  readonly sourceUrl: string | null;
+}
+
 function EvidencePreparationPanel() {
   const { activePresentation, client, locale, session } = useAuth();
   const text = messages(locale);
-  const [status, setStatus] = useState<"PREPARING" | "READY" | "FAILED">("PREPARING");
-  const [preparedCount, setPreparedCount] = useState(0);
+  const canPrepare =
+    activePresentation !== null &&
+    activePresentation.manifestHash !== undefined &&
+    session !== null &&
+    activePresentation.slides.length > 0;
+  const [preparedEvidence, setPreparedEvidence] = useState<readonly PreparedEvidenceCard[]>([]);
+  const [pendingCount, setPendingCount] = useState(
+    canPrepare && activePresentation !== null ? activePresentation.slides.length : 0,
+  );
 
   useEffect(() => {
-    if (activePresentation === null || session === null) return;
-    if (activePresentation.manifestHash === undefined) return;
+    setPreparedEvidence([]);
+    if (activePresentation === null || session === null) {
+      setPendingCount(0);
+      return;
+    }
+    const manifestHash = activePresentation.manifestHash;
+    if (manifestHash === undefined || activePresentation.slides.length === 0) {
+      setPendingCount(0);
+      return;
+    }
+
     let active = true;
-    setStatus("PREPARING");
-    void Promise.all(
-      activePresentation.slides.map((slide) =>
-        client.recommend(session.csrfToken, {
-          query: slide.accessibilityLabel,
-          deckVersion: activePresentation.deckVersion,
-          manifestHash: activePresentation.manifestHash as string,
-          maxResults: 3,
-        }),
-      ),
-    )
-      .then((results) => {
-        if (!active) return;
-        setPreparedCount(results.length);
-        setStatus("READY");
-      })
-      .catch(() => {
-        if (active) setStatus("FAILED");
-      });
+    const controller = new AbortController();
+    setPendingCount(activePresentation.slides.length);
+    for (const slide of activePresentation.slides) {
+      void (async () => {
+        try {
+          const result = await client.recommend(
+            session.csrfToken,
+            {
+              query: slide.accessibilityLabel,
+              deckVersion: activePresentation.deckVersion,
+              manifestHash,
+              maxResults: 3,
+            },
+            controller.signal,
+          );
+          if (!active || result.outcome !== "RECOMMEND") return;
+          const cards = result.evidence.map((evidence) => ({
+            id: `${slide.publicSlideKey}:${evidence.evidenceId}`,
+            title: evidence.title,
+            summary: result.recommendation.claim,
+            source: evidence.canonicalUrl ?? evidence.sourceId,
+            sourceUrl: evidence.canonicalUrl,
+          }));
+          setPreparedEvidence((current) => [...current, ...cards]);
+        } catch {
+          // Individual evidence failures stay quiet and never interrupt presentation controls.
+        } finally {
+          if (active) setPendingCount((current) => Math.max(0, current - 1));
+        }
+      })();
+    }
     return () => {
       active = false;
+      controller.abort();
     };
   }, [activePresentation, client, session]);
 
+  const status = pendingCount > 0 ? "PREPARING" : preparedEvidence.length > 0 ? "READY" : "EMPTY";
   return (
-    <Panel className="console-evidence-preparation" title={text.preparingEvidence} tone="inset">
+    <Panel className="console-evidence-preparation" title={text.preparedEvidence} tone="inset">
       <div data-evidence-status={status}>
-        <Badge tone={status === "READY" ? "success" : status === "FAILED" ? "warning" : "accent"}>
-          {status === "READY"
-            ? text.evidenceReady
-            : status === "FAILED"
-              ? text.slidesStillReady
-              : text.aiPreparing}
-        </Badge>
-        <ol className="console-preparation-steps">
-          <li>{text.aiReading}</li>
-          <li>{text.aiFinding}</li>
-          <li>{text.aiChecking}</li>
-        </ol>
-        <p className="console-caption" aria-live="polite">
-          {status === "READY"
-            ? `${preparedCount} slide evidence sets prepared.`
-            : status === "FAILED"
-              ? text.evidencePaused
-              : text.aiStartNow}
+        {preparedEvidence.length === 0 ? null : (
+          <ul className="console-evidence-list">
+            {preparedEvidence.map((evidence) => (
+              <li key={evidence.id}>
+                <article className="console-evidence-card" data-evidence-card={evidence.id}>
+                  <h3>{evidence.title}</h3>
+                  <dl>
+                    <div>
+                      <dt>{text.evidenceSummary}</dt>
+                      <dd>{evidence.summary}</dd>
+                    </div>
+                    <div>
+                      <dt>{text.evidenceSource}</dt>
+                      <dd>
+                        {evidence.sourceUrl === null ? (
+                          evidence.source
+                        ) : (
+                          <a href={evidence.sourceUrl} rel="noreferrer" target="_blank">
+                            {evidence.source}
+                          </a>
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
+                </article>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="console-evidence-caption">
+          {pendingCount > 0
+            ? text.evidencePreparingQuietly
+            : preparedEvidence.length > 0
+              ? text.evidencePrepared
+              : text.evidenceEmpty}
         </p>
       </div>
     </Panel>

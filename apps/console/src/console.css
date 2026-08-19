@@ -604,10 +604,64 @@ html[data-surface="console"] .ui-shell__body--focused {
   font-size: var(--text-caption);
 }
 
-.console-preparation-steps {
+.console-evidence-list {
   display: grid;
-  gap: var(--space-2);
-  padding-inline-start: var(--space-5);
+  gap: var(--space-3);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.console-evidence-card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: var(--size-hairline) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-panel);
+}
+
+.console-evidence-card h3,
+.console-evidence-card dl,
+.console-evidence-card dd {
+  margin: 0;
+}
+
+.console-evidence-card h3 {
+  font-size: var(--text-body);
+  line-height: var(--line-body);
+}
+
+.console-evidence-card dl {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.console-evidence-card dl > div {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.console-evidence-card dt {
+  color: var(--text-secondary);
+  font-size: var(--text-caption);
+}
+
+.console-evidence-card dd {
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+  font-size: var(--text-small);
+  line-height: var(--line-body);
+}
+
+.console-evidence-card a {
+  color: var(--text-secondary);
+}
+
+.console-evidence-caption {
+  margin: var(--space-3) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-caption);
 }
 
 .console-stage-actions {

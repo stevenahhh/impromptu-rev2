@@ -83,6 +83,46 @@ function rejectionOf(upload: Promise<unknown>): Promise<unknown> {
   );
 }
 
+test("signIn sends only username and password in the credentialed request body", async () => {
+  const originalFetch = globalThis.fetch;
+  const received: Array<{ url: string; init: RequestInit }> = [];
+  Object.defineProperty(globalThis, "fetch", {
+    configurable: true,
+    value: async (input: RequestInfo | URL, init?: RequestInit) => {
+      received.push({ url: String(input), init: init ?? {} });
+      return new Response(
+        JSON.stringify({
+          account: { accountId: "account_alpha", actorId: "actor_alpha" },
+          expiresAtMs: 10_000,
+          csrfToken: "csrf-alpha",
+        }),
+        { status: 201, headers: { "content-type": "application/json" } },
+      );
+    },
+  });
+  try {
+    await createConsoleSessionClient("https://private.example.test").signIn(
+      "presenter-alpha",
+      "transient-password",
+    );
+    const call = received[0];
+    if (call === undefined) throw new Error("sign-in request was not sent");
+    expect(call.url).toBe("https://private.example.test/v1/account-sessions");
+    expect(call.url).not.toContain("presenter-alpha");
+    expect(call.url).not.toContain("transient-password");
+    expect(call.init).toMatchObject({
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+    });
+    if (typeof call.init.body !== "string") throw new Error("sign-in body was not JSON");
+    const body: unknown = JSON.parse(call.init.body);
+    expect(body).toEqual({ username: "presenter-alpha", password: "transient-password" });
+  } finally {
+    Object.defineProperty(globalThis, "fetch", { configurable: true, value: originalFetch });
+  }
+});
+
 test("Console recommendation client calls the authenticated private HTTP route", async () => {
   const originalFetch = globalThis.fetch;
   const received: Array<{ url: string; init: RequestInit }> = [];

@@ -5,11 +5,19 @@ export interface RecommendationRequest {
   readonly maxResults: number;
 }
 
+export interface RecommendationEvidenceView {
+  readonly evidenceId: string;
+  readonly sourceId: string;
+  readonly title: string;
+  readonly quote: string;
+  readonly canonicalUrl: string | null;
+}
+
 export type RecommendationOutcome =
   | Readonly<{
       outcome: "RECOMMEND";
-      recommendation: unknown;
-      evidence: readonly unknown[];
+      recommendation: Readonly<{ claim: string }>;
+      evidence: readonly RecommendationEvidenceView[];
       completedAtMs: number;
       latencyMs: number;
     }>
@@ -70,14 +78,18 @@ export interface PlaybackCommandView {
 }
 
 export interface ConsoleSessionClient {
-  signIn(authorizationCode: string): Promise<AccountSessionView>;
+  signIn(username: string, password: string): Promise<AccountSessionView>;
   readSession(): Promise<AccountSessionView | null>;
   signOut(csrfToken: string): Promise<void>;
   createPresentation(
     csrfToken: string,
     artifacts: { readonly privateDeck: unknown; readonly publicDeck: unknown },
   ): Promise<PresentationSessionView>;
-  recommend(csrfToken: string, request: RecommendationRequest): Promise<RecommendationOutcome>;
+  recommend(
+    csrfToken: string,
+    request: RecommendationRequest,
+    signal?: AbortSignal,
+  ): Promise<RecommendationOutcome>;
   readLiveCandidates(presentationSessionId: string): Promise<LiveCandidateSnapshotView>;
   approveLiveCandidate(
     csrfToken: string,
@@ -219,15 +231,39 @@ function stringField(value: unknown, field: string): string | null {
   return typeof candidate === "string" ? candidate : null;
 }
 
+function isRecommendationEvidenceView(value: unknown): value is RecommendationEvidenceView {
+  if (typeof value !== "object" || value === null) return false;
+  const evidenceId = Reflect.get(value, "evidenceId");
+  const sourceId = Reflect.get(value, "sourceId");
+  const title = Reflect.get(value, "title");
+  const quote = Reflect.get(value, "quote");
+  const canonicalUrl = Reflect.get(value, "canonicalUrl");
+  return (
+    typeof evidenceId === "string" &&
+    typeof sourceId === "string" &&
+    typeof title === "string" &&
+    typeof quote === "string" &&
+    (typeof canonicalUrl === "string" || canonicalUrl === null)
+  );
+}
+
 function isRecommendationOutcome(value: unknown): value is RecommendationOutcome {
   if (typeof value !== "object" || value === null) return false;
-  const candidate = value as Record<string, unknown>;
-  if (typeof candidate.completedAtMs !== "number" || typeof candidate.latencyMs !== "number") {
-    return false;
-  }
-  return candidate.outcome === "ABSTAIN"
-    ? typeof candidate.reason === "string"
-    : candidate.outcome === "RECOMMEND" && Array.isArray(candidate.evidence);
+  const outcome = Reflect.get(value, "outcome");
+  const completedAtMs = Reflect.get(value, "completedAtMs");
+  const latencyMs = Reflect.get(value, "latencyMs");
+  if (typeof completedAtMs !== "number" || typeof latencyMs !== "number") return false;
+  if (outcome === "ABSTAIN") return typeof Reflect.get(value, "reason") === "string";
+  if (outcome !== "RECOMMEND") return false;
+  const recommendation = Reflect.get(value, "recommendation");
+  const evidence = Reflect.get(value, "evidence");
+  return (
+    typeof recommendation === "object" &&
+    recommendation !== null &&
+    typeof Reflect.get(recommendation, "claim") === "string" &&
+    Array.isArray(evidence) &&
+    evidence.every(isRecommendationEvidenceView)
+  );
 }
 
 function isLiveCandidateSnapshot(value: unknown): value is LiveCandidateSnapshotView {
@@ -345,12 +381,12 @@ export function createConsoleSessionClient(baseUrl = ""): ConsoleDeckUploadClien
     ...(csrfToken === undefined ? {} : { "x-csrf-token": csrfToken }),
   });
   return {
-    async signIn(authorizationCode) {
+    async signIn(username, password) {
       const response = await fetch(`${baseUrl}/v1/account-sessions`, {
         method: "POST",
         credentials: "include",
         headers: mutationHeaders(),
-        body: JSON.stringify({ authorizationCode }),
+        body: JSON.stringify({ username, password }),
       });
       const body = await responseBody(response);
       if (!response.ok || !isAccountSessionView(body)) throw new Error("Sign-in was rejected.");
@@ -372,12 +408,13 @@ export function createConsoleSessionClient(baseUrl = ""): ConsoleDeckUploadClien
       });
       if (!response.ok) throw new Error("Sign-out was rejected.");
     },
-    async recommend(csrfToken, request) {
+    async recommend(csrfToken, request, signal) {
       const response = await fetch(`${baseUrl}/v1/recommendations`, {
         method: "POST",
         credentials: "include",
         headers: mutationHeaders(csrfToken),
         body: JSON.stringify(request),
+        ...(signal === undefined ? {} : { signal }),
       });
       const body = await responseBody(response);
       if (!response.ok || !isRecommendationOutcome(body)) {

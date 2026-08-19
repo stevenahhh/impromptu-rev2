@@ -15,6 +15,7 @@ import type {
   ActivePresentationView,
   ConsoleDeckUploadClient,
   ConsoleSessionClient,
+  RecommendationOutcome,
 } from "./session-client";
 
 afterEach(cleanup);
@@ -91,7 +92,8 @@ describe("Console route boundary", () => {
     renderConsole("/sign-in", false, "ko");
 
     expect(within(document.body).getByRole("heading", { name: "비공개 발표 제어" })).toBeTruthy();
-    expect(within(document.body).getByText("일회용 로그인 코드")).toBeTruthy();
+    expect(document.querySelector("[data-sign-in-username]")).toBeTruthy();
+    expect(document.querySelector("[data-sign-in-password]")).toBeTruthy();
 
     cleanup();
     renderConsole("/live-publication", true, "ko");
@@ -179,23 +181,95 @@ describe("Console route boundary", () => {
     expect(within(document.body).getAllByText("Opening slide").length).toBeGreaterThan(0);
   });
 
-  test("shows evidence preparation immediately without blocking presentation readiness", () => {
-    render(
+  test("adds evidence as each slide finishes without blocking presentation readiness", async () => {
+    let resolveOpening: (outcome: RecommendationOutcome) => void = () => {
+      throw new Error("opening recommendation signal was not installed");
+    };
+    const openingRecommendation = new Promise<RecommendationOutcome>((resolve) => {
+      resolveOpening = resolve;
+    });
+    let resolveResults: (outcome: RecommendationOutcome) => void = () => {
+      throw new Error("results recommendation signal was not installed");
+    };
+    const resultsRecommendation = new Promise<RecommendationOutcome>((resolve) => {
+      resolveResults = resolve;
+    });
+    let signalRequestsStarted: () => void = () => {
+      throw new Error("request signal was not installed");
+    };
+    const requestsStarted = new Promise<void>((resolve) => {
+      signalRequestsStarted = resolve;
+    });
+    const requestSignals: AbortSignal[] = [];
+    const slideCommands: string[] = [];
+    const presentation = { ...workspacePresentation, manifestHash: "a".repeat(64) };
+    const client = workspaceClient({
+      recommend(_csrfToken, request, signal) {
+        if (signal !== undefined) requestSignals.push(signal);
+        if (requestSignals.length === presentation.slides.length) signalRequestsStarted();
+        return request.query === "Opening slide" ? openingRecommendation : resultsRecommendation;
+      },
+      async setSlide(_csrfToken, input) {
+        slideCommands.push(input.publicSlideKey);
+        return { acceptedControlRevision: "cr_1" };
+      },
+    });
+    const view = render(
       <MemoryRouter initialEntries={["/"]}>
-        <AuthProvider initialAuthenticated initialPresentation={workspacePresentation}>
+        <AuthProvider
+          initialAuthenticated
+          initialDisplayBindingEpoch="dbe_1"
+          initialPresentation={presentation}
+          client={client}
+        >
           <ConsoleRoutes />
         </AuthProvider>
       </MemoryRouter>,
     );
 
-    switchToEnglish();
+    await act(async () => await requestsStarted);
     expect(document.querySelector("[data-evidence-status='PREPARING']")).toBeTruthy();
-    expect(within(document.body).getByText("Preparing evidence")).toBeTruthy();
-    switchToEnglish();
-    expect(
-      within(document.body).getByRole("button", { name: "Open audience screen" }),
-    ).toBeTruthy();
-    expect(within(document.body).getByText(/start now/i)).toBeTruthy();
+    expect(document.querySelectorAll("[data-evidence-card]")).toHaveLength(0);
+    const start = within(document.body).getByRole("button", { name: "발표 시작" });
+    expect(start.hasAttribute("disabled")).toBe(false);
+    await act(async () => fireEvent.click(start));
+    expect(slideCommands).toEqual(["slide_one"]);
+
+    const result: RecommendationOutcome = {
+      outcome: "RECOMMEND",
+      recommendation: { claim: "Revenue increased year over year." },
+      evidence: [
+        {
+          evidenceId: "evidence_results",
+          sourceId: "annual-report",
+          title: "Annual report",
+          quote: "Revenue increased by 12%.",
+          canonicalUrl: "https://example.test/annual-report",
+        },
+      ],
+      completedAtMs: 100,
+      latencyMs: 20,
+    };
+    await act(async () => {
+      resolveResults(result);
+      await resultsRecommendation;
+    });
+
+    const cards = document.querySelectorAll("[data-evidence-card]");
+    expect(cards).toHaveLength(1);
+    expect(cards[0]?.textContent).toContain("Annual report");
+    expect(cards[0]?.textContent).toContain("Revenue increased year over year.");
+    expect(cards[0]?.textContent).toContain("https://example.test/annual-report");
+    expect(document.querySelector("[data-evidence-status='PREPARING']")).toBeTruthy();
+
+    view.unmount();
+    expect(requestSignals).toHaveLength(2);
+    expect(requestSignals.every((signal) => signal.aborted)).toBe(true);
+    await act(async () => {
+      resolveOpening(result);
+      await openingRecommendation;
+    });
+    expect(document.querySelectorAll("[data-evidence-card]")).toHaveLength(0);
   });
 
   test("offers display choices and starts from one primary action", async () => {
@@ -302,8 +376,8 @@ describe("Console route boundary", () => {
     expect(document.querySelector("[data-controller-lifecycle='BACKGROUND']")).toBeTruthy();
   });
 
-  test("exchanges the entered code through the typed session client without storage", async () => {
-    const receivedCodes: string[] = [];
+  test("passes username and password through the typed session client without storage", async () => {
+    const receivedCredentials: Array<{ username: string; password: string }> = [];
     let resolveSignIn: (session: AccountSessionView) => void = () => {
       throw new Error("sign-in signal was not installed");
     };
@@ -311,8 +385,8 @@ describe("Console route boundary", () => {
       resolveSignIn = resolve;
     });
     const client: ConsoleSessionClient = {
-      signIn(code) {
-        receivedCodes.push(code);
+      signIn(username, password) {
+        receivedCredentials.push({ username, password });
         return signInCompleted;
       },
       async readSession() {
@@ -346,11 +420,28 @@ describe("Console route boundary", () => {
       </MemoryRouter>,
     );
 
-    switchToEnglish();
-    fireEvent.change(within(document.body).getByLabelText("One-time sign-in code"), {
-      target: { value: "transient-code" },
-    });
-    fireEvent.click(within(document.body).getByRole("button", { name: "Enter private workspace" }));
+    const usernameInput = document.querySelector("[data-sign-in-username]");
+    const passwordInput = document.querySelector("[data-sign-in-password]");
+    const submit = document.querySelector("[data-sign-in-submit]");
+    expect(usernameInput).toBeInstanceOf(HTMLInputElement);
+    expect(passwordInput).toBeInstanceOf(HTMLInputElement);
+    expect(submit).toBeInstanceOf(HTMLButtonElement);
+    if (
+      !(usernameInput instanceof HTMLInputElement) ||
+      !(passwordInput instanceof HTMLInputElement) ||
+      !(submit instanceof HTMLButtonElement)
+    ) {
+      throw new Error("sign-in controls are missing");
+    }
+    expect(usernameInput.autocomplete).toBe("username");
+    expect(passwordInput.type).toBe("password");
+    expect(passwordInput.autocomplete).toBe("current-password");
+    expect(submit.disabled).toBe(true);
+    fireEvent.change(usernameInput, { target: { value: "presenter-alpha" } });
+    expect(submit.disabled).toBe(true);
+    fireEvent.change(passwordInput, { target: { value: "transient-password" } });
+    expect(submit.disabled).toBe(false);
+    fireEvent.click(submit);
 
     await act(async () => {
       resolveSignIn({
@@ -360,10 +451,10 @@ describe("Console route boundary", () => {
       });
       await signInCompleted;
     });
-    expect(
-      within(document.body).getByRole("heading", { name: "Start a presentation" }),
-    ).toBeTruthy();
-    expect(receivedCodes).toEqual(["transient-code"]);
+    expect(document.querySelector("[data-presentation-template]")).toBeTruthy();
+    expect(receivedCredentials).toEqual([
+      { username: "presenter-alpha", password: "transient-password" },
+    ]);
     expect(window.localStorage.length).toBe(0);
     expect(window.sessionStorage.length).toBe(0);
   });
