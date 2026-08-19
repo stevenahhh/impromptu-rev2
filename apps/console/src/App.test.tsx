@@ -10,12 +10,13 @@ const { MemoryRouter } = await import("react-router-dom");
 const { AuthProvider, ConsoleRoutes } = await import("./App");
 const { messages } = await import("./i18n");
 
-import type {
-  AccountSessionView,
-  ActivePresentationView,
-  ConsoleDeckUploadClient,
-  ConsoleSessionClient,
-  RecommendationOutcome,
+import {
+  AccountRegistrationError,
+  type AccountSessionView,
+  type ActivePresentationView,
+  type ConsoleDeckUploadClient,
+  type ConsoleSessionClient,
+  type RecommendationOutcome,
 } from "./session-client";
 
 afterEach(cleanup);
@@ -42,6 +43,9 @@ function workspaceClient(
   overrides: Partial<ConsoleDeckUploadClient> = {},
 ): ConsoleDeckUploadClient {
   return {
+    async signUp() {
+      throw new Error("not used");
+    },
     async signIn() {
       throw new Error("not used");
     },
@@ -376,6 +380,119 @@ describe("Console route boundary", () => {
     expect(document.querySelector("[data-controller-lifecycle='BACKGROUND']")).toBeTruthy();
   });
 
+  test("creates an account through the typed client and signs in without storage", async () => {
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+    const calls: Array<{ operation: "SIGN_UP" | "SIGN_IN"; username: string; password: string }> =
+      [];
+    let signalSignedIn: () => void = () => {
+      throw new Error("sign-in signal was not installed");
+    };
+    const signedIn = new Promise<void>((resolve) => {
+      signalSignedIn = resolve;
+    });
+    const client = workspaceClient({
+      async signUp(username, password) {
+        calls.push({ operation: "SIGN_UP", username, password });
+        return { account: { accountId: "account_new" } };
+      },
+      async signIn(username, password) {
+        calls.push({ operation: "SIGN_IN", username, password });
+        signalSignedIn();
+        return {
+          account: { accountId: "account_new", actorId: "actor_new" },
+          expiresAtMs: 10_000,
+          csrfToken: "csrf-new",
+        };
+      },
+    });
+    render(
+      <MemoryRouter initialEntries={["/sign-up"]}>
+        <AuthProvider client={client}>
+          <ConsoleRoutes />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    const usernameInput = document.querySelector("[data-sign-up-username]");
+    const passwordInput = document.querySelector("[data-sign-up-password]");
+    const submit = document.querySelector("[data-sign-up-submit]");
+    if (
+      !(usernameInput instanceof HTMLInputElement) ||
+      !(passwordInput instanceof HTMLInputElement) ||
+      !(submit instanceof HTMLButtonElement)
+    ) {
+      throw new Error("sign-up controls are missing");
+    }
+    expect(usernameInput.autocomplete).toBe("username");
+    expect(passwordInput.type).toBe("password");
+    expect(passwordInput.autocomplete).toBe("new-password");
+    fireEvent.change(usernameInput, { target: { value: "presenter-new" } });
+    fireEvent.change(passwordInput, { target: { value: "new-password" } });
+    await act(async () => {
+      fireEvent.click(submit);
+      await signedIn;
+    });
+
+    expect(calls).toEqual([
+      { operation: "SIGN_UP", username: "presenter-new", password: "new-password" },
+      { operation: "SIGN_IN", username: "presenter-new", password: "new-password" },
+    ]);
+    expect(document.querySelector("[data-presentation-template]")).toBeTruthy();
+    expect(window.localStorage.length).toBe(0);
+    expect(window.sessionStorage.length).toBe(0);
+  });
+
+  test("shows a duplicate-username failure without signing in", async () => {
+    let signInCount = 0;
+    let signalRegistrationAttempted: () => void = () => {
+      throw new Error("registration signal was not installed");
+    };
+    const registrationAttempted = new Promise<void>((resolve) => {
+      signalRegistrationAttempted = resolve;
+    });
+    const client = workspaceClient({
+      async signUp() {
+        signalRegistrationAttempted();
+        throw new AccountRegistrationError("USERNAME_TAKEN", 409);
+      },
+      async signIn() {
+        signInCount += 1;
+        throw new Error("sign-in must not run after rejected registration");
+      },
+    });
+    render(
+      <MemoryRouter initialEntries={["/sign-up"]}>
+        <AuthProvider client={client}>
+          <ConsoleRoutes />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    const usernameInput = document.querySelector("[data-sign-up-username]");
+    const passwordInput = document.querySelector("[data-sign-up-password]");
+    const submit = document.querySelector("[data-sign-up-submit]");
+    if (
+      !(usernameInput instanceof HTMLInputElement) ||
+      !(passwordInput instanceof HTMLInputElement) ||
+      !(submit instanceof HTMLButtonElement)
+    ) {
+      throw new Error("sign-up controls are missing");
+    }
+    fireEvent.change(usernameInput, { target: { value: "presenter-taken" } });
+    fireEvent.change(passwordInput, { target: { value: "new-password" } });
+    await act(async () => {
+      fireEvent.click(submit);
+      await registrationAttempted;
+    });
+
+    expect(document.querySelector("[data-sign-up-error='USERNAME_TAKEN']")).toBeTruthy();
+    expect(document.querySelector("[data-sign-up-error]")?.textContent?.length).toBeGreaterThan(0);
+    expect(document.querySelector("[data-sign-up-submit]")).toBeTruthy();
+    expect(document.querySelector("[data-presentation-template]")).toBeNull();
+    expect(signInCount).toBe(0);
+  });
+
   test("passes username and password through the typed session client without storage", async () => {
     const receivedCredentials: Array<{ username: string; password: string }> = [];
     let resolveSignIn: (session: AccountSessionView) => void = () => {
@@ -385,6 +502,9 @@ describe("Console route boundary", () => {
       resolveSignIn = resolve;
     });
     const client: ConsoleSessionClient = {
+      async signUp() {
+        throw new Error("not used");
+      },
       signIn(username, password) {
         receivedCredentials.push({ username, password });
         return signInCompleted;
@@ -500,6 +620,9 @@ describe("Console route boundary", () => {
       ],
     } as const;
     const client: ConsoleSessionClient = {
+      async signUp() {
+        throw new Error("not used");
+      },
       async signIn() {
         throw new Error("not used");
       },
@@ -572,6 +695,9 @@ describe("Console route boundary", () => {
     };
     let loadedPresentationId = "";
     const client: ConsoleSessionClient = {
+      async signUp() {
+        throw new Error("not used");
+      },
       async signIn() {
         throw new Error("not used");
       },
@@ -636,6 +762,9 @@ describe("Console route boundary", () => {
       ],
     };
     const client: ConsoleSessionClient = {
+      async signUp() {
+        throw new Error("not used");
+      },
       async signIn() {
         throw new Error("not used");
       },

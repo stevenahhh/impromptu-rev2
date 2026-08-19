@@ -24,6 +24,9 @@ function createUploadClient(options: { readonly failWith?: Error } = {}) {
     return { presentationSessionId: "ps_deck-upload-1", deckVersion: "deck-v1" };
   });
   const client: ConsoleDeckUploadClient = {
+    async signUp() {
+      throw new Error("not used");
+    },
     async signIn() {
       throw new Error("not used");
     },

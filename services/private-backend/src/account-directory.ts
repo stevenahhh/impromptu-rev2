@@ -63,7 +63,7 @@ export interface AccountDirectory {
 }
 
 const MINIMUM_PASSWORD_LENGTH = 8;
-const USERNAME_PATTERN = /^[a-z0-9](?:[a-z0-9._-]{1,30}[a-z0-9])?$/;
+const USERNAME_PATTERN = /^[a-z0-9](?:[a-z0-9._-]{1,30}[a-z0-9])$/;
 
 /**
  * A hash of a value no caller supplies. Verification runs it when the username

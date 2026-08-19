@@ -10,13 +10,15 @@ import {
   useRef,
   useState,
 } from "react";
-import { Navigate, NavLink, Outlet, Route, Routes, useLocation } from "react-router-dom";
+import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { type Locale, messages } from "./i18n";
 import {
   DEFAULT_PRESENTATION_TEMPLATES,
   type PresentationTemplate,
 } from "./presentation-templates";
 import {
+  AccountRegistrationError,
+  type AccountRegistrationFailure,
   type AccountSessionView,
   type ActivePresentationView,
   type ConsoleDeckUploadClient,
@@ -26,6 +28,8 @@ import {
   type DisplayJoinView,
   type LiveCandidateSnapshotView,
 } from "./session-client";
+
+type SignUpOutcome = "SUCCESS" | AccountRegistrationFailure;
 
 interface AuthState {
   authenticated: boolean;
@@ -39,6 +43,7 @@ interface AuthState {
   setDisplayBindingEpoch: (epoch: string) => void;
   locale: Locale;
   setLocale: (locale: Locale) => void;
+  signUp: (username: string, password: string) => Promise<SignUpOutcome>;
   signIn: (username: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -100,6 +105,19 @@ export function AuthProvider({
       setDisplayBindingEpoch,
       locale,
       setLocale,
+      async signUp(username: string, password: string): Promise<SignUpOutcome> {
+        setPending(true);
+        setError(null);
+        try {
+          await sessionClient.signUp(username, password);
+          setSession(await sessionClient.signIn(username, password));
+          return "SUCCESS";
+        } catch (cause) {
+          return cause instanceof AccountRegistrationError ? cause.reason : "UNKNOWN";
+        } finally {
+          setPending(false);
+        }
+      },
       async signIn(username: string, password: string) {
         setPending(true);
         setError(null);
@@ -236,6 +254,98 @@ function SignInPage() {
         </Button>
         <p className="console-caption" aria-live="polite">
           {error ?? text.signInPrivacy}
+        </p>
+        <p className="console-caption">
+          {text.needAccount} <Link to="/sign-up">{text.signUpLink}</Link>
+        </p>
+      </Panel>
+    </Shell>
+  );
+}
+
+const USERNAME_PATTERN = /^[a-z0-9](?:[a-z0-9._-]{1,30}[a-z0-9])$/;
+const MINIMUM_PASSWORD_LENGTH = 8;
+
+function SignUpPage() {
+  const { locale, pending, signUp } = useAuth();
+  const text = messages(locale);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [failure, setFailure] = useState<AccountRegistrationFailure | null>(null);
+
+  const submit = async () => {
+    const normalizedUsername = username.trim().toLowerCase();
+    if (!USERNAME_PATTERN.test(normalizedUsername)) {
+      setFailure("USERNAME_INVALID");
+      return;
+    }
+    if (password.length < MINIMUM_PASSWORD_LENGTH) {
+      setFailure("PASSWORD_TOO_SHORT");
+      return;
+    }
+    const outcome = await signUp(username, password);
+    setFailure(outcome === "SUCCESS" ? null : outcome);
+  };
+
+  const failureMessage =
+    failure === "USERNAME_TAKEN"
+      ? text.signUpUsernameTaken
+      : failure === "USERNAME_INVALID"
+        ? text.signUpUsernameInvalid
+        : failure === "PASSWORD_TOO_SHORT"
+          ? text.signUpPasswordTooShort
+          : failure === "UNKNOWN"
+            ? text.signUpFailed
+            : text.signUpPrivacy;
+
+  return (
+    <Shell focused header={<ConsoleHeader />} skipLabel={text.skipToContent}>
+      <Panel className="console-sign-in ui-reveal">
+        <h1>{text.signUpTitle}</h1>
+        <p className="console-lead">{text.signUpLead}</p>
+        <label className="console-field">
+          <span>{text.username}</span>
+          <input
+            autoComplete="username"
+            data-sign-up-username
+            value={username}
+            onChange={(event) => {
+              setUsername(event.currentTarget.value);
+              setFailure(null);
+            }}
+          />
+          <span>{text.signUpUsernameRules}</span>
+        </label>
+        <label className="console-field">
+          <span>{text.password}</span>
+          <input
+            autoComplete="new-password"
+            data-sign-up-password
+            type="password"
+            value={password}
+            onChange={(event) => {
+              setPassword(event.currentTarget.value);
+              setFailure(null);
+            }}
+          />
+          <span>{text.signUpPasswordRules}</span>
+        </label>
+        <Button
+          data-sign-up-submit
+          disabled={pending || username.length === 0 || password.length === 0}
+          onClick={() => void submit()}
+        >
+          {pending ? text.signingUp : text.createAccount}
+        </Button>
+        <p
+          className={`console-caption${failure === null ? "" : " console-caption--error"}`}
+          aria-live="polite"
+          data-sign-up-error={failure ?? undefined}
+        >
+          {failureMessage}
+        </p>
+        <p className="console-caption">
+          {text.haveAccount} <Link to="/sign-in">{text.signInLink}</Link>
         </p>
       </Panel>
     </Shell>
@@ -1104,6 +1214,7 @@ export function ConsoleRoutes({
     <Routes>
       <Route element={<PublicOnly />}>
         <Route path="/sign-in" element={<SignInPage />} />
+        <Route path="/sign-up" element={<SignUpPage />} />
       </Route>
       <Route element={<RequireAuth />}>
         <Route element={<PrivateLayout coResident={coResident} />}>

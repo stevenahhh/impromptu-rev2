@@ -28,6 +28,28 @@ export type RecommendationOutcome =
       latencyMs: number;
     }>;
 
+export interface AccountRegistrationView {
+  readonly account: { readonly accountId: string };
+}
+
+export type AccountRegistrationFailure =
+  | "USERNAME_TAKEN"
+  | "USERNAME_INVALID"
+  | "PASSWORD_TOO_SHORT"
+  | "UNKNOWN";
+
+export class AccountRegistrationError extends Error {
+  readonly status: number;
+  readonly reason: AccountRegistrationFailure;
+
+  constructor(reason: AccountRegistrationFailure, status: number) {
+    super("Account registration was rejected.");
+    this.name = "AccountRegistrationError";
+    this.reason = reason;
+    this.status = status;
+  }
+}
+
 export interface AccountSessionView {
   readonly account: { readonly accountId: string; readonly actorId: string };
   readonly expiresAtMs: number;
@@ -78,6 +100,7 @@ export interface PlaybackCommandView {
 }
 
 export interface ConsoleSessionClient {
+  signUp(username: string, password: string): Promise<AccountRegistrationView>;
   signIn(username: string, password: string): Promise<AccountSessionView>;
   readSession(): Promise<AccountSessionView | null>;
   signOut(csrfToken: string): Promise<void>;
@@ -209,6 +232,24 @@ async function responseBody(response: Response): Promise<unknown> {
   } catch {
     return null;
   }
+}
+
+function isAccountRegistrationView(value: unknown): value is AccountRegistrationView {
+  if (typeof value !== "object" || value === null) return false;
+  const account = Reflect.get(value, "account");
+  return (
+    typeof account === "object" &&
+    account !== null &&
+    typeof Reflect.get(account, "accountId") === "string"
+  );
+}
+
+function accountRegistrationFailure(body: unknown, status: number): AccountRegistrationFailure {
+  if (status === 409) return "USERNAME_TAKEN";
+  if (status !== 400 || typeof body !== "object" || body === null) return "UNKNOWN";
+  const reason = Reflect.get(body, "error");
+  if (reason === "USERNAME_INVALID" || reason === "PASSWORD_TOO_SHORT") return reason;
+  return "UNKNOWN";
 }
 
 function isAccountSessionView(value: unknown): value is AccountSessionView {
@@ -381,6 +422,22 @@ export function createConsoleSessionClient(baseUrl = ""): ConsoleDeckUploadClien
     ...(csrfToken === undefined ? {} : { "x-csrf-token": csrfToken }),
   });
   return {
+    async signUp(username, password) {
+      const response = await fetch(`${baseUrl}/v1/accounts`, {
+        method: "POST",
+        credentials: "include",
+        headers: mutationHeaders(),
+        body: JSON.stringify({ username, password }),
+      });
+      const body = await responseBody(response);
+      if (!response.ok || !isAccountRegistrationView(body)) {
+        throw new AccountRegistrationError(
+          accountRegistrationFailure(body, response.status),
+          response.status,
+        );
+      }
+      return body;
+    },
     async signIn(username, password) {
       const response = await fetch(`${baseUrl}/v1/account-sessions`, {
         method: "POST",
