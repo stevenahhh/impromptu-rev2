@@ -83,12 +83,11 @@ function releasePrivateHandler(coordinator: PreparedEvidenceCoordinator) {
   return createPrivateBackendHandler(parsePrivateBackendConfig({ CONSOLE_ORIGIN: consoleOrigin }), {
     coordinator,
     identityVerifier: {
-      async exchangeAuthorizationCode(code) {
-        return code.startsWith("tenant-")
-          ? {
-              accountId: `account_${code.replace("tenant-", "tenant_")}`,
-              actorId: `actor_${code.replace("tenant-", "tenant_")}`,
-            }
+      async verifyCredentials(username, password) {
+        const tenant =
+          username === "tenanta" ? "tenant_a" : username === "tenantb" ? "tenant_b" : null;
+        return password === "tenant-password" && tenant !== null
+          ? { accountId: `account_${tenant}`, actorId: `actor_${tenant}` }
           : null;
       },
     },
@@ -246,19 +245,19 @@ describe("WP10 release security gate", () => {
   test("denies cross-tenant private reads", async () => {
     const coordinator = new PreparedEvidenceCoordinator(new PreparedEvidenceProjectionGateway());
     const handler = releasePrivateHandler(coordinator);
-    const signIn = async (tenant: string) => {
+    const signIn = async (username: string) => {
       const response = await handler(
         privateRequest("/v1/account-sessions", {
           method: "POST",
-          body: JSON.stringify({ authorizationCode: tenant }),
+          body: JSON.stringify({ username, password: "tenant-password" }),
         }),
       );
       const payload = (await response.json()) as { csrfToken: string };
       const cookie = response.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
       return { cookie, csrf: payload.csrfToken };
     };
-    const tenantA = await signIn("tenant-a");
-    const tenantB = await signIn("tenant-b");
+    const tenantA = await signIn("tenanta");
+    const tenantB = await signIn("tenantb");
     const created = await handler(
       privateRequest("/v1/presentation-sessions", {
         method: "POST",

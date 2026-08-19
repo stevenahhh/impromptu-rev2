@@ -649,8 +649,8 @@ export async function runCustomDeckUploadE2e(): Promise<CustomDeckUploadEvidence
         {
           CONSOLE_ORIGIN: consoleOrigin,
           CONTROLLER_ACCOUNT_ID: "account_custom_deck_e2e",
-          CONTROLLER_ACTOR_ID: "actor_custom_deck_e2e",
-          CONTROLLER_AUTHORIZATION_CODE: "local-controller-code",
+          CONTROLLER_USERNAME: "customdeck",
+          CONTROLLER_PASSWORD: "custom-deck-password",
           PRIVATE_BACKEND_HOST: "127.0.0.1",
           PRIVATE_BACKEND_PORT: String(privatePort),
           PRIVATE_SNAPSHOT_PATH: join(runtimeRoot, "private.json"),

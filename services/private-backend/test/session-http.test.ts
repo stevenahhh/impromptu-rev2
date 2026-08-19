@@ -8,6 +8,10 @@ import { PreparedEvidenceCoordinator } from "../src/prepared-evidence.ts";
 const origin = "https://console.example.test";
 const config = parsePrivateBackendConfig({ CONSOLE_ORIGIN: origin });
 
+function emptyCredential(): string | null {
+  return null;
+}
+
 function request(path: string, init: RequestInit = {}) {
   return new Request(`https://private.example.test${path}`, {
     ...init,
@@ -21,12 +25,15 @@ function request(path: string, init: RequestInit = {}) {
 
 describe("account session HTTP boundary", () => {
   test("exchanges a one-time code server-side into an HttpOnly host cookie", async () => {
-    let receivedCode: string | null = null;
+    let receivedUsername: string | null = emptyCredential();
+    let receivedPassword: string | null = emptyCredential();
     const handler = createPrivateBackendHandler(config, {
       coordinator: new PreparedEvidenceCoordinator(new PreparedEvidenceProjectionGateway()),
       identityVerifier: {
-        async exchangeAuthorizationCode(code) {
-          receivedCode = code;
+        async verifyCredentials(username, password) {
+          receivedUsername = username;
+          receivedPassword = password;
+          if (username !== "alpha@example.test" || password !== "alpha-password") return null;
           return { accountId: "account_alpha", actorId: "actor_alpha" };
         },
       },
@@ -36,13 +43,14 @@ describe("account session HTTP boundary", () => {
     const response = await handler(
       request("/v1/account-sessions", {
         method: "POST",
-        body: JSON.stringify({ authorizationCode: "one-time-code" }),
+        body: JSON.stringify({ username: "alpha@example.test", password: "alpha-password" }),
       }),
     );
     const payload = await response.json();
 
     expect(response.status).toBe(201);
-    expect(String(receivedCode)).toBe("one-time-code");
+    expect(receivedUsername).toBe("alpha@example.test");
+    expect(receivedPassword).toBe("alpha-password");
     expect(response.headers.get("set-cookie")).toContain("__Host-account=account_session_");
     expect(response.headers.get("set-cookie")).toContain("HttpOnly; Secure; SameSite=Strict");
     expect(JSON.stringify(payload)).not.toContain("one-time-code");
@@ -56,7 +64,7 @@ describe("account session HTTP boundary", () => {
       {
         coordinator: new PreparedEvidenceCoordinator(new PreparedEvidenceProjectionGateway()),
         identityVerifier: {
-          async exchangeAuthorizationCode() {
+          async verifyCredentials() {
             return { accountId: "account_local", actorId: "actor_local" };
           },
         },
@@ -71,7 +79,7 @@ describe("account session HTTP boundary", () => {
           Origin: developmentOrigin,
           Referer: `${developmentOrigin}/sign-in`,
         },
-        body: JSON.stringify({ authorizationCode: "local-code" }),
+        body: JSON.stringify({ username: "local@example.test", password: "local-password" }),
       }),
     );
     const cookie = response.headers.get("set-cookie");
@@ -88,7 +96,7 @@ describe("account session HTTP boundary", () => {
     const handler = createPrivateBackendHandler(config, {
       coordinator: new PreparedEvidenceCoordinator(new PreparedEvidenceProjectionGateway()),
       identityVerifier: {
-        async exchangeAuthorizationCode() {
+        async verifyCredentials() {
           return { accountId: "account_alpha", actorId: "actor_alpha" };
         },
       },
@@ -99,7 +107,7 @@ describe("account session HTTP boundary", () => {
       new Request("https://private.example.test/v1/account-sessions", {
         method: "POST",
         headers: { Origin: origin },
-        body: JSON.stringify({ authorizationCode: "code" }),
+        body: JSON.stringify({ username: "alpha@example.test", password: "alpha-password" }),
       }),
     );
     expect(missingReferer.status).toBe(403);
@@ -107,7 +115,7 @@ describe("account session HTTP boundary", () => {
     const signedIn = await handler(
       request("/v1/account-sessions", {
         method: "POST",
-        body: JSON.stringify({ authorizationCode: "code" }),
+        body: JSON.stringify({ username: "alpha@example.test", password: "alpha-password" }),
       }),
     );
     const cookie = signedIn.headers.get("set-cookie")?.split(";", 1)[0];
@@ -124,7 +132,7 @@ describe("account session HTTP boundary", () => {
     const handler = createPrivateBackendHandler(config, {
       coordinator: new PreparedEvidenceCoordinator(new PreparedEvidenceProjectionGateway()),
       identityVerifier: {
-        async exchangeAuthorizationCode() {
+        async verifyCredentials() {
           return { accountId: "account_render", actorId: "actor_render" };
         },
       },
@@ -134,7 +142,7 @@ describe("account session HTTP boundary", () => {
     const signedIn = await handler(
       request("/v1/account-sessions", {
         method: "POST",
-        body: JSON.stringify({ authorizationCode: "render-code" }),
+        body: JSON.stringify({ username: "render@example.test", password: "render-password" }),
       }),
     );
     const cookie = signedIn.headers.get("set-cookie")?.split(";", 1)[0] ?? "";

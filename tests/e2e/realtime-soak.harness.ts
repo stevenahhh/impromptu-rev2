@@ -226,10 +226,8 @@ async function runRealtimeSoakWithWorkspace({
   const privateEnvironment = {
     CONSOLE_ORIGIN: consoleOrigin,
     CONTROLLER_ACCOUNT_ID: "account_wp5",
-    CONTROLLER_ACTOR_ID: "actor_wp5",
-    CONTROLLER_AUTHORIZATION_CODE: "wp5-code",
-    TAKEOVER_ACTOR_ID: "actor_wp5_takeover",
-    TAKEOVER_AUTHORIZATION_CODE: "wp5-takeover-code",
+    CONTROLLER_USERNAME: "wp5controller",
+    CONTROLLER_PASSWORD: "wp5-controller-password",
     PRIVATE_BACKEND_HOST: "127.0.0.1",
     PRIVATE_BACKEND_PORT: "44301",
     PRIVATE_SNAPSHOT_PATH: privateSnapshotPath,
@@ -258,7 +256,7 @@ async function runRealtimeSoakWithWorkspace({
     const signIn = await fetch(`${privateOrigin}/v1/account-sessions`, {
       method: "POST",
       headers: privateHeaders(),
-      body: JSON.stringify({ authorizationCode: "wp5-code" }),
+      body: JSON.stringify({ username: "wp5controller", password: "wp5-controller-password" }),
     });
     const signInBody = await jsonRecord(signIn);
     const accountCookie = signIn.headers.get("set-cookie")?.split(";", 1)[0];

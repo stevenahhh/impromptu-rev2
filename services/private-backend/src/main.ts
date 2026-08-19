@@ -8,6 +8,7 @@ import {
   StaticPolicyVersionAuthority,
 } from "@impromptu/model-router";
 import { z } from "zod";
+import { createAccountDirectory } from "./account-directory.ts";
 import { parsePrivateBackendConfig } from "./config.ts";
 import { createDeckRenderSubprocess } from "./deck-render-subprocess.ts";
 import { createDeckUploadService } from "./deck-upload-service.ts";
@@ -65,13 +66,17 @@ const DEFAULT_INGESTION_PROJECT = fileURLToPath(
 
 const config = parsePrivateBackendConfig(Bun.env);
 const internalAuthToken = required("SERVICE_AUTH_TOKEN");
-const expectedAuthorizationCode = required("CONTROLLER_AUTHORIZATION_CODE");
+const bootstrapUsername = required("CONTROLLER_USERNAME");
+const bootstrapPassword = required("CONTROLLER_PASSWORD");
 const accountId = required("CONTROLLER_ACCOUNT_ID");
-const actorId = required("CONTROLLER_ACTOR_ID");
-const takeoverAuthorizationCode = Bun.env.TAKEOVER_AUTHORIZATION_CODE;
-const takeoverActorId = Bun.env.TAKEOVER_ACTOR_ID;
-if ((takeoverAuthorizationCode === undefined) !== (takeoverActorId === undefined)) {
-  throw new Error("TAKEOVER_AUTHORIZATION_CODE and TAKEOVER_ACTOR_ID must be configured together");
+const accountDirectory = createAccountDirectory();
+const bootstrapAccount = await accountDirectory.register(
+  { username: bootstrapUsername, password: bootstrapPassword },
+  Date.now(),
+  { accountId },
+);
+if (bootstrapAccount.outcome !== "APPLIED") {
+  throw new Error(`bootstrap account rejected: ${bootstrapAccount.reason}`);
 }
 const projectionGatewayOrigin = required("PROJECTION_GATEWAY_ORIGIN");
 const projection = new ProjectionHttpPort(projectionGatewayOrigin, internalAuthToken);
@@ -273,14 +278,7 @@ const server = Bun.serve({
   fetch: createPrivateBackendHandler(config, {
     coordinator,
     internalAuthToken,
-    identityVerifier: {
-      async exchangeAuthorizationCode(code) {
-        if (code === expectedAuthorizationCode) return { accountId, actorId };
-        return code === takeoverAuthorizationCode && takeoverActorId !== undefined
-          ? { accountId, actorId: takeoverActorId }
-          : null;
-      },
-    },
+    identityVerifier: accountDirectory,
     now: Date.now,
     recommendations,
     persist,

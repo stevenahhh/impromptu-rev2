@@ -126,8 +126,8 @@ const projectionEnvironment = {
 const privateEnvironment = {
   CONSOLE_ORIGIN: consoleOrigin,
   CONTROLLER_ACCOUNT_ID: "account_restart",
-  CONTROLLER_ACTOR_ID: "actor_restart",
-  CONTROLLER_AUTHORIZATION_CODE: "restart-code",
+  CONTROLLER_USERNAME: "restart",
+  CONTROLLER_PASSWORD: "restart-password",
   PRIVATE_BACKEND_HOST: "127.0.0.1",
   PRIVATE_BACKEND_PORT: String(privatePort),
   PRIVATE_SNAPSHOT_PATH: privateSnapshotPath,
@@ -165,7 +165,7 @@ describe("durable service-main restore boundary", () => {
     const signIn = await fetch(`${privateOrigin}/v1/account-sessions`, {
       method: "POST",
       headers: headers(consoleOrigin),
-      body: JSON.stringify({ authorizationCode: "restart-code" }),
+      body: JSON.stringify({ username: "restart", password: "restart-password" }),
     });
     const signInBody = await signIn.json();
     const cookie = signIn.headers.get("set-cookie")?.split(";", 1)[0];

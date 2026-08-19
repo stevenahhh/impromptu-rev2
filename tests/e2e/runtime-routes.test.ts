@@ -129,8 +129,8 @@ describe("runnable WP3 service composition", () => {
       {
         CONSOLE_ORIGIN: consoleOrigin,
         CONTROLLER_ACCOUNT_ID: "account_runtime",
-        CONTROLLER_ACTOR_ID: "actor_runtime",
-        CONTROLLER_AUTHORIZATION_CODE: "runtime-code",
+        CONTROLLER_USERNAME: "runtime",
+        CONTROLLER_PASSWORD: "runtime-password",
         PRIVATE_BACKEND_HOST: "127.0.0.1",
         PRIVATE_BACKEND_PORT: "44101",
         PRIVATE_SNAPSHOT_PATH: privateSnapshotPath,
@@ -201,7 +201,7 @@ describe("runnable WP3 service composition", () => {
     const signIn = await fetch("http://127.0.0.1:44101/v1/account-sessions", {
       method: "POST",
       headers: browserHeaders(consoleOrigin),
-      body: JSON.stringify({ authorizationCode: "runtime-code" }),
+      body: JSON.stringify({ username: "runtime", password: "runtime-password" }),
     });
     expect(signIn.status).toBe(201);
     const accountCookie = signIn.headers.get("set-cookie")?.split(";", 1)[0];

@@ -176,7 +176,7 @@ async function httpHarness() {
     {
       coordinator,
       identityVerifier: {
-        async exchangeAuthorizationCode() {
+        async verifyCredentials() {
           return { accountId: "account_http", actorId: "actor_http" };
         },
       },
@@ -190,7 +190,7 @@ async function httpHarness() {
   const signIn = await fetch(`${serviceOrigin}/v1/account-sessions`, {
     method: "POST",
     headers: { origin, referer: `${origin}/`, "content-type": "application/json" },
-    body: JSON.stringify({ authorizationCode: "code" }),
+    body: JSON.stringify({ username: "alpha@example.test", password: "alpha-password" }),
   });
   const cookie = signIn.headers.get("set-cookie")?.split(";", 1)[0];
   const session = await signIn.json();

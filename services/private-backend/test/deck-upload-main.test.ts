@@ -175,8 +175,8 @@ function baseEnvironment(fixtureInput: MainFixture): Record<string, string> {
   return {
     CONSOLE_ORIGIN: fixtureInput.consoleOrigin,
     CONTROLLER_ACCOUNT_ID: "account_deck_main",
-    CONTROLLER_ACTOR_ID: "actor_deck_main",
-    CONTROLLER_AUTHORIZATION_CODE: "deck-main-code",
+    CONTROLLER_USERNAME: "deckmain",
+    CONTROLLER_PASSWORD: "deck-main-password",
     PRIVATE_BACKEND_HOST: "127.0.0.1",
     PRIVATE_BACKEND_PORT: new URL(fixtureInput.privateOrigin).port,
     PRIVATE_SNAPSHOT_PATH: fixtureInput.snapshotPath,
@@ -238,7 +238,7 @@ async function signIn(origin: string, fixtureInput: MainFixture) {
   const response = await fetch(`${origin}/v1/account-sessions`, {
     method: "POST",
     headers: browserHeaders(fixtureInput.consoleOrigin),
-    body: JSON.stringify({ authorizationCode: "deck-main-code" }),
+    body: JSON.stringify({ username: "deckmain", password: "deck-main-password" }),
   });
   expect(response.status).toBe(201);
   const session = await response.json();

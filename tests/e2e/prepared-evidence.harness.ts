@@ -404,10 +404,8 @@ async function runPreparedEvidenceE2EWithWorkspace({
   const privateEnvironment = {
     CONSOLE_ORIGIN: consoleOrigin,
     CONTROLLER_ACCOUNT_ID: "account_e2e",
-    CONTROLLER_ACTOR_ID: "actor_e2e",
-    CONTROLLER_AUTHORIZATION_CODE: "e2e-code",
-    TAKEOVER_ACTOR_ID: "actor_e2e_takeover",
-    TAKEOVER_AUTHORIZATION_CODE: "e2e-takeover-code",
+    CONTROLLER_USERNAME: "e2econtroller",
+    CONTROLLER_PASSWORD: "e2e-controller-password",
     PRIVATE_BACKEND_HOST: "127.0.0.1",
     PRIVATE_BACKEND_PORT: String(privatePort),
     PRIVATE_SNAPSHOT_PATH: privateSnapshotPath,
@@ -445,11 +443,13 @@ async function runPreparedEvidenceE2EWithWorkspace({
     const signIn = await fetch(`${privateOrigin}/v1/account-sessions`, {
       method: "POST",
       headers: browserHeaders(),
-      body: JSON.stringify({ authorizationCode: "e2e-code" }),
+      body: JSON.stringify({ username: "e2econtroller", password: "e2e-controller-password" }),
     });
     const signInBody = await jsonRecord(signIn);
     const cookie = signIn.headers.get("set-cookie")?.split(";", 1)[0];
     const csrfToken = requireString(signInBody, "csrfToken");
+    if (!isRecord(signInBody.account)) throw new Error("controller account missing");
+    const controllerActorId = requireString(signInBody.account, "actorId");
     if (!signIn.ok || cookie === undefined) throw new Error("real controller sign-in failed");
 
     const upload = await privateMutation(
@@ -838,11 +838,16 @@ async function runPreparedEvidenceE2EWithWorkspace({
     const takeoverSignIn = await fetch(`${privateOrigin}/v1/account-sessions`, {
       method: "POST",
       headers: browserHeaders(),
-      body: JSON.stringify({ authorizationCode: "e2e-takeover-code" }),
+      body: JSON.stringify({ username: "e2econtroller", password: "e2e-controller-password" }),
     });
     const takeoverSignInBody = await jsonRecord(takeoverSignIn);
     const takeoverCookie = takeoverSignIn.headers.get("set-cookie")?.split(";", 1)[0];
     const takeoverCsrf = requireString(takeoverSignInBody, "csrfToken");
+    if (!isRecord(takeoverSignInBody.account)) throw new Error("takeover account missing");
+    const takeoverActorId = requireString(takeoverSignInBody.account, "actorId");
+    if (takeoverActorId === controllerActorId) {
+      throw new Error("takeover sign-in reused the controller actor");
+    }
     if (!takeoverSignIn.ok || takeoverCookie === undefined) {
       throw new Error("takeover controller sign-in failed");
     }

@@ -17,8 +17,8 @@ export const developmentServices = [
     env: {
       CONSOLE_ORIGIN: "http://localhost:4173",
       CONTROLLER_ACCOUNT_ID: "account_local_demo",
-      CONTROLLER_ACTOR_ID: "actor_presenter",
-      CONTROLLER_AUTHORIZATION_CODE: "demo-2026",
+      CONTROLLER_USERNAME: "localdemo",
+      CONTROLLER_PASSWORD: "demo-2026-password",
       DECK_ARTIFACT_ROOT: "/tmp",
       DECK_STAGING_ROOT: "/tmp",
       PRIVATE_SNAPSHOT_PATH: `/tmp/impromptu-private-dev-${runId}.json`,

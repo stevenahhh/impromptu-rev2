@@ -12,7 +12,10 @@ import { renderedDeckArtifacts } from "./rendered-deck-artifacts.ts";
 export type PrivateBackendHandler = (request: Request) => Response | Promise<Response>;
 
 export interface AccountIdentityVerifier {
-  exchangeAuthorizationCode(code: string): Promise<{
+  verifyCredentials(
+    username: string,
+    password: string,
+  ): Promise<{
     readonly accountId: string;
     readonly actorId: string;
   } | null>;
@@ -244,13 +247,15 @@ export function createPrivateBackendHandler(
       const body = await requestBody(request);
       if (
         !isRecord(body) ||
-        Object.keys(body).length !== 1 ||
-        typeof body.authorizationCode !== "string"
+        Object.keys(body).length !== 2 ||
+        typeof body.username !== "string" ||
+        typeof body.password !== "string"
       ) {
         return json({ error: "invalid_request" }, 400, origin);
       }
-      const identity = await dependencies.identityVerifier.exchangeAuthorizationCode(
-        body.authorizationCode,
+      const identity = await dependencies.identityVerifier.verifyCredentials(
+        body.username,
+        body.password,
       );
       if (identity === null) return json({ error: "authentication_failed" }, 401, origin);
       const session = dependencies.coordinator.createAccountSession(identity, dependencies.now());

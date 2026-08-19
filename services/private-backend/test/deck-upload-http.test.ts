@@ -150,7 +150,7 @@ function uploadHarness(onFileChunk?: () => void) {
   const dependencies = {
     coordinator: new PreparedEvidenceCoordinator(new PreparedEvidenceProjectionGateway()),
     identityVerifier: {
-      async exchangeAuthorizationCode() {
+      async verifyCredentials() {
         return { accountId: "account_alpha", actorId: "actor_alpha" };
       },
     },
@@ -170,7 +170,7 @@ async function signIn(handler: PrivateBackendHandler) {
   const response = await handler(
     request("/v1/account-sessions", {
       method: "POST",
-      body: JSON.stringify({ authorizationCode: "upload-code" }),
+      body: JSON.stringify({ username: "upload@example.test", password: "upload-password" }),
     }),
   );
   expect(response.status).toBe(201);

@@ -70,7 +70,7 @@ function fixture(): Fixture {
     handler: createPrivateBackendHandler(parsePrivateBackendConfig({ CONSOLE_ORIGIN }), {
       coordinator,
       identityVerifier: {
-        async exchangeAuthorizationCode() {
+        async verifyCredentials() {
           return { accountId: "account_upload_boundary", actorId: "actor_upload_boundary" };
         },
       },
@@ -100,7 +100,10 @@ async function signIn(handler: PrivateBackendHandler) {
     new Request(`${PRIVATE_ORIGIN}/v1/account-sessions`, {
       method: "POST",
       headers: browserHeaders(),
-      body: JSON.stringify({ authorizationCode: "upload-boundary-code" }),
+      body: JSON.stringify({
+        username: "upload-boundary@example.test",
+        password: "upload-boundary-password",
+      }),
     }),
   );
   expect(response.status).toBe(201);
