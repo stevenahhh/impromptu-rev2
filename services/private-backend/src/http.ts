@@ -1,12 +1,13 @@
 import type { PrivateDeckContext } from "@impromptu/contracts/private";
 import type { PublishedDeckArtifact } from "@impromptu/contracts/public";
 import type { RecommendationOutcome } from "@impromptu/contracts/retrieval";
+import type { AccountDirectory } from "./account-directory.ts";
 import type { ExactOrigin, PrivateBackendConfig } from "./config.ts";
 import { type ParsedDeckMultipart, parseDeckUploadMultipart } from "./deck-upload-multipart.ts";
 import { DeckUploadRejectedError } from "./deck-upload-service.ts";
 import type { DeckUploadRejectionCode } from "./deck-upload-worker.ts";
 import { createPreparedDeckArtifacts } from "./prepared-deck-upload.ts";
-import type { ControllerSocket, PreparedEvidenceCoordinator } from "./prepared-evidence.ts";
+import type { PreparedEvidenceCoordinator } from "./prepared-evidence.ts";
 import { renderedDeckArtifacts } from "./rendered-deck-artifacts.ts";
 
 export type PrivateBackendHandler = (request: Request) => Response | Promise<Response>;
@@ -68,6 +69,8 @@ export interface DeckUploadService {
 export interface PrivateBackendHttpDependencies {
   readonly coordinator: PreparedEvidenceCoordinator;
   readonly identityVerifier: AccountIdentityVerifier;
+  /** Optional so deployments can explicitly leave public account creation disabled. */
+  readonly accountRegistrar?: Pick<AccountDirectory, "register">;
   readonly internalAuthToken: string;
   readonly now: () => number;
   readonly recommendations?: {
@@ -153,51 +156,65 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function accountCredentials(
+  value: unknown,
+): { readonly username: string; readonly password: string } | null {
+  if (
+    !isRecord(value) ||
+    Object.keys(value).length !== 2 ||
+    typeof value.username !== "string" ||
+    typeof value.password !== "string"
+  ) {
+    return null;
+  }
+  return { username: value.username, password: value.password };
+}
+
 function isMultipartFormData(value: string | null): boolean {
   return value?.split(";", 1)[0]?.trim().toLowerCase() === "multipart/form-data";
 }
 
-function controllerEventStream(
+async function controllerEventStream(
   coordinator: PreparedEvidenceCoordinator,
   accountSessionId: string,
   presentationSessionId: string,
   nowMs: number,
   headers: Headers,
-): Response {
-  let socket: ControllerSocket | null = null;
+): Promise<Response> {
   let cancelled = false;
+  let streamController: ReadableStreamDefaultController<Uint8Array> | null = null;
+  const connected = await coordinator.connectPlaybackController(
+    accountSessionId,
+    presentationSessionId,
+    nowMs,
+    (reason) => {
+      if (!cancelled && streamController !== null) {
+        streamController.enqueue(
+          new TextEncoder().encode(
+            `data: ${JSON.stringify({ kind: "CLOSE", payload: { reason } })}\n\n`,
+          ),
+        );
+        streamController.close();
+      }
+    },
+  );
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
-      const connected = coordinator.connectPlaybackController(
-        accountSessionId,
-        presentationSessionId,
-        nowMs,
-        (reason) => {
-          if (!cancelled) {
-            controller.enqueue(
-              new TextEncoder().encode(
-                `data: ${JSON.stringify({ kind: "CLOSE", payload: { reason } })}\n\n`,
-              ),
-            );
-            controller.close();
-          }
-        },
-      );
+      streamController = controller;
       if (connected.outcome === "REJECTED") {
         controller.error(new Error(connected.reason));
         return;
       }
-      socket = connected.value;
       controller.enqueue(new TextEncoder().encode(": ready\n\n"));
     },
     cancel() {
       cancelled = true;
-      socket?.close();
+      if (connected.outcome === "APPLIED") connected.value.close();
     },
   });
   headers.set("content-type", "text/event-stream; charset=utf-8");
   headers.set("cache-control", "no-store");
-  return new Response(body, { status: socket === null ? 409 : 200, headers });
+  return new Response(body, { status: connected.outcome === "REJECTED" ? 409 : 200, headers });
 }
 
 function csrfToken(internalAuthToken: string, accountSessionId: string): string {
@@ -243,22 +260,38 @@ export function createPrivateBackendHandler(
       return json({ error: "mutation_origin_forbidden" }, 403, origin);
     }
 
-    if (request.method === "POST" && url.pathname === "/v1/account-sessions") {
-      const body = await requestBody(request);
-      if (
-        !isRecord(body) ||
-        Object.keys(body).length !== 2 ||
-        typeof body.username !== "string" ||
-        typeof body.password !== "string"
-      ) {
-        return json({ error: "invalid_request" }, 400, origin);
+    if (request.method === "POST" && url.pathname === "/v1/accounts") {
+      if (dependencies.accountRegistrar === undefined) {
+        return json({ error: "account_registration_unavailable" }, 501, origin);
       }
+      const credentials = accountCredentials(await requestBody(request));
+      if (credentials === null) return json({ error: "invalid_request" }, 400, origin);
+      const registration = await dependencies.accountRegistrar.register(
+        credentials,
+        dependencies.now(),
+      );
+      if (registration.outcome === "APPLIED") {
+        return json({ account: { accountId: registration.value.accountId } }, 201, origin);
+      }
+      return json(
+        { error: registration.reason },
+        registration.reason === "USERNAME_TAKEN" ? 409 : 400,
+        origin,
+      );
+    }
+
+    if (request.method === "POST" && url.pathname === "/v1/account-sessions") {
+      const credentials = accountCredentials(await requestBody(request));
+      if (credentials === null) return json({ error: "invalid_request" }, 400, origin);
       const identity = await dependencies.identityVerifier.verifyCredentials(
-        body.username,
-        body.password,
+        credentials.username,
+        credentials.password,
       );
       if (identity === null) return json({ error: "authentication_failed" }, 401, origin);
-      const session = dependencies.coordinator.createAccountSession(identity, dependencies.now());
+      const session = await dependencies.coordinator.createAccountSession(
+        identity,
+        dependencies.now(),
+      );
       const sessionCsrfToken = csrfToken(dependencies.internalAuthToken, session.accountSessionId);
       await dependencies.persist?.();
       const cookieName = accountCookieName(config.allowedOrigin);
@@ -280,7 +313,7 @@ export function createPrivateBackendHandler(
 
     const accountSessionId = accountCookie(request, config.allowedOrigin);
     if (accountSessionId === null) return json({ error: "account_session_required" }, 401, origin);
-    const account = dependencies.coordinator.readAccountSession(
+    const account = await dependencies.coordinator.readAccountSession(
       accountSessionId,
       dependencies.now(),
     );
@@ -309,7 +342,7 @@ export function createPrivateBackendHandler(
       const presentationSessionId = url.searchParams.get("presentationSessionId");
       return presentationSessionId === null
         ? json({ error: "presentation_session_required" }, 400, origin)
-        : controllerEventStream(
+        : await controllerEventStream(
             dependencies.coordinator,
             accountSessionId,
             presentationSessionId,
@@ -322,7 +355,7 @@ export function createPrivateBackendHandler(
       if (presentationSessionId === null) {
         return json({ error: "presentation_session_required" }, 400, origin);
       }
-      const result = dependencies.coordinator.readLiveCandidateSnapshot(
+      const result = await dependencies.coordinator.readLiveCandidateSnapshot(
         accountSessionId,
         presentationSessionId,
         dependencies.now(),
@@ -334,7 +367,7 @@ export function createPrivateBackendHandler(
       );
     }
     if (request.method === "DELETE" && url.pathname === "/v1/account-session") {
-      const result = dependencies.coordinator.revokeAccountSession(
+      const result = await dependencies.coordinator.revokeAccountSession(
         accountSessionId,
         dependencies.now(),
       );
@@ -387,7 +420,7 @@ export function createPrivateBackendHandler(
         }
         return json({ error: "deck_upload_rejected" }, 400, origin);
       }
-      const presentation = dependencies.coordinator.createPresentation(
+      const presentation = await dependencies.coordinator.createPresentation(
         accountSessionId,
         { privateDeck: receipt.privateDeck, publicDeck: receipt.publicDeck },
         dependencies.now(),
@@ -464,7 +497,7 @@ export function createPrivateBackendHandler(
       }
     }
     if (request.method === "POST" && url.pathname === "/v1/presentation-sessions") {
-      const result = dependencies.coordinator.createPresentation(
+      const result = await dependencies.coordinator.createPresentation(
         accountSessionId,
         { privateDeck: body.privateDeck, publicDeck: body.publicDeck },
         dependencies.now(),
@@ -490,7 +523,7 @@ export function createPrivateBackendHandler(
       );
     }
     if (request.method === "POST" && url.pathname === "/v1/playback/lease-takeover") {
-      const result = dependencies.coordinator.takeoverPlaybackLease(
+      const result = await dependencies.coordinator.takeoverPlaybackLease(
         accountSessionId,
         body,
         dependencies.now(),
@@ -522,7 +555,7 @@ export function createPrivateBackendHandler(
       );
     }
     if (request.method === "POST" && url.pathname === "/v1/candidates/curated") {
-      const result = dependencies.coordinator.addCuratedCandidate(
+      const result = await dependencies.coordinator.addCuratedCandidate(
         accountSessionId,
         body,
         dependencies.now(),
@@ -535,7 +568,7 @@ export function createPrivateBackendHandler(
       );
     }
     if (request.method === "POST" && url.pathname === "/v1/publications/teammates") {
-      const result = dependencies.coordinator.approvePublicationTeammate(
+      const result = await dependencies.coordinator.approvePublicationTeammate(
         accountSessionId,
         String(body.presentationSessionId ?? ""),
         String(body.actorId ?? ""),

@@ -18,7 +18,9 @@ recommendations, publication, and projection dispatch.
 
 ## CONVENTIONS
 
-- Authenticate first; mutations also require exact Origin, Referer, and CSRF.
+- Authenticate first with username/password account sessions; mutations also require exact Origin, Referer, and CSRF.
+- `CONTROLLER_USERNAME`, `CONTROLLER_PASSWORD`, and `CONTROLLER_ACCOUNT_ID` bootstrap the operator account. `PRIVATE_DATABASE_URL` optionally persists accounts in PostgreSQL; without it, accounts are in-memory.
+- `POST /v1/accounts` registers an account without authentication, subject to the exact Origin and Referer checks. `POST /v1/account-sessions` accepts `{ username, password }`; each sign-in mints a fresh `actorId`, so sessions on multiple devices do not take each other's playback leases.
 - Internal Stage receipts use their dedicated bearer-authenticated route.
 - Serialize publication per presentation and preserve CAS, staleness, and idempotency checks.
 - Reauthorize live evidence immediately adjacent to the projection side effect.

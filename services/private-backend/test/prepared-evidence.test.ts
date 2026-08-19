@@ -101,11 +101,11 @@ async function createBoundFlow(
     ...(liveEvidenceAuthorizer === undefined ? {} : { liveEvidenceAuthorizer }),
     livePublicEnabled,
   });
-  const account = coordinator.createAccountSession(
+  const account = await coordinator.createAccountSession(
     { accountId: "account_alpha", actorId: "actor_alpha" },
     nowMs,
   );
-  const created = coordinator.createPresentation(
+  const created = await coordinator.createPresentation(
     account.accountSessionId,
     { privateDeck, publicDeck },
     nowMs,
@@ -136,27 +136,27 @@ async function createBoundFlow(
 }
 
 describe("prepared evidence private coordinator", () => {
-  test("rejects expired and revoked account sessions", () => {
+  test("rejects expired and revoked account sessions", async () => {
     const gateway = new PreparedEvidenceProjectionGateway();
     const coordinator = new PreparedEvidenceCoordinator(gateway, undefined, {
       accountSessionTtlMs: 100,
     });
-    const expired = coordinator.createAccountSession(
+    const expired = await coordinator.createAccountSession(
       { accountId: "account_alpha", actorId: "actor_alpha" },
       1_000,
     );
-    expect(coordinator.readAccountSession(expired.accountSessionId, 1_100)).toEqual({
+    expect(await coordinator.readAccountSession(expired.accountSessionId, 1_100)).toEqual({
       outcome: "REJECTED",
       reason: "ACCOUNT_SESSION_EXPIRED",
     });
-    const revoked = coordinator.createAccountSession(
+    const revoked = await coordinator.createAccountSession(
       { accountId: "account_alpha", actorId: "actor_alpha" },
       2_000,
     );
-    expect(coordinator.revokeAccountSession(revoked.accountSessionId, 2_001).outcome).toBe(
+    expect((await coordinator.revokeAccountSession(revoked.accountSessionId, 2_001)).outcome).toBe(
       "APPLIED",
     );
-    expect(coordinator.readAccountSession(revoked.accountSessionId, 2_002)).toEqual({
+    expect(await coordinator.readAccountSession(revoked.accountSessionId, 2_002)).toEqual({
       outcome: "REJECTED",
       reason: "ACCOUNT_SESSION_REVOKED",
     });
@@ -165,7 +165,7 @@ describe("prepared evidence private coordinator", () => {
   test("takes over an authenticated lease, supersedes pending work, and closes the old socket", async () => {
     const flow = await createBoundFlow();
     const closeReasons: string[] = [];
-    const socket = flow.coordinator.connectPlaybackController(
+    const socket = await flow.coordinator.connectPlaybackController(
       flow.account.accountSessionId,
       flow.created.lifecycle.presentationSessionId,
       1_002,
@@ -187,12 +187,12 @@ describe("prepared evidence private coordinator", () => {
         )
       ).outcome,
     ).toBe("APPLIED");
-    const replacementAccount = flow.coordinator.createAccountSession(
+    const replacementAccount = await flow.coordinator.createAccountSession(
       { accountId: "account_alpha", actorId: "actor_beta" },
       1_004,
     );
     expect(
-      flow.coordinator.takeoverPlaybackLease(
+      await flow.coordinator.takeoverPlaybackLease(
         replacementAccount.accountSessionId,
         {
           presentationSessionId: flow.created.lifecycle.presentationSessionId,
@@ -201,7 +201,7 @@ describe("prepared evidence private coordinator", () => {
         1_005,
       ),
     ).toEqual({ outcome: "REJECTED", reason: "STALE_DISPLAY_BINDING" });
-    const takeover = flow.coordinator.takeoverPlaybackLease(
+    const takeover = await flow.coordinator.takeoverPlaybackLease(
       replacementAccount.accountSessionId,
       {
         presentationSessionId: flow.created.lifecycle.presentationSessionId,
@@ -233,38 +233,40 @@ describe("prepared evidence private coordinator", () => {
   test("restores durable sessions and rejects forged candidate lifecycle identity", async () => {
     const flow = await createBoundFlow();
     expect(
-      flow.coordinator.addCuratedCandidate(
-        flow.account.accountSessionId,
-        {
-          candidateId: "candidate_durable_identity",
-          candidateVersion: "candidate-version-durable",
-          provenance: "CURATED_PREAPPROVED",
-          verdict: "SUPPORTED",
-          claimText: "Durable candidate",
-          evidenceExcerpt: "Durable support",
-          privateSourceUri: "private://source/durable",
-          causal: {
-            presentationSessionId: flow.created.lifecycle.presentationSessionId,
-            presentationSessionEpoch: "pse_1",
-            displayBindingEpoch: "dbe_1",
-            deckVersion: publicDeck.deckVersion,
-            manifestHash,
-            occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
-            transcriptFinalId: null,
-            source: {
-              sourceId: "source_durable",
-              revision: "source-revision-1",
-              contentHash: sourceHash,
-            },
-            decisions: {
-              acl: "acl-1",
-              publicationPolicy: "publication-policy-1",
-              rights: "rights-1",
-              dlp: "dlp-1",
+      (
+        await flow.coordinator.addCuratedCandidate(
+          flow.account.accountSessionId,
+          {
+            candidateId: "candidate_durable_identity",
+            candidateVersion: "candidate-version-durable",
+            provenance: "CURATED_PREAPPROVED",
+            verdict: "SUPPORTED",
+            claimText: "Durable candidate",
+            evidenceExcerpt: "Durable support",
+            privateSourceUri: "private://source/durable",
+            causal: {
+              presentationSessionId: flow.created.lifecycle.presentationSessionId,
+              presentationSessionEpoch: "pse_1",
+              displayBindingEpoch: "dbe_1",
+              deckVersion: publicDeck.deckVersion,
+              manifestHash,
+              occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+              transcriptFinalId: null,
+              source: {
+                sourceId: "source_durable",
+                revision: "source-revision-1",
+                contentHash: sourceHash,
+              },
+              decisions: {
+                acl: "acl-1",
+                publicationPolicy: "publication-policy-1",
+                rights: "rights-1",
+                dlp: "dlp-1",
+              },
             },
           },
-        },
-        1_002,
+          1_002,
+        )
       ).outcome,
     ).toBe("APPLIED");
     const snapshot = snapshotPreparedEvidenceStore(flow.store);
@@ -272,7 +274,7 @@ describe("prepared evidence private coordinator", () => {
     expect(restored.outcome).toBe("RESTORED");
     if (restored.outcome !== "RESTORED") throw new Error("snapshot restore failed");
     const restarted = new PreparedEvidenceCoordinator(flow.gateway, restored.store);
-    expect(restarted.readAccountSession(flow.account.accountSessionId, 1_002).outcome).toBe(
+    expect((await restarted.readAccountSession(flow.account.accountSessionId, 1_002)).outcome).toBe(
       "APPLIED",
     );
 
@@ -415,7 +417,7 @@ describe("prepared evidence private coordinator", () => {
         },
       },
     };
-    const added = flow.coordinator.addCuratedCandidate(
+    const added = await flow.coordinator.addCuratedCandidate(
       flow.account.accountSessionId,
       candidate,
       1_002,
@@ -569,7 +571,7 @@ describe("prepared evidence private coordinator", () => {
       (await flow.coordinator.addLiveCandidate(flow.account.accountSessionId, candidate, 1_002))
         .outcome,
     ).toBe("APPLIED");
-    const snapshot = flow.coordinator.readLiveCandidateSnapshot(
+    const snapshot = await flow.coordinator.readLiveCandidateSnapshot(
       flow.account.accountSessionId,
       flow.created.lifecycle.presentationSessionId,
       1_003,
@@ -660,7 +662,8 @@ describe("prepared evidence private coordinator", () => {
       },
     } as const;
     expect(
-      flow.coordinator.addCuratedCandidate(flow.account.accountSessionId, candidate, 1_002).outcome,
+      (await flow.coordinator.addCuratedCandidate(flow.account.accountSessionId, candidate, 1_002))
+        .outcome,
     ).toBe("APPLIED");
     const publication = await flow.coordinator.approveCandidate(
       flow.account.accountSessionId,
@@ -690,16 +693,18 @@ describe("prepared evidence private coordinator", () => {
       },
       true,
     );
-    const teammate = flow.coordinator.createAccountSession(
+    const teammate = await flow.coordinator.createAccountSession(
       { accountId: "account_alpha", actorId: "actor_teammate" },
       1_001,
     );
     expect(
-      flow.coordinator.approvePublicationTeammate(
-        flow.account.accountSessionId,
-        flow.created.lifecycle.presentationSessionId,
-        teammate.actorId,
-        1_001,
+      (
+        await flow.coordinator.approvePublicationTeammate(
+          flow.account.accountSessionId,
+          flow.created.lifecycle.presentationSessionId,
+          teammate.actorId,
+          1_001,
+        )
       ).outcome,
     ).toBe("APPLIED");
     const candidate = {
@@ -735,7 +740,7 @@ describe("prepared evidence private coordinator", () => {
       (await flow.coordinator.addLiveCandidate(flow.account.accountSessionId, candidate, 1_002))
         .outcome,
     ).toBe("APPLIED");
-    const snapshot = flow.coordinator.readLiveCandidateSnapshot(
+    const snapshot = await flow.coordinator.readLiveCandidateSnapshot(
       teammate.accountSessionId,
       flow.created.lifecycle.presentationSessionId,
       1_003,
@@ -743,7 +748,7 @@ describe("prepared evidence private coordinator", () => {
     if (snapshot.outcome !== "APPLIED") throw new Error("live snapshot was rejected");
     expect(snapshot.value.candidates).toHaveLength(1);
 
-    const takeover = flow.coordinator.takeoverPlaybackLease(
+    const takeover = await flow.coordinator.takeoverPlaybackLease(
       teammate.accountSessionId,
       {
         presentationSessionId: flow.created.lifecycle.presentationSessionId,
@@ -753,7 +758,7 @@ describe("prepared evidence private coordinator", () => {
     );
     expect(takeover.outcome).toBe("APPLIED");
     expect(
-      flow.coordinator.readLiveCandidateSnapshot(
+      await flow.coordinator.readLiveCandidateSnapshot(
         teammate.accountSessionId,
         flow.created.lifecycle.presentationSessionId,
         1_003,
@@ -883,7 +888,7 @@ describe("prepared evidence private coordinator", () => {
       (await flow.coordinator.addLiveCandidate(flow.account.accountSessionId, candidate, 1_002))
         .outcome,
     ).toBe("APPLIED");
-    const snapshot = flow.coordinator.readLiveCandidateSnapshot(
+    const snapshot = await flow.coordinator.readLiveCandidateSnapshot(
       flow.account.accountSessionId,
       flow.created.lifecycle.presentationSessionId,
       1_003,
@@ -935,7 +940,7 @@ describe("prepared evidence private coordinator", () => {
       ).outcome,
     ).toBe("APPLIED");
     expect(
-      flow.coordinator.readLiveCandidateSnapshot(
+      await flow.coordinator.readLiveCandidateSnapshot(
         flow.account.accountSessionId,
         flow.created.lifecycle.presentationSessionId,
         1_006,
@@ -993,7 +998,8 @@ describe("prepared evidence private coordinator", () => {
       },
     };
     expect(
-      flow.coordinator.addCuratedCandidate(flow.account.accountSessionId, candidate, 1_002).outcome,
+      (await flow.coordinator.addCuratedCandidate(flow.account.accountSessionId, candidate, 1_002))
+        .outcome,
     ).toBe("APPLIED");
     const join = flow.gateway.createDisplayJoin(
       {

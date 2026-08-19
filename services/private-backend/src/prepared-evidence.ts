@@ -52,6 +52,10 @@ import {
   rotatePlaybackDisplayBinding,
   setPlaybackStageStatus,
 } from "@impromptu/state";
+import {
+  type AccountSessionStore,
+  createInMemoryAccountSessionStore,
+} from "./account-session-store.ts";
 
 type MaybePromise<Value> = Value | Promise<Value>;
 
@@ -406,10 +410,10 @@ function sameOccurrence(
 }
 
 function accountSessionRejection(
-  session: AccountSession | undefined,
+  session: AccountSession | null,
   nowMs: number,
 ): SessionRejection | null {
-  if (session === undefined) return "ACCOUNT_SESSION_UNKNOWN";
+  if (session === null) return "ACCOUNT_SESSION_UNKNOWN";
   if (session.revokedAtMs !== null) return "ACCOUNT_SESSION_REVOKED";
   if (nowMs >= session.expiresAtMs) return "ACCOUNT_SESSION_EXPIRED";
   return null;
@@ -418,6 +422,7 @@ function accountSessionRejection(
 export class PreparedEvidenceCoordinator {
   readonly #store: PreparedEvidenceStore;
   readonly #projection: PreparedEvidenceProjectionPort;
+  readonly #accountSessions: AccountSessionStore;
   readonly #accountSessionTtlMs: number;
   readonly #presentationCapabilityTtlMs: number;
   readonly #liveEvidenceAuthorizer: LiveEvidenceAuthorizer | undefined;
@@ -431,6 +436,7 @@ export class PreparedEvidenceCoordinator {
     store: PreparedEvidenceStore = createPreparedEvidenceStore(),
     options: {
       readonly accountSessionTtlMs?: number;
+      readonly accountSessionStore?: AccountSessionStore;
       readonly presentationCapabilityTtlMs?: number;
       readonly liveEvidenceAuthorizer?: LiveEvidenceAuthorizer;
       readonly livePublicEnabled?: boolean;
@@ -438,6 +444,8 @@ export class PreparedEvidenceCoordinator {
   ) {
     this.#projection = projection;
     this.#store = store;
+    this.#accountSessions =
+      options.accountSessionStore ?? createInMemoryAccountSessionStore(store.accountSessions);
     this.#accountSessionTtlMs = options.accountSessionTtlMs ?? 8 * 60 * 60 * 1_000;
     this.#presentationCapabilityTtlMs = options.presentationCapabilityTtlMs ?? 4 * 60 * 60 * 1_000;
     this.#liveEvidenceAuthorizer = options.liveEvidenceAuthorizer;
@@ -453,10 +461,10 @@ export class PreparedEvidenceCoordinator {
     }
   }
 
-  createAccountSession(
+  async createAccountSession(
     verifiedIdentity: { readonly accountId: string; readonly actorId: string },
     nowMs: number,
-  ): AccountSession {
+  ): Promise<AccountSession> {
     const session = AccountSessionSchema.parse({
       accountSessionId: `account_session_${opaqueHex(24)}`,
       accountId: verifiedIdentity.accountId,
@@ -464,41 +472,47 @@ export class PreparedEvidenceCoordinator {
       expiresAtMs: nowMs + this.#accountSessionTtlMs,
       revokedAtMs: null,
     });
-    this.#store.accountSessions.set(session.accountSessionId, session);
+    await this.#accountSessions.create(session, nowMs);
     return session;
   }
 
-  readAccountSession(accountSessionId: string, nowMs: number): OperationResult<AccountSession> {
-    const session = this.#store.accountSessions.get(accountSessionId);
+  async readAccountSession(
+    accountSessionId: string,
+    nowMs: number,
+  ): Promise<OperationResult<AccountSession>> {
+    const session = await this.#accountSessions.read(accountSessionId);
     const rejection = accountSessionRejection(session, nowMs);
-    return rejection === null && session !== undefined
+    return rejection === null && session !== null
       ? { outcome: "APPLIED", value: session }
       : { outcome: "REJECTED", reason: rejection ?? "ACCOUNT_SESSION_UNKNOWN" };
   }
 
-  revokeAccountSession(accountSessionId: string, nowMs: number): OperationResult<null> {
-    const session = this.#store.accountSessions.get(accountSessionId);
+  async revokeAccountSession(
+    accountSessionId: string,
+    nowMs: number,
+  ): Promise<OperationResult<null>> {
+    const session = await this.#accountSessions.read(accountSessionId);
     const rejection = accountSessionRejection(session, nowMs);
-    if (rejection !== null || session === undefined) {
+    if (rejection !== null || session === null) {
       return { outcome: "REJECTED", reason: rejection ?? "ACCOUNT_SESSION_UNKNOWN" };
     }
-    this.#store.accountSessions.set(
-      accountSessionId,
-      AccountSessionSchema.parse({ ...session, revokedAtMs: nowMs }),
-    );
+    AccountSessionSchema.parse({ ...session, revokedAtMs: nowMs });
+    await this.#accountSessions.revoke(accountSessionId, nowMs);
     return { outcome: "APPLIED", value: null };
   }
 
-  createPresentation(
+  async createPresentation(
     accountSessionId: string,
     input: { readonly privateDeck: unknown; readonly publicDeck: unknown },
     nowMs: number,
-  ): OperationResult<{
-    readonly lifecycle: PresentationSessionLifecycle;
-    readonly lease: PlaybackAuthorityState["activeLease"];
-    readonly authority: PublicationAuthority;
-  }> {
-    const account = this.readAccountSession(accountSessionId, nowMs);
+  ): Promise<
+    OperationResult<{
+      readonly lifecycle: PresentationSessionLifecycle;
+      readonly lease: PlaybackAuthorityState["activeLease"];
+      readonly authority: PublicationAuthority;
+    }>
+  > {
+    const account = await this.readAccountSession(accountSessionId, nowMs);
     if (account.outcome === "REJECTED") return account;
     const privateDeck = PrivateDeckContextSchema.safeParse(input.privateDeck);
     const publicDeck = PublishedDeckArtifactSchema.safeParse(input.publicDeck);
@@ -570,12 +584,16 @@ export class PreparedEvidenceCoordinator {
     return { outcome: "APPLIED", value: { lifecycle, lease, authority } };
   }
 
-  endPresentation(
+  async endPresentation(
     accountSessionId: string,
     presentationSessionId: string,
     nowMs: number,
-  ): OperationResult<PresentationSessionLifecycle> {
-    const authorized = this.#authorizedPresentation(accountSessionId, presentationSessionId, nowMs);
+  ): Promise<OperationResult<PresentationSessionLifecycle>> {
+    const authorized = await this.#authorizedPresentation(
+      accountSessionId,
+      presentationSessionId,
+      nowMs,
+    );
     if (authorized.outcome === "REJECTED") return authorized;
     authorized.value.lifecycle = PresentationSessionLifecycleSchema.parse({
       ...authorized.value.lifecycle,
@@ -592,7 +610,7 @@ export class PreparedEvidenceCoordinator {
   ): Promise<OperationResult<AudienceDisplaySession>> {
     const approval = DisplayApprovalSchema.safeParse(input);
     if (!approval.success) return { outcome: "REJECTED", reason: "INVALID_DISPLAY_APPROVAL" };
-    const authorized = this.#authorizedPresentation(
+    const authorized = await this.#authorizedPresentation(
       accountSessionId,
       approval.data.presentationSessionId,
       nowMs,
@@ -629,15 +647,19 @@ export class PreparedEvidenceCoordinator {
     return { outcome: "APPLIED", value: session.data };
   }
 
-  connectPlaybackController(
+  async connectPlaybackController(
     accountSessionId: string,
     presentationSessionId: string,
     nowMs: number,
     onClose: (reason: ControllerSocketCloseReason) => void,
-  ): OperationResult<ControllerSocket> {
-    const authorized = this.#authorizedPresentation(accountSessionId, presentationSessionId, nowMs);
+  ): Promise<OperationResult<ControllerSocket>> {
+    const authorized = await this.#authorizedPresentation(
+      accountSessionId,
+      presentationSessionId,
+      nowMs,
+    );
     if (authorized.outcome === "REJECTED") return authorized;
-    const account = this.readAccountSession(accountSessionId, nowMs);
+    const account = await this.readAccountSession(accountSessionId, nowMs);
     if (
       account.outcome === "REJECTED" ||
       account.value.actorId !== authorized.value.playback.activeLease.actorId
@@ -667,17 +689,19 @@ export class PreparedEvidenceCoordinator {
     };
   }
 
-  takeoverPlaybackLease(
+  async takeoverPlaybackLease(
     accountSessionId: string,
     input: unknown,
     nowMs: number,
-  ): OperationResult<{
-    readonly lease: PlaybackAuthorityState["activeLease"];
-    readonly supersededReceipts: readonly SupersededCommandReceipt[];
-  }> {
+  ): Promise<
+    OperationResult<{
+      readonly lease: PlaybackAuthorityState["activeLease"];
+      readonly supersededReceipts: readonly SupersededCommandReceipt[];
+    }>
+  > {
     const takeover = PlaybackLeaseTakeoverSchema.safeParse(input);
     if (!takeover.success) return { outcome: "REJECTED", reason: "INVALID_LEASE_TAKEOVER" };
-    const authorized = this.#authorizedPresentation(
+    const authorized = await this.#authorizedPresentation(
       accountSessionId,
       takeover.data.presentationSessionId,
       nowMs,
@@ -688,7 +712,7 @@ export class PreparedEvidenceCoordinator {
     ) {
       return { outcome: "REJECTED", reason: "STALE_DISPLAY_BINDING" };
     }
-    const account = this.readAccountSession(accountSessionId, nowMs);
+    const account = await this.readAccountSession(accountSessionId, nowMs);
     if (account.outcome === "REJECTED") return account;
     const previousLease = authorized.value.playback.activeLease;
     const currentEpoch = Number(previousLease.controllerEpoch.slice(3));
@@ -732,13 +756,13 @@ export class PreparedEvidenceCoordinator {
     },
     nowMs: number,
   ): Promise<OperationResult<ReturnType<typeof reducePlaybackCommand>["receipt"]>> {
-    const authorized = this.#authorizedPresentation(
+    const authorized = await this.#authorizedPresentation(
       accountSessionId,
       input.presentationSessionId,
       nowMs,
     );
     if (authorized.outcome === "REJECTED") return authorized;
-    const account = this.readAccountSession(accountSessionId, nowMs);
+    const account = await this.readAccountSession(accountSessionId, nowMs);
     if (
       account.outcome === "REJECTED" ||
       account.value.actorId !== authorized.value.playback.activeLease.actorId
@@ -827,16 +851,16 @@ export class PreparedEvidenceCoordinator {
     return { outcome: "APPLIED", value: result.receipt };
   }
 
-  addCuratedCandidate(
+  async addCuratedCandidate(
     accountSessionId: string,
     candidateInput: unknown,
     nowMs: number,
-  ): OperationResult<CandidateLifecycleState> {
+  ): Promise<OperationResult<CandidateLifecycleState>> {
     const candidate = EvidenceCandidateSchema.safeParse(candidateInput);
     if (!candidate.success || candidate.data.provenance !== "CURATED_PREAPPROVED") {
       return { outcome: "REJECTED", reason: "INVALID_CURATED_CANDIDATE" };
     }
-    const authorized = this.#authorizedPresentation(
+    const authorized = await this.#authorizedPresentation(
       accountSessionId,
       candidate.data.causal.presentationSessionId,
       nowMs,
@@ -890,7 +914,7 @@ export class PreparedEvidenceCoordinator {
     ) {
       return { outcome: "REJECTED", reason: "EVIDENCE_AUTHORIZATION_DENIED" };
     }
-    const authorized = this.#authorizedPresentation(
+    const authorized = await this.#authorizedPresentation(
       accountSessionId,
       candidate.data.causal.presentationSessionId,
       nowMs,
@@ -931,15 +955,19 @@ export class PreparedEvidenceCoordinator {
     return { outcome: "APPLIED", value: lifecycle };
   }
 
-  approvePublicationTeammate(
+  async approvePublicationTeammate(
     accountSessionId: string,
     presentationSessionId: string,
     teammateActorId: string,
     nowMs: number,
-  ): OperationResult<null> {
-    const authorized = this.#authorizedPresentation(accountSessionId, presentationSessionId, nowMs);
+  ): Promise<OperationResult<null>> {
+    const authorized = await this.#authorizedPresentation(
+      accountSessionId,
+      presentationSessionId,
+      nowMs,
+    );
     if (authorized.outcome === "REJECTED") return authorized;
-    const account = this.readAccountSession(accountSessionId, nowMs);
+    const account = await this.readAccountSession(accountSessionId, nowMs);
     if (
       account.outcome === "REJECTED" ||
       authorized.value.cards.authority?.actorId !== account.value.actorId ||
@@ -951,14 +979,18 @@ export class PreparedEvidenceCoordinator {
     return { outcome: "APPLIED", value: null };
   }
 
-  readLiveCandidateSnapshot(
+  async readLiveCandidateSnapshot(
     accountSessionId: string,
     presentationSessionId: string,
     nowMs: number,
-  ): OperationResult<LiveCandidateSnapshot> {
-    const authorized = this.#authorizedPresentation(accountSessionId, presentationSessionId, nowMs);
+  ): Promise<OperationResult<LiveCandidateSnapshot>> {
+    const authorized = await this.#authorizedPresentation(
+      accountSessionId,
+      presentationSessionId,
+      nowMs,
+    );
     if (authorized.outcome === "REJECTED") return authorized;
-    const account = this.readAccountSession(accountSessionId, nowMs);
+    const account = await this.readAccountSession(accountSessionId, nowMs);
     if (
       account.outcome === "REJECTED" ||
       !authorized.value.approvedPublicationActorIds.has(account.value.actorId)
@@ -1008,13 +1040,13 @@ export class PreparedEvidenceCoordinator {
     input: CandidateApprovalInput,
     nowMs: number,
   ): Promise<OperationResult<PublishedAudienceCard>> {
-    const authorized = this.#authorizedPresentation(
+    const authorized = await this.#authorizedPresentation(
       accountSessionId,
       input.presentationSessionId,
       nowMs,
     );
     if (authorized.outcome === "REJECTED") return authorized;
-    const account = this.readAccountSession(accountSessionId, nowMs);
+    const account = await this.readAccountSession(accountSessionId, nowMs);
     if (
       account.outcome === "REJECTED" ||
       !authorized.value.approvedPublicationActorIds.has(account.value.actorId)
@@ -1204,13 +1236,13 @@ export class PreparedEvidenceCoordinator {
     input: CardTerminationInput,
     nowMs: number,
   ): Promise<OperationResult<PublicationTombstone>> {
-    const authorized = this.#authorizedPresentation(
+    const authorized = await this.#authorizedPresentation(
       accountSessionId,
       input.presentationSessionId,
       nowMs,
     );
     if (authorized.outcome === "REJECTED") return authorized;
-    const account = this.readAccountSession(accountSessionId, nowMs);
+    const account = await this.readAccountSession(accountSessionId, nowMs);
     if (
       account.outcome === "REJECTED" ||
       !authorized.value.approvedPublicationActorIds.has(account.value.actorId)
@@ -1352,12 +1384,12 @@ export class PreparedEvidenceCoordinator {
     socket.onClose(reason);
   }
 
-  #authorizedPresentation(
+  async #authorizedPresentation(
     accountSessionId: string,
     presentationSessionId: string,
     nowMs: number,
-  ): OperationResult<PresentationRecord> {
-    const account = this.readAccountSession(accountSessionId, nowMs);
+  ): Promise<OperationResult<PresentationRecord>> {
+    const account = await this.readAccountSession(accountSessionId, nowMs);
     if (account.outcome === "REJECTED") return account;
     const presentation = this.#store.presentations.get(presentationSessionId);
     if (presentation === undefined)

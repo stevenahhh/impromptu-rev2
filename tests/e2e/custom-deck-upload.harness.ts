@@ -108,6 +108,8 @@ const fixtureRoot = resolve("tests/fixtures/custom-deck-upload");
 const evidenceRoot = resolve("artifacts/custom-deck-upload-e2e");
 const defaultSofficePath = "/Applications/LibreOffice.app/Contents/MacOS/soffice";
 const defaultFontPath = resolve(process.env.HOME ?? "", "Library/Fonts/DejaVuSans.ttf");
+const controllerUsername = "customdeck";
+const controllerPassword = "custom-deck-password";
 const contentTypes: Readonly<Record<string, string>> = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
@@ -649,8 +651,8 @@ export async function runCustomDeckUploadE2e(): Promise<CustomDeckUploadEvidence
         {
           CONSOLE_ORIGIN: consoleOrigin,
           CONTROLLER_ACCOUNT_ID: "account_custom_deck_e2e",
-          CONTROLLER_USERNAME: "customdeck",
-          CONTROLLER_PASSWORD: "custom-deck-password",
+          CONTROLLER_USERNAME: controllerUsername,
+          CONTROLLER_PASSWORD: controllerPassword,
           PRIVATE_BACKEND_HOST: "127.0.0.1",
           PRIVATE_BACKEND_PORT: String(privatePort),
           PRIVATE_SNAPSHOT_PATH: join(runtimeRoot, "private.json"),
@@ -709,7 +711,8 @@ export async function runCustomDeckUploadE2e(): Promise<CustomDeckUploadEvidence
     });
     const consolePage = await context.newPage();
     await consolePage.goto(`${consoleOrigin}/sign-in`, { waitUntil: "domcontentloaded" });
-    await consolePage.locator("[data-sign-in-code]").fill("local-controller-code");
+    await consolePage.locator("[data-sign-in-username]").fill(controllerUsername);
+    await consolePage.locator("[data-sign-in-password]").fill(controllerPassword);
     const signInResponse = consolePage.waitForResponse(
       (response) => response.url().endsWith("/v1/account-sessions") && response.status() === 201,
     );

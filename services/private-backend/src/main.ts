@@ -7,8 +7,11 @@ import {
   ServerModelRouter,
   StaticPolicyVersionAuthority,
 } from "@impromptu/model-router";
+import postgres from "postgres";
 import { z } from "zod";
 import { createAccountDirectory } from "./account-directory.ts";
+import { createPostgresAccountSessionStore } from "./account-session-store-postgres.ts";
+import { createPostgresAccountStore } from "./account-store-postgres.ts";
 import { parsePrivateBackendConfig } from "./config.ts";
 import { createDeckRenderSubprocess } from "./deck-render-subprocess.ts";
 import { createDeckUploadService } from "./deck-upload-service.ts";
@@ -69,13 +72,21 @@ const internalAuthToken = required("SERVICE_AUTH_TOKEN");
 const bootstrapUsername = required("CONTROLLER_USERNAME");
 const bootstrapPassword = required("CONTROLLER_PASSWORD");
 const accountId = required("CONTROLLER_ACCOUNT_ID");
-const accountDirectory = createAccountDirectory();
+const privateDatabaseUrl = Bun.env.PRIVATE_DATABASE_URL;
+const privateSql =
+  privateDatabaseUrl === undefined || privateDatabaseUrl.length === 0
+    ? undefined
+    : postgres(privateDatabaseUrl);
+const accountDirectory =
+  privateSql === undefined
+    ? createAccountDirectory()
+    : createAccountDirectory(createPostgresAccountStore(privateSql));
 const bootstrapAccount = await accountDirectory.register(
   { username: bootstrapUsername, password: bootstrapPassword },
   Date.now(),
   { accountId },
 );
-if (bootstrapAccount.outcome !== "APPLIED") {
+if (bootstrapAccount.outcome === "REJECTED" && bootstrapAccount.reason !== "USERNAME_TAKEN") {
   throw new Error(`bootstrap account rejected: ${bootstrapAccount.reason}`);
 }
 const projectionGatewayOrigin = required("PROJECTION_GATEWAY_ORIGIN");
@@ -125,7 +136,7 @@ let coordinator: PreparedEvidenceCoordinator;
 const internalRetrieval = new InternalRetrievalService({
   principals: {
     async resolve(accountSessionId) {
-      const session = coordinator.readAccountSession(accountSessionId, Date.now());
+      const session = await coordinator.readAccountSession(accountSessionId, Date.now());
       return session.outcome === "APPLIED"
         ? {
             tenantId: session.value.accountId,
@@ -248,7 +259,7 @@ const recommendations = new PrivateRecommendationPipeline({
   router: modelRouter,
   contexts: {
     async resolve(accountSessionId) {
-      const session = coordinator.readAccountSession(accountSessionId, Date.now());
+      const session = await coordinator.readAccountSession(accountSessionId, Date.now());
       return session.outcome === "APPLIED"
         ? {
             tenantId: session.value.accountId,
@@ -262,6 +273,9 @@ const recommendations = new PrivateRecommendationPipeline({
   externalFetch: externalFetcher,
 });
 coordinator = new PreparedEvidenceCoordinator(projection, store, {
+  ...(privateSql === undefined
+    ? {}
+    : { accountSessionStore: createPostgresAccountSessionStore(privateSql) }),
   livePublicEnabled: config.livePublicEnabled,
   liveEvidenceAuthorizer: {
     async authorize(candidate) {
@@ -279,6 +293,7 @@ const server = Bun.serve({
     coordinator,
     internalAuthToken,
     identityVerifier: accountDirectory,
+    accountRegistrar: accountDirectory,
     now: Date.now,
     recommendations,
     persist,

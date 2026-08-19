@@ -99,6 +99,8 @@ const stagePort = await availablePort();
 const consolePort = await availablePort();
 const stageOrigin = `http://127.0.0.1:${stagePort}`;
 const consoleOrigin = `http://127.0.0.1:${consolePort}`;
+const controllerUsername = "topology-controller";
+const controllerPassword = "topology-controller-password";
 const evidenceRoot = resolve(process.env.WP4_EVIDENCE_DIR ?? "artifacts/wp4-topology");
 export const privateSurfaceVocabulary = [
   "PRIVATE_CANARY_WP4",
@@ -424,7 +426,8 @@ async function observeCoResidentCycle(browser: Browser): Promise<CoResidentCycle
   const page = await context.newPage();
   try {
     await page.goto(`${consoleOrigin}/sign-in`, { waitUntil: "domcontentloaded" });
-    await page.locator("[data-sign-in-code]").fill("co-resident-code");
+    await page.locator("[data-sign-in-username]").fill(controllerUsername);
+    await page.locator("[data-sign-in-password]").fill(controllerPassword);
     await page.locator("[data-sign-in-submit]").click();
     await page.locator("[data-co-resident-state='ENABLED']").waitFor({ state: "visible" });
     const enabledObserved =
@@ -484,7 +487,8 @@ async function rehearse(
   await installEventBuffer(context);
   const controller = await context.newPage();
   await controller.goto(`${consoleOrigin}/sign-in`, { waitUntil: "domcontentloaded" });
-  await controller.locator("[data-sign-in-code]").fill(`controller-${mode}-${rehearsal}`);
+  await controller.locator("[data-sign-in-username]").fill(controllerUsername);
+  await controller.locator("[data-sign-in-password]").fill(controllerPassword);
   await controller.locator("[data-sign-in-submit]").click();
   await controller.locator("[data-co-resident-state='ENABLED']").waitFor({ state: "visible" });
   const page = await context.newPage();

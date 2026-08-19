@@ -21,7 +21,10 @@ describe("custom deck upload real-browser QA", () => {
     expect(evidence.httpResponses.pdfUpload201.publicDeck).toBeDefined();
     expect(evidence.signIn201).toEqual({
       status: 201,
-      account: { accountId: "account_custom_deck_e2e", actorId: "actor_custom_deck_e2e" },
+      account: {
+        accountId: "account_custom_deck_e2e",
+        actorId: expect.stringMatching(/^actor_[a-f0-9]{32}$/),
+      },
     });
     expect(evidence.pptxUpload201.status).toBe(201);
     expect(evidence.pdfUpload201.status).toBe(201);
