@@ -107,7 +107,7 @@ describe("Console route boundary", () => {
     expect(within(document.body).queryByText("Authoritative snapshot")).toBeNull();
   });
 
-  test("switches the upload-first workflow with an accessible emoji language picker", () => {
+  test("switches locale from the compact language control", () => {
     render(
       <MemoryRouter initialEntries={["/"]}>
         <AuthProvider initialAuthenticated initialPresentation={workspacePresentation}>
@@ -117,37 +117,16 @@ describe("Console route boundary", () => {
     );
 
     const picker = within(document.body).getByRole("group", { name: "Language" });
-    expect(within(picker).getByRole("button", { name: "한국어" }).textContent).toContain("🇰🇷");
-    expect(within(picker).getByRole("button", { name: "English" }).textContent).toContain("🇺🇸");
-
+    expect(within(picker).getByRole("button", { name: "한국어" })).toBeTruthy();
+    expect(within(picker).getByRole("button", { name: "English" })).toBeTruthy();
     expect(document.documentElement.lang).toBe("ko");
     expect(within(document.body).getByRole("heading", { name: "발표 워크스페이스" })).toBeTruthy();
-    const steps = document.querySelector(".console-workflow-steps");
-    expect(steps).toBeTruthy();
-    expect(within(steps as HTMLElement).getByText("슬라이드 준비")).toBeTruthy();
-    expect(within(steps as HTMLElement).getByText("화면 연결")).toBeTruthy();
-    expect(within(steps as HTMLElement).getByText("발표 시작")).toBeTruthy();
 
     fireEvent.click(within(picker).getByRole("button", { name: "English" }));
     expect(document.documentElement.lang).toBe("en");
     expect(
       within(document.body).getByRole("heading", { name: "Presentation workspace" }),
     ).toBeTruthy();
-  });
-
-  test("offers one selected structured template before upload", () => {
-    renderConsole("/", true);
-
-    const templates = document.querySelectorAll("[data-presentation-template]");
-    expect(templates).toHaveLength(3);
-    expect(
-      document.querySelectorAll("[data-presentation-template][aria-pressed='true']"),
-    ).toHaveLength(1);
-
-    fireEvent.click(templates[1] as Element);
-
-    expect(templates[0]?.getAttribute("aria-pressed")).toBe("false");
-    expect(templates[1]?.getAttribute("aria-pressed")).toBe("true");
   });
 
   test("opens with an upload-first workspace and accepts a dropped deck", async () => {
@@ -343,9 +322,10 @@ describe("Console route boundary", () => {
     expect(
       within(document.body).getByRole("navigation", { name: "Private workspace" }),
     ).toBeTruthy();
+    expect(within(document.body).getByRole("link", { name: "Evidence approval" })).toBeTruthy();
     expect(
-      within(document.body).getByRole("link", { name: "Presentation workspace" }),
-    ).toBeTruthy();
+      within(document.body).queryByRole("link", { name: "Presentation workspace" }),
+    ).toBeNull();
     expect(within(document.body).queryByRole("alert")).toBeNull();
   });
 
@@ -438,7 +418,7 @@ describe("Console route boundary", () => {
       { operation: "SIGN_UP", username: "presenter-new", password: "new-password" },
       { operation: "SIGN_IN", username: "presenter-new", password: "new-password" },
     ]);
-    expect(document.querySelector("[data-presentation-template]")).toBeTruthy();
+    expect(document.querySelector("[data-upload-dropzone]")).toBeTruthy();
     expect(window.localStorage.length).toBe(0);
     expect(window.sessionStorage.length).toBe(0);
   });
@@ -489,7 +469,7 @@ describe("Console route boundary", () => {
     expect(document.querySelector("[data-sign-up-error='USERNAME_TAKEN']")).toBeTruthy();
     expect(document.querySelector("[data-sign-up-error]")?.textContent?.length).toBeGreaterThan(0);
     expect(document.querySelector("[data-sign-up-submit]")).toBeTruthy();
-    expect(document.querySelector("[data-presentation-template]")).toBeNull();
+    expect(document.querySelector("[data-upload-dropzone]")).toBeNull();
     expect(signInCount).toBe(0);
   });
 
@@ -571,7 +551,7 @@ describe("Console route boundary", () => {
       });
       await signInCompleted;
     });
-    expect(document.querySelector("[data-presentation-template]")).toBeTruthy();
+    expect(document.querySelector("[data-upload-dropzone]")).toBeTruthy();
     expect(receivedCredentials).toEqual([
       { username: "presenter-alpha", password: "transient-password" },
     ]);
@@ -657,21 +637,24 @@ describe("Console route boundary", () => {
     };
     render(
       <MemoryRouter initialEntries={["/live-publication"]}>
-        <AuthProvider initialAuthenticated client={client}>
+        <AuthProvider
+          initialAuthenticated
+          initialPresentation={{
+            presentationSessionId: "ps_live-ui",
+            deckVersion: "deck_live-ui",
+            slides: [],
+          }}
+          client={client}
+        >
           <ConsoleRoutes />
         </AuthProvider>
       </MemoryRouter>,
     );
 
-    switchToEnglish();
-    fireEvent.change(within(document.body).getByLabelText("Presentation session ID"), {
-      target: { value: "ps_live-ui" },
-    });
-    fireEvent.click(within(document.body).getByRole("button", { name: "Load fresh candidates" }));
     await act(async () => await loaded);
     expect(within(document.body).getByText("Fresh verified claim")).toBeTruthy();
 
-    fireEvent.click(within(document.body).getByRole("button", { name: "Approve live card" }));
+    fireEvent.click(within(document.body).getByRole("button", { name: "실시간 카드 승인" }));
     await act(async () => await approved);
     expect(approvals).toEqual([
       { candidateId: "candidate_live-ui", snapshotHash: "snapshot-hash-1" },
@@ -746,7 +729,7 @@ describe("Console route boundary", () => {
     switchToEnglish();
     await act(async () => {});
     expect(loadedPresentationId).toBe("ps_active");
-    expect(within(document.body).queryByLabelText("Presentation session ID")).toBeNull();
+    expect(within(document.body).queryByRole("textbox")).toBeNull();
     expect(within(document.body).getByRole("button", { name: "Refresh suggestions" })).toBeTruthy();
   });
 

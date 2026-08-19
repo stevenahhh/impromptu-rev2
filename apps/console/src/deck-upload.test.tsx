@@ -111,11 +111,11 @@ describe("deck upload from the authenticated Session page", () => {
     });
 
     expect(document.querySelector("[data-upload-status='UPLOADING']")).toBeNull();
-    expect(document.querySelector("[data-presentation-template]")).toBeNull();
+    expect(document.querySelector("[data-upload-dropzone]")).toBeNull();
     expect(document.querySelector("[data-stage-open]")).not.toBeNull();
   });
 
-  test("surfaces the typed upload error message", async () => {
+  test("surfaces a localized upload error without exposing the server reason", async () => {
     const harness = createUploadClient({ failWith: new Error("deck_upload_rejected") });
     renderSession(harness.client);
     selectDeckFile("rehearsal.pdf");
@@ -129,7 +129,8 @@ describe("deck upload from the authenticated Session page", () => {
 
     expect(document.querySelector("[data-upload-status='UPLOADING']")).toBeNull();
     const errorText = document.querySelector("[data-upload-status='ERROR']");
-    expect(errorText?.textContent).toBe("deck_upload_rejected");
+    expect(errorText?.textContent).not.toContain("deck_upload_rejected");
+    expect(errorText?.textContent?.length).toBeGreaterThan(0);
     if (!(errorText instanceof HTMLElement)) throw new Error("deck upload error missing");
     expect(errorText.className).toContain("console-caption--error");
     expect(document.querySelector("[data-upload-status='SUCCESS']")).toBeNull();

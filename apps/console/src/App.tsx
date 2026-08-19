@@ -1,4 +1,4 @@
-import { Badge, Brand, Button, Panel, Shell, StatusDot } from "@impromptu/ui";
+import { Badge, Brand, Button, Panel, Shell } from "@impromptu/ui";
 import {
   createContext,
   type ReactNode,
@@ -12,10 +12,6 @@ import {
 } from "react";
 import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { type Locale, messages } from "./i18n";
-import {
-  DEFAULT_PRESENTATION_TEMPLATES,
-  type PresentationTemplate,
-} from "./presentation-templates";
 import {
   AccountRegistrationError,
   type AccountRegistrationFailure,
@@ -123,8 +119,8 @@ export function AuthProvider({
         setError(null);
         try {
           setSession(await sessionClient.signIn(username, password));
-        } catch (cause) {
-          setError(cause instanceof Error ? cause.message : "Sign-in failed.");
+        } catch {
+          setError("SIGN_IN_FAILED");
         } finally {
           setPending(false);
         }
@@ -136,8 +132,8 @@ export function AuthProvider({
         try {
           await sessionClient.signOut(session.csrfToken);
           setSession(null);
-        } catch (cause) {
-          setError(cause instanceof Error ? cause.message : "Sign-out failed.");
+        } catch {
+          setError("SIGN_OUT_FAILED");
         } finally {
           setPending(false);
         }
@@ -183,7 +179,7 @@ function LanguagePicker() {
         title="한국어"
         onClick={() => setLocale("ko")}
       >
-        <span aria-hidden="true">🇰🇷</span>
+        <span aria-hidden="true">KO</span>
       </button>
       <button
         type="button"
@@ -192,7 +188,7 @@ function LanguagePicker() {
         title="English"
         onClick={() => setLocale("en")}
       >
-        <span aria-hidden="true">🇺🇸</span>
+        <span aria-hidden="true">EN</span>
       </button>
     </fieldset>
   );
@@ -206,10 +202,6 @@ function ConsoleHeader() {
       <Brand eyebrow={text.presenterConsole} />
       <div className="console-header__actions">
         <LanguagePicker />
-        <Badge tone="success">
-          <StatusDot label={text.localPreview} />
-          {text.localPreview}
-        </Badge>
       </div>
     </div>
   );
@@ -253,7 +245,7 @@ function SignInPage() {
           {pending ? text.signingIn : text.enterWorkspace}
         </Button>
         <p className="console-caption" aria-live="polite">
-          {error ?? text.signInPrivacy}
+          {error === null ? text.signInPrivacy : text.signInFailed}
         </p>
         <p className="console-caption">
           {text.needAccount} <Link to="/sign-up">{text.signUpLink}</Link>
@@ -354,20 +346,29 @@ function SignUpPage() {
 
 function PrivateNavigation() {
   const { locale, signOut } = useAuth();
+  const location = useLocation();
   const text = messages(locale);
+  const isWorkspace = location.pathname === "/" || location.pathname === "/session";
 
   return (
-    <aside className="console-rail ui-reveal">
+    <div className="console-header console-app-bar">
+      <Brand eyebrow={text.presenterConsole} />
       <nav aria-label={text.privateWorkspace} className="console-nav">
-        <NavLink to="/" end>
-          {text.workspace}
-        </NavLink>
-        <NavLink to="/live-publication">{text.evidenceApproval}</NavLink>
+        {isWorkspace ? (
+          <NavLink to="/live-publication">{text.evidenceApproval}</NavLink>
+        ) : (
+          <NavLink to="/" end>
+            {text.workspace}
+          </NavLink>
+        )}
       </nav>
-      <Button variant="quiet" onClick={() => void signOut()}>
-        {text.leave}
-      </Button>
-    </aside>
+      <div className="console-header__actions">
+        <LanguagePicker />
+        <Button variant="quiet" onClick={() => void signOut()}>
+          {text.leave}
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -438,8 +439,7 @@ function PrivateLayout({ coResident }: { readonly coResident: boolean }) {
   }
 
   return (
-    <Shell header={<ConsoleHeader />} skipLabel={text.skipToContent}>
-      <PrivateNavigation />
+    <Shell header={<PrivateNavigation />} skipLabel={text.skipToContent}>
       <div
         className="console-content"
         data-co-resident-state={coResidentState}
@@ -465,9 +465,7 @@ function LivePublicationPage() {
   const titleId = useId();
   const { activePresentation, client, locale, session } = useAuth();
   const text = messages(locale);
-  const [fallbackPresentationSessionId, setFallbackPresentationSessionId] = useState("");
-  const presentationSessionId =
-    activePresentation?.presentationSessionId ?? fallbackPresentationSessionId;
+  const presentationSessionId = activePresentation?.presentationSessionId ?? "";
   const [snapshot, setSnapshot] = useState<LiveCandidateSnapshotView | null>(null);
   const [pendingCandidateId, setPendingCandidateId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
@@ -487,9 +485,9 @@ function LivePublicationPage() {
             ? "실시간 공개가 비활성화되어 있습니다. 확인된 제안은 비공개로 유지됩니다."
             : "Live public is fail-closed. Verified candidates remain private.",
       );
-    } catch (cause) {
+    } catch {
       setSnapshot(null);
-      setMessage(cause instanceof Error ? cause.message : "Snapshot failed.");
+      setMessage(text.snapshotFailed);
     }
   }, [client, locale, presentationSessionId, text]);
 
@@ -513,13 +511,9 @@ function LivePublicationPage() {
       outcome = "PUBLISHED";
       setSnapshot(null);
       setMessage(text.published);
-    } catch (cause) {
+    } catch {
       setSnapshot(null);
-      setMessage(
-        cause instanceof Error
-          ? `${cause.message}. Load a new authoritative snapshot.`
-          : "Approval was rejected. Load a new authoritative snapshot.",
-      );
+      setMessage(text.liveApprovalFailed);
     } finally {
       publishApprovalLoadEvent({
         type: "APPROVAL_SETTLED",
@@ -538,20 +532,7 @@ function LivePublicationPage() {
         <p className="console-lead">{text.liveApprovalLead}</p>
       </div>
       <Panel title={text.snapshotTitle} tone="inset">
-        {activePresentation === null ? (
-          <label className="console-field">
-            <span>{text.sessionId}</span>
-            <input
-              value={fallbackPresentationSessionId}
-              onChange={(event) => {
-                setFallbackPresentationSessionId(event.currentTarget.value);
-                setSnapshot(null);
-              }}
-            />
-          </label>
-        ) : (
-          <p>{text.autoSuggestions}</p>
-        )}
+        <p>{activePresentation === null ? text.approvalNeedsDeck : text.autoSuggestions}</p>
         <Button disabled={presentationSessionId.length === 0} onClick={() => void loadSnapshot()}>
           {activePresentation === null ? text.loadCandidates : text.refreshSuggestions}
         </Button>
@@ -562,9 +543,6 @@ function LivePublicationPage() {
       {snapshot?.candidates.map((candidate) => (
         <Panel key={candidate.candidateId} title={candidate.claimText}>
           <p>{candidate.evidenceExcerpt}</p>
-          <p className="console-caption">
-            {candidate.occurrence.publicSlideKey} / occurrence {candidate.occurrence.occurrenceSeq}
-          </p>
           <Button
             disabled={!snapshot.livePublicEnabled || pendingCandidateId !== null}
             onClick={() => void approve(candidate)}
@@ -598,6 +576,8 @@ function SessionUploadPanel({
   const [phase, setPhase] = useState<"IDLE" | "UPLOADING" | "SUCCESS" | "ERROR">("IDLE");
   const [message, setMessage] = useState("");
   const [view, setView] = useState<DeckUploadView | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const dragDepth = useRef(0);
 
   const selectFile = (selected: File | null) => {
     setFile(selected);
@@ -626,9 +606,9 @@ function SessionUploadPanel({
         slides: publicSlides(next.publicDeck),
       });
       setPhase("SUCCESS");
-    } catch (cause) {
+    } catch {
       setPhase("ERROR");
-      setMessage(cause instanceof Error ? cause.message : text.uploadFailed);
+      setMessage(text.uploadFailed);
     }
   };
 
@@ -636,11 +616,27 @@ function SessionUploadPanel({
     <Panel className="console-upload-panel" tone="inset">
       <section
         className={`console-dropzone${phase === "UPLOADING" ? " console-dropzone--busy" : ""}`}
+        data-dragging={dragging}
         data-upload-dropzone
         aria-label={text.uploadTitle}
-        onDragOver={(event) => event.preventDefault()}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          dragDepth.current += 1;
+          setDragging(true);
+        }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+        }}
+        onDragLeave={(event) => {
+          event.preventDefault();
+          dragDepth.current = Math.max(0, dragDepth.current - 1);
+          if (dragDepth.current === 0) setDragging(false);
+        }}
         onDrop={(event) => {
           event.preventDefault();
+          dragDepth.current = 0;
+          setDragging(false);
           const dropped = event.dataTransfer.files[0];
           if (dropped !== undefined) void uploadFile(dropped);
         }}
@@ -712,60 +708,10 @@ function publicSlides(value: unknown): ActivePresentationView["slides"] {
   });
 }
 
-function PresentationTemplateSelector({
-  selectedId,
-  templates,
-  onSelect,
-}: {
-  readonly selectedId: string;
-  readonly templates: readonly PresentationTemplate[];
-  readonly onSelect: (id: string) => void;
-}) {
-  const { locale } = useAuth();
-  const text = messages(locale);
+function PresentationWorkspacePage() {
   const titleId = useId();
-  return (
-    <section className="console-template-library" aria-labelledby={titleId}>
-      <div>
-        <h2 id={titleId}>{text.templateLibrary}</h2>
-        <p>{text.templateLibraryLead}</p>
-      </div>
-      <fieldset className="console-template-grid" aria-label={text.templateLibrary}>
-        {templates.map((template) => (
-          <button
-            key={template.id}
-            type="button"
-            aria-pressed={selectedId === template.id}
-            data-presentation-template={template.id}
-            onClick={() => onSelect(template.id)}
-          >
-            <strong>{template.name[locale]}</strong>
-            <span>{template.description[locale]}</span>
-          </button>
-        ))}
-      </fieldset>
-    </section>
-  );
-}
-
-function PresentationWorkspacePage({
-  templates,
-}: {
-  readonly templates: readonly PresentationTemplate[];
-}) {
-  const titleId = useId();
-  const {
-    activePresentation,
-    client,
-    displayBindingEpoch,
-    locale,
-    session,
-    setActivePresentation,
-  } = useAuth();
+  const { activePresentation, client, locale, session, setActivePresentation } = useAuth();
   const text = messages(locale);
-  const [selectedTemplateId, setSelectedTemplateId] = useState(
-    templates[0]?.id ?? DEFAULT_PRESENTATION_TEMPLATES[0].id,
-  );
   const [activeIndex, setActiveIndex] = useState(0);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const previousPresentation = useRef(activePresentation);
@@ -781,7 +727,6 @@ function PresentationWorkspacePage({
     <section
       className={`console-workspace${activePresentation === null ? "" : " console-workspace--presenting"}`}
       aria-labelledby={titleId}
-      data-selected-template={selectedTemplateId}
     >
       <header className="console-workspace__intro">
         <h1 ref={headingRef} id={titleId} tabIndex={-1}>
@@ -796,40 +741,10 @@ function PresentationWorkspacePage({
           </Button>
         )}
       </header>
-      {activePresentation === null ? (
-        <PresentationTemplateSelector
-          selectedId={selectedTemplateId}
-          templates={templates}
-          onSelect={setSelectedTemplateId}
-        />
-      ) : null}
-      <ol className="console-workflow-steps" aria-label="Presentation setup progress">
-        <li data-step-state={activePresentation === null ? "CURRENT" : "COMPLETE"}>
-          <span>1</span>
-          <strong>{text.stepSlides}</strong>
-        </li>
-        <li
-          data-step-state={
-            activePresentation === null
-              ? "UPCOMING"
-              : displayBindingEpoch === null
-                ? "CURRENT"
-                : "COMPLETE"
-          }
-        >
-          <span>2</span>
-          <strong>{text.stepDisplay}</strong>
-        </li>
-        <li data-step-state={displayBindingEpoch === null ? "UPCOMING" : "CURRENT"}>
-          <span>3</span>
-          <strong>{text.stepPresent}</strong>
-        </li>
-      </ol>
       {session === null ? null : activePresentation === null ? (
         <SessionUploadPanel client={client} csrfToken={session.csrfToken} />
       ) : (
         <div className="console-cockpit">
-          <SlideWorkspace activeIndex={activeIndex} onSelect={setActiveIndex} />
           <div className="console-cockpit__center">
             <SlidePreview index={activeIndex} />
             <PlaybackPanel index={activeIndex} onIndexChange={setActiveIndex} />
@@ -838,6 +753,7 @@ function PresentationWorkspacePage({
             <EvidencePreparationPanel
               key={`${activePresentation.presentationSessionId}:${activePresentation.deckVersion}:${activePresentation.manifestHash ?? ""}`}
             />
+            <SlideWorkspace activeIndex={activeIndex} onSelect={setActiveIndex} />
             <StageSetupPanel />
             <DisplayPairingPanel />
           </div>
@@ -865,10 +781,7 @@ function SlideWorkspace({
   return (
     <section className="console-slides" aria-label={text.slideRail}>
       <div className="console-slides__header">
-        <h2>
-          {slides.length} {text.ready}
-        </h2>
-        <Badge tone="success">{text.safeRender}</Badge>
+        <h2>{text.slidesCount.replace("{count}", String(slides.length))}</h2>
       </div>
       <ol className="console-slide-list">
         {slides.map((slide, index) => (
@@ -905,7 +818,6 @@ function SlidePreview({ index }: { readonly index: number }) {
           {slide?.accessibilityLabel ?? text.slidesPlaceholder}
         </p>
       </div>
-      <p className="console-preview__note">{text.privateConsoleLead}</p>
     </section>
   );
 }
@@ -964,7 +876,7 @@ function EvidencePreparationPanel() {
             id: `${slide.publicSlideKey}:${evidence.evidenceId}`,
             title: evidence.title,
             summary: result.recommendation.claim,
-            source: evidence.canonicalUrl ?? evidence.sourceId,
+            source: evidence.canonicalUrl ?? text.sourceUnavailable,
             sourceUrl: evidence.canonicalUrl,
           }));
           setPreparedEvidence((current) => [...current, ...cards]);
@@ -979,7 +891,7 @@ function EvidencePreparationPanel() {
       active = false;
       controller.abort();
     };
-  }, [activePresentation, client, session]);
+  }, [activePresentation, client, session, text.sourceUnavailable]);
 
   const status = pendingCount > 0 ? "PREPARING" : preparedEvidence.length > 0 ? "READY" : "EMPTY";
   return (
@@ -1045,7 +957,6 @@ function StageSetupPanel() {
           {text.externalDisplay}
         </Button>
       </div>
-      <p className="console-caption">{text.stagePrivacy}</p>
     </Panel>
   );
 }
@@ -1076,7 +987,7 @@ function DisplayPairingPanel() {
   } = useAuth();
   const text = messages(locale);
   const [connectionCode, setConnectionCode] = useState("");
-  const [message, setMessage] = useState("Paste the connection code shown on the audience screen.");
+  const [message, setMessage] = useState("");
 
   const approve = async () => {
     const join = decodeDisplayJoin(connectionCode);
@@ -1097,8 +1008,8 @@ function DisplayPairingPanel() {
       const binding = await client.approveDisplay(session.csrfToken, activePresentation, join);
       setDisplayBindingEpoch(binding.displayBindingEpoch);
       setMessage(text.screenApproved);
-    } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : text.approvalFailed);
+    } catch {
+      setMessage(text.approvalFailed);
     }
   };
 
@@ -1121,11 +1032,11 @@ function DisplayPairingPanel() {
       ) : (
         <Badge tone="success">{text.audienceConnected}</Badge>
       )}
-      <p className="console-caption" aria-live="polite">
-        {message === "Paste the connection code shown on the audience screen."
-          ? text.connectionHint
-          : message}
-      </p>
+      {displayBindingEpoch === null && message.length > 0 ? (
+        <p className="console-caption" aria-live="polite">
+          {message}
+        </p>
+      ) : null}
     </Panel>
   );
 }
@@ -1158,9 +1069,9 @@ function PlaybackPanel({
       });
       onIndexChange(nextIndex);
       setControlRevision(receipt.acceptedControlRevision);
-      setMessage(`Showing slide ${nextIndex + 1} of ${slides.length}.`);
-    } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : text.slideFailed);
+      setMessage(text.slideChanged);
+    } catch {
+      setMessage(text.slideFailed);
     }
   };
 
@@ -1173,28 +1084,33 @@ function PlaybackPanel({
 
   return (
     <Panel className="console-present" title={text.presenterConsole} tone="inset">
-      <div data-presentation-state={presentationStarted ? "PRESENTING" : "READY"}>
-        <Button
-          disabled={displayBindingEpoch === null || slides.length === 0}
-          onClick={() => void startPresentation()}
+      <div className="console-present__controls">
+        <div
+          className="console-present__start"
+          data-presentation-state={presentationStarted ? "PRESENTING" : "READY"}
         >
-          {presentationStarted ? text.started : text.startPresentation}
-        </Button>
-      </div>
-      <div className="console-playback-actions">
-        <Button
-          variant="quiet"
-          disabled={displayBindingEpoch === null || index === 0}
-          onClick={() => void show(index - 1)}
-        >
-          {text.previousSlide}
-        </Button>
-        <Button
-          disabled={displayBindingEpoch === null || index >= slides.length - 1}
-          onClick={() => void show(index + 1)}
-        >
-          {text.nextSlide}
-        </Button>
+          <Button
+            disabled={displayBindingEpoch === null || slides.length === 0}
+            onClick={() => void startPresentation()}
+          >
+            {presentationStarted ? text.started : text.startPresentation}
+          </Button>
+        </div>
+        <div className="console-playback-actions">
+          <Button
+            variant="quiet"
+            disabled={displayBindingEpoch === null || index === 0}
+            onClick={() => void show(index - 1)}
+          >
+            {text.previousSlide}
+          </Button>
+          <Button
+            disabled={displayBindingEpoch === null || index >= slides.length - 1}
+            onClick={() => void show(index + 1)}
+          >
+            {text.nextSlide}
+          </Button>
+        </div>
       </div>
       <p className="console-caption" aria-live="polite">
         {message || text.connectControls}
@@ -1203,13 +1119,7 @@ function PlaybackPanel({
   );
 }
 
-export function ConsoleRoutes({
-  coResident = false,
-  templates = DEFAULT_PRESENTATION_TEMPLATES,
-}: {
-  readonly coResident?: boolean;
-  readonly templates?: readonly PresentationTemplate[];
-}) {
+export function ConsoleRoutes({ coResident = false }: { readonly coResident?: boolean }) {
   return (
     <Routes>
       <Route element={<PublicOnly />}>
@@ -1218,8 +1128,8 @@ export function ConsoleRoutes({
       </Route>
       <Route element={<RequireAuth />}>
         <Route element={<PrivateLayout coResident={coResident} />}>
-          <Route index element={<PresentationWorkspacePage templates={templates} />} />
-          <Route path="/session" element={<PresentationWorkspacePage templates={templates} />} />
+          <Route index element={<PresentationWorkspacePage />} />
+          <Route path="/session" element={<PresentationWorkspacePage />} />
           <Route path="/live-publication" element={<LivePublicationPage />} />
         </Route>
       </Route>

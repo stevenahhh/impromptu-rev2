@@ -4,14 +4,9 @@ import { useEffect } from "react";
 import { BrowserRouter } from "react-router-dom";
 
 import { AuthProvider, ConsoleRoutes } from "../../App";
-import type { PresentationTemplate } from "../../presentation-templates";
 import { registerConsoleServiceWorker } from "../../registerServiceWorker";
 
-export function ConsoleClient({
-  templates,
-}: {
-  readonly templates: readonly PresentationTemplate[];
-}) {
+export function ConsoleClient() {
   useEffect(() => {
     registerConsoleServiceWorker();
   }, []);
@@ -19,10 +14,7 @@ export function ConsoleClient({
   return (
     <BrowserRouter>
       <AuthProvider>
-        <ConsoleRoutes
-          coResident={process.env.NEXT_PUBLIC_CO_RESIDENT_CONSOLE === "true"}
-          templates={templates}
-        />
+        <ConsoleRoutes coResident={process.env.NEXT_PUBLIC_CO_RESIDENT_CONSOLE === "true"} />
       </AuthProvider>
     </BrowserRouter>
   );
