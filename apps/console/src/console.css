@@ -17,6 +17,56 @@ html[data-surface="console"] .ui-skip-link:focus:not(:focus-visible) {
   transform: translateY(calc(-1 * var(--size-full) - var(--space-8)));
 }
 
+/* Installed-app shell: the console fills the viewport, never page-scrolls, and
+   behaves like a native surface instead of a document. */
+html[data-surface="console"],
+html[data-surface="console"] body {
+  block-size: var(--size-viewport);
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+html[data-surface="console"] body {
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+html[data-surface="console"] img {
+  -webkit-user-drag: none;
+}
+
+html[data-surface="console"] .ui-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: var(--space-4);
+  inline-size: var(--size-full);
+  max-inline-size: none;
+  block-size: var(--size-viewport);
+  min-block-size: 0;
+  padding: var(--space-4);
+}
+
+html[data-surface="console"] .ui-shell__header {
+  padding-block-end: var(--space-0);
+}
+
+html[data-surface="console"] .ui-shell__body {
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+html[data-surface="console"] .ui-shell__body:not(.ui-shell__body--focused) {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: stretch;
+}
+
+html[data-surface="console"] .ui-shell__body--focused {
+  overflow-y: auto;
+}
+
 .console-rail {
   display: flex;
   grid-column: 1 / -1;
@@ -117,14 +167,24 @@ html[data-surface="console"] .ui-skip-link:focus:not(:focus-visible) {
   background: var(--surface-panel);
 }
 
-.console-content,
 .console-stack {
   display: grid;
   gap: var(--space-8);
 }
 
 .console-content {
+  display: flex;
+  flex-direction: column;
   grid-column: 1 / -1;
+  gap: var(--space-4);
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.console-content > .console-stack {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow-y: auto;
 }
 
 .console-co-resident {
@@ -267,7 +327,9 @@ html[data-surface="console"] .ui-skip-link:focus:not(:focus-visible) {
 .console-workspace {
   display: grid;
   gap: var(--space-8);
-  width: min(100%, 90rem);
+  align-content: start;
+  width: var(--size-full);
+  overflow-y: auto;
 }
 
 .console-workspace__intro {
@@ -429,51 +491,109 @@ html[data-surface="console"] .ui-skip-link:focus:not(:focus-visible) {
   color: var(--text-secondary);
 }
 
-.console-workspace__grid {
+.console-cockpit {
   display: grid;
   grid-template-columns:
-    minmax(var(--size-card-min), 1.1fr)
-    minmax(var(--size-card-min), 0.9fr);
-  gap: var(--space-6);
-  align-items: start;
+    minmax(13rem, 0.8fr)
+    minmax(0, 2.4fr)
+    minmax(var(--size-card-min), 1fr);
+  gap: var(--space-4);
+  min-block-size: 0;
 }
 
-.console-workspace__side,
+.console-cockpit__center,
+.console-cockpit__side,
 .console-slides {
   display: grid;
-  gap: var(--space-5);
+  align-content: start;
+  gap: var(--space-4);
+  min-block-size: 0;
+  overflow-y: auto;
+}
+
+.console-preview {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.console-preview__frame {
+  display: grid;
+  place-content: center;
+  gap: var(--space-3);
+  align-self: start;
+  inline-size: var(--size-full);
+  max-inline-size: var(--size-full);
+  block-size: auto;
+  aspect-ratio: 16 / 9;
+  padding: var(--space-8);
+  border: var(--size-hairline) solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-inset);
+  text-align: center;
+}
+
+.console-preview__label {
+  margin: var(--space-0);
+  font-family: var(--font-display);
+  font-size: var(--text-title);
+  line-height: var(--line-title);
+}
+
+.console-preview__note {
+  margin: var(--space-0);
+  color: var(--text-secondary);
+  font-size: var(--text-caption);
 }
 
 .console-slides__header {
   display: flex;
-  align-items: flex-end;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
-  gap: var(--space-4);
+  gap: var(--space-2);
+}
+
+.console-slides__header h2 {
+  font-size: var(--text-body);
 }
 
 .console-slide-list {
   display: grid;
-  gap: var(--space-3);
-  max-height: var(--size-stage-copy);
+  gap: var(--space-2);
   margin: 0;
   padding: 0;
-  padding-inline-end: var(--space-2);
-  overflow: auto;
   list-style: none;
 }
 
-.console-slide-list li {
+.console-slide-list button {
   display: grid;
-  grid-template-columns: var(--space-10) 1fr;
+  grid-template-columns: var(--space-8) 1fr;
   gap: var(--space-3);
   align-items: center;
-  padding: var(--space-4);
+  inline-size: var(--size-full);
+  padding: var(--space-3);
   border: var(--size-hairline) solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background: var(--surface-raised);
+  color: var(--text-primary);
+  background: var(--surface-panel);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
 }
 
-.console-slide-list li span {
+.console-slide-list button[aria-current="true"] {
+  border-color: var(--border-strong);
+  background: var(--surface-inset);
+}
+
+.console-slide-list button strong {
+  overflow: hidden;
+  font-weight: var(--weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.console-slide-list button span {
   display: grid;
   place-items: center;
   aspect-ratio: 1;
@@ -481,6 +601,7 @@ html[data-surface="console"] .ui-skip-link:focus:not(:focus-visible) {
   background: var(--surface-inset);
   color: var(--text-secondary);
   font-family: var(--font-mono);
+  font-size: var(--text-caption);
 }
 
 .console-preparation-steps {
@@ -502,13 +623,83 @@ html[data-surface="console"] .ui-skip-link:focus:not(:focus-visible) {
 }
 
 @media (max-width: 68rem) {
-  .console-workspace__grid {
-    grid-template-columns: 1fr;
+  .console-cockpit {
+    grid-template-columns: minmax(0, 1.6fr) minmax(var(--size-card-min), 1fr);
+  }
+
+  .console-cockpit .console-slides {
+    grid-column: 1 / -1;
   }
 
   .console-workflow-steps {
     grid-template-columns: 1fr;
   }
+}
+
+@media (max-width: 48rem) {
+  .console-cockpit {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-y: auto;
+  }
+
+  .console-cockpit__center,
+  .console-cockpit__side,
+  .console-cockpit .console-slides {
+    overflow: visible;
+  }
+}
+
+/* Overrides that must outrank the base rules above. */
+html[data-surface="console"] input,
+html[data-surface="console"] textarea,
+html[data-surface="console"] [contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.console-content > .console-workspace {
+  flex: 1 1 auto;
+  min-block-size: 0;
+}
+
+.console-workspace--presenting {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: var(--space-4);
+  overflow: hidden;
+}
+
+.console-workspace--presenting .console-workspace__intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  max-width: none;
+}
+
+.console-workspace--presenting .console-workspace__intro h1 {
+  margin: var(--space-0);
+  font-size: var(--text-lead);
+}
+
+.console-cockpit .ui-panel {
+  padding: var(--space-4);
+  overflow: visible;
+}
+
+.console-cockpit .ui-panel__header {
+  margin-block-end: var(--space-3);
+}
+
+.console-cockpit .ui-panel__title {
+  font-size: var(--text-lead);
+}
+
+.console-workspace--presenting .console-lead {
+  display: none;
+}
+
+.console-workspace--presenting .console-workflow-steps li {
+  padding: var(--space-2) var(--space-4);
 }
 
 @media (max-width: 40rem) {

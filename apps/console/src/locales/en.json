@@ -86,5 +86,7 @@
   "slideFailed": "Slide change failed.",
   "started": "Presentation started",
   "startedMessage": "Presentation started. The audience screen is showing slide 1.",
-  "slidesPlaceholder": "Slides will appear here after upload."
+  "slidesPlaceholder": "Slides will appear here after upload.",
+  "slideRail": "Slide list",
+  "slidePreview": "Slide preview"
 }

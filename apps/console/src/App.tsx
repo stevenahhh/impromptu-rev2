@@ -645,6 +645,7 @@ function PresentationWorkspacePage({
   const [selectedTemplateId, setSelectedTemplateId] = useState(
     templates[0]?.id ?? DEFAULT_PRESENTATION_TEMPLATES[0].id,
   );
+  const [activeIndex, setActiveIndex] = useState(0);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const previousPresentation = useRef(activePresentation);
 
@@ -657,7 +658,7 @@ function PresentationWorkspacePage({
 
   return (
     <section
-      className="console-workspace"
+      className={`console-workspace${activePresentation === null ? "" : " console-workspace--presenting"}`}
       aria-labelledby={titleId}
       data-selected-template={selectedTemplateId}
     >
@@ -706,10 +707,13 @@ function PresentationWorkspacePage({
       {session === null ? null : activePresentation === null ? (
         <SessionUploadPanel client={client} csrfToken={session.csrfToken} />
       ) : (
-        <div className="console-workspace__grid">
-          <SlideWorkspace />
-          <div className="console-workspace__side">
-            <PlaybackPanel />
+        <div className="console-cockpit">
+          <SlideWorkspace activeIndex={activeIndex} onSelect={setActiveIndex} />
+          <div className="console-cockpit__center">
+            <SlidePreview index={activeIndex} />
+            <PlaybackPanel index={activeIndex} onIndexChange={setActiveIndex} />
+          </div>
+          <div className="console-cockpit__side">
             <EvidencePreparationPanel />
             <StageSetupPanel />
             <DisplayPairingPanel />
@@ -720,33 +724,65 @@ function PresentationWorkspacePage({
   );
 }
 
-function SlideWorkspace() {
+function orderedSlides(presentation: ActivePresentationView): ActivePresentationView["slides"] {
+  return [...presentation.slides].sort((left, right) => left.ordinal - right.ordinal);
+}
+
+function SlideWorkspace({
+  activeIndex,
+  onSelect,
+}: {
+  readonly activeIndex: number;
+  readonly onSelect: (index: number) => void;
+}) {
   const { activePresentation, locale } = useAuth();
   if (activePresentation === null) return null;
   const text = messages(locale);
-  const slides = [...activePresentation.slides].sort((left, right) => left.ordinal - right.ordinal);
+  const slides = orderedSlides(activePresentation);
   return (
-    <section className="console-slides" aria-label="Presentation slides">
+    <section className="console-slides" aria-label={text.slideRail}>
       <div className="console-slides__header">
-        <div>
-          <h2>
-            {slides.length} {text.ready}
-          </h2>
-        </div>
+        <h2>
+          {slides.length} {text.ready}
+        </h2>
         <Badge tone="success">{text.safeRender}</Badge>
       </div>
       <ol className="console-slide-list">
-        {slides.map((slide) => (
+        {slides.map((slide, index) => (
           <li key={slide.publicSlideKey}>
-            <span>{slide.ordinal}</span>
-            <strong>{slide.accessibilityLabel}</strong>
+            <button
+              type="button"
+              aria-current={index === activeIndex}
+              data-slide-thumb={slide.publicSlideKey}
+              onClick={() => onSelect(index)}
+            >
+              <span>{slide.ordinal}</span>
+              <strong>{slide.accessibilityLabel}</strong>
+            </button>
           </li>
         ))}
       </ol>
-      <Panel title={`${text.presenterConsole} — private`} tone="inset">
-        <Badge tone="accent">{text.privateBadge}</Badge>
-        <p>{text.privateConsoleLead}</p>
-      </Panel>
+    </section>
+  );
+}
+
+function SlidePreview({ index }: { readonly index: number }) {
+  const { activePresentation, locale } = useAuth();
+  if (activePresentation === null) return null;
+  const text = messages(locale);
+  const slides = orderedSlides(activePresentation);
+  const slide = slides[index];
+  return (
+    <section className="console-preview" aria-label={text.slidePreview}>
+      <div className="console-preview__frame" data-slide-preview>
+        <p className="ui-eyebrow">
+          {index + 1} / {slides.length}
+        </p>
+        <p className="console-preview__label">
+          {slide?.accessibilityLabel ?? text.slidesPlaceholder}
+        </p>
+      </div>
+      <p className="console-preview__note">{text.privateConsoleLead}</p>
     </section>
   );
 }
@@ -916,10 +952,15 @@ function DisplayPairingPanel() {
   );
 }
 
-function PlaybackPanel() {
+function PlaybackPanel({
+  index,
+  onIndexChange,
+}: {
+  readonly index: number;
+  readonly onIndexChange: (index: number) => void;
+}) {
   const { activePresentation, client, displayBindingEpoch, locale, session } = useAuth();
   const text = messages(locale);
-  const [index, setIndex] = useState(0);
   const [controlRevision, setControlRevision] = useState("cr_0");
   const [presentationStarted, setPresentationStarted] = useState(false);
   const [message, setMessage] = useState("");
@@ -937,7 +978,7 @@ function PlaybackPanel() {
         displayBindingEpoch,
         baseRevision: controlRevision,
       });
-      setIndex(nextIndex);
+      onIndexChange(nextIndex);
       setControlRevision(receipt.acceptedControlRevision);
       setMessage(`Showing slide ${nextIndex + 1} of ${slides.length}.`);
     } catch (cause) {
@@ -962,7 +1003,6 @@ function PlaybackPanel() {
           {presentationStarted ? text.started : text.startPresentation}
         </Button>
       </div>
-      <p>{slides[index]?.accessibilityLabel ?? text.slidesPlaceholder}</p>
       <div className="console-playback-actions">
         <Button
           variant="quiet"
