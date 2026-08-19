@@ -6,7 +6,7 @@ The production browser validator (`bun run check:browser-runtime`) applies this 
 
 | Surface | Route | State |
 | --- | --- | --- |
-| Console | `/sign-in` | Signed out |
+| Console | `/sign-in` | Signed out; username and password sign-in fields |
 | Console | `/` | Authenticated fixture |
 | Console | `/session` | Authenticated fixture |
 | Stage | `/` | Public display setup |
