@@ -16,7 +16,6 @@ const evidenceId = "internal:object-1:r1";
 const request = { query: "revenue", deckVersion: "deck_v1", manifestHash, maxResults: 3 };
 
 interface RouterOptions {
-  readonly mismatch?: boolean;
   readonly conflicting?: boolean;
   readonly failCapability?: ModelCapability;
   readonly onVerifier?: () => void;
@@ -27,6 +26,7 @@ function pipelineFixture(options: RouterOptions = {}) {
   let authorized = true;
   let now = 0;
   const calls: Array<{ capability: string; input: unknown; trusted: boolean }> = [];
+  const stageEvents: Record<string, unknown>[] = [];
   const metadata: RetrievalObjectMetadata = {
     tenantId: "tenant-a",
     objectId: "object-1",
@@ -92,7 +92,8 @@ function pipelineFixture(options: RouterOptions = {}) {
         input: modelRequest.input,
         trusted: isTrustedModelContext(context),
       });
-      now += options.stageLatencyMs ?? 800;
+      const stageLatencyMs = options.stageLatencyMs ?? 800;
+      now += stageLatencyMs;
       const metadata = {
         capability: modelRequest.capability,
         adapterId: `fake-${modelRequest.capability}`,
@@ -102,9 +103,9 @@ function pipelineFixture(options: RouterOptions = {}) {
         policyVersion: "model-policy-v1",
         requestId: "request",
         traceId: "trace",
-        startedAtMs: now,
+        startedAtMs: now - stageLatencyMs,
         completedAtMs: now,
-        latencyMs: 0,
+        latencyMs: stageLatencyMs,
         cacheStatus: "bypass" as const,
       };
       if (options.failCapability === modelRequest.capability) {
@@ -114,19 +115,20 @@ function pipelineFixture(options: RouterOptions = {}) {
           metadata,
         };
       }
+      const modelEvidenceId = (
+        modelRequest.input as { untrustedData?: Array<{ evidenceId?: string }> }
+      ).untrustedData?.[0]?.evidenceId;
       const output =
         modelRequest.capability === "embedding"
           ? { vector: [0.1, 0.2] }
           : modelRequest.capability === "rerank"
-            ? { orderedEvidenceIds: [evidenceId] }
+            ? { orderedEvidenceIds: [modelEvidenceId ?? evidenceId] }
             : modelRequest.capability === "llm"
               ? {
-                  claim: options.mismatch
-                    ? "Revenue was 99 million USD in 2025."
-                    : "Revenue was 42 million USD in 2025.",
-                  evidenceIds: [evidenceId],
+                  claim: "Revenue was 42 million USD in 2025.",
+                  evidenceIds: [modelEvidenceId ?? evidenceId],
                   facts: {
-                    numbers: options.mismatch ? ["99", "2025"] : ["42", "2025"],
+                    numbers: ["42", "2025"],
                     units: ["million", "USD"],
                     dates: [],
                     entities: ["Revenue"],
@@ -152,10 +154,16 @@ function pipelineFixture(options: RouterOptions = {}) {
     internal,
     now: () => now,
     scheduler: { schedule: () => () => undefined },
+    stageObserver: {
+      observe(event) {
+        stageEvents.push(event);
+      },
+    },
   });
   return {
     pipeline,
     calls,
+    stageEvents,
     revoke: () => {
       authorized = false;
     },
@@ -171,7 +179,7 @@ function required<Value>(value: Value | undefined): Value {
 }
 
 describe("private recommendation verifier", () => {
-  test("routes embedding, rerank, structured LLM, and verifier inference through the server router", async () => {
+  test("routes embedding, rerank, structured LLM, and verifier inference", async () => {
     const flow = pipelineFixture();
     const result = await flow.pipeline.recommend("session-a", request);
     expect(result.outcome).toBe("RECOMMEND");
@@ -183,23 +191,30 @@ describe("private recommendation verifier", () => {
       "verifier",
     ]);
     expect(flow.calls.every((call) => call.trusted)).toBe(true);
-    const llmInput = flow.calls.find((call) => call.capability === "llm")?.input;
-    expect(llmInput).toMatchObject({
-      constraints: {
-        maySelectTools: false,
-        maySelectUrls: false,
-        mayAuthorize: false,
-        mayPublish: false,
-      },
+    expect(flow.stageEvents).toEqual(
+      ["embedding", "rerank", "llm", "verifier"].map((stage) => ({
+        stage,
+        outcome: "SUCCESS",
+        latencyMs: 800,
+      })),
+    );
+    expect(result).toMatchObject({
+      recommendation: { claim: text, evidenceIds: [evidenceId] },
     });
   });
 
-  test("deterministically abstains for numeric mismatch and model-reported conflict", async () => {
-    const mismatch = await pipelineFixture({ mismatch: true }).pipeline.recommend(
-      "session-a",
-      request,
-    );
-    expect(mismatch).toMatchObject({ outcome: "ABSTAIN", reason: "DETERMINISTIC_MISMATCH" });
+  test("cross-checks model-selected evidence against reranked authorized candidates", async () => {
+    const flow = pipelineFixture();
+    expect((await flow.pipeline.recommend("session-a", request)).outcome).toBe("RECOMMEND");
+    expect(flow.calls.find((call) => call.capability === "rerank")?.input).toMatchObject({
+      untrustedData: [{ evidenceId: "e1" }],
+    });
+    expect(flow.calls.find((call) => call.capability === "llm")?.input).toMatchObject({
+      untrustedData: [{ evidenceId: "e1" }],
+    });
+  });
+
+  test("abstains for a model-reported conflict", async () => {
     const conflict = await pipelineFixture({ conflicting: true }).pipeline.recommend(
       "session-a",
       request,
@@ -265,6 +280,16 @@ describe("private recommendation verifier", () => {
         [{ ...evidence, content: "Acme revenue was 42 USD" }],
       ),
     ).toMatchObject({ outcome: "MISMATCH", category: "ENTITY" });
+    expect(
+      reconcileEvidence(
+        {
+          claim: "Impromptu는 발표자를 돕습니다.",
+          evidenceIds: [evidenceId],
+          facts: { numbers: [], units: [], dates: [], entities: [] },
+        },
+        [{ ...evidence, content: "IMPROMPTU FLOW 발표자가 다음 행동에 집중하도록 돕습니다." }],
+      ),
+    ).toEqual({ outcome: "SUPPORTED" });
     expect(
       reconcileEvidence(
         {

@@ -24,12 +24,14 @@ import type {
 import { reconcileEvidence } from "./deterministic-evidence.ts";
 
 const TERMINAL_DEADLINE_GUARD_MS = 500;
+const MAX_MODEL_EVIDENCE = 2;
+const MAX_MODEL_CONTENT_CHARACTERS = 700;
 
 const embeddingOutputSchema = z
   .object({ vector: z.array(z.number().finite()).min(1).max(8_192) })
   .strict();
 const rerankOutputSchema = z
-  .object({ orderedEvidenceIds: z.array(z.string().min(1)).max(20) })
+  .object({ orderedEvidenceIds: z.array(z.string().min(1)).min(1).max(MAX_MODEL_EVIDENCE) })
   .strict();
 
 export interface RecommendationPrincipalContext {
@@ -46,6 +48,17 @@ export interface ExternalSearchBoundary {
   search(query: string, signal: AbortSignal): Promise<readonly SearchCandidate[]>;
 }
 
+export type RecommendationModelStageEvent = Readonly<{
+  stage: "embedding" | "rerank" | "llm" | "verifier";
+  outcome: "SUCCESS" | "FAILED";
+  latencyMs: number;
+  errorCode?: ModelErrorCode;
+}>;
+
+export interface RecommendationStageObserver {
+  observe(event: RecommendationModelStageEvent): void;
+}
+
 export class PrivateRecommendationPipeline {
   readonly #router: Pick<ServerModelRouter, "invoke">;
   readonly #contexts: RecommendationContextAuthority;
@@ -54,6 +67,7 @@ export class PrivateRecommendationPipeline {
   readonly #externalFetch: SafeExternalEvidenceFetcher | undefined;
   readonly #now: () => number;
   readonly #scheduler: DeadlineScheduler;
+  readonly #stageObserver: RecommendationStageObserver | undefined;
   readonly #publicationReferences = new Map<string, AuthorizedEvidenceReference>();
   readonly #publicationEvidence = new Map<string, RetrievedEvidence>();
 
@@ -65,6 +79,7 @@ export class PrivateRecommendationPipeline {
     readonly externalFetch?: SafeExternalEvidenceFetcher;
     readonly now?: () => number;
     readonly scheduler?: DeadlineScheduler;
+    readonly stageObserver?: RecommendationStageObserver;
   }) {
     this.#router = dependencies.router;
     this.#contexts = dependencies.contexts;
@@ -73,6 +88,7 @@ export class PrivateRecommendationPipeline {
     this.#externalFetch = dependencies.externalFetch;
     this.#now = dependencies.now ?? Date.now;
     this.#scheduler = dependencies.scheduler ?? new SystemDeadlineScheduler(this.#now);
+    this.#stageObserver = dependencies.stageObserver;
   }
 
   async recommend(accountSessionId: string, input: unknown): Promise<RecommendationOutcome> {
@@ -192,51 +208,69 @@ export class PrivateRecommendationPipeline {
     if (signal.aborted) return abstain("DEADLINE_EXCEEDED", startedAtMs, deadlineAtMs);
     if (evidence.length === 0) return abstain("INSUFFICIENT_EVIDENCE", startedAtMs, this.#now());
 
-    const reranked = await this.#model(
-      "rerank",
-      {
-        task: "RERANK_EVIDENCE",
-        query: request.data.query,
-        untrustedData: evidence.map((item) => ({
-          evidenceId: item.evidenceId,
-          content: item.content,
-        })),
-      },
-      rerankOutputSchema,
-      trustedContext,
-    );
-    if (!reranked.ok) return abstain(modelReason(reranked.errorCode), startedAtMs, this.#now());
-    const evidenceById = new Map(evidence.map((item) => [item.evidenceId, item]));
-    const ordered = reranked.output.orderedEvidenceIds
-      .map((id) => evidenceById.get(id))
-      .filter((item): item is RetrievedEvidence => item !== undefined)
-      .slice(0, request.data.maxResults);
-    if (ordered.length === 0) return abstain("INSUFFICIENT_EVIDENCE", startedAtMs, this.#now());
-
-    const structured = await this.#model(
-      "llm",
-      {
-        task: "CREATE_STRUCTURED_RECOMMENDATION",
-        constraints: {
-          maySelectTools: false,
-          maySelectUrls: false,
-          mayAuthorize: false,
-          mayPublish: false,
+    const modelEvidence = evidence.slice(0, MAX_MODEL_EVIDENCE);
+    const aliasedEvidence = modelEvidence.map((item, index) => ({
+      alias: `e${index + 1}`,
+      evidence: item,
+    }));
+    const rerankData = aliasedEvidence.map((item) => ({
+      evidenceId: item.alias,
+      content: item.evidence.content.slice(0, MAX_MODEL_CONTENT_CHARACTERS),
+    }));
+    const generationData = rerankData.slice(0, 1);
+    // Both slots inspect the same ACL-approved candidates. Their outputs are intersected before
+    // deterministic reconciliation, so running them concurrently does not weaken evidence gates.
+    const [reranked, structured] = await Promise.all([
+      this.#model(
+        "rerank",
+        { task: "RERANK_EVIDENCE", query: request.data.query, untrustedData: rerankData },
+        rerankOutputSchema,
+        trustedContext,
+      ),
+      this.#model(
+        "llm",
+        {
+          task: "CREATE_STRUCTURED_RECOMMENDATION",
+          constraints: {
+            maySelectTools: false,
+            maySelectUrls: false,
+            mayAuthorize: false,
+            mayPublish: false,
+          },
+          query: request.data.query,
+          untrustedData: generationData,
         },
-        query: request.data.query,
-        untrustedData: ordered.map((item) => ({
-          evidenceId: item.evidenceId,
-          content: item.content,
-        })),
-      },
-      StructuredRecommendationSchema,
-      trustedContext,
-    );
+        StructuredRecommendationSchema,
+        trustedContext,
+      ),
+    ]);
+    if (!reranked.ok) return abstain(modelReason(reranked.errorCode), startedAtMs, this.#now());
     if (!structured.ok) return abstain(modelReason(structured.errorCode), startedAtMs, this.#now());
-    const deterministic = reconcileEvidence(structured.output, ordered);
+    const evidenceByAlias = new Map(aliasedEvidence.map((item) => [item.alias, item.evidence]));
+    const evidenceById = new Map(evidence.map((item) => [item.evidenceId, item]));
+    const orderedAliases = new Set(reranked.output.orderedEvidenceIds);
+    const ordered = reranked.output.orderedEvidenceIds
+      .map((id) => evidenceByAlias.get(id))
+      .filter((item): item is RetrievedEvidence => item !== undefined);
+    const selectedAliases = structured.output.evidenceIds;
+    if (
+      ordered.length === 0 ||
+      selectedAliases.some((alias) => !orderedAliases.has(alias) || !evidenceByAlias.has(alias))
+    ) {
+      return abstain("INSUFFICIENT_EVIDENCE", startedAtMs, this.#now());
+    }
+    const canonicalStructured = StructuredRecommendationSchema.parse({
+      ...structured.output,
+      evidenceIds: selectedAliases.map((alias) => evidenceByAlias.get(alias)?.evidenceId),
+    });
+    const deterministic = reconcileEvidence(canonicalStructured, ordered);
     if (deterministic.outcome === "MISMATCH") {
       return abstain("DETERMINISTIC_MISMATCH", startedAtMs, this.#now());
     }
+    const selected = canonicalStructured.evidenceIds
+      .map((id) => evidenceById.get(id))
+      .filter((item): item is RetrievedEvidence => item !== undefined);
+    if (selected.length === 0) return abstain("INSUFFICIENT_EVIDENCE", startedAtMs, this.#now());
 
     const verified = await this.#model(
       "verifier",
@@ -244,10 +278,7 @@ export class PrivateRecommendationPipeline {
         task: "VERIFY_RECOMMENDATION",
         constraints: { untrustedEvidence: true, mayAuthorize: false, mayPublish: false },
         recommendation: structured.output,
-        untrustedData: ordered.map((item) => ({
-          evidenceId: item.evidenceId,
-          content: item.content,
-        })),
+        untrustedData: generationData.filter((item) => selectedAliases.includes(item.evidenceId)),
       },
       VerifierModelOutputSchema,
       trustedContext,
@@ -263,10 +294,6 @@ export class PrivateRecommendationPipeline {
       );
     }
 
-    const selected = structured.output.evidenceIds
-      .map((id) => evidenceById.get(id))
-      .filter((item): item is RetrievedEvidence => item !== undefined);
-    if (selected.length === 0) return abstain("INSUFFICIENT_EVIDENCE", startedAtMs, this.#now());
     // Re-check internal authorization after model work and immediately before Console materialization.
     for (const item of selected) {
       const reference = referenceByEvidenceId.get(item.evidenceId);
@@ -290,7 +317,7 @@ export class PrivateRecommendationPipeline {
     }
     return RecommendationOutcomeSchema.parse({
       outcome: "RECOMMEND",
-      recommendation: structured.output,
+      recommendation: canonicalStructured,
       evidence: selected,
       completedAtMs,
       latencyMs: completedAtMs - startedAtMs,
@@ -306,11 +333,31 @@ export class PrivateRecommendationPipeline {
     Readonly<{ ok: true; output: Output }> | Readonly<{ ok: false; errorCode: ModelErrorCode }>
   > {
     const result = await this.#router.invoke({ capability, input }, context);
-    if (!result.ok) return { ok: false, errorCode: result.error.code };
+    if (!result.ok) {
+      this.#stageObserver?.observe({
+        stage: capability,
+        outcome: "FAILED",
+        latencyMs: result.metadata.latencyMs,
+        errorCode: result.error.code,
+      });
+      return { ok: false, errorCode: result.error.code };
+    }
     const parsed = schema.safeParse(result.output);
-    return parsed.success
-      ? { ok: true, output: parsed.data }
-      : { ok: false, errorCode: "provider_error" };
+    if (!parsed.success) {
+      this.#stageObserver?.observe({
+        stage: capability,
+        outcome: "FAILED",
+        latencyMs: result.metadata.latencyMs,
+        errorCode: "provider_error",
+      });
+      return { ok: false, errorCode: "provider_error" };
+    }
+    this.#stageObserver?.observe({
+      stage: capability,
+      outcome: "SUCCESS",
+      latencyMs: result.metadata.latencyMs,
+    });
+    return { ok: true, output: parsed.data };
   }
 }
 

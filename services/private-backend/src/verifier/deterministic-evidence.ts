@@ -45,29 +45,17 @@ export function reconcileEvidence(
   const evidenceText = selected.map((item) => item?.content ?? "").join("\n");
   const claimFacts = extractFacts(recommendation.claim);
   const declared = normalizeFacts(recommendation.facts);
-  for (const [category, values] of [
-    ["NUMBER", claimFacts.numbers] as const,
-    ["UNIT", claimFacts.units] as const,
-    ["DATE", claimFacts.dates] as const,
-    ["ENTITY", claimFacts.entities] as const,
-  ]) {
-    const declaredValues =
-      category === "NUMBER"
-        ? declared.numbers
-        : category === "UNIT"
-          ? declared.units
-          : category === "DATE"
-            ? declared.dates
-            : declared.entities;
-    for (const value of values) {
-      if (!declaredValues.includes(value)) return { outcome: "MISMATCH", category, value };
-    }
-  }
+  const asserted = {
+    numbers: unique([...claimFacts.numbers, ...declared.numbers]),
+    units: unique([...claimFacts.units, ...declared.units]),
+    dates: unique([...claimFacts.dates, ...declared.dates]),
+    entities: unique([...claimFacts.entities, ...declared.entities]),
+  };
   const evidenceFacts = extractFacts(evidenceText);
   for (const [category, values, available] of [
-    ["NUMBER", declared.numbers, evidenceFacts.numbers] as const,
-    ["UNIT", declared.units, evidenceFacts.units] as const,
-    ["DATE", declared.dates, evidenceFacts.dates] as const,
+    ["NUMBER", asserted.numbers, evidenceFacts.numbers] as const,
+    ["UNIT", asserted.units, evidenceFacts.units] as const,
+    ["DATE", asserted.dates, evidenceFacts.dates] as const,
   ]) {
     for (const value of values) {
       if (!available.includes(value)) return { outcome: "MISMATCH", category, value };
@@ -75,11 +63,11 @@ export function reconcileEvidence(
   }
   const foldedClaim = fold(recommendation.claim);
   const foldedEvidence = fold(evidenceText);
-  for (const entity of unique([...claimFacts.entities, ...declared.entities])) {
+  for (const entity of asserted.entities) {
     if (
       !foldedClaim.includes(entity) ||
       !foldedEvidence.includes(entity) ||
-      !evidenceFacts.entities.includes(entity)
+      !evidenceFacts.entities.some((candidate) => containsEntity(candidate, entity))
     ) {
       return { outcome: "MISMATCH", category: "ENTITY", value: entity };
     }
@@ -108,7 +96,7 @@ export function extractFacts(text: string): EvidenceFactSet {
   const entities = unique(
     [
       ...text.matchAll(
-        /(?<![\p{L}\p{N}])\p{Lu}[\p{L}\p{N}&.'’-]*(?:\s+\p{Lu}[\p{L}\p{N}&.'’-]*)*/gu,
+        /(?<![\p{L}\p{N}])\p{Lu}[\p{Script=Latin}\p{N}&.'’-]*(?:\s+\p{Lu}[\p{Script=Latin}\p{N}&.'’-]*)*/gu,
       ),
     ]
       .map((match) => fold(match[0]))
@@ -149,6 +137,10 @@ function normalizeDate(value: string): string {
 
 function fold(value: string): string {
   return value.normalize("NFKC").toLocaleLowerCase("en-US").replace(/\s+/g, " ").trim();
+}
+
+function containsEntity(candidate: string, entity: string): boolean {
+  return ` ${candidate} `.includes(` ${entity} `);
 }
 
 function unique(values: readonly string[]): string[] {

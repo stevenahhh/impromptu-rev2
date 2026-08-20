@@ -21,7 +21,6 @@ const origin = "https://console.example.test";
 const manifestHash = "a".repeat(64);
 const content = "Acme revenue was 42 million USD in 2025.";
 const sourceHash = new Bun.CryptoHasher("sha256").update(content).digest("hex");
-const evidenceId = "internal:object-1:r1";
 const recommendationRequest = {
   query: "revenue",
   deckVersion: "deck_v1",
@@ -47,10 +46,10 @@ function modelRouter(): ServerModelRouter {
   const registry = new ModelRoutingRegistry();
   const outputs = {
     embedding: { vector: [0.1, 0.2] },
-    rerank: { orderedEvidenceIds: [evidenceId] },
+    rerank: { orderedEvidenceIds: ["e1"] },
     llm: {
       claim: "Acme revenue was 42 million USD in 2025.",
-      evidenceIds: [evidenceId],
+      evidenceIds: ["e1"],
       facts: {
         numbers: ["42", "2025"],
         units: ["million", "USD"],
