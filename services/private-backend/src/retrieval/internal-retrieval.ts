@@ -12,6 +12,10 @@ export interface RetrievalPrincipalAuthority {
   resolve(accountSessionId: string): Promise<RetrievalPrincipal | null>;
 }
 
+export interface RetrievalCorpusPreparer {
+  prepare(principal: RetrievalPrincipal, request: RetrievalRequest): Promise<void>;
+}
+
 export interface AuthorizationSnapshot {
   readonly version: string;
   readonly current: boolean;
@@ -86,17 +90,20 @@ export class InternalRetrievalService {
   readonly #policy: RetrievalAuthorizationPolicy;
   readonly #ann: AuthorizedAnnIndex;
   readonly #objects: PrivateRetrievalObjectStore;
+  readonly #corpus: RetrievalCorpusPreparer | undefined;
 
   constructor(dependencies: {
     readonly principals: RetrievalPrincipalAuthority;
     readonly policy: RetrievalAuthorizationPolicy;
     readonly ann: AuthorizedAnnIndex;
     readonly objects: PrivateRetrievalObjectStore;
+    readonly corpus?: RetrievalCorpusPreparer;
   }) {
     this.#principals = dependencies.principals;
     this.#policy = dependencies.policy;
     this.#ann = dependencies.ann;
     this.#objects = dependencies.objects;
+    this.#corpus = dependencies.corpus;
   }
 
   async retrieve(
@@ -109,6 +116,7 @@ export class InternalRetrievalService {
     try {
       const principal = await this.#principals.resolve(accountSessionId);
       if (principal === null) return [];
+      await this.#corpus?.prepare(principal, request.data);
       const snapshot = await this.#policy.prefilter(principal, request.data);
       if (
         !snapshot.current ||
