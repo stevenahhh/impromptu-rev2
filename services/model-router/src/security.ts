@@ -40,6 +40,39 @@ export interface ProviderEgressTransport {
   send(request: ProviderEgressTransportRequest): Promise<ProviderTransportResponse>;
 }
 
+export class FetchProviderEgressTransport implements ProviderEgressTransport {
+  readonly #maxResponseBytes: number;
+
+  constructor(options: { readonly maxResponseBytes?: number } = {}) {
+    this.#maxResponseBytes = options.maxResponseBytes ?? 4_000_000;
+  }
+
+  async send(request: ProviderEgressTransportRequest): Promise<ProviderTransportResponse> {
+    const headers = new Headers(request.headers);
+    headers.set("authorization", `Bearer ${request.credential}`);
+    const response = await fetch(request.url, {
+      method: request.method,
+      headers,
+      ...(request.body === undefined ? {} : { body: Uint8Array.from(request.body).buffer }),
+      redirect: "error",
+      signal: request.signal,
+    });
+    const declaredLength = Number(response.headers.get("content-length"));
+    if (Number.isFinite(declaredLength) && declaredLength > this.#maxResponseBytes) {
+      throw new ModelRouterError("transport_error", "Provider response exceeded size limit", false);
+    }
+    const body = new Uint8Array(await response.arrayBuffer());
+    if (body.byteLength > this.#maxResponseBytes) {
+      throw new ModelRouterError("transport_error", "Provider response exceeded size limit", false);
+    }
+    return {
+      status: response.status,
+      headers: Object.fromEntries(response.headers.entries()),
+      body,
+    };
+  }
+}
+
 export interface RevocableTransportLease {
   readonly transport: ProviderTransport;
   readonly revoke: () => void;

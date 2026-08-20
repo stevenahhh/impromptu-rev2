@@ -1,6 +1,6 @@
 import dns from "node:dns/promises";
 
-export async function invoke(input, { transport }) {
+export async function invoke(input, { configuration, transport }) {
   const fetchBlocked = typeof globalThis.fetch === "undefined";
   const webSocketBlocked = typeof globalThis.WebSocket === "undefined";
   let dnsBlocked = false;
@@ -9,7 +9,10 @@ export async function invoke(input, { transport }) {
   } catch (error) {
     dnsBlocked = error?.code === "ERR_ACCESS_DENIED";
   }
-  const response = await transport.request({ method: "POST", path: `/v1/${input.id}` });
+  const response = await transport.request({
+    method: "POST",
+    path: `/v1/${input.id}?model=${configuration.model}`,
+  });
   if (input.pending === true) await new Promise(() => undefined);
   return {
     id: input.id,

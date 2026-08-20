@@ -148,7 +148,12 @@ function registerIsolatedUnary(registry: ModelRoutingRegistry, exportName = "inv
             })
             .strict()
         : z.unknown(),
-    module: { modulePath, exportName, allowedReadPaths: [] },
+    module: {
+      modulePath,
+      exportName,
+      allowedReadPaths: [],
+      configuration: { model: "configured-model" },
+    },
   });
 }
 
@@ -203,8 +208,8 @@ describe("production adapter process isolation", () => {
     });
     expect(second).toMatchObject({ ok: true, output: { id: "second" } });
     expect(transport.requests.map(({ url }) => url).sort()).toEqual([
-      "https://api.vendor.example/v1/first",
-      "https://api.vendor.example/v1/second",
+      "https://api.vendor.example/v1/first?model=configured-model",
+      "https://api.vendor.example/v1/second?model=configured-model",
     ]);
     expect(
       transport.requests.every(({ credential }) => credential === "parent-only-credential"),

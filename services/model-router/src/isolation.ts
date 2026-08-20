@@ -16,6 +16,7 @@ export const isolatedAdapterModuleSchema = z
     allowedReadPaths: z
       .array(z.string().refine((value) => isAbsolute(value), "read paths must be absolute"))
       .default([]),
+    configuration: z.record(z.string(), z.string()).default({}),
   })
   .strict();
 export type IsolatedAdapterModule = z.infer<typeof isolatedAdapterModuleSchema>;
@@ -97,7 +98,12 @@ export class NodePermissionAdapterIsolate implements AdapterIsolate {
     const module = isolatedAdapterModuleSchema.parse(untrustedModule);
     const session = this.#spawn(module, "unary", context);
     try {
-      session.send({ type: "init", input: encodeRpc(input), context: publicContext(context) });
+      session.send({
+        type: "init",
+        input: encodeRpc(input),
+        context: publicContext(context),
+        configuration: module.configuration,
+      });
       return await session.unaryResult;
     } finally {
       await session.close();
@@ -126,7 +132,11 @@ export class NodePermissionAdapterIsolate implements AdapterIsolate {
       }
     })();
     void pump.catch(() => undefined);
-    session.send({ type: "init", context: publicContext(context) });
+    session.send({
+      type: "init",
+      context: publicContext(context),
+      configuration: module.configuration,
+    });
     try {
       for await (const event of session.events) yield event;
     } finally {

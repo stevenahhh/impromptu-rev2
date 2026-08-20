@@ -67,6 +67,7 @@ async function receive(line) {
     const adapter = adapterModule[exportName];
     if (typeof adapter !== "function") throw new Error("Adapter export must be a function");
     const api = Object.freeze({
+      configuration: Object.freeze(message.configuration ?? {}),
       context: Object.freeze(message.context ?? {}),
       transport,
     });

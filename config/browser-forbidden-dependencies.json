@@ -34,6 +34,8 @@
     "DEEPGRAM_API_KEY",
     "GOOGLE_GENERATIVE_AI_API_KEY",
     "OPENAI_API_KEY",
+    "CHAT_MODEL_API_KEY",
+    "EMBEDDING_MODEL_API_KEY",
     "api.anthropic.com",
     "api.deepgram.com",
     "api.openai.com",

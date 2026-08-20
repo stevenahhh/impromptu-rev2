@@ -288,6 +288,7 @@ function cloneAndFreezeDescriptor(value: unknown) {
 function cloneAndFreezeModule(value: unknown): IsolatedAdapterModule {
   const module = isolatedAdapterModuleSchema.parse(structuredClone(value));
   Object.freeze(module.allowedReadPaths);
+  Object.freeze(module.configuration);
   return Object.freeze(module);
 }
 

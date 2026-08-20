@@ -1,3 +1,5 @@
+import { lookup } from "node:dns/promises";
+import { request as httpsRequest } from "node:https";
 import { type RetrievedEvidence, RetrievedEvidenceSchema } from "@impromptu/contracts/retrieval";
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
@@ -33,6 +35,64 @@ export interface PinnedHttpsTransport {
     readonly addresses: readonly string[];
     readonly signal: AbortSignal;
   }): Promise<PinnedHttpsResponse>;
+}
+
+export class NodePublicDnsResolver implements PublicDnsResolver {
+  async resolve(hostname: string, signal: AbortSignal): Promise<readonly string[]> {
+    if (signal.aborted) throw signal.reason;
+    let rejectAbort: (reason: unknown) => void = () => undefined;
+    const abort = new Promise<never>((_resolve, reject) => {
+      rejectAbort = reject;
+    });
+    const onAbort = () => rejectAbort(signal.reason);
+    signal.addEventListener("abort", onAbort, { once: true });
+    try {
+      const records = await Promise.race([lookup(hostname, { all: true, verbatim: true }), abort]);
+      return Object.freeze([...new Set(records.map((record) => record.address))]);
+    } finally {
+      signal.removeEventListener("abort", onAbort);
+    }
+  }
+}
+
+export class NodePinnedHttpsTransport implements PinnedHttpsTransport {
+  async request(input: {
+    readonly url: string;
+    readonly addresses: readonly string[];
+    readonly signal: AbortSignal;
+  }): Promise<PinnedHttpsResponse> {
+    const url = safeHttpsUrl(input.url);
+    const address = input.addresses[0];
+    if (address === undefined || !isPublicIpAddress(address)) {
+      throw new Error("A public pinned address is required");
+    }
+    return await new Promise<PinnedHttpsResponse>((resolve, reject) => {
+      const request = httpsRequest(
+        url,
+        {
+          method: "GET",
+          headers: { accept: "text/html, application/xhtml+xml, text/plain" },
+          lookup: (_hostname, _options, callback) => {
+            callback(null, address, address.includes(":") ? 6 : 4);
+          },
+          servername: url.hostname,
+        },
+        (response) => {
+          const headers: Record<string, string> = {};
+          for (const [name, value] of Object.entries(response.headers)) {
+            if (value !== undefined)
+              headers[name] = Array.isArray(value) ? value.join(", ") : value;
+          }
+          resolve({ status: response.statusCode ?? 0, headers, body: response });
+        },
+      );
+      const onAbort = () => request.destroy(new Error("Pinned HTTPS request aborted"));
+      input.signal.addEventListener("abort", onAbort, { once: true });
+      request.once("close", () => input.signal.removeEventListener("abort", onAbort));
+      request.once("error", reject);
+      request.end();
+    });
+  }
 }
 
 export type ExternalFetchResult =
