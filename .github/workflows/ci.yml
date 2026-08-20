@@ -1,0 +1,289 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BUN_VERSION: 1.3.14
+  NODE_VERSION: 26.0.0
+  PYTHON_VERSION: 3.14.0
+  UV_VERSION: 0.9.24
+
+jobs:
+  quality:
+    name: check / policy, lint, types
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        runtime:
+          - node: 26.0.0
+            bun: 1.3.14
+            python: 3.14.0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.runtime.node }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ matrix.runtime.bun }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.runtime.python }}
+      - name: Install JavaScript dependencies
+        run: bun install --frozen-lockfile
+      - name: Repository and architecture policy
+        run: bun run check:repo && bun run check:boundaries
+      - name: Lint
+        run: bun run lint
+      - name: Typecheck
+        run: bun run typecheck
+
+  test:
+    name: check / Bun tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: impromptu_bootstrap
+          POSTGRES_PASSWORD: ci-local-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready --username impromptu_bootstrap --dbname postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    strategy:
+      matrix:
+        runtime:
+          - node: 26.0.0
+            bun: 1.3.14
+            python: 3.14.0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.runtime.node }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ matrix.runtime.bun }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.runtime.python }}
+      - name: Install JavaScript dependencies
+        run: bun install --frozen-lockfile
+      - name: Prepare test databases
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          docker exec "$POSTGRES_CONTAINER" mkdir -p /workspace/infra/database /workspace/infra/migrations
+          docker cp infra/migrations/. "$POSTGRES_CONTAINER:/workspace/infra/migrations"
+          docker cp infra/database/migrate.sh "$POSTGRES_CONTAINER:/workspace/infra/database/migrate.sh"
+          docker exec \
+            --env MIGRATIONS_ROOT=/workspace/infra/migrations \
+            --env 'BOOTSTRAP_DATABASE_URL=postgresql:///postgres?user=impromptu_bootstrap' \
+            --env 'PRIVATE_MIGRATION_DATABASE_URL=postgresql:///impromptu_private?user=migration' \
+            --env 'PROJECTION_MIGRATION_DATABASE_URL=postgresql:///impromptu_projection?user=migration' \
+            "$POSTGRES_CONTAINER" sh /workspace/infra/database/migrate.sh
+      - name: Test
+        env:
+          PRIVATE_DATABASE_URL: postgresql://impromptu_bootstrap:ci-local-only@127.0.0.1:5432/impromptu_private
+          PROJECTION_DATABASE_URL: postgresql://impromptu_bootstrap:ci-local-only@127.0.0.1:5432/impromptu_projection
+        run: bun run test
+
+  browser-build:
+    name: check / browser build and boundaries
+    runs-on: ubuntu-24.04
+    env:
+      CONSOLE_PRIVATE_API_ORIGIN: https://private-backend.ci.invalid
+      STAGE_PUBLIC_API_ORIGIN: https://projection-gateway.ci.invalid
+      NEXT_PUBLIC_STAGE_ORIGIN: https://stage.ci.invalid
+    timeout-minutes: 25
+    strategy:
+      matrix:
+        runtime:
+          - node: 26.0.0
+            bun: 1.3.14
+            python: 3.14.0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.runtime.node }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ matrix.runtime.bun }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.runtime.python }}
+      - name: Install JavaScript dependencies
+        run: bun install --frozen-lockfile
+      - name: Build browser applications
+        run: bun run build
+      - name: Verify browser boundaries
+        run: bun run check:browser && bun run check:browser-boundary
+      - name: Verify production browser runtime
+        run: bun run check:browser-runtime
+
+  ingestion:
+    name: Python ingestion / ${{ matrix.python }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      matrix:
+        python: [3.14.0]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.0.0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: 0.9.24
+          enable-cache: true
+      - name: Install JavaScript dependencies
+        run: bun install --frozen-lockfile
+      - name: Install locked Python dependencies
+        run: uv sync --project services/ingestion --frozen
+      - name: Lint ingestion
+        run: uv run --project services/ingestion ruff check src tests
+      - name: Typecheck ingestion
+        run: uv run --project services/ingestion basedpyright
+      - name: Test ingestion
+        run: uv run --project services/ingestion pytest
+
+  database:
+    name: PostgreSQL role topology
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: impromptu_bootstrap
+          POSTGRES_PASSWORD: ci-local-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready --username impromptu_bootstrap --dbname postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.0.0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - uses: actions/setup-python@v6
+        with:
+          python-version: 3.14.0
+      - name: Install JavaScript dependencies
+        run: bun install --frozen-lockfile
+      - name: Copy migrations into the PostgreSQL service container
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          docker exec "$POSTGRES_CONTAINER" mkdir -p /workspace/infra/database /workspace/infra/migrations
+          docker cp infra/migrations/. "$POSTGRES_CONTAINER:/workspace/infra/migrations"
+          docker cp infra/database/migrate.sh "$POSTGRES_CONTAINER:/workspace/infra/database/migrate.sh"
+      - name: Apply migrations twice and verify the ledger
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          migrate() {
+            docker exec \
+              --env MIGRATIONS_ROOT=/workspace/infra/migrations \
+              --env 'BOOTSTRAP_DATABASE_URL=postgresql:///postgres?user=impromptu_bootstrap' \
+              --env 'PRIVATE_MIGRATION_DATABASE_URL=postgresql:///impromptu_private?user=migration' \
+              --env 'PROJECTION_MIGRATION_DATABASE_URL=postgresql:///impromptu_projection?user=migration' \
+              "$POSTGRES_CONTAINER" sh /workspace/infra/database/migrate.sh
+          }
+          migrate
+          migrate | tee /tmp/migration-rerun.log
+          grep -q 'SKIP private/0006_deck_retrieval_chunks.sql' /tmp/migration-rerun.log
+          grep -q 'SKIP projection/0005_gateway_state.sql' /tmp/migration-rerun.log
+      - name: Verify database roles, grants, and application surfaces
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          psql_file() {
+            role="$1"
+            database="$2"
+            file="$3"
+            docker exec --interactive "$POSTGRES_CONTAINER" \
+              psql --username "$role" --dbname "$database" --no-psqlrc --set ON_ERROR_STOP=1 < "$file"
+          }
+          psql_file impromptu_bootstrap postgres tests/database/cluster-assertions.sql
+          psql_file private_app impromptu_private tests/database/private-seed.sql
+          psql_file impromptu_bootstrap impromptu_projection tests/database/projection-seed.sql
+          PRIVATE_DATABASE_URL=postgresql://impromptu_bootstrap:ci-local-only@127.0.0.1:5432/impromptu_private \
+            PROJECTION_DATABASE_URL=postgresql://impromptu_bootstrap:ci-local-only@127.0.0.1:5432/impromptu_projection \
+            bun run tests/database/state-store-integration.ts
+          psql_file impromptu_bootstrap impromptu_private tests/database/private-assertions.sql
+          psql_file impromptu_bootstrap impromptu_projection tests/database/projection-assertions.sql
+          psql_file private_app impromptu_private tests/database/private-app.sql
+          psql_file projection_app impromptu_projection tests/database/projection-app.sql
+          psql_file publication_dispatcher impromptu_projection tests/database/dispatcher-app.sql
+
+  docker:
+    name: Docker / ${{ matrix.image }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: private-backend
+            dockerfile: services/private-backend/Dockerfile
+          - image: projection-gateway
+            dockerfile: services/projection-gateway/Dockerfile
+          - image: console
+            dockerfile: apps/console/Dockerfile
+          - image: stage
+            dockerfile: apps/stage/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: false
+          tags: impromptu/${{ matrix.image }}:ci
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+  check:
+    name: bun run check (split gate)
+    if: always()
+    needs: [quality, test, browser-build, ingestion, database, docker]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every check shard
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: test "$RESULTS" = "success success success success success success"

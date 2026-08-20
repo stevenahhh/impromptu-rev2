@@ -1,0 +1,203 @@
+name: impromptu-production
+
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: impromptu_bootstrap
+      POSTGRES_PASSWORD: ${POSTGRES_BOOTSTRAP_PASSWORD:?Set POSTGRES_BOOTSTRAP_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready --username impromptu_bootstrap --dbname postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - database
+
+  database-migrate:
+    image: postgres:17.6-alpine
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      BOOTSTRAP_DATABASE_URL: postgresql://impromptu_bootstrap:${POSTGRES_BOOTSTRAP_PASSWORD:?Set POSTGRES_BOOTSTRAP_PASSWORD}@postgres:5432/postgres
+      PRIVATE_MIGRATION_DATABASE_URL: postgresql://migration:${MIGRATION_DATABASE_PASSWORD:?Set MIGRATION_DATABASE_PASSWORD}@postgres:5432/impromptu_private
+      PROJECTION_MIGRATION_DATABASE_URL: postgresql://migration:${MIGRATION_DATABASE_PASSWORD:?Set MIGRATION_DATABASE_PASSWORD}@postgres:5432/impromptu_projection
+      MIGRATIONS_ROOT: /workspace/infra/migrations
+      MIGRATION_DATABASE_PASSWORD: ${MIGRATION_DATABASE_PASSWORD:?Set MIGRATION_DATABASE_PASSWORD}
+      PRIVATE_DATABASE_PASSWORD: ${PRIVATE_DATABASE_PASSWORD:?Set PRIVATE_DATABASE_PASSWORD}
+      PROJECTION_DATABASE_PASSWORD: ${PROJECTION_DATABASE_PASSWORD:?Set PROJECTION_DATABASE_PASSWORD}
+      PUBLICATION_DISPATCHER_DATABASE_PASSWORD: ${PUBLICATION_DISPATCHER_DATABASE_PASSWORD:?Set PUBLICATION_DISPATCHER_DATABASE_PASSWORD}
+      RETENTION_DATABASE_PASSWORD: ${RETENTION_DATABASE_PASSWORD:?Set RETENTION_DATABASE_PASSWORD}
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        for migration in /workspace/infra/migrations/cluster/*.sql; do
+          psql "$$BOOTSTRAP_DATABASE_URL" --no-psqlrc --set ON_ERROR_STOP=1 --file "$$migration"
+        done
+        printf '%s\n' \
+          "ALTER ROLE migration PASSWORD :'migration_password';" \
+          "ALTER ROLE private_app PASSWORD :'private_password';" \
+          "ALTER ROLE projection_app PASSWORD :'projection_password';" \
+          "ALTER ROLE publication_dispatcher PASSWORD :'dispatcher_password';" \
+          "ALTER ROLE retention_worker PASSWORD :'retention_password';" \
+          | psql "$$BOOTSTRAP_DATABASE_URL" --no-psqlrc --set ON_ERROR_STOP=1 \
+              --set migration_password="$$MIGRATION_DATABASE_PASSWORD" \
+              --set private_password="$$PRIVATE_DATABASE_PASSWORD" \
+              --set projection_password="$$PROJECTION_DATABASE_PASSWORD" \
+              --set dispatcher_password="$$PUBLICATION_DISPATCHER_DATABASE_PASSWORD" \
+              --set retention_password="$$RETENTION_DATABASE_PASSWORD"
+        exec sh /workspace/infra/database/migrate.sh
+    volumes:
+      - ./infra/migrations:/workspace/infra/migrations:ro
+      - ./infra/database/migrate.sh:/workspace/infra/database/migrate.sh:ro
+    networks:
+      - database
+
+  projection-gateway:
+    build:
+      context: .
+      dockerfile: services/projection-gateway/Dockerfile
+    image: impromptu/projection-gateway:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      database-migrate:
+        condition: service_completed_successfully
+    environment:
+      PROJECTION_GATEWAY_HOST: 0.0.0.0
+      PROJECTION_GATEWAY_PORT: "3002"
+      STAGE_ORIGIN: ${STAGE_PUBLIC_ORIGIN:?Set STAGE_PUBLIC_ORIGIN}
+      PRIVATE_BACKEND_ORIGIN: http://private-backend:3001
+      SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:?Set SERVICE_AUTH_TOKEN}
+      DECK_ARTIFACT_ROOT: /var/lib/impromptu/decks
+      PROJECTION_DATABASE_URL: postgresql://projection_app:${PROJECTION_DATABASE_PASSWORD:?Set PROJECTION_DATABASE_PASSWORD}@postgres:5432/impromptu_projection
+      PROJECTION_GATEWAY_STATE_KEY: ${PROJECTION_GATEWAY_STATE_KEY:-default}
+      PROJECTION_PUBLIC_RATE_LIMIT_CAPACITY: ${PROJECTION_PUBLIC_RATE_LIMIT_CAPACITY:-120}
+      PROJECTION_PUBLIC_RATE_LIMIT_REFILL_PER_SECOND: ${PROJECTION_PUBLIC_RATE_LIMIT_REFILL_PER_SECOND:-2}
+      PROJECTION_CONNECTION_RATE_LIMIT_CAPACITY: ${PROJECTION_CONNECTION_RATE_LIMIT_CAPACITY:-20}
+      PROJECTION_CONNECTION_RATE_LIMIT_REFILL_PER_SECOND: ${PROJECTION_CONNECTION_RATE_LIMIT_REFILL_PER_SECOND:-1}
+    healthcheck:
+      test: ["CMD", "bun", "-e", "const r=await fetch('http://127.0.0.1:3002/readyz');process.exit(r.ok?0:1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    ports:
+      - "127.0.0.1:${PROJECTION_GATEWAY_PUBLISH_PORT:-3002}:3002"
+    volumes:
+      - deck-artifacts:/var/lib/impromptu/decks:ro
+    networks:
+      - application
+      - database
+
+  private-backend:
+    build:
+      context: .
+      dockerfile: services/private-backend/Dockerfile
+    image: impromptu/private-backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      database-migrate:
+        condition: service_completed_successfully
+      projection-gateway:
+        condition: service_healthy
+    environment:
+      PRIVATE_BACKEND_HOST: 0.0.0.0
+      PRIVATE_BACKEND_PORT: "3001"
+      CONSOLE_ORIGIN: ${CONSOLE_PUBLIC_ORIGIN:?Set CONSOLE_PUBLIC_ORIGIN}
+      PROJECTION_GATEWAY_ORIGIN: http://projection-gateway:3002
+      SERVICE_AUTH_TOKEN: ${SERVICE_AUTH_TOKEN:?Set SERVICE_AUTH_TOKEN}
+      CONTROLLER_ACCOUNT_ID: ${CONTROLLER_ACCOUNT_ID:?Set CONTROLLER_ACCOUNT_ID}
+      CONTROLLER_USERNAME: ${CONTROLLER_USERNAME:?Set CONTROLLER_USERNAME}
+      CONTROLLER_PASSWORD: ${CONTROLLER_PASSWORD:?Set CONTROLLER_PASSWORD}
+      PRIVATE_DATABASE_URL: postgresql://private_app:${PRIVATE_DATABASE_PASSWORD:?Set PRIVATE_DATABASE_PASSWORD}@postgres:5432/impromptu_private
+      PRIVATE_PREPARED_EVIDENCE_STATE_KEY: ${PRIVATE_PREPARED_EVIDENCE_STATE_KEY:-default}
+      LOGIN_ACCOUNT_RATE_LIMIT_CAPACITY: ${LOGIN_ACCOUNT_RATE_LIMIT_CAPACITY:-5}
+      LOGIN_ACCOUNT_RATE_LIMIT_REFILL_PER_SECOND: ${LOGIN_ACCOUNT_RATE_LIMIT_REFILL_PER_SECOND:-0.1}
+      LOGIN_IP_RATE_LIMIT_CAPACITY: ${LOGIN_IP_RATE_LIMIT_CAPACITY:-20}
+      LOGIN_IP_RATE_LIMIT_REFILL_PER_SECOND: ${LOGIN_IP_RATE_LIMIT_REFILL_PER_SECOND:-1}
+      DECK_STAGING_ROOT: /var/lib/impromptu/staging
+      DECK_ARTIFACT_ROOT: /var/lib/impromptu/decks
+      INGESTION_PROJECT_PATH: /app/services/ingestion
+      DECK_RENDER_DEADLINE_MS: ${DECK_RENDER_DEADLINE_MS:-60000}
+      LIVE_PUBLICATION_GATE_STATE: ${LIVE_PUBLICATION_GATE_STATE:-BLOCKED}
+      CHAT_MODEL_API_KEY: ${CHAT_MODEL_API_KEY:?Set CHAT_MODEL_API_KEY}
+      CHAT_MODEL_BASE_URL: ${CHAT_MODEL_BASE_URL:-https://opencode.ai/zen/go/v1}
+      EMBEDDING_MODEL_API_KEY: ${EMBEDDING_MODEL_API_KEY:?Set EMBEDDING_MODEL_API_KEY}
+      EMBEDDING_MODEL_BASE_URL: ${EMBEDDING_MODEL_BASE_URL:?Set EMBEDDING_MODEL_BASE_URL}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:?Set EMBEDDING_MODEL}
+      RERANK_MODEL: ${RERANK_MODEL:-deepseek-v4-flash}
+      LLM_MODEL: ${LLM_MODEL:-deepseek-v4-flash}
+      VERIFIER_MODEL: ${VERIFIER_MODEL:-deepseek-v4-flash}
+    healthcheck:
+      test: ["CMD", "bun", "-e", "const r=await fetch('http://127.0.0.1:3001/readyz');process.exit(r.ok?0:1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    ports:
+      - "127.0.0.1:${PRIVATE_BACKEND_PUBLISH_PORT:-3001}:3001"
+    volumes:
+      - deck-artifacts:/var/lib/impromptu/decks
+      - deck-staging:/var/lib/impromptu/staging
+    networks:
+      - application
+      - database
+
+  console:
+    build:
+      context: .
+      dockerfile: apps/console/Dockerfile
+      args:
+        CONSOLE_PRIVATE_API_ORIGIN: ${CONSOLE_PRIVATE_API_ORIGIN:?Set CONSOLE_PRIVATE_API_ORIGIN}
+        NEXT_PUBLIC_STAGE_ORIGIN: ${STAGE_PUBLIC_ORIGIN:?Set STAGE_PUBLIC_ORIGIN}
+        NEXT_PUBLIC_SW_COHORT: ${IMPROMPTU_RELEASE_COHORT:-stable}
+        NEXT_PUBLIC_CO_RESIDENT_CONSOLE: ${NEXT_PUBLIC_CO_RESIDENT_CONSOLE:-false}
+    image: impromptu/console:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      private-backend:
+        condition: service_healthy
+    environment:
+      CONSOLE_PRIVATE_API_ORIGIN: ${CONSOLE_PRIVATE_API_ORIGIN:?Set CONSOLE_PRIVATE_API_ORIGIN}
+      HOSTNAME: 0.0.0.0
+      PORT: "4173"
+    ports:
+      - "${CONSOLE_PORT:-4173}:4173"
+    networks:
+      - application
+
+  stage:
+    build:
+      context: .
+      dockerfile: apps/stage/Dockerfile
+      args:
+        IMPROMPTU_RELEASE_COHORT: ${IMPROMPTU_RELEASE_COHORT:-stable}
+        STAGE_PUBLIC_API_ORIGIN: ${STAGE_PUBLIC_API_ORIGIN:?Set STAGE_PUBLIC_API_ORIGIN}
+    image: impromptu/stage:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      projection-gateway:
+        condition: service_healthy
+    ports:
+      - "${STAGE_PORT:-4174}:8080"
+    networks:
+      - application
+
+networks:
+  application:
+    internal: false
+  database:
+    internal: true
+
+volumes:
+  postgres-data:
+  deck-staging:
+  deck-artifacts:
