@@ -47,6 +47,21 @@ describe("browser forbidden dependency checker", () => {
     ]);
   });
 
+  test("does not let an unrelated shared policy hide a root with no CSP integration", () => {
+    const manifest = loadBrowserDependencyManifest();
+
+    expect(scanBrowserDependencies(manifest, ["scripts/fixtures/browser-boundary-no-csp"])).toEqual(
+      [
+        {
+          file: "scripts/fixtures/browser-boundary-no-csp",
+          kind: "missing-csp",
+          specifier: "scripts/fixtures/browser-boundary-no-csp",
+          rule: "browser root must define a CSP",
+        },
+      ],
+    );
+  });
+
   test("scans manifests, imports, bundles, source maps, artifacts, signatures, and CSP", () => {
     const manifest = loadBrowserDependencyManifest();
     const violations = scanBrowserDependencies(manifest, [

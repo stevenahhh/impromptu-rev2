@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { relative, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 
 const defaultManifestPath = "config/browser-forbidden-dependencies.json";
 const sourceExtensions = new Set([
@@ -87,8 +87,10 @@ export function scanBrowserDependencies(
     return [violation(".", "empty-root", ".", "at least one browser root is required")];
   }
   const violations: BrowserDependencyViolation[] = [];
-  const configuredCspFound = scanConfiguredCspSources(manifest, cwd, violations);
-  for (const root of roots) scanRoot(manifest, root, cwd, configuredCspFound, violations);
+  const configuredCspSources = scanConfiguredCspSources(manifest, cwd, violations);
+  for (const root of roots) {
+    scanRoot(manifest, root, cwd, configuredCspSources, violations);
+  }
   return violations.sort((left, right) =>
     `${left.file}\u0000${left.kind}\u0000${left.specifier}`.localeCompare(
       `${right.file}\u0000${right.kind}\u0000${right.specifier}`,
@@ -120,7 +122,7 @@ function scanRoot(
   manifest: BrowserDependencyManifest,
   root: string,
   cwd: string,
-  configuredCspFound: boolean,
+  configuredCspSources: ReadonlySet<string>,
   violations: BrowserDependencyViolation[],
 ): void {
   const absoluteRoot = resolve(cwd, root);
@@ -169,17 +171,17 @@ function scanRoot(
     }
 
     const source = readFileSync(file, "utf8");
-    violations.push(
-      ...findForbiddenDependencyViolations(manifest, relativeFile, extractModuleSpecifiers(source)),
-    );
+    const specifiers = extractModuleSpecifiers(source);
+    violations.push(...findForbiddenDependencyViolations(manifest, relativeFile, specifiers));
     violations.push(...findForbiddenContentViolations(manifest, relativeFile, source));
     if (containsCsp(source)) {
       cspFound = true;
       violations.push(...findForbiddenCspViolations(manifest, relativeFile, source));
     }
+    if (importsConfiguredCspSource(file, specifiers, configuredCspSources)) cspFound = true;
   }
 
-  if (rootIsDirectory && !cspFound && !configuredCspFound) {
+  if (rootIsDirectory && !cspFound) {
     violations.push(
       violation(relativeRoot, "missing-csp", relativeRoot, "browser root must define a CSP"),
     );
@@ -190,8 +192,8 @@ function scanConfiguredCspSources(
   manifest: BrowserDependencyManifest,
   cwd: string,
   violations: BrowserDependencyViolation[],
-): boolean {
-  let cspFound = false;
+): ReadonlySet<string> {
+  const configuredSources = new Set<string>();
   for (const sourcePath of manifest.cspSources) {
     const absolutePath = resolve(cwd, sourcePath);
     const relativePath = toPosix(relative(cwd, absolutePath));
@@ -202,11 +204,38 @@ function scanConfiguredCspSources(
       continue;
     }
     const source = readFileSync(absolutePath, "utf8");
-    if (!containsCsp(source)) continue;
-    cspFound = true;
+    if (!containsCsp(source)) {
+      violations.push(
+        violation(
+          relativePath,
+          "missing-csp",
+          relativePath,
+          "configured CSP source must define a CSP",
+        ),
+      );
+      continue;
+    }
+    configuredSources.add(absolutePath);
     violations.push(...findForbiddenCspViolations(manifest, relativePath, source));
   }
-  return cspFound;
+  return configuredSources;
+}
+
+function importsConfiguredCspSource(
+  file: string,
+  specifiers: readonly string[],
+  configuredSources: ReadonlySet<string>,
+): boolean {
+  for (const specifier of specifiers) {
+    if (!specifier.startsWith(".")) continue;
+    const importedPath = resolve(dirname(file), specifier);
+    for (const configuredSource of configuredSources) {
+      const extension = extensionOf(configuredSource);
+      const withoutExtension = configuredSource.slice(0, -extension.length);
+      if (importedPath === configuredSource || importedPath === withoutExtension) return true;
+    }
+  }
+  return false;
 }
 
 function collectDirectoryFiles(directory: string, manifest: BrowserDependencyManifest): string[] {

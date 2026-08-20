@@ -772,9 +772,13 @@ async function rehearse(
 export async function runWindowsTopologyE2E(): Promise<WindowsTopologyEvidence> {
   rmSync(evidenceRoot, { force: true, recursive: true });
   mkdirSync(evidenceRoot, { recursive: true });
-  await run(["bun", "run", "build"], "apps/stage");
+  await run(["bun", "run", "build"], "apps/stage", {
+    ...process.env,
+    STAGE_PUBLIC_API_ORIGIN: stageOrigin,
+  });
   await run(["bun", "run", "build"], "apps/console", {
     ...process.env,
+    CONSOLE_PRIVATE_API_ORIGIN: "https://private-backend.e2e.invalid",
     NEXT_PUBLIC_CO_RESIDENT_CONSOLE: "true",
   });
   const backendProxyPort = await availablePort();

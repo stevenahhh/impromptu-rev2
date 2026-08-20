@@ -15,7 +15,16 @@ const preservedDirectives = [
   "connect-src 'self'",
   "worker-src 'self'",
   "manifest-src 'self'",
+  "object-src 'none'",
   "base-uri 'none'",
+] as const;
+
+const requiredResponseHeaders = [
+  "Content-Security-Policy:",
+  "Strict-Transport-Security: max-age=63072000; includeSubDomains; preload",
+  "X-Content-Type-Options: nosniff",
+  "Referrer-Policy: strict-origin-when-cross-origin",
+  "Permissions-Policy:",
 ] as const;
 
 describe("browser response security headers", () => {
@@ -30,11 +39,25 @@ describe("browser response security headers", () => {
     }
   });
 
-  test("emits the same CSP as a deployment response-header artifact", () => {
+  test("emits the CSP and complete production response-header set", () => {
     for (const surface of ["console", "stage"] as const) {
-      const policy = createContentSecurityPolicy(surface);
-      expect(createDeploymentHeaders(surface)).toBe(`/*\n  Content-Security-Policy: ${policy}\n`);
+      const deploymentHeaders = createDeploymentHeaders(surface);
+      expect(deploymentHeaders).toContain(
+        `Content-Security-Policy: ${createContentSecurityPolicy(surface)}`,
+      );
+      for (const header of requiredResponseHeaders) expect(deploymentHeaders).toContain(header);
     }
+  });
+
+  test("permits only explicitly configured API transports and images", () => {
+    const policy = createContentSecurityPolicy("stage", {
+      connectSources: ["https://gateway.example.test", "wss://gateway.example.test"],
+      imageSources: ["https://gateway.example.test"],
+    });
+    expect(policy).toContain(
+      "connect-src 'self' https://gateway.example.test wss://gateway.example.test",
+    );
+    expect(policy).toContain("img-src 'self' data: https://gateway.example.test");
   });
 
   test("keeps the shipped policy script-src exact and confines the dev allowance to the dev server", () => {
@@ -42,16 +65,12 @@ describe("browser response security headers", () => {
       const shipped = createContentSecurityPolicy(surface);
       const development = createDevelopmentContentSecurityPolicy(surface);
 
-      // The shipped artifact must never gain an inline-script allowance.
       expect(shipped).toContain("script-src 'self'");
       expect(shipped).not.toContain("unsafe-inline");
       expect(createDeploymentHeaders(surface)).not.toContain("unsafe-inline");
-
-      // Vite's dev HMR preamble is an inline script, so the dev server alone relaxes script-src.
       expect(development).toContain("script-src 'self' 'unsafe-inline'");
       expect(development).toContain("style-src 'self' 'unsafe-inline'");
 
-      // Nothing else may differ between the two policies.
       const normalise = (policy: string) =>
         policy
           .split("; ")
@@ -62,16 +81,16 @@ describe("browser response security headers", () => {
   });
 
   test("builds the production index meta from the shipped policy", () => {
-    const shipped =
-      "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'self'";
-    expect(createContentSecurityPolicyMeta("console")).toEqual({
+    const meta = createContentSecurityPolicyMeta("console");
+    expect(meta).toEqual({
       tag: "meta",
       attrs: {
         "http-equiv": "Content-Security-Policy",
-        content: shipped,
+        content:
+          "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'",
       },
       injectTo: "head-prepend",
     });
-    expect(shipped).not.toContain("unsafe-inline");
+    expect(String(meta.attrs?.content)).not.toContain("unsafe-inline");
   });
 });

@@ -5,21 +5,59 @@ import type { HtmlTagDescriptor, Plugin, ResolvedConfig } from "vite";
 
 type BrowserSurface = "console" | "stage";
 
-const sharedDirectives = [
-  "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self'",
-  "img-src 'self' data:",
-  "connect-src 'self'",
-  "worker-src 'self'",
-  "manifest-src 'self'",
-  "base-uri 'none'",
-  "frame-ancestors 'none'",
-] as const;
+interface ContentSecurityPolicyOptions {
+  readonly connectSources?: readonly string[];
+  readonly imageSources?: readonly string[];
+}
 
-export function createContentSecurityPolicy(surface: BrowserSurface) {
+const STRICT_TRANSPORT_SECURITY = "max-age=63072000; includeSubDomains; preload";
+const PERMISSIONS_POLICY = [
+  "accelerometer=()",
+  "autoplay=()",
+  "camera=()",
+  "display-capture=()",
+  "encrypted-media=()",
+  "fullscreen=(self)",
+  "geolocation=()",
+  "gyroscope=()",
+  "magnetometer=()",
+  "microphone=()",
+  "payment=()",
+  "picture-in-picture=()",
+  "publickey-credentials-get=()",
+  "usb=()",
+].join(", ");
+
+function productionSecurityHeaders(surface: BrowserSurface, options: ContentSecurityPolicyOptions) {
+  return {
+    "Content-Security-Policy": createContentSecurityPolicy(surface, options),
+    "Permissions-Policy": PERMISSIONS_POLICY,
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Strict-Transport-Security": STRICT_TRANSPORT_SECURITY,
+    "X-Content-Type-Options": "nosniff",
+  } as const;
+}
+
+export function createContentSecurityPolicy(
+  surface: BrowserSurface,
+  options: ContentSecurityPolicyOptions = {},
+) {
+  const connectSources = ["'self'", ...(options.connectSources ?? [])].join(" ");
+  const imageSources = ["'self'", "data:", ...(options.imageSources ?? [])].join(" ");
   const formAction = surface === "console" ? "form-action 'self'" : "form-action 'none'";
-  return [...sharedDirectives, formAction].join("; ");
+  return [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self'",
+    `img-src ${imageSources}`,
+    `connect-src ${connectSources}`,
+    "worker-src 'self'",
+    "manifest-src 'self'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "frame-ancestors 'none'",
+    formAction,
+  ].join("; ");
 }
 
 /**
@@ -30,14 +68,23 @@ export function createContentSecurityPolicy(surface: BrowserSurface) {
  * `vite dev` renders a blank page. This allowance exists only in the dev server response and
  * is never written to the deployment headers or the built artifact.
  */
-export function createDevelopmentContentSecurityPolicy(surface: BrowserSurface) {
-  return createContentSecurityPolicy(surface)
+export function createDevelopmentContentSecurityPolicy(
+  surface: BrowserSurface,
+  options: ContentSecurityPolicyOptions = {},
+) {
+  return createContentSecurityPolicy(surface, options)
     .replace("script-src 'self'", "script-src 'self' 'unsafe-inline'")
     .replace("style-src 'self'", "style-src 'self' 'unsafe-inline'");
 }
 
-export function createContentSecurityPolicyMeta(surface: BrowserSurface): HtmlTagDescriptor {
-  const policy = createContentSecurityPolicy(surface).replace("; frame-ancestors 'none'", "");
+export function createContentSecurityPolicyMeta(
+  surface: BrowserSurface,
+  options: ContentSecurityPolicyOptions = {},
+): HtmlTagDescriptor {
+  const policy = createContentSecurityPolicy(surface, options).replace(
+    "; frame-ancestors 'none'",
+    "",
+  );
   return {
     tag: "meta",
     attrs: {
@@ -48,25 +95,34 @@ export function createContentSecurityPolicyMeta(surface: BrowserSurface): HtmlTa
   };
 }
 
-export function createDeploymentHeaders(surface: BrowserSurface) {
-  return `/*\n  Content-Security-Policy: ${createContentSecurityPolicy(surface)}\n`;
+export function createDeploymentHeaders(
+  surface: BrowserSurface,
+  options: ContentSecurityPolicyOptions = {},
+) {
+  const headers = productionSecurityHeaders(surface, options);
+  return `/*\n${Object.entries(headers)
+    .map(([key, value]) => `  ${key}: ${value}`)
+    .join("\n")}\n`;
 }
 
-export function responseSecurityHeaders(surface: BrowserSurface): Plugin {
+export function responseSecurityHeaders(
+  surface: BrowserSurface,
+  options: ContentSecurityPolicyOptions = {},
+): Plugin {
   let resolvedConfig: ResolvedConfig;
-  const headers = {
-    "Content-Security-Policy": createContentSecurityPolicy(surface),
-  };
+  const headers = productionSecurityHeaders(surface, options);
   const developmentHeaders = {
-    "Content-Security-Policy": createDevelopmentContentSecurityPolicy(surface),
+    ...headers,
+    "Content-Security-Policy": createDevelopmentContentSecurityPolicy(surface, options),
   };
+  delete (developmentHeaders as Partial<typeof developmentHeaders>)["Strict-Transport-Security"];
 
   return {
     name: `impromptu-${surface}-response-security`,
-    config(_userConfig, environment) {
+    config() {
       return {
         preview: { headers },
-        server: { headers: environment.command === "serve" ? developmentHeaders : headers },
+        server: { headers: developmentHeaders },
       };
     },
     configResolved(config) {
@@ -74,11 +130,11 @@ export function responseSecurityHeaders(surface: BrowserSurface): Plugin {
     },
     transformIndexHtml(html) {
       if (resolvedConfig.command === "serve") return html;
-      return { html, tags: [createContentSecurityPolicyMeta(surface)] };
+      return { html, tags: [createContentSecurityPolicyMeta(surface, options)] };
     },
     closeBundle() {
       const outputDirectory = resolve(resolvedConfig.root, resolvedConfig.build.outDir);
-      writeFileSync(join(outputDirectory, "_headers"), createDeploymentHeaders(surface));
+      writeFileSync(join(outputDirectory, "_headers"), createDeploymentHeaders(surface, options));
     },
   };
 }

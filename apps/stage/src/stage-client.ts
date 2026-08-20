@@ -583,7 +583,7 @@ async function validSnapshotHash(value: unknown): Promise<boolean> {
 
 export function createStageSessionClient(
   baseUrl = "",
-  eventSourceFactory: EventSourceFactory = (url) => new EventSource(url),
+  eventSourceFactory: EventSourceFactory = (url) => new EventSource(url, { withCredentials: true }),
   webSocketFactory: WebSocketFactory = (url) => new WebSocket(url),
 ): StageSessionClient {
   const headers = { "content-type": "application/json" };
