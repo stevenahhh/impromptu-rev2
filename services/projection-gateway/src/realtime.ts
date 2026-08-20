@@ -1,8 +1,10 @@
+import type { MetricsRegistry } from "./observability.ts";
 import type {
   PreparedEvidenceProjectionGateway,
   StageSocket,
   StageSocketCloseReason,
 } from "./prepared-evidence.ts";
+import { clientIpKey, type RateLimiter } from "./rate-limit.ts";
 
 export interface PublicStageAppliedReceipt {
   readonly status: "STAGE_APPLIED";
@@ -45,13 +47,16 @@ export interface ProjectionRealtimeDependencies {
     readonly commandId: string;
     readonly displayBindingEpoch: string;
   }) => Promise<unknown | null>;
+  readonly connectionRateLimiter?: RateLimiter;
+  readonly metrics?: MetricsRegistry;
 }
 
 export type RealtimeAuthentication =
   | Readonly<{ outcome: "ACCEPTED"; audienceDisplaySessionId: string }>
   | Readonly<{
       outcome: "REJECTED";
-      reason: "ORIGIN_FORBIDDEN" | "DISPLAY_SESSION_REQUIRED";
+      reason: "ORIGIN_FORBIDDEN" | "DISPLAY_SESSION_REQUIRED" | "RATE_LIMITED";
+      retryAfterMs?: number;
     }>;
 
 export interface ProjectionRealtimeConnection {
@@ -128,9 +133,18 @@ export function createProjectionRealtimeProtocol(dependencies: ProjectionRealtim
         return { outcome: "REJECTED", reason: "ORIGIN_FORBIDDEN" };
       }
       const audienceDisplaySessionId = displayCookie(request);
-      return audienceDisplaySessionId === null
-        ? { outcome: "REJECTED", reason: "DISPLAY_SESSION_REQUIRED" }
-        : { outcome: "ACCEPTED", audienceDisplaySessionId };
+      if (audienceDisplaySessionId === null) {
+        return { outcome: "REJECTED", reason: "DISPLAY_SESSION_REQUIRED" };
+      }
+      const decision = dependencies.connectionRateLimiter?.consume(clientIpKey(request));
+      if (decision?.outcome === "REJECTED") {
+        return {
+          outcome: "REJECTED",
+          reason: "RATE_LIMITED",
+          retryAfterMs: decision.retryAfterMs,
+        };
+      }
+      return { outcome: "ACCEPTED", audienceDisplaySessionId };
     },
 
     connect(
@@ -139,6 +153,11 @@ export function createProjectionRealtimeProtocol(dependencies: ProjectionRealtim
     ): ProjectionRealtimeConnection | null {
       const initial = dependencies.gateway.snapshot(audienceDisplaySessionId, dependencies.now());
       if (initial === null) return null;
+      let measured = false;
+      const finish = () => {
+        if (measured) dependencies.metrics?.addRealtimeConnections(-1);
+        measured = false;
+      };
       let socket: StageSocket | null = dependencies.gateway.connectStage(
         audienceDisplaySessionId,
         {
@@ -152,12 +171,15 @@ export function createProjectionRealtimeProtocol(dependencies: ProjectionRealtim
             send({ kind: "CARD", payload: event });
           },
           onClose(reason) {
+            finish();
             send({ kind: "CLOSE", payload: { reason } });
           },
         },
         dependencies.now(),
       );
       if (socket === null) return null;
+      measured = true;
+      dependencies.metrics?.addRealtimeConnections(1);
       return {
         async receive(frame) {
           const applied = parseAppliedFrame(frame);
@@ -191,6 +213,7 @@ export function createProjectionRealtimeProtocol(dependencies: ProjectionRealtim
         close() {
           socket?.close();
           socket = null;
+          finish();
         },
       };
     },

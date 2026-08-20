@@ -6,8 +6,10 @@ import type { ExactOrigin, PrivateBackendConfig } from "./config.ts";
 import { type ParsedDeckMultipart, parseDeckUploadMultipart } from "./deck-upload-multipart.ts";
 import { DeckUploadRejectedError } from "./deck-upload-service.ts";
 import type { DeckUploadRejectionCode } from "./deck-upload-worker.ts";
+import { httpOutcome, type JsonLogger, type MetricsRegistry } from "./observability.ts";
 import { createPreparedDeckArtifacts } from "./prepared-deck-upload.ts";
 import type { PreparedEvidenceCoordinator } from "./prepared-evidence.ts";
+import { clientIpKey, hashRateLimitKey, type RateLimiter } from "./rate-limit.ts";
 import { renderedDeckArtifacts } from "./rendered-deck-artifacts.ts";
 
 export type PrivateBackendHandler = (request: Request) => Response | Promise<Response>;
@@ -78,6 +80,17 @@ export interface PrivateBackendHttpDependencies {
   };
   readonly persist?: () => Promise<void>;
   readonly uploads?: DeckUploadService;
+  readonly logger?: JsonLogger;
+  readonly metrics?: MetricsRegistry;
+  readonly readiness?: {
+    check(): Promise<
+      Readonly<{ outcome: "READY" }> | Readonly<{ outcome: "NOT_READY"; reason: string }>
+    >;
+  };
+  readonly loginRateLimiters?: Readonly<{
+    account: RateLimiter;
+    ip: RateLimiter;
+  }>;
 }
 
 function json(body: unknown, status: number, headers?: Headers): Response {
@@ -86,6 +99,36 @@ function json(body: unknown, status: number, headers?: Headers): Response {
   responseHeaders.set("content-type", "application/json; charset=utf-8");
 
   return new Response(JSON.stringify(body), { status, headers: responseHeaders });
+}
+
+function text(body: string, status: number): Response {
+  return new Response(body, {
+    status,
+    headers: {
+      "cache-control": "no-store",
+      "content-type": "text/plain; version=0.0.4; charset=utf-8",
+    },
+  });
+}
+
+function rateLimited(
+  reason: "ACCOUNT_RATE_LIMITED" | "IP_RATE_LIMITED",
+  retryAfterMs: number,
+  headers: Headers,
+): Response {
+  headers.set("retry-after", String(Math.max(1, Math.ceil(retryAfterMs / 1_000))));
+  return json({ outcome: "REJECTED", reason, retryAfterMs }, 429, headers);
+}
+
+const responseOutcomes = new WeakMap<Response, string>();
+
+function metricPath(path: string): string {
+  return path;
+}
+
+function observeResponseOutcome(response: Response, outcome: string): Response {
+  responseOutcomes.set(response, outcome);
+  return response;
 }
 
 function deckUploadRejected(code: DeckUploadRejectionCode, headers: Headers): Response {
@@ -109,6 +152,8 @@ function browserOriginHeaders(request: Request, allowedOrigin: ExactOrigin): Hea
   const headers = new Headers();
   headers.set("access-control-allow-origin", allowedOrigin);
   headers.set("access-control-allow-credentials", "true");
+  headers.set("access-control-allow-methods", "GET, POST, DELETE");
+  headers.set("access-control-allow-headers", "content-type, x-csrf-token");
   headers.set("vary", "Origin");
   return headers;
 }
@@ -180,14 +225,21 @@ async function controllerEventStream(
   presentationSessionId: string,
   nowMs: number,
   headers: Headers,
+  metrics?: MetricsRegistry,
 ): Promise<Response> {
   let cancelled = false;
+  let measured = false;
   let streamController: ReadableStreamDefaultController<Uint8Array> | null = null;
+  const finish = () => {
+    if (measured) metrics?.addRealtimeConnections(-1);
+    measured = false;
+  };
   const connected = await coordinator.connectPlaybackController(
     accountSessionId,
     presentationSessionId,
     nowMs,
     (reason) => {
+      finish();
       if (!cancelled && streamController !== null) {
         streamController.enqueue(
           new TextEncoder().encode(
@@ -198,6 +250,10 @@ async function controllerEventStream(
       }
     },
   );
+  if (connected.outcome === "APPLIED") {
+    measured = true;
+    metrics?.addRealtimeConnections(1);
+  }
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
       streamController = controller;
@@ -210,6 +266,7 @@ async function controllerEventStream(
     cancel() {
       cancelled = true;
       if (connected.outcome === "APPLIED") connected.value.close();
+      finish();
     },
   });
   headers.set("content-type", "text/event-stream; charset=utf-8");
@@ -228,15 +285,37 @@ export function createPrivateBackendHandler(
   config: PrivateBackendConfig,
   dependencies?: PrivateBackendHttpDependencies,
 ): PrivateBackendHandler {
-  return async (request) => {
+  const handle = async (request: Request): Promise<Response> => {
     const origin = browserOriginHeaders(request, config.allowedOrigin);
     if (origin instanceof Response) return origin;
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: origin });
 
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/health") {
       return json({ service: "private-backend", status: "ok" }, 200, origin);
     }
-    if (dependencies === undefined) return json({ error: "not_found" }, 404, origin);
+    if (dependencies === undefined) {
+      return url.pathname === "/readyz"
+        ? json({ outcome: "NOT_READY", reason: "DEPENDENCIES_UNAVAILABLE" }, 503, origin)
+        : json({ error: "not_found" }, 404, origin);
+    }
+    if (request.method === "GET" && url.pathname === "/metrics") {
+      if (request.headers.get("authorization") !== `Bearer ${dependencies.internalAuthToken}`) {
+        return json({ error: "internal_unauthorized" }, 401);
+      }
+      return text(dependencies.metrics?.render() ?? "", 200);
+    }
+    if (request.method === "GET" && url.pathname === "/readyz") {
+      if (dependencies.readiness === undefined) {
+        return json({ outcome: "NOT_READY", reason: "DEPENDENCY_CHECK_UNAVAILABLE" }, 503, origin);
+      }
+      try {
+        const readiness = await dependencies.readiness.check();
+        return json(readiness, readiness.outcome === "READY" ? 200 : 503, origin);
+      } catch {
+        return json({ outcome: "NOT_READY", reason: "DEPENDENCY_CHECK_FAILED" }, 503, origin);
+      }
+    }
 
     if (request.method === "POST" && url.pathname === "/internal/stage-applied") {
       if (request.headers.get("authorization") !== `Bearer ${dependencies.internalAuthToken}`) {
@@ -283,6 +362,18 @@ export function createPrivateBackendHandler(
     if (request.method === "POST" && url.pathname === "/v1/account-sessions") {
       const credentials = accountCredentials(await requestBody(request));
       if (credentials === null) return json({ error: "invalid_request" }, 400, origin);
+      if (dependencies.loginRateLimiters !== undefined) {
+        const accountDecision = dependencies.loginRateLimiters.account.consume(
+          hashRateLimitKey(`account:${credentials.username.trim().toLowerCase()}`),
+        );
+        if (accountDecision.outcome === "REJECTED") {
+          return rateLimited("ACCOUNT_RATE_LIMITED", accountDecision.retryAfterMs, origin);
+        }
+        const ipDecision = dependencies.loginRateLimiters.ip.consume(clientIpKey(request));
+        if (ipDecision.outcome === "REJECTED") {
+          return rateLimited("IP_RATE_LIMITED", ipDecision.retryAfterMs, origin);
+        }
+      }
       const identity = await dependencies.identityVerifier.verifyCredentials(
         credentials.username,
         credentials.password,
@@ -348,6 +439,7 @@ export function createPrivateBackendHandler(
             presentationSessionId,
             dependencies.now(),
             origin,
+            dependencies.metrics,
           );
     }
     if (request.method === "GET" && url.pathname === "/v1/publications/live-candidates") {
@@ -446,11 +538,12 @@ export function createPrivateBackendHandler(
       if (dependencies.recommendations === undefined) {
         return json({ error: "recommendations_unavailable" }, 503, origin);
       }
-      return json(
-        await dependencies.recommendations.recommend(accountSessionId, body),
-        200,
-        origin,
-      );
+      const recommendation = await dependencies.recommendations.recommend(accountSessionId, body);
+      const outcome =
+        recommendation.outcome === "ABSTAIN"
+          ? `${recommendation.outcome}:${recommendation.reason}`
+          : recommendation.outcome;
+      return observeResponseOutcome(json(recommendation, 200, origin), outcome);
     }
     if (request.method === "POST" && url.pathname === "/v1/candidates/live") {
       const result = await dependencies.coordinator.addLiveCandidate(
@@ -634,5 +727,39 @@ export function createPrivateBackendHandler(
     }
 
     return json({ error: "not_found" }, 404, origin);
+  };
+
+  return async (request) => {
+    const startedAtMs = dependencies?.now() ?? Date.now();
+    const path = metricPath(new URL(request.url).pathname);
+    const suppliedRequestId = request.headers.get("x-request-id");
+    const requestId =
+      suppliedRequestId !== null && /^[A-Za-z0-9._:-]{1,128}$/.test(suppliedRequestId)
+        ? suppliedRequestId
+        : crypto.randomUUID();
+    let response: Response;
+    try {
+      response = await handle(request);
+    } catch (error) {
+      dependencies?.logger?.error({
+        requestId,
+        path,
+        errorType: error instanceof Error ? error.name : "UnknownError",
+      });
+      response = json({ error: "internal_error" }, 500);
+    }
+    response.headers.set("x-request-id", requestId);
+    const durationMs = Math.max(0, (dependencies?.now() ?? Date.now()) - startedAtMs);
+    const outcome = responseOutcomes.get(response) ?? httpOutcome(response.status);
+    dependencies?.metrics?.observeHttp(request.method, path, response.status, durationMs, outcome);
+    dependencies?.logger?.request({
+      requestId,
+      method: request.method,
+      path,
+      status: response.status,
+      durationMs,
+      outcome,
+    });
+    return response;
   };
 }

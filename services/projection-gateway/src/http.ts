@@ -3,12 +3,14 @@ import {
   PublishedDeckArtifactSchema,
 } from "@impromptu/contracts/public";
 import type { ExactOrigin, ProjectionGatewayConfig } from "./config.ts";
+import { httpOutcome, type JsonLogger, type MetricsRegistry } from "./observability.ts";
 import type {
   PlaybackProjectionInput,
   PreparedEvidenceProjectionGateway,
   PublicCardEvent,
   StageSocket,
 } from "./prepared-evidence.ts";
+import { clientIpKey, type RateLimiter } from "./rate-limit.ts";
 
 export type ProjectionGatewayHandler = (request: Request) => Response | Promise<Response>;
 
@@ -123,6 +125,14 @@ export interface ProjectionGatewayHttpDependencies {
   readonly stageReceiptWriter: StageReceiptWriter;
   readonly persist?: () => Promise<void>;
   readonly deckAssets?: DeckAssetReader;
+  readonly logger?: JsonLogger;
+  readonly metrics?: MetricsRegistry;
+  readonly publicRateLimiter?: RateLimiter;
+  readonly readiness?: {
+    check(): Promise<
+      Readonly<{ outcome: "READY" }> | Readonly<{ outcome: "NOT_READY"; reason: string }>
+    >;
+  };
 }
 
 function json(body: unknown, status: number, headers?: Headers): Response {
@@ -134,6 +144,25 @@ function json(body: unknown, status: number, headers?: Headers): Response {
 }
 
 const DECK_ASSET_PATH_PREFIX = "/v1/deck-assets/";
+
+function text(body: string, status: number): Response {
+  return new Response(body, {
+    status,
+    headers: {
+      "cache-control": "no-store",
+      "content-type": "text/plain; version=0.0.4; charset=utf-8",
+    },
+  });
+}
+
+function metricPath(path: string): string {
+  return path.startsWith(DECK_ASSET_PATH_PREFIX) ? `${DECK_ASSET_PATH_PREFIX}:artifact/*` : path;
+}
+
+function rateLimited(retryAfterMs: number, headers: Headers): Response {
+  headers.set("retry-after", String(Math.max(1, Math.ceil(retryAfterMs / 1_000))));
+  return json({ outcome: "REJECTED", reason: "IP_RATE_LIMITED", retryAfterMs }, 429, headers);
+}
 
 function isDeckAssetPathComponent(component: string): boolean {
   return (
@@ -158,6 +187,8 @@ function browserOriginHeaders(request: Request, allowedOrigin: ExactOrigin): Hea
   const headers = new Headers();
   headers.set("access-control-allow-origin", allowedOrigin);
   headers.set("access-control-allow-credentials", "true");
+  headers.set("access-control-allow-methods", "GET, POST");
+  headers.set("access-control-allow-headers", "content-type, x-csrf-token");
   headers.set("vary", "Origin");
   return headers;
 }
@@ -368,6 +399,11 @@ function eventStream(
 ): Response {
   let socket: StageSocket | null = null;
   let cancelled = false;
+  let measured = false;
+  const finish = () => {
+    if (measured) dependencies.metrics?.addRealtimeConnections(-1);
+    measured = false;
+  };
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(new TextEncoder().encode(": ready\n\n"));
@@ -377,6 +413,7 @@ function eventStream(
           onPlayback: (event) => controller.enqueue(serverEvent("PLAYBACK", event)),
           onCard: (event) => controller.enqueue(serverEvent("CARD", event)),
           onClose: (reason) => {
+            finish();
             if (!cancelled) {
               controller.enqueue(serverEvent("CLOSE", { reason }));
               controller.close();
@@ -385,11 +422,17 @@ function eventStream(
         },
         dependencies.now(),
       );
-      if (socket === null) controller.error(new Error("display session is unavailable"));
+      if (socket === null) {
+        controller.error(new Error("display session is unavailable"));
+      } else {
+        measured = true;
+        dependencies.metrics?.addRealtimeConnections(1);
+      }
     },
     cancel() {
       cancelled = true;
       socket?.close();
+      finish();
     },
   });
   headers.set("content-type", "text/event-stream; charset=utf-8");
@@ -412,9 +455,10 @@ export function createProjectionGatewayHandler(
   config: ProjectionGatewayConfig,
   dependencies?: ProjectionGatewayHttpDependencies,
 ): ProjectionGatewayHandler {
-  return async (request) => {
+  const handle = async (request: Request): Promise<Response> => {
     const origin = browserOriginHeaders(request, config.allowedOrigin);
     if (origin instanceof Response) return origin;
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: origin });
 
     const url = new URL(request.url);
     const knownMutationPath =
@@ -428,7 +472,32 @@ export function createProjectionGatewayHandler(
     if (url.pathname === "/health") {
       return json({ service: "projection-gateway", status: "ok" }, 200, origin);
     }
-    if (dependencies === undefined) return json({ error: "not_found" }, 404, origin);
+    if (dependencies === undefined) {
+      return url.pathname === "/readyz"
+        ? json({ outcome: "NOT_READY", reason: "DEPENDENCIES_UNAVAILABLE" }, 503, origin)
+        : json({ error: "not_found" }, 404, origin);
+    }
+    if (request.method === "GET" && url.pathname === "/metrics") {
+      if (request.headers.get("authorization") !== `Bearer ${dependencies.internalAuthToken}`) {
+        return json({ error: "internal_unauthorized" }, 401);
+      }
+      return text(dependencies.metrics?.render() ?? "", 200);
+    }
+    if (request.method === "GET" && url.pathname === "/readyz") {
+      if (dependencies.readiness === undefined) {
+        return json({ outcome: "NOT_READY", reason: "DEPENDENCY_CHECK_UNAVAILABLE" }, 503, origin);
+      }
+      try {
+        const readiness = await dependencies.readiness.check();
+        return json(readiness, readiness.outcome === "READY" ? 200 : 503, origin);
+      } catch {
+        return json({ outcome: "NOT_READY", reason: "DEPENDENCY_CHECK_FAILED" }, 503, origin);
+      }
+    }
+    if (url.pathname.startsWith("/v1/") && dependencies.publicRateLimiter !== undefined) {
+      const decision = dependencies.publicRateLimiter.consume(clientIpKey(request));
+      if (decision.outcome === "REJECTED") return rateLimited(decision.retryAfterMs, origin);
+    }
 
     if (request.method === "POST" && url.pathname.startsWith("/internal/")) {
       if (request.headers.get("authorization") !== `Bearer ${dependencies.internalAuthToken}`) {
@@ -708,5 +777,39 @@ export function createProjectionGatewayHandler(
     }
 
     return json({ error: "not_found" }, 404, origin);
+  };
+
+  return async (request) => {
+    const startedAtMs = dependencies?.now() ?? Date.now();
+    const path = metricPath(new URL(request.url).pathname);
+    const suppliedRequestId = request.headers.get("x-request-id");
+    const requestId =
+      suppliedRequestId !== null && /^[A-Za-z0-9._:-]{1,128}$/.test(suppliedRequestId)
+        ? suppliedRequestId
+        : crypto.randomUUID();
+    let response: Response;
+    try {
+      response = await handle(request);
+    } catch (error) {
+      dependencies?.logger?.error({
+        requestId,
+        path,
+        errorType: error instanceof Error ? error.name : "UnknownError",
+      });
+      response = json({ error: "internal_error" }, 500);
+    }
+    response.headers.set("x-request-id", requestId);
+    const durationMs = Math.max(0, (dependencies?.now() ?? Date.now()) - startedAtMs);
+    const outcome = httpOutcome(response.status);
+    dependencies?.metrics?.observeHttp(request.method, path, response.status, durationMs, outcome);
+    dependencies?.logger?.request({
+      requestId,
+      method: request.method,
+      path,
+      status: response.status,
+      durationMs,
+      outcome,
+    });
+    return response;
   };
 }
