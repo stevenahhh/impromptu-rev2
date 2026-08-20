@@ -32,6 +32,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PrivateDeckContextSchema } from "@impromptu/contracts/private";
 import { PublishedDeckArtifactSchema } from "@impromptu/contracts/public";
+import { createPostgresPreparedEvidencePersistence } from "../src/prepared-evidence-store-postgres.ts";
 
 type ServiceProcess = ReturnType<typeof Bun.spawn<"ignore", "pipe", "pipe">>;
 const processes: ServiceProcess[] = [];
@@ -179,7 +180,7 @@ function baseEnvironment(fixtureInput: MainFixture): Record<string, string> {
     CONTROLLER_PASSWORD: "deck-main-password",
     PRIVATE_BACKEND_HOST: "127.0.0.1",
     PRIVATE_BACKEND_PORT: new URL(fixtureInput.privateOrigin).port,
-    PRIVATE_SNAPSHOT_PATH: fixtureInput.snapshotPath,
+    PRIVATE_PREPARED_EVIDENCE_STATE_KEY: fixtureInput.snapshotPath,
     PROJECTION_GATEWAY_ORIGIN: fixtureInput.projectionOrigin,
     SERVICE_AUTH_TOKEN: "deck-main-token-for-integration-test",
     DECK_STAGING_ROOT: fixtureInput.stagingRoot,
@@ -187,6 +188,17 @@ function baseEnvironment(fixtureInput: MainFixture): Record<string, string> {
     DECK_RENDER_DEADLINE_MS: "5000",
     FAKE_UV_SOURCE_LOG: join(fixtureInput.binDir, "source-paths.log"),
     PATH: `${fixtureInput.binDir}:${process.env.PATH ?? ""}`,
+    CHAT_MODEL_API_KEY: "main-test-provider-key",
+    EMBEDDING_MODEL_API_KEY: "main-test-provider-key",
+    CHAT_MODEL_BASE_URL: "https://models.example.test/v1",
+    EMBEDDING_MODEL_BASE_URL: "https://embeddings.example.test/v1",
+    EMBEDDING_MODEL: "embedding-test",
+    RERANK_MODEL: "rerank-test",
+    LLM_MODEL: "llm-test",
+    VERIFIER_MODEL: "verifier-test",
+    ...(process.env.PRIVATE_DATABASE_URL === undefined
+      ? {}
+      : { PRIVATE_DATABASE_URL: process.env.PRIVATE_DATABASE_URL }),
   };
 }
 
@@ -300,7 +312,12 @@ describe("production main deck upload wiring", () => {
   test("preserves validated PPTX and PDF suffixes through the production main renderer argv", async () => {
     const fixtureInput = await fixture();
     installFakeUv(fixtureInput.binDir);
-    await startMain(baseEnvironment(fixtureInput));
+    const environment = baseEnvironment(fixtureInput);
+    if (environment.PRIVATE_DATABASE_URL === undefined) {
+      await expectRejectedStartup(environment, "PRIVATE_DATABASE_URL is required");
+      return;
+    }
+    await startMain(environment);
     const { cookie, csrfToken } = await signIn(fixtureInput.privateOrigin, fixtureInput);
 
     for (const upload of [
@@ -333,6 +350,10 @@ describe("production main deck upload wiring", () => {
     const env = baseEnvironment(fixtureInput);
     // The default repo-relative ingestion project (services/ingestion) is used:
     // INGESTION_PROJECT_PATH is intentionally absent.
+    if (env.PRIVATE_DATABASE_URL === undefined) {
+      await expectRejectedStartup(env, "PRIVATE_DATABASE_URL is required");
+      return;
+    }
 
     const main = await startMain(env);
     expect(processes).toContain(main);
@@ -373,12 +394,19 @@ describe("production main deck upload wiring", () => {
       readdirSync(fixtureInput.artifactRoot).filter((entry) => entry.endsWith(".part")),
     ).toEqual([]);
 
-    // The presentation session was created and persisted in the private snapshot.
-    const snapshot = JSON.parse(readFileSync(fixtureInput.snapshotPath, "utf8"));
-    expect(snapshot.presentations).toHaveLength(1);
-    expect(snapshot.presentations[0].publicDeck).toEqual(receipt.publicDeck);
-    expect(snapshot.presentations[0].privateDeck).toEqual(receipt.privateDeck);
-    expect(snapshot.presentations[0].lifecycle.deckVersion).toBe(publicDeck.deckVersion);
-    expect(snapshot.presentations[0].lifecycle.ownerAccountId).toBe("account_deck_main");
+    // The presentation session was created and persisted in private PostgreSQL state.
+    const privateDatabaseUrl = process.env.PRIVATE_DATABASE_URL;
+    if (privateDatabaseUrl === undefined) throw new Error("PRIVATE_DATABASE_URL is required");
+    const sql = new Bun.SQL(privateDatabaseUrl);
+    const persistence = await createPostgresPreparedEvidencePersistence(sql, {
+      stateKey: fixtureInput.snapshotPath,
+    });
+    await sql.close();
+    const presentations = [...persistence.store.presentations.values()];
+    expect(presentations).toHaveLength(1);
+    expect(presentations[0]?.publicDeck).toEqual(receipt.publicDeck);
+    expect(presentations[0]?.privateDeck).toEqual(receipt.privateDeck);
+    expect(presentations[0]?.lifecycle.deckVersion).toBe(publicDeck.deckVersion);
+    expect(String(presentations[0]?.lifecycle.ownerAccountId)).toBe("account_deck_main");
   });
 });

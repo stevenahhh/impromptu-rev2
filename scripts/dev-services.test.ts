@@ -18,5 +18,12 @@ describe("local development topology", () => {
     expect(backend?.env.CONTROLLER_USERNAME).toBe("localdemo");
     expect(backend?.env.CONTROLLER_PASSWORD).toBe("demo-2026-password");
     expect(backend?.env.CONSOLE_ORIGIN).toBe("http://localhost:4173");
+    expect(backend?.env.CHAT_MODEL_BASE_URL).toBe("https://opencode.ai/zen/go/v1");
+    expect(backend?.env.EMBEDDING_MODEL_BASE_URL).toBe("https://127.0.0.1:8443/v1");
+    expect(backend?.env.EMBEDDING_MODEL).toBe("embeddinggemma");
+    expect(backend?.env.EMBEDDING_MODEL_API_KEY).toBe("local-embedding-token");
+    expect(backend?.env.NODE_EXTRA_CA_CERTS).toBe(
+      "/Users/gahn/Library/Application Support/mkcert/rootCA.pem",
+    );
   });
 });

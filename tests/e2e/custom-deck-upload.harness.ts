@@ -624,10 +624,17 @@ export async function runCustomDeckUploadE2e(): Promise<CustomDeckUploadEvidence
     await Promise.all([
       runCommand(
         ["bun", "run", "build"],
-        { NEXT_PUBLIC_STAGE_ORIGIN: stageOrigin },
+        {
+          CONSOLE_PRIVATE_API_ORIGIN: "https://private-backend.e2e.invalid",
+          NEXT_PUBLIC_STAGE_ORIGIN: stageOrigin,
+        },
         resolve("apps/console"),
       ),
-      runCommand(["bun", "run", "build"], {}, resolve("apps/stage")),
+      runCommand(
+        ["bun", "run", "build"],
+        { STAGE_PUBLIC_API_ORIGIN: stageOrigin },
+        resolve("apps/stage"),
+      ),
     ]);
     const token = "custom-deck-upload-e2e-token";
     processes.push(
@@ -636,7 +643,7 @@ export async function runCustomDeckUploadE2e(): Promise<CustomDeckUploadEvidence
         {
           PROJECTION_GATEWAY_HOST: "127.0.0.1",
           PROJECTION_GATEWAY_PORT: String(projectionPort),
-          PROJECTION_DATABASE_PATH: join(runtimeRoot, "projection.json"),
+          PROJECTION_GATEWAY_STATE_KEY: join(runtimeRoot, "projection.json"),
           PRIVATE_BACKEND_ORIGIN: privateOrigin,
           SERVICE_AUTH_TOKEN: token,
           STAGE_ORIGIN: stageOrigin,
@@ -653,9 +660,17 @@ export async function runCustomDeckUploadE2e(): Promise<CustomDeckUploadEvidence
           CONTROLLER_ACCOUNT_ID: "account_custom_deck_e2e",
           CONTROLLER_USERNAME: controllerUsername,
           CONTROLLER_PASSWORD: controllerPassword,
+          CHAT_MODEL_API_KEY: "e2e-provider-key",
+          EMBEDDING_MODEL_API_KEY: "e2e-provider-key",
+          CHAT_MODEL_BASE_URL: "https://models.example.test/v1",
+          EMBEDDING_MODEL_BASE_URL: "https://embeddings.example.test/v1",
+          EMBEDDING_MODEL: "embedding-test",
+          RERANK_MODEL: "rerank-test",
+          LLM_MODEL: "llm-test",
+          VERIFIER_MODEL: "verifier-test",
           PRIVATE_BACKEND_HOST: "127.0.0.1",
           PRIVATE_BACKEND_PORT: String(privatePort),
-          PRIVATE_SNAPSHOT_PATH: join(runtimeRoot, "private.json"),
+          PRIVATE_PREPARED_EVIDENCE_STATE_KEY: join(runtimeRoot, "private.json"),
           // Route projection writes and published assets through the Stage origin so the
           // production Stage CSP exercises the same-origin public asset boundary.
           PROJECTION_GATEWAY_ORIGIN: stageOrigin,

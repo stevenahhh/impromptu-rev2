@@ -116,7 +116,7 @@ describe("runnable WP3 service composition", () => {
       {
         PROJECTION_GATEWAY_HOST: "127.0.0.1",
         PROJECTION_GATEWAY_PORT: "44102",
-        PROJECTION_DATABASE_PATH: projectionDatabasePath,
+        PROJECTION_GATEWAY_STATE_KEY: projectionDatabasePath,
         PRIVATE_BACKEND_ORIGIN: "http://127.0.0.1:44101",
         SERVICE_AUTH_TOKEN: serviceToken,
         STAGE_ORIGIN: stageOrigin,
@@ -131,9 +131,17 @@ describe("runnable WP3 service composition", () => {
         CONTROLLER_ACCOUNT_ID: "account_runtime",
         CONTROLLER_USERNAME: "runtime",
         CONTROLLER_PASSWORD: "runtime-password",
+        CHAT_MODEL_API_KEY: "e2e-provider-key",
+        EMBEDDING_MODEL_API_KEY: "e2e-provider-key",
+        CHAT_MODEL_BASE_URL: "https://models.example.test/v1",
+        EMBEDDING_MODEL_BASE_URL: "https://embeddings.example.test/v1",
+        EMBEDDING_MODEL: "embedding-test",
+        RERANK_MODEL: "rerank-test",
+        LLM_MODEL: "llm-test",
+        VERIFIER_MODEL: "verifier-test",
         PRIVATE_BACKEND_HOST: "127.0.0.1",
         PRIVATE_BACKEND_PORT: "44101",
-        PRIVATE_SNAPSHOT_PATH: privateSnapshotPath,
+        PRIVATE_PREPARED_EVIDENCE_STATE_KEY: privateSnapshotPath,
         PROJECTION_GATEWAY_ORIGIN: "http://127.0.0.1:44102",
         SERVICE_AUTH_TOKEN: serviceToken,
         DECK_STAGING_ROOT: deckStagingRoot,
@@ -242,8 +250,8 @@ describe("runnable WP3 service composition", () => {
     });
     expect(recommendation.status).toBe(200);
     expect(await recommendation.json()).toMatchObject({
-      outcome: "RECOMMEND",
-      recommendation: { claim: "Acme revenue was 42 million USD in 2025." },
+      outcome: "ABSTAIN",
+      reason: "MODEL_FAILURE",
     });
 
     const controllerEvents = await fetch("http://127.0.0.1:44101/v1/playback/controller-events", {

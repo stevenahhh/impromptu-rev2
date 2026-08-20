@@ -118,12 +118,16 @@ async function startProcess(
   }
 }
 
-async function runCommand(command: readonly string[], cwd?: string): Promise<void> {
+async function runCommand(
+  command: readonly string[],
+  cwd?: string,
+  environment: NodeJS.ProcessEnv = globalThis.process.env,
+): Promise<void> {
   const executable = command[0];
   if (executable === undefined) throw new Error("empty command");
   const child = spawn(executable, command.slice(1), {
     ...(cwd === undefined ? {} : { cwd }),
-    env: globalThis.process.env,
+    env: environment,
     stdio: ["ignore", "pipe", "pipe"],
   });
   const [code] = await once(child, "exit", { signal: AbortSignal.timeout(30_000) });
@@ -396,7 +400,7 @@ async function runPreparedEvidenceE2EWithWorkspace({
     PRIVATE_BACKEND_ORIGIN: privateOrigin,
     PROJECTION_GATEWAY_HOST: "127.0.0.1",
     PROJECTION_GATEWAY_PORT: String(projectionPort),
-    PROJECTION_DATABASE_PATH: projectionDatabasePath,
+    PROJECTION_GATEWAY_STATE_KEY: projectionDatabasePath,
     SERVICE_AUTH_TOKEN: serviceToken,
     STAGE_ORIGIN: stageOrigin,
     DECK_ARTIFACT_ROOT: deckArtifactRoot,
@@ -406,9 +410,17 @@ async function runPreparedEvidenceE2EWithWorkspace({
     CONTROLLER_ACCOUNT_ID: "account_e2e",
     CONTROLLER_USERNAME: "e2econtroller",
     CONTROLLER_PASSWORD: "e2e-controller-password",
+    CHAT_MODEL_API_KEY: "e2e-provider-key",
+    EMBEDDING_MODEL_API_KEY: "e2e-provider-key",
+    CHAT_MODEL_BASE_URL: "https://models.example.test/v1",
+    EMBEDDING_MODEL_BASE_URL: "https://embeddings.example.test/v1",
+    EMBEDDING_MODEL: "embedding-test",
+    RERANK_MODEL: "rerank-test",
+    LLM_MODEL: "llm-test",
+    VERIFIER_MODEL: "verifier-test",
     PRIVATE_BACKEND_HOST: "127.0.0.1",
     PRIVATE_BACKEND_PORT: String(privatePort),
-    PRIVATE_SNAPSHOT_PATH: privateSnapshotPath,
+    PRIVATE_PREPARED_EVIDENCE_STATE_KEY: privateSnapshotPath,
     PROJECTION_GATEWAY_ORIGIN: projectionOrigin,
     SERVICE_AUTH_TOKEN: serviceToken,
     DECK_STAGING_ROOT: deckStagingRoot,
@@ -427,7 +439,10 @@ async function runPreparedEvidenceE2EWithWorkspace({
       "private-backend listening",
     );
     processes.push(privateProcess);
-    await runCommand(["bun", "run", "build"], "apps/stage");
+    await runCommand(["bun", "run", "build"], "apps/stage", {
+      ...globalThis.process.env,
+      STAGE_PUBLIC_API_ORIGIN: stageOrigin,
+    });
     processes.push(
       await startProcess(
         ["bun", "run", "tests/e2e/stage-origin.ts"],

@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import { mkdirSync, rmSync } from "node:fs";
 import { createServer as createNetServer } from "node:net";
 import { join } from "node:path";
 
@@ -23,6 +23,49 @@ const privateSnapshotPath = join(import.meta.dir, ".restart-private-snapshot.jso
 const projectionDatabasePath = join(import.meta.dir, ".restart-projection-database.json");
 const deckStagingRoot = join(import.meta.dir, ".restart-deck-staging");
 const deckArtifactRoot = join(import.meta.dir, ".restart-deck-artifacts");
+const privateDatabaseUrl = Bun.env.PRIVATE_DATABASE_URL;
+const projectionDatabaseUrl = Bun.env.PROJECTION_DATABASE_URL;
+if (privateDatabaseUrl === undefined || projectionDatabaseUrl === undefined) {
+  throw new Error("PRIVATE_DATABASE_URL and PROJECTION_DATABASE_URL are required");
+}
+const privateSql = new Bun.SQL(privateDatabaseUrl);
+const projectionSql = new Bun.SQL(projectionDatabaseUrl);
+
+afterAll(async () => {
+  await Promise.all([privateSql.close(), projectionSql.close()]);
+});
+
+async function privateSnapshot(): Promise<unknown> {
+  const rows = await privateSql<readonly Readonly<{ snapshot: unknown }>[]>`
+    SELECT snapshot FROM private_app.prepared_evidence_state WHERE state_key = ${privateSnapshotPath}
+  `;
+  const row = rows[0];
+  if (row === undefined) throw new Error("private snapshot fixture missing");
+  return row.snapshot;
+}
+
+async function projectionSnapshot(): Promise<unknown> {
+  const rows = await projectionSql<readonly Readonly<{ snapshot: unknown }>[]>`
+    SELECT snapshot FROM public_projection.gateway_state WHERE state_key = ${projectionDatabasePath}
+  `;
+  const row = rows[0];
+  if (row === undefined) throw new Error("projection snapshot fixture missing");
+  return row.snapshot;
+}
+
+async function writePrivateSnapshot(snapshot: unknown): Promise<void> {
+  await privateSql`
+    UPDATE private_app.prepared_evidence_state SET snapshot = ${snapshot}::jsonb
+    WHERE state_key = ${privateSnapshotPath}
+  `;
+}
+
+async function writeProjectionSnapshot(snapshot: unknown): Promise<void> {
+  await projectionSql`
+    UPDATE public_projection.gateway_state SET snapshot = ${snapshot}::jsonb
+    WHERE state_key = ${projectionDatabasePath}
+  `;
+}
 const privatePort = await availablePort();
 const projectionPort = await availablePort();
 const privateOrigin = `http://127.0.0.1:${privatePort}`;
@@ -116,7 +159,7 @@ function headers(origin: string, csrfToken?: string, cookie?: string): HeadersIn
 
 const projectionEnvironment = {
   PRIVATE_BACKEND_ORIGIN: privateOrigin,
-  PROJECTION_DATABASE_PATH: projectionDatabasePath,
+  PROJECTION_GATEWAY_STATE_KEY: projectionDatabasePath,
   PROJECTION_GATEWAY_HOST: "127.0.0.1",
   PROJECTION_GATEWAY_PORT: String(projectionPort),
   SERVICE_AUTH_TOKEN: serviceToken,
@@ -128,9 +171,17 @@ const privateEnvironment = {
   CONTROLLER_ACCOUNT_ID: "account_restart",
   CONTROLLER_USERNAME: "restart",
   CONTROLLER_PASSWORD: "restart-password",
+  CHAT_MODEL_API_KEY: "e2e-provider-key",
+  EMBEDDING_MODEL_API_KEY: "e2e-provider-key",
+  CHAT_MODEL_BASE_URL: "https://models.example.test/v1",
+  EMBEDDING_MODEL_BASE_URL: "https://embeddings.example.test/v1",
+  EMBEDDING_MODEL: "embedding-test",
+  RERANK_MODEL: "rerank-test",
+  LLM_MODEL: "llm-test",
+  VERIFIER_MODEL: "verifier-test",
   PRIVATE_BACKEND_HOST: "127.0.0.1",
   PRIVATE_BACKEND_PORT: String(privatePort),
-  PRIVATE_SNAPSHOT_PATH: privateSnapshotPath,
+  PRIVATE_PREPARED_EVIDENCE_STATE_KEY: privateSnapshotPath,
   PROJECTION_GATEWAY_ORIGIN: projectionOrigin,
   SERVICE_AUTH_TOKEN: serviceToken,
   DECK_STAGING_ROOT: deckStagingRoot,
@@ -143,6 +194,10 @@ afterEach(async () => {
   rmSync(projectionDatabasePath, { force: true });
   rmSync(deckStagingRoot, { recursive: true, force: true });
   rmSync(deckArtifactRoot, { recursive: true, force: true });
+  await Promise.all([
+    privateSql`DELETE FROM private_app.prepared_evidence_state WHERE state_key = ${privateSnapshotPath}`,
+    projectionSql`DELETE FROM public_projection.gateway_state WHERE state_key = ${projectionDatabasePath}`,
+  ]);
 });
 
 describe("durable service-main restore boundary", () => {
@@ -304,8 +359,8 @@ describe("durable service-main restore boundary", () => {
 
     await stop(privateBackend);
     await stop(projection);
-    const privateBaseline: unknown = JSON.parse(readFileSync(privateSnapshotPath, "utf8"));
-    const projectionBaseline: unknown = JSON.parse(readFileSync(projectionDatabasePath, "utf8"));
+    const privateBaseline = await privateSnapshot();
+    const projectionBaseline = await projectionSnapshot();
 
     const unsafeOccurrence = structuredClone(projectionBaseline) as {
       projections: Array<{ occurrence: { occurrenceSeq: number } }>;
@@ -313,7 +368,7 @@ describe("durable service-main restore boundary", () => {
     const unsafeProjection = unsafeOccurrence.projections[0];
     if (unsafeProjection === undefined) throw new Error("projection snapshot fixture missing");
     unsafeProjection.occurrence.occurrenceSeq = Number.MAX_SAFE_INTEGER + 1;
-    writeFileSync(projectionDatabasePath, JSON.stringify(unsafeOccurrence));
+    await writeProjectionSnapshot(unsafeOccurrence);
     await expectRejectedStartup(
       "services/projection-gateway/src/main.ts",
       projectionEnvironment,
@@ -326,13 +381,14 @@ describe("durable service-main restore boundary", () => {
     const strippedProjection = strippedTerminalHistory.projections[0];
     if (strippedProjection === undefined) throw new Error("projection snapshot fixture missing");
     strippedProjection.tombstones = [];
-    writeFileSync(projectionDatabasePath, JSON.stringify(strippedTerminalHistory));
+    await writeProjectionSnapshot(strippedTerminalHistory);
     await expectRejectedStartup(
       "services/projection-gateway/src/main.ts",
       projectionEnvironment,
       "ProjectionGatewaySnapshotError",
     );
 
+    await writeProjectionSnapshot(projectionBaseline);
     const mismatchedCandidateHash = structuredClone(privateBaseline) as {
       presentations: Array<{
         candidates: Array<{ lifecycle: { contentHash: string } }>;
@@ -341,13 +397,14 @@ describe("durable service-main restore boundary", () => {
     const hashCandidate = mismatchedCandidateHash.presentations[0]?.candidates[0];
     if (hashCandidate === undefined) throw new Error("private candidate fixture missing");
     hashCandidate.lifecycle.contentHash = "f".repeat(64);
-    writeFileSync(privateSnapshotPath, JSON.stringify(mismatchedCandidateHash));
+    await writePrivateSnapshot(mismatchedCandidateHash);
     await expectRejectedStartup(
       "services/private-backend/src/main.ts",
       privateEnvironment,
       "PreparedEvidenceSnapshotError",
     );
 
+    await writePrivateSnapshot(privateBaseline);
     const mismatchedCandidateVersion = structuredClone(privateBaseline) as {
       presentations: Array<{
         candidates: Array<{ lifecycle: { candidateVersion: string } }>;
@@ -356,7 +413,7 @@ describe("durable service-main restore boundary", () => {
     const versionCandidate = mismatchedCandidateVersion.presentations[0]?.candidates[0];
     if (versionCandidate === undefined) throw new Error("private candidate fixture missing");
     versionCandidate.lifecycle.candidateVersion = "candidate-version-forged";
-    writeFileSync(privateSnapshotPath, JSON.stringify(mismatchedCandidateVersion));
+    await writePrivateSnapshot(mismatchedCandidateVersion);
     await expectRejectedStartup(
       "services/private-backend/src/main.ts",
       privateEnvironment,

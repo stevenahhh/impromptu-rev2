@@ -1,13 +1,29 @@
 import { parseProjectionGatewayConfig } from "./config.ts";
 import { createDeckAssetReader, createProjectionGatewayHandler } from "./http.ts";
-import {
-  createProjectionGatewayStore,
-  PreparedEvidenceProjectionGateway,
-  ProjectionGatewaySnapshotError,
-  restoreProjectionGatewayStore,
-  snapshotProjectionGatewayStore,
-} from "./prepared-evidence.ts";
+import { createJsonLogger, createMetricsRegistry } from "./observability.ts";
+import { createPostgresProjectionGatewayPersistence } from "./ports/postgres-projection-store.ts";
+import { PreparedEvidenceProjectionGateway } from "./prepared-evidence.ts";
+import { createTokenBucketRateLimiter } from "./rate-limit.ts";
 import { createProjectionRealtimeProtocol, type ProjectionRealtimeConnection } from "./realtime.ts";
+
+function required(name: string): string {
+  const value = Bun.env[name];
+  if (value === undefined || value.length === 0) throw new Error(`${name} is required`);
+  return value;
+}
+
+function positiveNumber(name: string, defaultValue: number): number {
+  const value = Bun.env[name];
+  if (value === undefined) return defaultValue;
+  if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)) {
+    throw new Error(`${name} must be a positive finite number`);
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive finite number`);
+  }
+  return parsed;
+}
 
 const internalAuthToken = Bun.env.SERVICE_AUTH_TOKEN;
 if (internalAuthToken === undefined || internalAuthToken.length < 16) {
@@ -34,29 +50,24 @@ const deckArtifactStats = await Bun.file(deckArtifactRoot)
 if (deckArtifactStats === null || !deckArtifactStats.isDirectory()) {
   throw new Error("DECK_ARTIFACT_ROOT must be an existing absolute directory");
 }
-const databasePath = Bun.env.PROJECTION_DATABASE_PATH;
-if (databasePath === undefined || databasePath.length === 0) {
-  throw new Error("PROJECTION_DATABASE_PATH is required");
-}
-const databaseFile = Bun.file(databasePath);
-let store = createProjectionGatewayStore();
-if (await databaseFile.exists()) {
-  let input: unknown;
-  try {
-    input = await databaseFile.json();
-  } catch {
-    throw new ProjectionGatewaySnapshotError("projection database snapshot is not valid JSON");
-  }
-  const restored = restoreProjectionGatewayStore(input);
-  if (restored.outcome !== "RESTORED") {
-    throw new ProjectionGatewaySnapshotError("projection database snapshot failed validation");
-  }
-  store = restored.store;
-}
-const gateway = new PreparedEvidenceProjectionGateway(store);
-const persist = async () => {
-  await Bun.write(databasePath, JSON.stringify(snapshotProjectionGatewayStore(store)));
-};
+const projectionSql = new Bun.SQL(required("PROJECTION_DATABASE_URL"));
+const projectionStateKey = Bun.env.PROJECTION_GATEWAY_STATE_KEY;
+const persistence = await createPostgresProjectionGatewayPersistence(projectionSql, {
+  ...(projectionStateKey === undefined ? {} : { stateKey: projectionStateKey }),
+});
+const gateway = new PreparedEvidenceProjectionGateway(persistence.store);
+const logger = createJsonLogger();
+const metrics = createMetricsRegistry("projection_gateway");
+const publicRateLimiter = createTokenBucketRateLimiter({
+  capacity: positiveNumber("PROJECTION_PUBLIC_RATE_LIMIT_CAPACITY", 120),
+  refillPerSecond: positiveNumber("PROJECTION_PUBLIC_RATE_LIMIT_REFILL_PER_SECOND", 2),
+  now: Date.now,
+});
+const connectionRateLimiter = createTokenBucketRateLimiter({
+  capacity: positiveNumber("PROJECTION_CONNECTION_RATE_LIMIT_CAPACITY", 20),
+  refillPerSecond: positiveNumber("PROJECTION_CONNECTION_RATE_LIMIT_REFILL_PER_SECOND", 1),
+  now: Date.now,
+});
 const recordApplied = async (input: {
   readonly audienceDisplaySessionId: string;
   readonly commandId: string;
@@ -80,15 +91,26 @@ const httpHandler = createProjectionGatewayHandler(config, {
   gateway,
   internalAuthToken,
   now: Date.now,
-  persist,
+  persist: persistence.persist,
   stageReceiptWriter: { recordApplied },
   deckAssets: createDeckAssetReader(deckArtifactRoot),
+  logger,
+  metrics,
+  publicRateLimiter,
+  readiness: {
+    async check() {
+      await projectionSql`SELECT 1`;
+      return { outcome: "READY" };
+    },
+  },
 });
 const realtime = createProjectionRealtimeProtocol({
   gateway,
   allowedOrigin: config.allowedOrigin,
   now: Date.now,
   recordApplied,
+  connectionRateLimiter,
+  metrics,
 });
 type RealtimeSocketData = {
   audienceDisplaySessionId: string;
@@ -101,9 +123,20 @@ const server = Bun.serve<RealtimeSocketData, Record<never, never>>({
     if (new URL(request.url).pathname !== "/v1/realtime") return httpHandler(request);
     const authentication = realtime.authenticate(request);
     if (authentication.outcome === "REJECTED") {
+      const rateLimited = authentication.reason === "RATE_LIMITED";
       return new Response(JSON.stringify({ error: authentication.reason }), {
-        status: 403,
-        headers: { "content-type": "application/json", "cache-control": "no-store" },
+        status: rateLimited ? 429 : 403,
+        headers: {
+          "content-type": "application/json",
+          "cache-control": "no-store",
+          ...(rateLimited
+            ? {
+                "retry-after": String(
+                  Math.max(1, Math.ceil((authentication.retryAfterMs ?? 1_000) / 1_000)),
+                ),
+              }
+            : {}),
+        },
       });
     }
     return server.upgrade(request, {

@@ -2,11 +2,15 @@ import { statSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  createTrustedModelContext,
+  FetchProviderEgressTransport,
   ModelRoutingRegistry,
   NodePermissionAdapterIsolate,
   ServerModelRouter,
+  StaticExactEgressPolicy,
   StaticPolicyVersionAuthority,
 } from "@impromptu/model-router";
+import { SQL } from "bun";
 import postgres from "postgres";
 import { z } from "zod";
 import { createAccountDirectory } from "./account-directory.ts";
@@ -17,16 +21,19 @@ import { createDeckRenderSubprocess } from "./deck-render-subprocess.ts";
 import { createDeckUploadService } from "./deck-upload-service.ts";
 import { createDeckUploadWorker } from "./deck-upload-worker.ts";
 import { createPrivateBackendHandler } from "./http.ts";
-import {
-  createPreparedEvidenceStore,
-  PreparedEvidenceCoordinator,
-  PreparedEvidenceSnapshotError,
-  restorePreparedEvidenceStore,
-  snapshotPreparedEvidenceStore,
-} from "./prepared-evidence.ts";
+import { registerOpenAiCompatibleAdapters } from "./model-adapters/openai-compatible.ts";
+import { createJsonLogger, createMetricsRegistry } from "./observability.ts";
+import { PreparedEvidenceCoordinator } from "./prepared-evidence.ts";
+import { createPostgresPreparedEvidencePersistence } from "./prepared-evidence-store-postgres.ts";
 import { ProjectionHttpPort } from "./projection-http-port.ts";
-import { SafeExternalEvidenceFetcher } from "./retrieval/external-fetch.ts";
+import { createTokenBucketRateLimiter } from "./rate-limit.ts";
+import {
+  NodePinnedHttpsTransport,
+  NodePublicDnsResolver,
+  SafeExternalEvidenceFetcher,
+} from "./retrieval/external-fetch.ts";
 import { InternalRetrievalService } from "./retrieval/internal-retrieval.ts";
+import { PostgresDeckRetrievalStore } from "./retrieval/postgres-deck-retrieval.ts";
 import { PrivateRecommendationPipeline } from "./verifier/recommendation-pipeline.ts";
 
 function required(name: string): string {
@@ -63,6 +70,37 @@ function renderDeadlineMs(value: string | undefined): number {
   return parsed;
 }
 
+function positiveNumber(name: string, defaultValue: number): number {
+  const value = Bun.env[name];
+  if (value === undefined) return defaultValue;
+  if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)) {
+    throw new Error(`${name} must be a positive finite number`);
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive finite number`);
+  }
+  return parsed;
+}
+
+function credentialFreeHttpsBaseUrl(name: string): URL {
+  const url = new URL(required(name));
+  if (
+    url.protocol !== "https:" ||
+    url.username !== "" ||
+    url.password !== "" ||
+    url.search !== "" ||
+    url.hash !== ""
+  ) {
+    throw new Error(`${name} must be a credential-free HTTPS URL without query or fragment`);
+  }
+  return url;
+}
+
+function apiPrefix(url: URL): string {
+  return url.pathname.replace(/\/$/, "") || "/";
+}
+
 const DEFAULT_INGESTION_PROJECT = fileURLToPath(
   new URL("../../../services/ingestion", import.meta.url),
 );
@@ -72,23 +110,6 @@ const internalAuthToken = required("SERVICE_AUTH_TOKEN");
 const bootstrapUsername = required("CONTROLLER_USERNAME");
 const bootstrapPassword = required("CONTROLLER_PASSWORD");
 const accountId = required("CONTROLLER_ACCOUNT_ID");
-const privateDatabaseUrl = Bun.env.PRIVATE_DATABASE_URL;
-const privateSql =
-  privateDatabaseUrl === undefined || privateDatabaseUrl.length === 0
-    ? undefined
-    : postgres(privateDatabaseUrl);
-const accountDirectory =
-  privateSql === undefined
-    ? createAccountDirectory()
-    : createAccountDirectory(createPostgresAccountStore(privateSql));
-const bootstrapAccount = await accountDirectory.register(
-  { username: bootstrapUsername, password: bootstrapPassword },
-  Date.now(),
-  { accountId },
-);
-if (bootstrapAccount.outcome === "REJECTED" && bootstrapAccount.reason !== "USERNAME_TAKEN") {
-  throw new Error(`bootstrap account rejected: ${bootstrapAccount.reason}`);
-}
 const projectionGatewayOrigin = required("PROJECTION_GATEWAY_ORIGIN");
 const projection = new ProjectionHttpPort(projectionGatewayOrigin, internalAuthToken);
 const deckStagingRoot = existingAbsoluteDirectory(
@@ -112,136 +133,47 @@ const deckUploadService = createDeckUploadService({
     deadlineMs: renderDeadlineMs(Bun.env.DECK_RENDER_DEADLINE_MS),
   }),
 });
-const snapshotPath = required("PRIVATE_SNAPSHOT_PATH");
-const snapshotFile = Bun.file(snapshotPath);
-let store = createPreparedEvidenceStore();
-if (await snapshotFile.exists()) {
-  let input: unknown;
-  try {
-    input = await snapshotFile.json();
-  } catch {
-    throw new PreparedEvidenceSnapshotError("private snapshot is not valid JSON");
-  }
-  const restored = restorePreparedEvidenceStore(input);
-  if (restored.outcome !== "RESTORED") {
-    throw new PreparedEvidenceSnapshotError("private snapshot failed validation");
-  }
-  store = restored.store;
-}
-const fixtureObjectId = "runtime-fixture";
-const fixtureContent = "Acme revenue was 42 million USD in 2025.";
-const fixtureSourceHash = new Bun.CryptoHasher("sha256").update(fixtureContent).digest("hex");
-const fixtureManifestHash = "a".repeat(64);
+const privateDatabaseUrl = required("PRIVATE_DATABASE_URL");
+const privateSql = postgres(privateDatabaseUrl);
+const preparedEvidenceSql = new SQL(privateDatabaseUrl);
+const privateStateKey = Bun.env.PRIVATE_PREPARED_EVIDENCE_STATE_KEY;
+const persistence = await createPostgresPreparedEvidencePersistence(preparedEvidenceSql, {
+  ...(privateStateKey === undefined ? {} : { stateKey: privateStateKey }),
+});
+const store = persistence.store;
 let coordinator: PreparedEvidenceCoordinator;
-const internalRetrieval = new InternalRetrievalService({
-  principals: {
-    async resolve(accountSessionId) {
-      const session = await coordinator.readAccountSession(accountSessionId, Date.now());
-      return session.outcome === "APPLIED"
-        ? {
-            tenantId: session.value.accountId,
-            principalId: session.value.actorId,
-            groupIds: ["runtime-fixture-readers"],
-            attributes: { role: "controller" },
-          }
-        : null;
-    },
-  },
-  policy: {
-    async prefilter(principal, request) {
-      const eligible =
-        principal.groupIds.includes("runtime-fixture-readers") &&
-        request.deckVersion === "deck_v1" &&
-        request.manifestHash === fixtureManifestHash;
-      return {
-        version: "acl-runtime-v1",
-        current: true,
-        authorizedObjectIds: eligible ? [fixtureObjectId] : [],
-      };
-    },
-    async authorizeObject(principal, object, version) {
-      return (
-        version === "acl-runtime-v1" &&
-        principal.tenantId === object.tenantId &&
-        object.objectId === fixtureObjectId
-      );
-    },
-    async isCurrent(_tenantId, version) {
-      return version === "acl-runtime-v1";
-    },
-  },
-  ann: {
-    async search(input) {
-      return input.authorizedObjectIds.includes(fixtureObjectId)
-        ? [
-            {
-              tenantId: input.tenantId,
-              objectId: fixtureObjectId,
-              score: 1,
-              indexedSourceHash: fixtureSourceHash,
-              indexedDeckVersion: "deck_v1",
-              indexedManifestHash: fixtureManifestHash,
-              indexedAuthorizationVersion: "acl-runtime-v1",
-            },
-          ]
-        : [];
-    },
-  },
-  objects: {
-    async readMetadata(tenantId, objectId) {
-      return objectId === fixtureObjectId
-        ? {
-            tenantId,
-            objectId,
-            sourceId: "source_runtime",
-            sourceRevision: "r1",
-            sourceHash: fixtureSourceHash,
-            deckVersion: "deck_v1",
-            manifestHash: fixtureManifestHash,
-            title: "Runtime evidence fixture",
-            anchor: "fixture=runtime",
-            rights: "APPROVED",
-            containsPii: false,
-          }
-        : null;
-    },
-    async readContent(_tenantId, objectId) {
-      return objectId === fixtureObjectId ? fixtureContent : null;
-    },
-  },
-});
-const externalFetcher = new SafeExternalEvidenceFetcher({
-  dns: {
-    async resolve() {
-      return ["93.184.216.34"];
-    },
-  },
-  transport: {
-    async request() {
-      throw new Error("Pinned external retrieval transport is not configured");
-    },
-  },
-});
+const chatModelApiKey = required("CHAT_MODEL_API_KEY");
+const embeddingModelApiKey = required("EMBEDDING_MODEL_API_KEY");
+const chatModelBaseUrl = credentialFreeHttpsBaseUrl("CHAT_MODEL_BASE_URL");
+const embeddingModelBaseUrl = credentialFreeHttpsBaseUrl("EMBEDDING_MODEL_BASE_URL");
+const accountDirectory = createAccountDirectory(createPostgresAccountStore(privateSql));
 const modelRegistry = new ModelRoutingRegistry();
-const fixedAdapterModule = fileURLToPath(
-  new URL("./model-adapters/fixed-retrieval.mjs", import.meta.url),
-);
-for (const capability of ["embedding", "rerank", "llm", "verifier"] as const) {
-  const registration = modelRegistry.registerIsolatedUnary({
-    descriptor: {
-      adapterId: `fixed-runtime-${capability}`,
-      capability,
-      provider: "fixed-runtime-provider",
-      model: `fixed-runtime-${capability}`,
-      modelVersion: "1",
-      estimatedCostUnits: 1,
-    },
-    inputSchema: z.unknown(),
-    outputSchema: z.unknown(),
-    module: { modulePath: fixedAdapterModule, exportName: capability, allowedReadPaths: [] },
-  });
-  if (registration !== undefined) throw new Error(`Failed to register ${capability} adapter`);
-}
+const chatModel = {
+  origin: chatModelBaseUrl.origin,
+  apiPrefix: apiPrefix(chatModelBaseUrl),
+  model: required("LLM_MODEL"),
+};
+const modelAdapterBindings = registerOpenAiCompatibleAdapters(modelRegistry, {
+  embedding: {
+    origin: embeddingModelBaseUrl.origin,
+    apiPrefix: apiPrefix(embeddingModelBaseUrl),
+    model: required("EMBEDDING_MODEL"),
+    secretId: "embedding-model-api-key",
+  },
+  rerank: {
+    ...chatModel,
+    model: required("RERANK_MODEL"),
+    secretId: "rerank-model-api-key",
+    reasoningEffort: "none",
+  },
+  llm: { ...chatModel, secretId: "llm-model-api-key", reasoningEffort: "none" },
+  verifier: {
+    ...chatModel,
+    model: required("VERIFIER_MODEL"),
+    secretId: "verifier-model-api-key",
+    reasoningEffort: "none",
+  },
+});
 const modelBudget = {
   async reserve(request: { readonly estimatedCostUnits: number }) {
     return { reservationId: crypto.randomUUID(), reservedUnits: request.estimatedCostUnits };
@@ -254,7 +186,109 @@ const modelRouter = new ServerModelRouter({
   policyVersionAuthority: new StaticPolicyVersionAuthority("model-policy-v1"),
   quotaPolicy: { async assertWithinQuota() {} },
   budget: modelBudget,
+  secretStore: {
+    async read(secretId) {
+      if (secretId === "embedding-model-api-key") return { value: embeddingModelApiKey };
+      if (
+        secretId === "rerank-model-api-key" ||
+        secretId === "llm-model-api-key" ||
+        secretId === "verifier-model-api-key"
+      ) {
+        return { value: chatModelApiKey };
+      }
+      throw new Error("Unknown model credential");
+    },
+  },
+  egressPolicy: new StaticExactEgressPolicy(
+    modelAdapterBindings.map(({ adapterId, origin }) => ({ adapterId, origin })),
+  ),
+  providerTransport: new FetchProviderEgressTransport(),
 });
+const logger = createJsonLogger();
+const retrievalStore = new PostgresDeckRetrievalStore({
+  sql: privateSql,
+  artifactRoot: deckArtifactRoot,
+  access: {
+    async authorize(principal, request) {
+      return [...store.presentations.values()].some(
+        (presentation) =>
+          String(presentation.privateDeck.ownerAccountId) === principal.tenantId &&
+          presentation.privateDeck.deckVersion === request.deckVersion &&
+          presentation.privateDeck.manifestHash === request.manifestHash,
+      );
+    },
+  },
+  logger: {
+    log(event) {
+      const requestId = `deck-index:${crypto.randomUUID()}`;
+      logger.request({
+        requestId,
+        method: "INDEX",
+        path: "/internal/deck-retrieval",
+        status: event.outcome === "FAILED" ? 500 : 200,
+        durationMs: event.durationMs,
+        outcome: `${event.outcome}:${event.reason}`,
+      });
+      if (event.errorType !== undefined) {
+        logger.error({ requestId, path: "/internal/deck-retrieval", errorType: event.errorType });
+      }
+    },
+  },
+  embedding: {
+    async embed(text, principal) {
+      const startedAtMs = Date.now();
+      const signal = AbortSignal.timeout(15_000);
+      const result = await modelRouter.invoke(
+        { capability: "embedding", input: { task: "EMBED_RETRIEVAL_QUERY", query: text } },
+        createTrustedModelContext({
+          tenantId: principal.tenantId,
+          principalId: principal.principalId,
+          policyVersion: "model-policy-v1",
+          requestId: `deck-index:${crypto.randomUUID()}`,
+          traceId: `deck-index:${principal.tenantId}:${startedAtMs}`,
+          deadlineAtMs: startedAtMs + 15_000,
+          signal,
+        }),
+      );
+      if (!result.ok) throw new Error(`Deck embedding failed: ${result.error.code}`);
+      return z
+        .object({ vector: z.array(z.number().finite()).min(1).max(8_192) })
+        .strict()
+        .parse(result.output).vector;
+    },
+  },
+});
+const internalRetrieval = new InternalRetrievalService({
+  principals: {
+    async resolve(accountSessionId) {
+      const session = await coordinator.readAccountSession(accountSessionId, Date.now());
+      return session.outcome === "APPLIED"
+        ? {
+            tenantId: session.value.accountId,
+            principalId: session.value.actorId,
+            groupIds: [],
+            attributes: { role: "controller" },
+          }
+        : null;
+    },
+  },
+  policy: retrievalStore,
+  ann: retrievalStore,
+  objects: retrievalStore,
+  corpus: retrievalStore,
+});
+const externalFetcher = new SafeExternalEvidenceFetcher({
+  dns: new NodePublicDnsResolver(),
+  transport: new NodePinnedHttpsTransport(),
+});
+const bootstrapAccount = await accountDirectory.register(
+  { username: bootstrapUsername, password: bootstrapPassword },
+  Date.now(),
+  { accountId },
+);
+if (bootstrapAccount.outcome === "REJECTED" && bootstrapAccount.reason !== "USERNAME_TAKEN") {
+  throw new Error(`bootstrap account rejected: ${bootstrapAccount.reason}`);
+}
 const recommendations = new PrivateRecommendationPipeline({
   router: modelRouter,
   contexts: {
@@ -271,11 +305,22 @@ const recommendations = new PrivateRecommendationPipeline({
   },
   internal: internalRetrieval,
   externalFetch: externalFetcher,
+  stageObserver: {
+    observe(event) {
+      logger.request({
+        requestId: `recommendation-stage:${crypto.randomUUID()}`,
+        method: "INFERENCE",
+        path: `/internal/recommendation/${event.stage}`,
+        status: event.outcome === "SUCCESS" ? 200 : 500,
+        durationMs: event.latencyMs,
+        outcome:
+          event.errorCode === undefined ? event.outcome : `${event.outcome}:${event.errorCode}`,
+      });
+    },
+  },
 });
 coordinator = new PreparedEvidenceCoordinator(projection, store, {
-  ...(privateSql === undefined
-    ? {}
-    : { accountSessionStore: createPostgresAccountSessionStore(privateSql) }),
+  accountSessionStore: createPostgresAccountSessionStore(privateSql),
   livePublicEnabled: config.livePublicEnabled,
   liveEvidenceAuthorizer: {
     async authorize(candidate) {
@@ -283,8 +328,18 @@ coordinator = new PreparedEvidenceCoordinator(projection, store, {
     },
   },
 });
-const persist = async () => {
-  await Bun.write(snapshotPath, JSON.stringify(snapshotPreparedEvidenceStore(store)));
+const metrics = createMetricsRegistry("private_backend");
+const loginRateLimiters = {
+  account: createTokenBucketRateLimiter({
+    capacity: positiveNumber("LOGIN_ACCOUNT_RATE_LIMIT_CAPACITY", 5),
+    refillPerSecond: positiveNumber("LOGIN_ACCOUNT_RATE_LIMIT_REFILL_PER_SECOND", 0.1),
+    now: Date.now,
+  }),
+  ip: createTokenBucketRateLimiter({
+    capacity: positiveNumber("LOGIN_IP_RATE_LIMIT_CAPACITY", 20),
+    refillPerSecond: positiveNumber("LOGIN_IP_RATE_LIMIT_REFILL_PER_SECOND", 1),
+    now: Date.now,
+  }),
 };
 const server = Bun.serve({
   hostname: config.host,
@@ -296,8 +351,26 @@ const server = Bun.serve({
     accountRegistrar: accountDirectory,
     now: Date.now,
     recommendations,
-    persist,
+    persist: persistence.persist,
     uploads: deckUploadService,
+    logger,
+    metrics,
+    loginRateLimiters,
+    readiness: {
+      async check() {
+        await privateSql`SELECT 1`;
+        try {
+          const response = await fetch(`${projectionGatewayOrigin}/health`, {
+            signal: AbortSignal.timeout(5_000),
+          });
+          return response.ok
+            ? { outcome: "READY" }
+            : { outcome: "NOT_READY", reason: "PROJECTION_GATEWAY_UNAVAILABLE" };
+        } catch {
+          return { outcome: "NOT_READY", reason: "PROJECTION_GATEWAY_UNAVAILABLE" };
+        }
+      },
+    },
   }),
 });
 
