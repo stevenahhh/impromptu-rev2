@@ -171,6 +171,12 @@ export interface ActivePresentationView {
     publicSlideKey: string;
     ordinal: number;
     accessibilityLabel: string;
+    image?: Readonly<{
+      url: string;
+      contentHash: string;
+      width: number;
+      height: number;
+    }>;
   }>[];
 }
 

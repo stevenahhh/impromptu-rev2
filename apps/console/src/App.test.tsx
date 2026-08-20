@@ -164,6 +164,38 @@ describe("Console route boundary", () => {
     expect(within(document.body).getAllByText("Opening slide").length).toBeGreaterThan(0);
   });
 
+  test("renders an uploaded slide through the same-origin asset path", async () => {
+    const presentation: ActivePresentationView = {
+      ...workspacePresentation,
+      slides: [
+        {
+          publicSlideKey: "slide_one",
+          ordinal: 1,
+          accessibilityLabel: "Opening slide",
+          image: {
+            url: "http://127.0.0.1:3002/v1/deck-assets/manifest/slides/slide-1.svg",
+            contentHash: "a".repeat(64),
+            width: 1600,
+            height: 900,
+          },
+        },
+      ],
+    };
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AuthProvider initialAuthenticated initialPresentation={presentation}>
+          <ConsoleRoutes />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    const image = document.querySelector("[data-rendered-slide] img");
+    expect(image?.getAttribute("src")).toBe("/v1/deck-assets/manifest/slides/slide-1.svg");
+    await act(async () => fireEvent.load(image as Element));
+    expect(document.querySelector("[data-rendered-slide='active'] img")).toBeTruthy();
+    expect(image?.getAttribute("alt")).toBe("Opening slide");
+  });
+
   test("adds evidence as each slide finishes without blocking presentation readiness", async () => {
     let resolveOpening: (outcome: RecommendationOutcome) => void = () => {
       throw new Error("opening recommendation signal was not installed");

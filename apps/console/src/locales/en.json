@@ -95,5 +95,7 @@
   "startedMessage": "Presentation started. The audience screen is showing slide 1.",
   "slidesPlaceholder": "Slides will appear here after upload.",
   "slideRail": "Slide list",
-  "slidePreview": "Slide preview"
+  "slidePreview": "Slide preview",
+  "slideLoading": "Loading slide.",
+  "slideLoadFailed": "The slide could not be loaded."
 }

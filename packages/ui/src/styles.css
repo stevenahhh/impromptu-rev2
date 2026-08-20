@@ -314,6 +314,33 @@ a {
   }
 }
 
+.ui-rendered-slide,
+.ui-rendered-slide__canvas {
+  position: relative;
+  inline-size: var(--size-full);
+  block-size: var(--size-full);
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.ui-rendered-slide__canvas > svg,
+.ui-rendered-slide__image {
+  display: block;
+  inline-size: var(--size-full);
+  block-size: var(--size-full);
+  object-fit: contain;
+}
+
+.ui-rendered-slide__status {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  margin: 0;
+  color: var(--text-secondary);
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
 @media (forced-colors: active) {
   .ui-button,
   .ui-panel,

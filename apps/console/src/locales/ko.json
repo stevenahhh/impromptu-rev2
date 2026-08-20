@@ -95,5 +95,7 @@
   "startedMessage": "발표를 시작했습니다. 청중 화면에 첫 번째 슬라이드가 표시됩니다.",
   "slidesPlaceholder": "업로드가 끝나면 슬라이드가 여기에 표시됩니다.",
   "slideRail": "슬라이드 목록",
-  "slidePreview": "슬라이드 미리보기"
+  "slidePreview": "슬라이드 미리보기",
+  "slideLoading": "슬라이드를 불러오는 중입니다.",
+  "slideLoadFailed": "슬라이드를 불러오지 못했습니다."
 }

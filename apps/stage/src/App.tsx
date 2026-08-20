@@ -5,7 +5,7 @@ import {
   type RealtimeStageState,
   type RealtimeTransition,
 } from "@impromptu/state/realtime";
-import { Badge, Brand, Button, Panel, Shell, StatusDot } from "@impromptu/ui";
+import { Badge, Brand, Button, Panel, rebaseDeckAssetUrl, Shell, StatusDot } from "@impromptu/ui";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import copy from "./locales/ko.json";
@@ -31,6 +31,8 @@ import {
   windowsDisplayMode,
 } from "./windows-topology";
 
+const STAGE_PUBLIC_API_ORIGIN = import.meta.env.STAGE_PUBLIC_API_ORIGIN ?? "";
+
 function publishStageEvent(name: string, detail: unknown): void {
   window.dispatchEvent(new CustomEvent(name, { detail }));
 }
@@ -42,14 +44,7 @@ function displayModeLabel(mode: "extend" | "duplicate" | "single"): string {
 }
 
 export function normalizeDeckAssetUrl(url: string) {
-  try {
-    const parsed = new URL(url, "http://stage.invalid");
-    return parsed.pathname.startsWith("/v1/deck-assets/")
-      ? `${parsed.pathname}${parsed.search}`
-      : url;
-  } catch {
-    return url;
-  }
+  return rebaseDeckAssetUrl(url, STAGE_PUBLIC_API_ORIGIN);
 }
 
 function renderedSlideRuntime(
@@ -965,7 +960,10 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
 }
 
 export function StageRoutes({ client }: { readonly client?: StageSessionClient }) {
-  const sessionClient = useMemo(() => client ?? createStageSessionClient(), [client]);
+  const sessionClient = useMemo(
+    () => client ?? createStageSessionClient(STAGE_PUBLIC_API_ORIGIN),
+    [client],
+  );
   return (
     <Routes>
       <Route index element={<LandingPage client={sessionClient} />} />

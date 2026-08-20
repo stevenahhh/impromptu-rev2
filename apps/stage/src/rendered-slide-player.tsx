@@ -1,5 +1,6 @@
 import type { PublishedSlideRuntime, RuntimeEmbeddedFont } from "@impromptu/contracts";
 import { createSlidePlayer, type SlidePlayer } from "@impromptu/slide-runtime";
+import { loadVerifiedSvg } from "@impromptu/ui";
 import {
   forwardRef,
   type AnimationEvent as ReactAnimationEvent,
@@ -32,30 +33,6 @@ interface RenderedSlidePlayerProps {
 type RuntimeStatus = "loading" | "active" | "error";
 type SupportedTransition = "fade" | "none";
 
-const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
-const XML_NAMESPACE = "http://www.w3.org/XML/1998/namespace";
-const XMLNS_NAMESPACE = "http://www.w3.org/2000/xmlns/";
-const MAX_SVG_BYTES = 16_000_000;
-const MAX_SVG_ELEMENTS = 250_000;
-const SVG_FRAGMENT_REFERENCE = /^#[A-Za-z][A-Za-z0-9_.:-]{0,127}$/;
-const FORBIDDEN_SVG_ELEMENTS = new Set([
-  "a",
-  "animate",
-  "animatemotion",
-  "animatetransform",
-  "audio",
-  "discard",
-  "embed",
-  "foreignobject",
-  "handler",
-  "iframe",
-  "object",
-  "script",
-  "set",
-  "style",
-  "video",
-]);
-
 function fontPreload(url: string): HTMLLinkElement {
   const link = document.createElement("link");
   link.rel = "preload";
@@ -72,120 +49,6 @@ function isEmbeddedFont(font: PublishedSlideRuntime["fonts"][number]): font is R
 
 function supportedTransition(runtime: PublishedSlideRuntime): SupportedTransition {
   return runtime.timeline.transition?.kind === "fade" ? "fade" : "none";
-}
-
-function cssValueIsSafe(value: string): boolean {
-  if (/(?:javascript\s*:|data\s*:|@import|expression\s*\(|-moz-binding)/i.test(value)) {
-    return false;
-  }
-  const withoutSafeFragments = value.replace(
-    /url\s*\(\s*(["']?)(#[A-Za-z][A-Za-z0-9_.:-]{0,127})\1\s*\)/gi,
-    "",
-  );
-  return !/url\s*\(/i.test(withoutSafeFragments);
-}
-
-function safeHref(element: Element, value: string, sourceUrl: string): string | null {
-  if (SVG_FRAGMENT_REFERENCE.test(value)) return value;
-  if (element.localName.toLowerCase() !== "image") return null;
-  try {
-    const source = new URL(sourceUrl, window.location.href);
-    const resolved = new URL(value, source);
-    return (resolved.protocol === "https:" || resolved.protocol === "http:") &&
-      resolved.origin === source.origin
-      ? resolved.href
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function cloneSafeSvgElement(source: Element, sourceUrl: string): SVGElement | null {
-  if (
-    source.namespaceURI !== SVG_NAMESPACE ||
-    FORBIDDEN_SVG_ELEMENTS.has(source.localName.toLowerCase())
-  ) {
-    return null;
-  }
-
-  const clone = document.createElementNS(SVG_NAMESPACE, source.localName);
-  for (const attribute of source.attributes) {
-    if (attribute.namespaceURI === XMLNS_NAMESPACE) continue;
-    const localName = attribute.localName.toLowerCase();
-    if (localName.startsWith("on")) return null;
-    if (attribute.namespaceURI === XML_NAMESPACE && localName === "base") return null;
-
-    let value = attribute.value;
-    if (localName === "href") {
-      const href = safeHref(source, value, sourceUrl);
-      if (href === null) return null;
-      value = href;
-    } else if (!cssValueIsSafe(value)) {
-      return null;
-    }
-    clone.setAttributeNS(attribute.namespaceURI, attribute.name, value);
-  }
-
-  for (const child of source.childNodes) {
-    if (child.nodeType === Node.TEXT_NODE || child.nodeType === Node.CDATA_SECTION_NODE) {
-      clone.append(document.createTextNode(child.textContent ?? ""));
-      continue;
-    }
-    if (child.nodeType === Node.COMMENT_NODE) continue;
-    if (child.nodeType !== Node.ELEMENT_NODE) return null;
-    const childElement = child as Element;
-    // LibreOffice emits inert SMIL/OOo metadata in foreign namespaces inside <defs>.
-    // The runtime uses the separately verified PPTX timeline, so drop those subtrees while
-    // retaining the SVG drawing tree. Active or malformed content in the SVG namespace still
-    // fails closed below.
-    if (childElement.namespaceURI !== SVG_NAMESPACE) continue;
-    const childClone = cloneSafeSvgElement(childElement, sourceUrl);
-    if (childClone === null) return null;
-    clone.append(childClone);
-  }
-  return clone;
-}
-
-function parseSafeSvg(source: string, sourceUrl: string): SVGSVGElement | null {
-  const upper = source.toUpperCase();
-  if (upper.includes("<!DOCTYPE") || upper.includes("<!ENTITY")) return null;
-
-  const parsed = new DOMParser().parseFromString(source, "image/svg+xml");
-  if (
-    parsed.querySelector("parsererror") !== null ||
-    parsed.documentElement.localName !== "svg" ||
-    parsed.getElementsByTagName("*").length > MAX_SVG_ELEMENTS
-  ) {
-    return null;
-  }
-  const clone = cloneSafeSvgElement(parsed.documentElement, sourceUrl);
-  return clone instanceof SVGSVGElement ? clone : null;
-}
-
-async function verifiedSvg(
-  slide: RenderedSlidePlayerSlide,
-  signal: AbortSignal,
-): Promise<SVGSVGElement> {
-  const response = await fetch(slide.imageUrl, { signal });
-  if (!response.ok) throw new Error(`Rendered slide fetch failed (${response.status})`);
-  const bytes = await response.arrayBuffer();
-  if (bytes.byteLength === 0 || bytes.byteLength > MAX_SVG_BYTES) {
-    throw new Error("Rendered slide exceeds the SVG byte limit");
-  }
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  const actualHash = Array.from(new Uint8Array(digest), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
-  if (actualHash !== slide.imageContentHash) {
-    throw new Error("Rendered slide bytes do not match imageContentHash");
-  }
-
-  const source = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  const svg = parseSafeSvg(source, slide.imageUrl);
-  if (svg === null) throw new Error("Rendered slide is not a safe SVG document");
-  svg.setAttribute("role", "img");
-  svg.setAttribute("aria-label", slide.accessibilityLabel);
-  return svg;
 }
 
 function resetPlayer(player: SlidePlayer | null): void {
@@ -331,10 +194,7 @@ function RenderedSlidePlayerComponent(
     );
 
     void Promise.all([
-      verifiedSvg(
-        { publicSlideKey, imageUrl, imageContentHash, accessibilityLabel },
-        abortController.signal,
-      ),
+      loadVerifiedSvg({ imageUrl, imageContentHash, accessibilityLabel }, abortController.signal),
       fontReadiness,
     ])
       .then(([svg]) => {
@@ -375,15 +235,7 @@ function RenderedSlidePlayerComponent(
       for (const preload of preloads) preload.remove();
       for (const face of loadedFaces) document.fonts.delete(face);
     };
-  }, [
-    occurrenceSeq,
-    accessibilityLabel,
-    imageContentHash,
-    imageUrl,
-    publicSlideKey,
-    stableRuntime,
-    transition,
-  ]);
+  }, [occurrenceSeq, accessibilityLabel, imageContentHash, imageUrl, stableRuntime, transition]);
 
   useEffect(() => {
     if (status !== "active" || groupCount !== 0 || exhaustedCallbackSentRef.current) return;

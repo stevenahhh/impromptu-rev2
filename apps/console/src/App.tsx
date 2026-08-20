@@ -1,4 +1,12 @@
-import { Badge, Brand, Button, Panel, Shell } from "@impromptu/ui";
+import {
+  Badge,
+  Brand,
+  Button,
+  Panel,
+  RenderedSlide,
+  rebaseDeckAssetUrl,
+  Shell,
+} from "@impromptu/ui";
 import {
   createContext,
   type ReactNode,
@@ -694,17 +702,36 @@ function publicSlides(value: unknown): ActivePresentationView["slides"] {
   return slides.flatMap((value) => {
     if (typeof value !== "object" || value === null) return [];
     const slide = value as Record<string, unknown>;
-    return typeof slide.publicSlideKey === "string" &&
-      typeof slide.ordinal === "number" &&
-      typeof slide.accessibilityLabel === "string"
-      ? [
-          {
-            publicSlideKey: slide.publicSlideKey,
-            ordinal: slide.ordinal,
-            accessibilityLabel: slide.accessibilityLabel,
-          },
-        ]
-      : [];
+    if (
+      typeof slide.publicSlideKey !== "string" ||
+      typeof slide.ordinal !== "number" ||
+      typeof slide.accessibilityLabel !== "string"
+    ) {
+      return [];
+    }
+    const image = slide.image;
+    const parsedImage =
+      typeof image === "object" &&
+      image !== null &&
+      typeof (image as Record<string, unknown>).url === "string" &&
+      typeof (image as Record<string, unknown>).contentHash === "string" &&
+      typeof (image as Record<string, unknown>).width === "number" &&
+      typeof (image as Record<string, unknown>).height === "number"
+        ? {
+            url: (image as Record<string, unknown>).url as string,
+            contentHash: (image as Record<string, unknown>).contentHash as string,
+            width: (image as Record<string, unknown>).width as number,
+            height: (image as Record<string, unknown>).height as number,
+          }
+        : undefined;
+    return [
+      {
+        publicSlideKey: slide.publicSlideKey,
+        ordinal: slide.ordinal,
+        accessibilityLabel: slide.accessibilityLabel,
+        ...(parsedImage === undefined ? {} : { image: parsedImage }),
+      },
+    ];
   });
 }
 
@@ -811,11 +838,24 @@ function SlidePreview({ index }: { readonly index: number }) {
   return (
     <section className="console-preview" aria-label={text.slidePreview}>
       <div className="console-preview__frame" data-slide-preview>
-        <p className="ui-eyebrow">
+        {slide?.image === undefined ? (
+          <p className="console-preview__status" role="alert">
+            {text.slideLoadFailed}
+          </p>
+        ) : (
+          <RenderedSlide
+            key={`${slide.publicSlideKey}:${slide.image.contentHash}`}
+            slide={{
+              imageUrl: rebaseDeckAssetUrl(slide.image.url),
+              imageContentHash: slide.image.contentHash,
+              accessibilityLabel: slide.accessibilityLabel,
+            }}
+            loadingLabel={text.slideLoading}
+            errorLabel={text.slideLoadFailed}
+          />
+        )}
+        <p className="console-preview__position">
           {index + 1} / {slides.length}
-        </p>
-        <p className="console-preview__label">
-          {slide?.accessibilityLabel ?? text.slidesPlaceholder}
         </p>
       </div>
     </section>
