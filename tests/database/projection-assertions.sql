@@ -32,7 +32,7 @@ SELECT pg_temp.assert_true(
 );
 SELECT pg_temp.assert_true(
   (
-    SELECT count(*) = 5 AND bool_and(relrowsecurity) AND bool_and(relforcerowsecurity)
+    SELECT count(*) = 6 AND bool_and(relrowsecurity) AND bool_and(relforcerowsecurity)
     FROM pg_class AS relation
     JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
     WHERE namespace.nspname = 'public_projection'
@@ -41,14 +41,15 @@ SELECT pg_temp.assert_true(
         'audience_cards',
         'display_receipts',
         'publication_inbox',
-        'applied_publications'
+        'applied_publications',
+        'gateway_state'
       )
   ),
   'all projection base tables must force row-level security'
 );
 SELECT pg_temp.assert_true(
   (
-    SELECT count(*) = 5
+    SELECT count(*) = 6
     FROM pg_policies
     WHERE schemaname = 'public_projection'
       AND policyname = 'owner_internal'
@@ -138,18 +139,37 @@ SELECT pg_temp.assert_true(
   'retention worker must use only the tenant-scoped retention function'
 );
 SELECT pg_temp.assert_true(
+  NOT has_table_privilege(
+    'projection_app',
+    'public_projection.gateway_state',
+    'SELECT,INSERT,UPDATE,DELETE'
+  )
+    AND has_function_privilege(
+      'projection_app',
+      'public_projection.read_gateway_state(text)',
+      'EXECUTE'
+    )
+    AND has_function_privilege(
+      'projection_app',
+      'public_projection.write_gateway_state(text,bigint,jsonb)',
+      'EXECUTE'
+    ),
+  'projection runtime must access gateway state only through narrow functions'
+);
+SELECT pg_temp.assert_true(
   (
-    SELECT count(*) = 4
+    SELECT count(*) = 5
     FROM _migrations.applied_migrations
     WHERE migration_name IN (
       '0001_projection_foundation.sql',
       '0002_publication_inbox.sql',
       '0003_dispatcher_only_writes.sql',
-      '0004_retention_cascade.sql'
+      '0004_retention_cascade.sql',
+      '0005_gateway_state.sql'
     )
       AND checksum ~ '^[0-9a-f]{64}$'
   ),
-  'projection migration must be recorded with a checksum'
+  'projection migrations must be recorded with checksums'
 );
 
 SELECT 'projection catalog and lifecycle assertions passed' AS result;

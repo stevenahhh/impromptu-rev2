@@ -115,4 +115,16 @@ FROM public_projection.record_display_receipt(
   \quit 1
 \endif
 
+SELECT (
+  count(*) = 1
+  AND bool_and(revision = 1)
+  AND bool_and(snapshot ->> 'stateKind' = 'PREPARED_EVIDENCE_PROJECTION_DATABASE_SNAPSHOT')
+)::integer AS gateway_state_visible
+FROM public_projection.read_gateway_state('database-test') \gset
+\if :gateway_state_visible
+\else
+  \echo 'projection_app could not read gateway state through the narrow function'
+  \quit 1
+\endif
+
 SELECT 'projection_app permitted surface passed' AS result;

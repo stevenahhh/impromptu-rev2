@@ -59,4 +59,17 @@ FROM private_app.presentation_sessions \gset
 \endif
 COMMIT;
 
-SELECT 'private tenant RLS permitted surface passed' AS result;
+SELECT (
+  count(*) = 1
+  AND bool_and(revision = 1)
+  AND bool_and(snapshot ->> 'stateKind' = 'PREPARED_EVIDENCE_COORDINATOR_SNAPSHOT')
+)::integer AS prepared_evidence_state_visible
+FROM private_app.prepared_evidence_state
+WHERE state_key = 'database-test' \gset
+\if :prepared_evidence_state_visible
+\else
+  \echo 'private_app could not read the persisted prepared-evidence state'
+  \quit 1
+\endif
+
+SELECT 'private tenant RLS and prepared-evidence state surface passed' AS result;

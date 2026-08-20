@@ -220,10 +220,13 @@ rerun_output="$(run_migrations)"
 if [[ "$rerun_output" != *"SKIP private/0001_private_foundation.sql"* \
   || "$rerun_output" != *"SKIP private/0002_publication_dispatcher.sql"* \
   || "$rerun_output" != *"SKIP private/0003_retention_cascade.sql"* \
+  || "$rerun_output" != *"SKIP private/0004_accounts.sql"* \
+  || "$rerun_output" != *"SKIP private/0005_prepared_evidence_state.sql"* \
   || "$rerun_output" != *"SKIP projection/0001_projection_foundation.sql"* \
   || "$rerun_output" != *"SKIP projection/0002_publication_inbox.sql"* \
   || "$rerun_output" != *"SKIP projection/0003_dispatcher_only_writes.sql"* \
-  || "$rerun_output" != *"SKIP projection/0004_retention_cascade.sql"* ]]; then
+  || "$rerun_output" != *"SKIP projection/0004_retention_cascade.sql"* \
+  || "$rerun_output" != *"SKIP projection/0005_gateway_state.sql"* ]]; then
   echo "migration assertion failed: rerun did not skip applied migrations" >&2
   echo "$rerun_output" >&2
   exit 1
@@ -250,6 +253,10 @@ run_real_dispatch() {
     PROJECTION_DATABASE_URL="$PROJECTION_DRIVER_URL" \
     bun run "$REPO_ROOT/services/private-backend/test/support/dispatch-integration.ts" "$mode"
 }
+
+PRIVATE_DATABASE_URL="$PRIVATE_DRIVER_URL" \
+  PROJECTION_DATABASE_URL="$PROJECTION_DRIVER_URL" \
+  bun run "$REPO_ROOT/tests/database/state-store-integration.ts"
 
 run_real_dispatch valid
 
@@ -312,6 +319,11 @@ expect_denied \
   "read a public projection base table" \
   "SELECT count(*) FROM public_projection.projection_sessions" \
   "permission denied for table projection_sessions"
+expect_denied \
+  "$PROJECTION_ROLE" "$PROJECTION_DATABASE" \
+  "read the gateway state base table directly" \
+  "SELECT count(*) FROM public_projection.gateway_state" \
+  "permission denied for table gateway_state"
 expect_denied \
   "$PROJECTION_ROLE" "$PROJECTION_DATABASE" \
   "write the receipt base table directly" \

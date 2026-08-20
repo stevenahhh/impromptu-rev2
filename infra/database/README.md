@@ -3,8 +3,8 @@
 This harness starts one disposable PostgreSQL 17 cluster with three databases:
 
 - `postgres`: bootstrap and cluster migration ledger only;
-- `impromptu_private`: tenant-owned sessions, candidates, and publication outbox;
-- `impromptu_projection`: public projection storage, closed views, and display receipts.
+- `impromptu_private`: tenant-owned sessions, candidates, publication outbox, and the private prepared-evidence coordinator snapshot;
+- `impromptu_projection`: public projection storage, gateway snapshot, closed views, and display receipts.
 
 Keeping private and projection relations in separate databases means a `projection_app` connection has no private relation rows in `pg_catalog` from which to infer names or sizes. The role also lacks `CONNECT` and `TEMPORARY` on `postgres` and `impromptu_private`, cannot measure the private database, and cannot execute PostgreSQL large-object mutation functions.
 
@@ -18,7 +18,7 @@ bun run test:db:harness
 bun run test:db:concurrent
 ```
 
-The primary command tests fresh installation, migration-ledger reruns, checksum drift, transactional rollback after an interrupted migration, role escalation, catalog noninterference, tenant and projection RLS, audience-card lifecycle filtering, concurrent idempotent receipt writes, and concurrent publication dispatch deduplication.
+The primary command tests fresh installation, migration-ledger reruns, checksum drift, transactional rollback after an interrupted migration, role escalation, catalog noninterference, tenant and projection RLS, audience-card lifecycle filtering, prepared-evidence snapshot reload and stale-writer rejection, concurrent idempotent receipt writes, and concurrent publication dispatch deduplication.
 
 The harness uses `docker compose up --wait`; it has no sleeps or timing-based polling. Every invocation generates a unique Compose project name. Teardown preserves the original test status, treats cleanup or resource-inspection failure as a failure when tests passed, and verifies that project-labeled containers, networks, and volumes are absent before printing success. The two additional commands exercise cleanup-failure handling and simultaneous worktree-safe projects.
 
@@ -61,3 +61,5 @@ Migration rules:
 - Never edit an applied migration; add the next ordered file.
 - Revoke `PUBLIC` privileges before granting a runtime surface.
 - Stage-facing reads belong in lifecycle-filtered `public_projection` views; writes require narrow, explicitly granted functions or the private publication path.
+- The projection gateway accesses `gateway_state` only through `read_gateway_state` and `write_gateway_state`; the base table remains inaccessible to `projection_app`.
+- Service-state repositories use revision compare-and-swap and reject stale writers with `PREPARED_EVIDENCE_STATE_CONFLICT`.

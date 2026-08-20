@@ -84,17 +84,51 @@ SELECT pg_temp.assert_true(
   'projection_app must not have private schema usage'
 );
 SELECT pg_temp.assert_true(
+  NOT (
+    SELECT relrowsecurity
+    FROM pg_class AS relation
+    JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+    WHERE namespace.nspname = 'private_app'
+      AND relation.relname = 'prepared_evidence_state'
+  )
+    AND has_table_privilege(
+      'private_app',
+      'private_app.prepared_evidence_state',
+      'SELECT,INSERT,UPDATE'
+    )
+    AND NOT has_table_privilege(
+      'private_app',
+      'private_app.prepared_evidence_state',
+      'DELETE'
+    ),
+  'private runtime must have only the required service-state privileges'
+);
+SELECT pg_temp.assert_true(
+  EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conrelid = 'private_app.deck_retrieval_chunks'::regclass
+      AND conname = 'deck_retrieval_chunks_embedding_dimension_check'
+      AND pg_get_constraintdef(oid) LIKE '%cardinality(embedding) = 768%'
+  ),
+  'deck retrieval embeddings must have exactly 768 dimensions'
+);
+SELECT pg_temp.assert_true(
   (
-    SELECT count(*) = 3
+    SELECT count(*) = 7
     FROM _migrations.applied_migrations
     WHERE migration_name IN (
       '0001_private_foundation.sql',
       '0002_publication_dispatcher.sql',
-      '0003_retention_cascade.sql'
+      '0003_retention_cascade.sql',
+      '0004_accounts.sql',
+      '0005_prepared_evidence_state.sql',
+      '0006_deck_retrieval_chunks.sql',
+      '0007_embedding_dimension.sql'
     )
       AND checksum ~ '^[0-9a-f]{64}$'
   ),
-  'private migration must be recorded with a checksum'
+  'private migrations must be recorded with checksums'
 );
 
 SELECT 'private catalog and RLS assertions passed' AS result;
