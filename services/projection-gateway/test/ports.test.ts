@@ -11,18 +11,16 @@ describe("projection gateway ports", () => {
       presentationSessionEpoch: 3,
       displayBindingEpoch: 2,
       publicPlaybackRevision: 8,
-      publicCardRevision: 5,
       slide: {
         deckVersion: "deck-v1",
         publicSlideKey: "public-slide-2",
         occurrenceSeq: 1,
       },
-      cards: [],
     };
     const reader: PublicProjectionReader | undefined = undefined;
     const receiptWriter: DisplayReceiptWriter | undefined = undefined;
 
-    expect(snapshot.cards).toEqual([]);
+    expect(snapshot.slide.publicSlideKey).toBe("public-slide-2");
     expect(reader).toBeUndefined();
     expect(receiptWriter).toBeUndefined();
   });

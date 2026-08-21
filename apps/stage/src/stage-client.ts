@@ -11,32 +11,6 @@ export interface DisplayJoinView extends DisplayIdentity {
   readonly expiresAtMs: number;
 }
 
-export interface StageCardView {
-  readonly projectionId: string;
-  readonly status: "PUBLISHED";
-  readonly mode: "CURATED" | "LIVE";
-  readonly leaseExpiresAtMs: number | null;
-  readonly publicationPolicyVersion?: string;
-  readonly cardVersion?: string;
-  readonly liveBinding?: Readonly<{
-    presentationSessionEpoch: string;
-    displayBindingEpoch: string;
-    publicSlideOccurrence: Readonly<{ publicSlideKey: string; occurrenceSeq: number }>;
-    publicationPolicyVersion: string;
-    cardVersion: string;
-  }>;
-  readonly offlinePackage?: Readonly<{
-    readonly offlineDisplayAllowed: boolean;
-    readonly localExpiresAtMs: number;
-    readonly signature: string;
-    readonly signatureVerified: boolean;
-  }>;
-  readonly claim: string;
-  readonly supportSummary: string;
-  readonly sourceLabel: string;
-  readonly publicCardRevision: string;
-}
-
 export interface StagePlaybackEvent {
   readonly commandId: string;
   readonly presentationSessionEpoch: string;
@@ -46,15 +20,6 @@ export interface StagePlaybackEvent {
   readonly occurrence: { readonly publicSlideKey: string; readonly occurrenceSeq: number };
   readonly blackout: boolean;
 }
-
-export interface StageCardTombstone {
-  readonly projectionId: string;
-  readonly status: "RETRACTED" | "EXPIRED";
-  readonly publicCardRevision: string;
-  readonly occurredAtMs: number;
-}
-
-export type StageCardEvent = StageCardView | StageCardTombstone;
 
 export interface StageSnapshotView {
   readonly role: "PUBLIC_STAGE";
@@ -73,13 +38,8 @@ export interface StageSnapshotView {
     runtime?: unknown;
   }>[];
   readonly publicPlaybackRevision: string;
-  readonly publicationPolicyVersion: string | null;
   readonly blackout: boolean;
   readonly occurrence: { readonly publicSlideKey: string; readonly occurrenceSeq: number };
-  readonly cards: readonly StageCardView[];
-  readonly publicCardRevision: string;
-  readonly tombstoneWatermark: string;
-  readonly tombstoneRetentionMs: number;
 }
 
 export interface StageAppliedReceiptView {
@@ -98,7 +58,6 @@ export interface StageSubscription {
 
 export interface StageEventObserver {
   onPlayback(event: StagePlaybackEvent): void;
-  onCard(event: StageCardEvent): void;
   onReceipt?(receipt: StageAppliedReceiptView): void;
   onProtocolError?(code: string): void;
   onClose(reason: string): void;
@@ -147,30 +106,6 @@ function record(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function liveBinding(value: unknown): NonNullable<StageCardView["liveBinding"]> | null {
-  const candidate = record(value);
-  const occurrence = record(candidate?.publicSlideOccurrence);
-  return candidate !== null &&
-    occurrence !== null &&
-    typeof candidate.presentationSessionEpoch === "string" &&
-    typeof candidate.displayBindingEpoch === "string" &&
-    typeof occurrence.publicSlideKey === "string" &&
-    typeof occurrence.occurrenceSeq === "number" &&
-    typeof candidate.publicationPolicyVersion === "string" &&
-    typeof candidate.cardVersion === "string"
-    ? {
-        presentationSessionEpoch: candidate.presentationSessionEpoch,
-        displayBindingEpoch: candidate.displayBindingEpoch,
-        publicSlideOccurrence: {
-          publicSlideKey: occurrence.publicSlideKey,
-          occurrenceSeq: occurrence.occurrenceSeq,
-        },
-        publicationPolicyVersion: candidate.publicationPolicyVersion,
-        cardVersion: candidate.cardVersion,
-      }
-    : null;
-}
-
 function displayJoin(value: unknown): DisplayJoinView | null {
   const candidate = record(value);
   if (
@@ -207,17 +142,16 @@ function snapshot(value: unknown): StageSnapshotView | null {
     typeof candidate.presentationSessionEpoch !== "string" ||
     typeof candidate.displayBindingEpoch !== "string" ||
     typeof candidate.publicPlaybackRevision !== "string" ||
-    (candidate.publicationPolicyVersion !== null &&
-      typeof candidate.publicationPolicyVersion !== "string") ||
     typeof candidate.blackout !== "boolean" ||
     deck === null ||
     typeof deck.deckVersion !== "string" ||
     typeof deck.manifestHash !== "string" ||
     !Array.isArray(deck.slides) ||
     !Array.isArray(candidate.cards) ||
-    typeof candidate.publicCardRevision !== "string" ||
-    typeof candidate.tombstoneWatermark !== "string" ||
-    typeof candidate.tombstoneRetentionMs !== "number"
+    candidate.cards.length !== 0 ||
+    !Array.isArray(candidate.tombstones) ||
+    candidate.tombstones.length !== 0 ||
+    typeof candidate.publicCardRevision !== "string"
   ) {
     return null;
   }
@@ -250,72 +184,6 @@ function snapshot(value: unknown): StageSnapshotView | null {
       ...(parsedRuntime?.success === true ? { runtime: parsedRuntime.data } : {}),
     });
   }
-  const cards: StageCardView[] = [];
-  for (const valueCard of candidate.cards) {
-    const card = record(valueCard);
-    if (
-      card === null ||
-      typeof card.projectionId !== "string" ||
-      card.status !== "PUBLISHED" ||
-      typeof card.claim !== "string" ||
-      typeof card.supportSummary !== "string" ||
-      typeof card.sourceLabel !== "string" ||
-      typeof card.publicCardRevision !== "string"
-    ) {
-      return null;
-    }
-    const mode = card.mode === "LIVE" ? "LIVE" : "CURATED";
-    const leaseExpiresAtMs =
-      typeof card.leaseExpiresAtMs === "number"
-        ? card.leaseExpiresAtMs
-        : typeof card.expiresAtMs === "number" && mode === "LIVE"
-          ? card.expiresAtMs
-          : null;
-    const binding = liveBinding(card.liveBinding);
-    if (
-      mode === "LIVE" &&
-      (leaseExpiresAtMs === null ||
-        binding === null ||
-        binding.presentationSessionEpoch !== candidate.presentationSessionEpoch ||
-        binding.displayBindingEpoch !== candidate.displayBindingEpoch ||
-        binding.publicSlideOccurrence.publicSlideKey !== occurrence.publicSlideKey ||
-        binding.publicSlideOccurrence.occurrenceSeq !== occurrence.occurrenceSeq ||
-        card.publicationPolicyVersion !== candidate.publicationPolicyVersion ||
-        card.publicationPolicyVersion !== binding.publicationPolicyVersion ||
-        card.cardVersion !== binding.cardVersion)
-    ) {
-      continue;
-    }
-    const offlinePackage = record(card.offlinePackage);
-    cards.push({
-      projectionId: card.projectionId,
-      status: card.status,
-      mode,
-      leaseExpiresAtMs,
-      ...(typeof card.publicationPolicyVersion === "string"
-        ? { publicationPolicyVersion: card.publicationPolicyVersion }
-        : {}),
-      ...(typeof card.cardVersion === "string" ? { cardVersion: card.cardVersion } : {}),
-      ...(binding === null ? {} : { liveBinding: binding }),
-      ...(offlinePackage !== null &&
-      typeof offlinePackage.offlineDisplayAllowed === "boolean" &&
-      typeof offlinePackage.localExpiresAtMs === "number" &&
-      typeof offlinePackage.signature === "string"
-        ? {
-            offlinePackage: {
-              offlineDisplayAllowed: offlinePackage.offlineDisplayAllowed,
-              localExpiresAtMs: offlinePackage.localExpiresAtMs,
-              signature: offlinePackage.signature,
-              signatureVerified: false,
-            },
-          }
-        : {}),
-      claim: card.claim,
-      supportSummary: card.supportSummary,
-      sourceLabel: card.sourceLabel,
-      publicCardRevision: card.publicCardRevision,
-    });
-  }
   return {
     role: "PUBLIC_STAGE",
     stateHash: candidate.stateHash,
@@ -326,16 +194,11 @@ function snapshot(value: unknown): StageSnapshotView | null {
     manifestHash: deck.manifestHash,
     deckSlides,
     publicPlaybackRevision: candidate.publicPlaybackRevision,
-    publicationPolicyVersion: candidate.publicationPolicyVersion,
     blackout: candidate.blackout,
     occurrence: {
       publicSlideKey: occurrence.publicSlideKey,
       occurrenceSeq: occurrence.occurrenceSeq,
     },
-    cards,
-    publicCardRevision: candidate.publicCardRevision,
-    tombstoneWatermark: candidate.tombstoneWatermark,
-    tombstoneRetentionMs: candidate.tombstoneRetentionMs,
   };
 }
 
@@ -367,81 +230,6 @@ function playback(value: unknown): StagePlaybackEvent | null {
     : null;
 }
 
-function cardEvent(value: unknown): StageCardEvent | null {
-  const candidate = record(value);
-  if (
-    candidate !== null &&
-    (candidate.status === "RETRACTED" || candidate.status === "EXPIRED") &&
-    typeof candidate.projectionId === "string" &&
-    typeof candidate.publicCardRevision === "string" &&
-    typeof candidate.occurredAtMs === "number"
-  ) {
-    return {
-      projectionId: candidate.projectionId,
-      status: candidate.status,
-      publicCardRevision: candidate.publicCardRevision,
-      occurredAtMs: candidate.occurredAtMs,
-    };
-  }
-  if (
-    candidate !== null &&
-    candidate.status === "PUBLISHED" &&
-    typeof candidate.projectionId === "string" &&
-    typeof candidate.claim === "string" &&
-    typeof candidate.supportSummary === "string" &&
-    typeof candidate.sourceLabel === "string" &&
-    typeof candidate.publicCardRevision === "string"
-  ) {
-    const mode = candidate.mode === "LIVE" ? "LIVE" : "CURATED";
-    const leaseExpiresAtMs =
-      typeof candidate.leaseExpiresAtMs === "number"
-        ? candidate.leaseExpiresAtMs
-        : typeof candidate.expiresAtMs === "number" && mode === "LIVE"
-          ? candidate.expiresAtMs
-          : null;
-    const binding = liveBinding(candidate.liveBinding);
-    if (
-      mode === "LIVE" &&
-      (leaseExpiresAtMs === null ||
-        binding === null ||
-        candidate.publicationPolicyVersion !== binding.publicationPolicyVersion ||
-        candidate.cardVersion !== binding.cardVersion)
-    ) {
-      return null;
-    }
-    const offlinePackage = record(candidate.offlinePackage);
-    return {
-      projectionId: candidate.projectionId,
-      status: candidate.status,
-      mode,
-      leaseExpiresAtMs,
-      ...(typeof candidate.publicationPolicyVersion === "string"
-        ? { publicationPolicyVersion: candidate.publicationPolicyVersion }
-        : {}),
-      ...(typeof candidate.cardVersion === "string" ? { cardVersion: candidate.cardVersion } : {}),
-      ...(binding === null ? {} : { liveBinding: binding }),
-      ...(offlinePackage !== null &&
-      typeof offlinePackage.offlineDisplayAllowed === "boolean" &&
-      typeof offlinePackage.localExpiresAtMs === "number" &&
-      typeof offlinePackage.signature === "string"
-        ? {
-            offlinePackage: {
-              offlineDisplayAllowed: offlinePackage.offlineDisplayAllowed,
-              localExpiresAtMs: offlinePackage.localExpiresAtMs,
-              signature: offlinePackage.signature,
-              signatureVerified: false,
-            },
-          }
-        : {}),
-      claim: candidate.claim,
-      supportSummary: candidate.supportSummary,
-      sourceLabel: candidate.sourceLabel,
-      publicCardRevision: candidate.publicCardRevision,
-    };
-  }
-  return null;
-}
-
 function appliedReceipt(value: unknown): StageAppliedReceiptView | null {
   const candidate = record(value);
   return candidate !== null &&
@@ -466,7 +254,6 @@ function parseStreamMessage(
   event: Event,
 ):
   | Readonly<{ kind: "PLAYBACK"; payload: StagePlaybackEvent }>
-  | Readonly<{ kind: "CARD"; payload: StageCardEvent }>
   | Readonly<{ kind: "RECEIPT"; payload: StageAppliedReceiptView }>
   | Readonly<{ kind: "ERROR"; code: string }>
   | Readonly<{ kind: "CLOSE"; reason: string }>
@@ -487,10 +274,6 @@ function parseStreamMessage(
     const payload = appliedReceipt(envelope.payload);
     return payload === null ? null : { kind: "RECEIPT", payload };
   }
-  if (envelope?.kind === "CARD") {
-    const payload = cardEvent(envelope.payload);
-    return payload === null ? null : { kind: "CARD", payload };
-  }
   if (envelope?.kind === "ERROR") {
     const payload = record(envelope.payload);
     return payload !== null && typeof payload.code === "string"
@@ -504,65 +287,6 @@ function parseStreamMessage(
       : null;
   }
   return null;
-}
-
-const OFFLINE_DISPLAY_PUBLIC_KEY: JsonWebKey = {
-  kty: "EC",
-  crv: "P-256",
-  x: "F3i88NgsJwVGOI-F9iyV35t8q2aDHOM_5-qwXCG2xCg",
-  y: "DSD6ou2ZeGoJ0LZ2GJa2aQ99YI2d5PraViGUpS1PHaI",
-  ext: true,
-  key_ops: ["verify"],
-};
-
-function base64UrlBytes(value: string): Uint8Array<ArrayBuffer> | null {
-  try {
-    const base64 = value.replaceAll("-", "+").replaceAll("_", "/");
-    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
-    const binary = atob(padded);
-    const bytes = new Uint8Array(new ArrayBuffer(binary.length));
-    for (let index = 0; index < binary.length; index += 1) {
-      bytes[index] = binary.charCodeAt(index);
-    }
-    return bytes;
-  } catch {
-    return null;
-  }
-}
-
-export async function verifyOfflinePackage(card: StageCardView): Promise<StageCardView> {
-  const offline = card.offlinePackage;
-  if (offline === undefined) return card;
-  const signature = base64UrlBytes(offline.signature);
-  let signatureVerified = false;
-  if (signature !== null) {
-    try {
-      const key = await crypto.subtle.importKey(
-        "jwk",
-        OFFLINE_DISPLAY_PUBLIC_KEY,
-        { name: "ECDSA", namedCurve: "P-256" },
-        false,
-        ["verify"],
-      );
-      const signedPayload = JSON.stringify({
-        projectionId: card.projectionId,
-        offlineDisplayAllowed: offline.offlineDisplayAllowed,
-        localExpiresAtMs: offline.localExpiresAtMs,
-      });
-      signatureVerified = await crypto.subtle.verify(
-        { name: "ECDSA", hash: "SHA-256" },
-        key,
-        signature,
-        new TextEncoder().encode(signedPayload),
-      );
-    } catch {
-      signatureVerified = false;
-    }
-  }
-  return {
-    ...card,
-    offlinePackage: { ...offline, signatureVerified },
-  };
 }
 
 async function validSnapshotHash(value: unknown): Promise<boolean> {
@@ -627,10 +351,7 @@ export function createStageSessionClient(
         if (response.status === 409) throw new Error("RECONCILE_REQUIRED");
         throw new Error("Public snapshot is unavailable.");
       }
-      return {
-        ...body,
-        cards: await Promise.all(body.cards.map(verifyOfflinePackage)),
-      };
+      return body;
     },
     async subscribe(observer, timeoutMs = 5_000) {
       const source = eventSourceFactory(`${baseUrl}/v1/events`);
@@ -647,7 +368,6 @@ export function createStageSessionClient(
       const onMessage = (event: Event) => {
         const message = parseStreamMessage(event);
         if (message?.kind === "PLAYBACK") observer.onPlayback(message.payload);
-        if (message?.kind === "CARD") observer.onCard(message.payload);
         if (message?.kind === "RECEIPT") observer.onReceipt?.(message.payload);
         if (message?.kind === "ERROR") observer.onProtocolError?.(message.code);
         if (message?.kind === "CLOSE") {
@@ -703,7 +423,6 @@ export function createStageSessionClient(
       const onMessage = (event: Event) => {
         const message = parseStreamMessage(event);
         if (message?.kind === "PLAYBACK") observer.onPlayback(message.payload);
-        if (message?.kind === "CARD") observer.onCard(message.payload);
         if (message?.kind === "RECEIPT") observer.onReceipt?.(message.payload);
         if (message?.kind === "ERROR") observer.onProtocolError?.(message.code);
         if (message?.kind === "CLOSE") {

@@ -1,10 +1,4 @@
 import { type PublishedSlideRuntime, PublishedSlideRuntimeSchema } from "@impromptu/contracts";
-import {
-  applyRealtimeTransition,
-  createRealtimeStageState,
-  type RealtimeStageState,
-  type RealtimeTransition,
-} from "@impromptu/state/realtime";
 import { Badge, Brand, Button, Panel, rebaseDeckAssetUrl, Shell, StatusDot } from "@impromptu/ui";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
@@ -13,7 +7,6 @@ import { RenderedSlidePlayer, type RenderedSlidePlayerHandle } from "./rendered-
 import {
   createStageSessionClient,
   type DisplayJoinView,
-  type StageCardEvent,
   type StageEventObserver,
   type StageSessionClient,
   type StageSnapshotView,
@@ -247,70 +240,10 @@ function useStageFullscreen() {
   return { ...state, toggle };
 }
 
-function cardRevisionValue(revision: string): number {
+function playbackRevisionValue(revision: string): number {
+  if (!revision.startsWith("pbr_")) return -1;
   const value = Number(revision.slice(4));
   return Number.isSafeInteger(value) && value >= 0 ? value : -1;
-}
-
-function liveCardMatchesSnapshot(
-  snapshot: StageSnapshotView | null,
-  event: StageCardEvent,
-): boolean {
-  if (event.status !== "PUBLISHED" || event.mode !== "LIVE") return true;
-  const binding = event.liveBinding;
-  return (
-    snapshot !== null &&
-    binding !== undefined &&
-    binding.presentationSessionEpoch === snapshot.presentationSessionEpoch &&
-    binding.displayBindingEpoch === snapshot.displayBindingEpoch &&
-    binding.publicSlideOccurrence.publicSlideKey === snapshot.occurrence.publicSlideKey &&
-    binding.publicSlideOccurrence.occurrenceSeq === snapshot.occurrence.occurrenceSeq &&
-    event.publicationPolicyVersion === snapshot.publicationPolicyVersion &&
-    event.publicationPolicyVersion === binding.publicationPolicyVersion &&
-    event.cardVersion === binding.cardVersion
-  );
-}
-
-function applyCardEvent(
-  snapshot: StageSnapshotView | null,
-  event: StageCardEvent,
-): StageSnapshotView | null {
-  if (
-    snapshot === null ||
-    cardRevisionValue(event.publicCardRevision) <= cardRevisionValue(snapshot.publicCardRevision)
-  ) {
-    return snapshot;
-  }
-  if (event.status === "PUBLISHED" && event.mode === "LIVE") {
-    if (!liveCardMatchesSnapshot(snapshot, event)) {
-      return {
-        ...snapshot,
-        publicCardRevision: event.publicCardRevision,
-        cards: snapshot.cards.filter((card) => card.projectionId !== event.projectionId),
-      };
-    }
-    return {
-      ...snapshot,
-      publicCardRevision: event.publicCardRevision,
-      cards: [
-        ...snapshot.cards.filter(
-          (card) =>
-            card.projectionId !== event.projectionId &&
-            (card.mode !== "LIVE" ||
-              card.publicationPolicyVersion === event.publicationPolicyVersion),
-        ),
-        event,
-      ],
-    };
-  }
-  return {
-    ...snapshot,
-    publicCardRevision: event.publicCardRevision,
-    cards:
-      event.status === "PUBLISHED"
-        ? [...snapshot.cards.filter((card) => card.projectionId !== event.projectionId), event]
-        : snapshot.cards.filter((card) => card.projectionId !== event.projectionId),
-  };
 }
 
 function DisplayPage({ client }: { readonly client: StageSessionClient }) {
@@ -437,148 +370,44 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
     let subscription: StageSubscription | null = null;
     let sseSubscription: StageSubscription | null = null;
     let latestSnapshot: StageSnapshotView | null = null;
-    let realtimeState: RealtimeStageState | null = null;
     let realtimeReconnectAttempts = 0;
-    const leaseTimers = new Map<string, ReturnType<typeof setTimeout>>();
-
-    const transition = (event: RealtimeTransition) => {
-      if (realtimeState === null) return null;
-      const result = applyRealtimeTransition(realtimeState, event);
-      realtimeState = result.state;
-      return result;
-    };
-
-    const visibleCards = (current: StageSnapshotView, state: RealtimeStageState) => ({
-      ...current,
-      cards: current.cards.filter((card) => state.visibleCardIds.includes(card.projectionId)),
-    });
-
-    const hideStaleEvent = (result: ReturnType<typeof transition>) => {
-      if (result?.outcome !== "STALE_EVENT") return false;
-      const hidden = transition({ type: "EXPLICIT_HIDE", reason: "STALE_EVENT" });
-      setSnapshot((current) => {
-        if (current === null || hidden === null) return current;
-        const next = visibleCards(current, hidden.state);
-        latestSnapshot = next;
-        return next;
-      });
-      publishStageEvent("impromptu:card-hidden", { reason: "STALE_EVENT" });
-      return true;
-    };
-
-    const scheduleLease = (card: StageSnapshotView["cards"][number]): void => {
-      const existing = leaseTimers.get(card.projectionId);
-      if (existing !== undefined) globalThis.clearTimeout(existing);
-      const expiresAtMs =
-        card.mode === "LIVE" ? card.leaseExpiresAtMs : card.offlinePackage?.localExpiresAtMs;
-      if (expiresAtMs === null || expiresAtMs === undefined) return;
-      const timer = globalThis.setTimeout(
-        () => {
-          leaseTimers.delete(card.projectionId);
-          if (Date.now() < expiresAtMs) {
-            scheduleLease(card);
-            return;
-          }
-          const current = latestSnapshot;
-          const present = current?.cards.find(
-            (candidate) => candidate.projectionId === card.projectionId,
-          );
-          const presentExpiresAtMs =
-            present?.mode === "LIVE"
-              ? present.leaseExpiresAtMs
-              : present?.offlinePackage?.localExpiresAtMs;
-          if (current === null || presentExpiresAtMs !== expiresAtMs) return;
-          const result = transition({ type: "CLOCK", nowMs: Date.now() });
-          if (result === null || result.outcome !== "APPLIED") return;
-          const next = visibleCards(current, result.state);
-          latestSnapshot = next;
-          setSnapshot(next);
-          if (!next.cards.some((candidate) => candidate.projectionId === card.projectionId)) {
-            publishStageEvent("impromptu:card-hidden", {
-              projectionId: card.projectionId,
-              reason: card.mode === "LIVE" ? "LEASE_EXPIRED" : "LOCAL_EXPIRY",
-            });
-          }
-        },
-        Math.max(0, expiresAtMs - Date.now()),
-      );
-      leaseTimers.set(card.projectionId, timer);
-    };
 
     const connect = async (pins?: StageSnapshotView): Promise<void> => {
       try {
         const observer: StageEventObserver = {
           onPlayback(event) {
             if (!active) return;
+            const current = latestSnapshot;
+            if (current === null) return;
             if (
-              realtimeState !== null &&
-              (event.presentationSessionEpoch !== realtimeState.presentationSessionEpoch ||
-                event.displayBindingEpoch !== realtimeState.displayBindingEpoch)
+              event.presentationSessionEpoch !== current.presentationSessionEpoch ||
+              event.displayBindingEpoch !== current.displayBindingEpoch
             ) {
-              const epochResult = transition({
-                type: "EPOCH_CHANGED",
-                presentationSessionEpoch: event.presentationSessionEpoch,
-                displayBindingEpoch: event.displayBindingEpoch,
-              });
-              setSnapshot((current) => {
-                if (current === null || epochResult === null) return current;
-                const next = visibleCards(current, epochResult.state);
-                latestSnapshot = next;
-                return next;
-              });
-              publishStageEvent("impromptu:card-hidden", { reason: "EPOCH_CHANGED" });
+              setSnapshot(null);
+              latestSnapshot = null;
+              publishStageEvent("impromptu:reconcile-required", { reason: "EPOCH_CHANGED" });
               return;
             }
-            const playbackResult = transition({
-              type: "ABSOLUTE_PLAYBACK",
-              commandId: event.commandId,
-              presentationSessionEpoch: event.presentationSessionEpoch,
-              displayBindingEpoch: event.displayBindingEpoch,
-              publicPlaybackRevision: event.publicPlaybackRevision,
-              occurrence: event.occurrence,
-              blackout: event.blackout,
-            });
-            if (playbackResult?.outcome === "APPLIED") {
-              setSnapshot((current) => {
-                if (current === null) return null;
-                const cards = current.cards.filter(
-                  (card) =>
-                    card.mode !== "LIVE" ||
-                    (card.liveBinding?.presentationSessionEpoch ===
-                      event.presentationSessionEpoch &&
-                      card.liveBinding.displayBindingEpoch === event.displayBindingEpoch &&
-                      card.liveBinding.publicSlideOccurrence.publicSlideKey ===
-                        event.occurrence.publicSlideKey &&
-                      card.liveBinding.publicSlideOccurrence.occurrenceSeq ===
-                        event.occurrence.occurrenceSeq &&
-                      card.publicationPolicyVersion === current.publicationPolicyVersion &&
-                      card.publicationPolicyVersion === card.liveBinding.publicationPolicyVersion &&
-                      card.cardVersion === card.liveBinding.cardVersion),
-                );
-                for (const card of current.cards) {
-                  if (!cards.includes(card)) {
-                    publishStageEvent("impromptu:card-hidden", {
-                      projectionId: card.projectionId,
-                      reason: "OCCURRENCE_CHANGED",
-                    });
-                  }
-                }
-                const next = {
-                  ...current,
-                  publicPlaybackRevision: event.publicPlaybackRevision,
-                  occurrence: event.occurrence,
-                  blackout: event.blackout,
-                  cards,
-                };
-                latestSnapshot = next;
-                return next;
-              });
+            const currentRevision = playbackRevisionValue(current.publicPlaybackRevision);
+            const nextRevision = playbackRevisionValue(event.publicPlaybackRevision);
+            if (nextRevision === currentRevision + 1) {
+              const next = {
+                ...current,
+                publicPlaybackRevision: event.publicPlaybackRevision,
+                occurrence: event.occurrence,
+                blackout: event.blackout,
+              };
+              latestSnapshot = next;
+              setSnapshot(next);
               publishStageEvent("impromptu:visible-playback", {
                 commandId: event.commandId,
                 occurrence: event.occurrence,
               });
-            } else {
-              hideStaleEvent(playbackResult);
+            } else if (nextRevision !== currentRevision) {
+              setSnapshot(null);
+              latestSnapshot = null;
+              publishStageEvent("impromptu:reconcile-required", { reason: "REVISION_GAP" });
+              return;
             }
             const recordOverHttp = () =>
               client
@@ -596,83 +425,8 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
             }
             void recordOverHttp();
           },
-          onCard(event) {
-            if (!active) return;
-            if (!liveCardMatchesSnapshot(latestSnapshot, event)) {
-              const hidden = transition({
-                type: "EXPLICIT_HIDE",
-                projectionId: event.projectionId,
-                reason: "STALE_EVENT",
-              });
-              setSnapshot((current) => {
-                if (current === null || hidden === null) return current;
-                const next = visibleCards(
-                  {
-                    ...current,
-                    cards: current.cards.filter((card) => card.projectionId !== event.projectionId),
-                  },
-                  hidden.state,
-                );
-                latestSnapshot = next;
-                return next;
-              });
-              publishStageEvent("impromptu:card-hidden", {
-                projectionId: event.projectionId,
-                reason: "STALE_LIVE_BINDING",
-              });
-              return;
-            }
-            const cardResult =
-              event.status === "PUBLISHED"
-                ? transition({
-                    type: "CARD_UPSERT",
-                    nowMs: Date.now(),
-                    card: {
-                      projectionId: event.projectionId,
-                      mode: event.mode,
-                      leaseExpiresAtMs: event.leaseExpiresAtMs,
-                      publicCardRevision: event.publicCardRevision,
-                      ...(event.offlinePackage === undefined
-                        ? {}
-                        : {
-                            offlinePackage: {
-                              offlineDisplayAllowed: event.offlinePackage.offlineDisplayAllowed,
-                              localExpiresAtMs: event.offlinePackage.localExpiresAtMs,
-                              signatureVerified: event.offlinePackage.signatureVerified,
-                            },
-                          }),
-                    },
-                  })
-                : transition({
-                    type: "CARD_TOMBSTONE",
-                    projectionId: event.projectionId,
-                    publicCardRevision: event.publicCardRevision,
-                  });
-            if (hideStaleEvent(cardResult)) return;
-            setSnapshot((current) => {
-              const streamed = applyCardEvent(current, event);
-              if (streamed === null || cardResult === null) return streamed;
-              const next = visibleCards(streamed, cardResult.state);
-              latestSnapshot = next;
-              return next;
-            });
-            if (event.status === "PUBLISHED") scheduleLease(event);
-            else {
-              const timer = leaseTimers.get(event.projectionId);
-              if (timer !== undefined) globalThis.clearTimeout(timer);
-              leaseTimers.delete(event.projectionId);
-            }
-            publishStageEvent("impromptu:card-event", event);
-          },
           onProtocolError(code) {
-            const result = transition({ type: "EXPLICIT_HIDE", reason: "EXPLICIT_ERROR" });
-            setSnapshot((current) => {
-              if (current === null || result === null) return current;
-              const next = visibleCards(current, result.state);
-              latestSnapshot = next;
-              return next;
-            });
-            publishStageEvent("impromptu:card-hidden", { reason: code });
+            publishStageEvent("impromptu:channel-close", { reason: code });
           },
           onReceipt(receipt) {
             realtimeReconnectAttempts = 0;
@@ -682,17 +436,6 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
             if (!active) return;
             publishStageEvent("impromptu:channel-close", { reason });
             subscription = null;
-            const partitioned = transition({
-              type: "PARTITION",
-              reason: "NETWORK_ERROR",
-              nowMs: Date.now(),
-            });
-            setSnapshot((current) => {
-              if (current === null || partitioned === null) return current;
-              const next = visibleCards(current, partitioned.state);
-              latestSnapshot = next;
-              return next;
-            });
             if (realtimeReconnectAttempts < 1) {
               realtimeReconnectAttempts += 1;
               void connect(latestSnapshot ?? undefined);
@@ -710,66 +453,13 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
         }
         const next = await client.snapshot(pins);
         if (!active) return;
+        latestSnapshot = next;
+        setSnapshot(next);
         publishStageEvent("impromptu:stage-ready", { requestedMode, observedMode: mode });
-        if (realtimeState === null) {
-          realtimeState = createRealtimeStageState(
-            {
-              presentationSessionId: next.presentationSessionId,
-              presentationSessionEpoch: next.presentationSessionEpoch,
-              displayBindingEpoch: next.displayBindingEpoch,
-              deckVersion: next.deckVersion,
-              manifestHash: next.manifestHash,
-            },
-            next.occurrence,
-          );
-        } else {
-          transition({ type: "RECONNECT" });
-        }
-        const restored = transition({
-          type: "SNAPSHOT",
-          verifiedStateHash: next.stateHash,
-          snapshot: {
-            role: next.role,
-            stateHash: next.stateHash,
-            presentationSessionId: next.presentationSessionId,
-            presentationSessionEpoch: next.presentationSessionEpoch,
-            displayBindingEpoch: next.displayBindingEpoch,
-            deckVersion: next.deckVersion,
-            manifestHash: next.manifestHash,
-            publicPlaybackRevision: next.publicPlaybackRevision,
-            publicCardRevision: next.publicCardRevision,
-            occurrence: next.occurrence,
-            blackout: next.blackout,
-            cards: next.cards.map((card) => ({
-              projectionId: card.projectionId,
-              mode: card.mode,
-              leaseExpiresAtMs: card.leaseExpiresAtMs,
-              publicCardRevision: card.publicCardRevision,
-              ...(card.offlinePackage === undefined
-                ? {}
-                : {
-                    offlinePackage: {
-                      offlineDisplayAllowed: card.offlinePackage.offlineDisplayAllowed,
-                      localExpiresAtMs: card.offlinePackage.localExpiresAtMs,
-                      signatureVerified: card.offlinePackage.signatureVerified,
-                    },
-                  }),
-            })),
-          },
-        });
-        if (restored === null || restored.outcome === "RECONCILE_REQUIRED") {
-          throw new Error("RECONCILE_REQUIRED");
-        }
-        const visible = visibleCards(next, restored.state);
-        latestSnapshot = visible;
-        setSnapshot(visible);
         publishStageEvent("impromptu:snapshot-applied", {
-          stateHash: visible.stateHash,
-          publicPlaybackRevision: visible.publicPlaybackRevision,
-          publicCardRevision: visible.publicCardRevision,
-          visibleCardIds: visible.cards.map((card) => card.projectionId),
+          stateHash: next.stateHash,
+          publicPlaybackRevision: next.publicPlaybackRevision,
         });
-        for (const card of visible.cards) scheduleLease(card);
         if (client.subscribeRealtime !== undefined) {
           subscription = await client.subscribeRealtime(observer);
           if (!active) subscription.close();
@@ -778,7 +468,8 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
         subscription?.close();
         subscription = null;
         if (active && error instanceof Error && error.message === "RECONCILE_REQUIRED") {
-          setSnapshot((current) => (current === null ? null : { ...current, cards: [] }));
+          setSnapshot(null);
+          latestSnapshot = null;
           publishStageEvent("impromptu:reconcile-required", { reason: "PIN_MISMATCH" });
         }
       }
@@ -796,7 +487,6 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
       window.removeEventListener("online", reconnectWhenOnline);
       subscription?.close();
       sseSubscription?.close();
-      for (const timer of leaseTimers.values()) globalThis.clearTimeout(timer);
     };
   }, [client, mode, requestedMode]);
 
@@ -859,7 +549,6 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [mode, navigateCachedSlide, snapshot]);
-  const card = snapshot?.cards[0];
   const projectedSlide = snapshot?.deckSlides.find(
     (slide) => slide.publicSlideKey === snapshot.occurrence.publicSlideKey,
   );
@@ -901,9 +590,7 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
       >
         {currentSlide === undefined ? (
           <section className="stage-claim ui-reveal">
-            <p className="ui-eyebrow">{copy.evidenceEyebrow}</p>
-            <h1 id={titleId}>{copy.evidenceTitle}</h1>
-            <p className="stage-lead">{copy.evidenceLead}</p>
+            <h1 id={titleId}>{copy.recovering}</h1>
           </section>
         ) : (
           <section
@@ -929,14 +616,6 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
             )}
           </section>
         )}
-        <Panel className="stage-evidence ui-reveal ui-reveal--2">
-          <Badge tone="accent">{copy.preApproved}</Badge>
-          <blockquote>{card?.claim ?? copy.fallbackClaim}</blockquote>
-          <footer>
-            <span>{card?.sourceLabel ?? copy.fallbackSource}</span>
-            <span>{card?.supportSummary ?? copy.fallbackSummary}</span>
-          </footer>
-        </Panel>
       </main>
       <aside
         className="stage-placement-message"

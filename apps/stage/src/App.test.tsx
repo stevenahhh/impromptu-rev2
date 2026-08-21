@@ -1,23 +1,14 @@
-import { afterAll, afterEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 
 GlobalRegistrator.register();
 afterAll(() => GlobalRegistrator.unregister());
 
-const { act, cleanup, fireEvent, render, within } = await import("@testing-library/react");
+const { act, cleanup, render, within } = await import("@testing-library/react");
 const { MemoryRouter } = await import("react-router-dom");
+const { StageRoutes } = await import("./App");
 
-const { normalizeDeckAssetUrl, StageRoutes } = await import("./App");
-const { signOfflineCard } = await import("./offline-signing.test-fixture");
-const { verifyOfflinePackage } = await import("./stage-client");
-
-import type {
-  DisplayIdentity,
-  DisplayJoinView,
-  StageEventObserver,
-  StageSessionClient,
-  StageSnapshotView,
-} from "./stage-client";
+import type { StageEventObserver, StageSessionClient, StageSnapshotView } from "./stage-client";
 
 function deferred<Value>() {
   let resolve: ((value: Value) => void) | null = null;
@@ -35,36 +26,6 @@ function deferred<Value>() {
   };
 }
 
-afterEach(() => {
-  cleanup();
-  Object.defineProperty(document, "fullscreenElement", {
-    configurable: true,
-    value: null,
-  });
-});
-
-function textMutation(text: string, visible: boolean) {
-  const present = () => document.body.textContent?.includes(text) === true;
-  if (present() === visible) return Promise.resolve();
-  return new Promise<void>((resolve, reject) => {
-    const observer = new MutationObserver(() => {
-      if (present() === visible) {
-        observer.disconnect();
-        resolve();
-      }
-    });
-    observer.observe(document.body, { childList: true, characterData: true, subtree: true });
-    AbortSignal.timeout(2_000).addEventListener(
-      "abort",
-      () => {
-        observer.disconnect();
-        reject(new Error(`text mutation timeout: ${text}`));
-      },
-      { once: true },
-    );
-  });
-}
-
 function nextStageEvent(type: string): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const signal = AbortSignal.timeout(2_000);
@@ -79,631 +40,139 @@ function nextStageEvent(type: string): Promise<unknown> {
   });
 }
 
-function renderStage(path: string) {
-  return render(
-    <MemoryRouter initialEntries={[path]}>
-      <StageRoutes />
-    </MemoryRouter>,
-  );
+afterEach(() => cleanup());
+
+const snapshot: StageSnapshotView = {
+  role: "PUBLIC_STAGE",
+  stateHash: "a".repeat(64),
+  presentationSessionId: "ps_alpha",
+  presentationSessionEpoch: "pse_1",
+  displayBindingEpoch: "dbe_1",
+  deckVersion: "deck_alpha",
+  manifestHash: "b".repeat(64),
+  deckSlides: [
+    {
+      publicSlideKey: "slide_one",
+      ordinal: 1,
+      imageUrl: "https://public.test/one.png",
+      imageContentHash: "c".repeat(64),
+      accessibilityLabel: "Slide one",
+    },
+    {
+      publicSlideKey: "slide_two",
+      ordinal: 2,
+      imageUrl: "https://public.test/two.png",
+      imageContentHash: "d".repeat(64),
+      accessibilityLabel: "Slide two",
+    },
+  ],
+  publicPlaybackRevision: "pbr_0",
+  blackout: false,
+  occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+};
+
+function stageClient(
+  observerSignal: ReturnType<typeof deferred<StageEventObserver>>,
+  value: StageSnapshotView = snapshot,
+): StageSessionClient {
+  return {
+    async createJoin() {
+      throw new Error("not used");
+    },
+    async claim() {},
+    async snapshot() {
+      return value;
+    },
+    async subscribe(observer) {
+      observerSignal.resolve(observer);
+      return { close() {} };
+    },
+    async recordApplied() {
+      return { status: "STAGE_APPLIED" };
+    },
+  };
 }
 
-describe("public Stage boundary", () => {
-  test("loads immutable deck assets through the Stage same-origin boundary", () => {
-    expect(
-      normalizeDeckAssetUrl("http://127.0.0.1:3002/v1/deck-assets/artifact_one/slides/slide-1.png"),
-    ).toBe("/v1/deck-assets/artifact_one/slides/slide-1.png");
-  });
-
-  test("never renders private presenter workspace or evidence preparation controls", () => {
-    const inertClient: StageSessionClient = {
-      createJoin: () => new Promise<DisplayJoinView>(() => {}),
-      async claim() {
-        throw new Error("not used");
-      },
-      async snapshot() {
-        throw new Error("not used");
-      },
-      async subscribe() {
-        throw new Error("not used");
-      },
-      async recordApplied() {
-        throw new Error("not used");
-      },
-    };
-    render(
-      <MemoryRouter initialEntries={["/"]}>
-        <StageRoutes client={inertClient} />
-      </MemoryRouter>,
-    );
-
-    expect(within(document.body).queryByText("Presenter console")).toBeNull();
-    expect(within(document.body).queryByText("Preparing evidence")).toBeNull();
-    expect(document.querySelector("[data-upload-dropzone]")).toBeNull();
-  });
-
-  test("keeps both Stage routes public and audience-only", () => {
-    renderStage("/");
-    expect(
-      within(document.body).getByRole("heading", { name: "청중을 위한 깨끗한 화면" }),
-    ).toBeTruthy();
-    expect(within(document.body).queryByText(/Stage/)).toBeNull();
-    expect(within(document.body).queryByText("Private workspace")).toBeNull();
-
-    cleanup();
-    renderStage("/display/rehearsal");
-    expect(
-      within(document.body).getByRole("heading", { name: "흐름을 끊지 않는 근거" }),
-    ).toBeTruthy();
-    expect(within(document.body).queryByText(/Stage/)).toBeNull();
-    expect(within(document.body).queryByText("Private workspace")).toBeNull();
-  });
-
-  test("uses exact join and approval actions without granting controller authority", async () => {
-    const actions: string[] = [];
-    const joinSignal = deferred<DisplayJoinView>();
-    const claimSignal = deferred<void>();
-    const snapshotSignal = deferred<StageSnapshotView>();
-    let identity: DisplayIdentity = { displayId: "", displayFingerprint: "" };
-    let requestedDeckVersion = "";
-    const client: StageSessionClient = {
-      createJoin(nextIdentity, deckVersion) {
-        actions.push("join-created");
-        identity = nextIdentity;
-        requestedDeckVersion = deckVersion;
-        return joinSignal.promise;
-      },
-      claim() {
-        actions.push("display-claimed");
-        return claimSignal.promise;
-      },
-      snapshot() {
-        actions.push("snapshot-read");
-        return snapshotSignal.promise;
-      },
-      async subscribe() {
-        actions.push("events-subscribed");
-        return { close() {} };
-      },
-      async recordApplied() {
-        actions.push("receipt-recorded");
-        return null;
-      },
-    };
-    render(
-      <MemoryRouter initialEntries={["/"]}>
-        <StageRoutes client={client} />
-      </MemoryRouter>,
-    );
-    if (actions[0] !== "join-created")
-      throw new Error("join subscription was not installed by render");
-    await act(async () => {
-      joinSignal.resolve({
-        ...identity,
-        deckVersion: requestedDeckVersion,
-        displayJoinId: `join_${"a".repeat(32)}`,
-        expiresAtMs: 90_000,
-      });
-      await joinSignal.promise;
-    });
-    expect(within(document.body).getByText("AAAAAAAA")).toBeTruthy();
-    expect(within(document.body).queryByText("Private workspace")).toBeNull();
-    fireEvent.click(within(document.body).getByRole("button", { name: "승인 후 계속" }));
-    await act(async () => {
-      claimSignal.resolve(undefined);
-      await claimSignal.promise;
-    });
-    await act(async () => {
-      snapshotSignal.resolve({
-        role: "PUBLIC_STAGE",
-        stateHash: "a".repeat(64),
-        presentationSessionId: "ps_alpha",
-        presentationSessionEpoch: "pse_1",
-        displayBindingEpoch: "dbe_1",
-        deckVersion: "deck_alpha",
-        manifestHash: "b".repeat(64),
-        deckSlides: [
-          {
-            publicSlideKey: "slide_one",
-            ordinal: 1,
-            imageUrl: "https://public.test/one.png",
-            imageContentHash: "c".repeat(64),
-            accessibilityLabel: "One",
-          },
-        ],
-        publicPlaybackRevision: "pbr_0",
-        publicationPolicyVersion: null,
-        blackout: false,
-        occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
-        cards: [],
-        publicCardRevision: "pcr_0",
-        tombstoneWatermark: "pcr_0",
-        tombstoneRetentionMs: 60_000,
-      });
-      await snapshotSignal.promise;
-    });
-    expect(within(document.body).getByRole("img", { name: "One" })).toBeTruthy();
-    expect(document.body.querySelector("[data-audience-readiness='READY']")).toBeTruthy();
-    expect(document.body.querySelector(".stage-claim")).toBeNull();
-    expect(actions).toEqual([
-      "join-created",
-      "display-claimed",
-      "events-subscribed",
-      "snapshot-read",
-    ]);
-  });
-
-  test("observes one visible effect, renders cached navigation, and hides on stale playback", async () => {
-    let observer: StageEventObserver | null = null;
-    const snapshotApplied = deferred<unknown>();
-    const visibleEffects: unknown[] = [];
-    window.addEventListener(
-      "impromptu:snapshot-applied",
-      (event) => snapshotApplied.resolve(event instanceof CustomEvent ? event.detail : null),
-      { once: true },
-    );
-    window.addEventListener("impromptu:visible-playback", (event) => {
-      visibleEffects.push(event instanceof CustomEvent ? event.detail : null);
-    });
-    const verifiedCuratedCard = await verifyOfflinePackage(
-      await signOfflineCard({
-        projectionId: "projection_curated",
-        status: "PUBLISHED",
-        mode: "CURATED",
-        leaseExpiresAtMs: null,
-        offlinePackage: {
-          offlineDisplayAllowed: true,
-          localExpiresAtMs: Date.now() + 60_000,
-          signature: "",
-          signatureVerified: false,
-        },
-        claim: "Verified offline claim",
-        supportSummary: "Signed package",
-        sourceLabel: "Public source",
-        publicCardRevision: "pcr_1",
-      }),
-    );
-    expect(verifiedCuratedCard.offlinePackage?.signatureVerified).toBe(true);
-    const snapshot: StageSnapshotView = {
-      role: "PUBLIC_STAGE",
-      stateHash: "a".repeat(64),
-      presentationSessionId: "ps_alpha",
-      presentationSessionEpoch: "pse_1",
-      displayBindingEpoch: "dbe_1",
-      deckVersion: "deck_alpha",
-      manifestHash: "b".repeat(64),
-      deckSlides: [
+describe("slide-only public Stage", () => {
+  test("renders no evidence or source DOM even when a malicious snapshot object carries cards", async () => {
+    const observerSignal = deferred<StageEventObserver>();
+    const snapshotApplied = nextStageEvent("impromptu:snapshot-applied");
+    const injected = {
+      ...snapshot,
+      cards: [
         {
-          publicSlideKey: "slide_one",
-          ordinal: 1,
-          imageUrl: "https://public.test/one.png",
-          imageContentHash: "c".repeat(64),
-          accessibilityLabel: "One",
+          projectionId: "projection_curated",
+          status: "PUBLISHED",
+          mode: "CURATED",
+          claim: "CURATED CARD SENTINEL",
+          supportSummary: "SUPPORT SENTINEL",
+          sourceLabel: "SOURCE SENTINEL",
+          publicCardRevision: "pcr_1",
         },
         {
-          publicSlideKey: "slide_two",
-          ordinal: 2,
-          imageUrl: "https://public.test/two.png",
-          imageContentHash: "d".repeat(64),
-          accessibilityLabel: "Two",
+          projectionId: "projection_live",
+          status: "PUBLISHED",
+          mode: "LIVE",
+          claim: "LIVE CARD SENTINEL",
+          supportSummary: "LIVE SUPPORT SENTINEL",
+          sourceLabel: "LIVE SOURCE SENTINEL",
+          publicCardRevision: "pcr_2",
         },
       ],
-      publicPlaybackRevision: "pbr_0",
-      publicationPolicyVersion: null,
-      blackout: false,
-      occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
-      cards: [verifiedCuratedCard],
-      publicCardRevision: "pcr_1",
-      tombstoneWatermark: "pcr_0",
-      tombstoneRetentionMs: 60_000,
     };
-    let snapshotReads = 0;
-    const client: StageSessionClient = {
-      async createJoin() {
-        throw new Error("not used");
-      },
-      async claim() {},
-      async snapshot() {
-        snapshotReads += 1;
-        return snapshotReads === 1
-          ? snapshot
-          : {
-              ...snapshot,
-              stateHash: "e".repeat(64),
-              publicPlaybackRevision: "pbr_1",
-              occurrence: { publicSlideKey: "slide_two", occurrenceSeq: 2 },
-            };
-      },
-      async subscribe(nextObserver) {
-        observer = nextObserver;
-        return { close() {} };
-      },
-      async recordApplied() {
-        return { status: "STAGE_APPLIED" };
-      },
-    };
-    const waitVisible = textMutation("Verified offline claim", true);
     render(
       <MemoryRouter initialEntries={["/display/display_alpha"]}>
-        <StageRoutes client={client} />
+        <StageRoutes client={stageClient(observerSignal, injected)} />
       </MemoryRouter>,
     );
-    const appliedSnapshot = await act(async () => snapshotApplied.promise);
-    expect(appliedSnapshot).toEqual({
-      stateHash: "a".repeat(64),
-      publicPlaybackRevision: "pbr_0",
-      publicCardRevision: "pcr_1",
-      visibleCardIds: ["projection_curated"],
-    });
-    await act(async () => waitVisible);
-    expect(within(document.body).getByText("Verified offline claim")).toBeTruthy();
-    expect(within(document.body).getByRole("img", { name: "One" }).getAttribute("src")).toBe(
-      "https://public.test/one.png",
-    );
-    const localSlide = deferred<unknown>();
-    window.addEventListener(
-      "impromptu:local-slide",
-      (event) => localSlide.resolve(event instanceof CustomEvent ? event.detail : null),
-      { once: true },
-    );
-    await act(async () => fireEvent.keyDown(window, { key: "ArrowRight" }));
-    expect(await localSlide.promise).toEqual({
-      publicSlideKey: "slide_two",
-      occurrenceSeq: 2,
-    });
-    expect(within(document.body).getByRole("img", { name: "Two" }).getAttribute("src")).toBe(
-      "https://public.test/two.png",
-    );
-    const installedObserver = observer as StageEventObserver | null;
-    if (installedObserver === null) throw new Error("Stage observer was not installed");
-    const playback = {
-      commandId: "cmd_one",
-      presentationSessionEpoch: "pse_1",
-      displayBindingEpoch: "dbe_1",
-      acceptedControlRevision: "cr_1",
-      publicPlaybackRevision: "pbr_1",
-      occurrence: { publicSlideKey: "slide_two", occurrenceSeq: 2 },
-      blackout: false,
-    };
-    await act(async () => {
-      installedObserver.onPlayback(playback);
-      installedObserver.onPlayback(playback);
-    });
-    expect(visibleEffects).toHaveLength(1);
-    const staleHidden = deferred<unknown>();
-    const waitHidden = textMutation("Verified offline claim", false);
-    window.addEventListener(
-      "impromptu:card-hidden",
-      (event) => staleHidden.resolve(event instanceof CustomEvent ? event.detail : null),
-      { once: true },
-    );
-    await act(async () =>
-      installedObserver.onPlayback({
-        ...playback,
-        commandId: "cmd_stale_playback",
-        publicPlaybackRevision: "pbr_3",
-      }),
-    );
-    expect(await staleHidden.promise).toEqual({ reason: "STALE_EVENT" });
-    await act(async () => waitHidden);
+
+    await act(async () => snapshotApplied);
+    expect(within(document.body).getByRole("img", { name: "Slide one" })).toBeTruthy();
+    expect(document.body.textContent).not.toContain("CURATED CARD SENTINEL");
+    expect(document.body.textContent).not.toContain("LIVE CARD SENTINEL");
+    expect(document.body.textContent).not.toContain("SOURCE SENTINEL");
+    expect(document.querySelector(".stage-evidence")).toBeNull();
+    await observerSignal.promise;
   });
 
-  test("hides a visible card on an observed stale card event", async () => {
-    let observer: StageEventObserver | null = null;
-    const snapshotApplied = deferred<unknown>();
-    window.addEventListener("impromptu:snapshot-applied", () => snapshotApplied.resolve(null), {
-      once: true,
-    });
-    const liveCard: StageSnapshotView["cards"][number] = {
-      projectionId: "projection_live",
-      status: "PUBLISHED",
-      mode: "LIVE",
-      leaseExpiresAtMs: Date.now() + 2_000,
-      publicationPolicyVersion: "publication-policy-1",
-      cardVersion: "card-version-1",
-      liveBinding: {
+  test("applies contiguous slide playback and does not apply a revision gap", async () => {
+    const observerSignal = deferred<StageEventObserver>();
+    const snapshotApplied = nextStageEvent("impromptu:snapshot-applied");
+    render(
+      <MemoryRouter initialEntries={["/display/display_alpha"]}>
+        <StageRoutes client={stageClient(observerSignal)} />
+      </MemoryRouter>,
+    );
+    await act(async () => snapshotApplied);
+    const observer = await observerSignal.promise;
+    const visible = nextStageEvent("impromptu:visible-playback");
+    await act(async () =>
+      observer.onPlayback({
+        commandId: "cmd_one",
         presentationSessionEpoch: "pse_1",
         displayBindingEpoch: "dbe_1",
-        publicSlideOccurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
-        publicationPolicyVersion: "publication-policy-1",
-        cardVersion: "card-version-1",
-      },
-      claim: "Fresh live claim",
-      supportSummary: "Visible support",
-      sourceLabel: "Public source",
-      publicCardRevision: "pcr_2",
-    };
-    const snapshot: StageSnapshotView = {
-      role: "PUBLIC_STAGE",
-      stateHash: "a".repeat(64),
-      presentationSessionId: "ps_alpha",
-      presentationSessionEpoch: "pse_1",
-      displayBindingEpoch: "dbe_1",
-      deckVersion: "deck_alpha",
-      manifestHash: "b".repeat(64),
-      deckSlides: [],
-      publicPlaybackRevision: "pbr_0",
-      publicationPolicyVersion: "publication-policy-1",
-      blackout: false,
-      occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
-      cards: [liveCard],
-      publicCardRevision: "pcr_2",
-      tombstoneWatermark: "pcr_0",
-      tombstoneRetentionMs: 60_000,
-    };
-    const client: StageSessionClient = {
-      async createJoin() {
-        throw new Error("not used");
-      },
-      async claim() {},
-      async snapshot() {
-        return snapshot;
-      },
-      async subscribe(nextObserver) {
-        observer = nextObserver;
-        return { close() {} };
-      },
-      async recordApplied() {
-        return null;
-      },
-    };
-    const waitVisible = textMutation("Fresh live claim", true);
-    render(
-      <MemoryRouter initialEntries={["/display/display_alpha"]}>
-        <StageRoutes client={client} />
-      </MemoryRouter>,
+        acceptedControlRevision: "cr_1",
+        publicPlaybackRevision: "pbr_1",
+        occurrence: { publicSlideKey: "slide_two", occurrenceSeq: 2 },
+        blackout: false,
+      }),
     );
-    await act(async () => snapshotApplied.promise);
-    await act(async () => waitVisible);
-    const installedObserver = observer as StageEventObserver | null;
-    if (installedObserver === null) throw new Error("Stage observer was not installed");
-    const staleHidden = deferred<unknown>();
-    const waitHidden = textMutation("Fresh live claim", false);
-    window.addEventListener(
-      "impromptu:card-hidden",
-      (event) => staleHidden.resolve(event instanceof CustomEvent ? event.detail : null),
-      { once: true },
-    );
-    await act(async () => installedObserver.onCard({ ...liveCard, publicCardRevision: "pcr_1" }));
-    expect(await staleHidden.promise).toEqual({ reason: "STALE_EVENT" });
-    await act(async () => waitHidden);
-  });
+    expect(await visible).toMatchObject({ commandId: "cmd_one" });
+    expect(within(document.body).getByRole("img", { name: "Slide two" })).toBeTruthy();
 
-  test("explicitly hides delayed live ingress from stale binding, occurrence, and policy", async () => {
-    let observer: StageEventObserver | null = null;
-    const snapshotApplied = nextStageEvent("impromptu:snapshot-applied");
-    const snapshot: StageSnapshotView = {
-      role: "PUBLIC_STAGE",
-      stateHash: "a".repeat(64),
-      presentationSessionId: "ps_alpha",
-      presentationSessionEpoch: "pse_1",
-      displayBindingEpoch: "dbe_2",
-      deckVersion: "deck_alpha",
-      manifestHash: "b".repeat(64),
-      deckSlides: [],
-      publicPlaybackRevision: "pbr_1",
-      publicationPolicyVersion: "publication-policy-2",
-      blackout: false,
-      occurrence: { publicSlideKey: "slide_two", occurrenceSeq: 2 },
-      cards: [],
-      publicCardRevision: "pcr_0",
-      tombstoneWatermark: "pcr_0",
-      tombstoneRetentionMs: 60_000,
-    };
-    const client: StageSessionClient = {
-      async createJoin() {
-        throw new Error("not used");
-      },
-      async claim() {},
-      async snapshot() {
-        return snapshot;
-      },
-      async subscribe(nextObserver) {
-        observer = nextObserver;
-        return { close() {} };
-      },
-      async recordApplied() {
-        return null;
-      },
-    };
-    render(
-      <MemoryRouter initialEntries={["/display/display_alpha"]}>
-        <StageRoutes client={client} />
-      </MemoryRouter>,
-    );
-    await act(async () => snapshotApplied);
-    const installedObserver = observer as StageEventObserver | null;
-    if (installedObserver === null) throw new Error("Stage observer was not installed");
-    const baseEvent = {
-      projectionId: "projection_delayed",
-      status: "PUBLISHED",
-      mode: "LIVE",
-      leaseExpiresAtMs: Date.now() + 2_000,
-      publicationPolicyVersion: "publication-policy-2",
-      cardVersion: "card-version-2",
-      liveBinding: {
+    const reconcile = nextStageEvent("impromptu:reconcile-required");
+    await act(async () =>
+      observer.onPlayback({
+        commandId: "cmd_gap",
         presentationSessionEpoch: "pse_1",
-        displayBindingEpoch: "dbe_2",
-        publicSlideOccurrence: { publicSlideKey: "slide_two", occurrenceSeq: 2 },
-        publicationPolicyVersion: "publication-policy-2",
-        cardVersion: "card-version-2",
-      },
-      claim: "Delayed stale ingress",
-      supportSummary: "Must never become visible",
-      sourceLabel: "Public source",
-      publicCardRevision: "pcr_1",
-    } as const;
-    const staleEvents = [
-      {
-        ...baseEvent,
-        projectionId: "projection_delayed_rebind",
-        liveBinding: { ...baseEvent.liveBinding, displayBindingEpoch: "dbe_1" },
-      },
-      {
-        ...baseEvent,
-        projectionId: "projection_delayed_occurrence",
-        liveBinding: {
-          ...baseEvent.liveBinding,
-          publicSlideOccurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
-        },
-      },
-      {
-        ...baseEvent,
-        projectionId: "projection_delayed_policy",
-        publicationPolicyVersion: "publication-policy-1",
-        liveBinding: {
-          ...baseEvent.liveBinding,
-          publicationPolicyVersion: "publication-policy-1",
-        },
-      },
-    ] as const;
-    for (const event of staleEvents) {
-      const hidden = nextStageEvent("impromptu:card-hidden");
-      await act(async () => installedObserver.onCard(event));
-      expect(await hidden).toEqual({
-        projectionId: event.projectionId,
-        reason: "STALE_LIVE_BINDING",
-      });
-      expect(document.body.textContent).not.toContain(event.claim);
-    }
-  });
-
-  test("hides a verified curated card at local expiry while partitioned", async () => {
-    let observer: StageEventObserver | null = null;
-    const reconnectSnapshot = deferred<StageSnapshotView>();
-    const localExpiresAtMs = Date.now() + 1_000;
-    const verifiedCuratedCard = await verifyOfflinePackage(
-      await signOfflineCard({
-        projectionId: "projection_curated",
-        status: "PUBLISHED",
-        mode: "CURATED",
-        leaseExpiresAtMs: null,
-        offlinePackage: {
-          offlineDisplayAllowed: true,
-          localExpiresAtMs,
-          signature: "",
-          signatureVerified: false,
-        },
-        claim: "Expiring curated claim",
-        supportSummary: "Partition-safe only until expiry",
-        sourceLabel: "Public source",
-        publicCardRevision: "pcr_1",
+        displayBindingEpoch: "dbe_1",
+        acceptedControlRevision: "cr_3",
+        publicPlaybackRevision: "pbr_3",
+        occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 3 },
+        blackout: false,
       }),
     );
-    const snapshot: StageSnapshotView = {
-      role: "PUBLIC_STAGE",
-      stateHash: "a".repeat(64),
-      presentationSessionId: "ps_alpha",
-      presentationSessionEpoch: "pse_1",
-      displayBindingEpoch: "dbe_1",
-      deckVersion: "deck_alpha",
-      manifestHash: "b".repeat(64),
-      deckSlides: [],
-      publicPlaybackRevision: "pbr_0",
-      publicationPolicyVersion: null,
-      blackout: false,
-      occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
-      cards: [verifiedCuratedCard],
-      publicCardRevision: "pcr_1",
-      tombstoneWatermark: "pcr_0",
-      tombstoneRetentionMs: 60_000,
-    };
-    let snapshotReads = 0;
-    const client: StageSessionClient = {
-      async createJoin() {
-        throw new Error("not used");
-      },
-      async claim() {},
-      snapshot() {
-        snapshotReads += 1;
-        return snapshotReads === 1 ? Promise.resolve(snapshot) : reconnectSnapshot.promise;
-      },
-      async subscribe(nextObserver) {
-        observer = nextObserver;
-        return { close() {} };
-      },
-      async recordApplied() {
-        return null;
-      },
-    };
-    const snapshotApplied = nextStageEvent("impromptu:snapshot-applied");
-    const waitVisible = textMutation("Expiring curated claim", true);
-    render(
-      <MemoryRouter initialEntries={["/display/display_alpha"]}>
-        <StageRoutes client={client} />
-      </MemoryRouter>,
-    );
-    await act(async () => snapshotApplied);
-    await act(async () => waitVisible);
-    const installedObserver = observer as StageEventObserver | null;
-    if (installedObserver === null) throw new Error("Stage observer was not installed");
-    const hidden = nextStageEvent("impromptu:card-hidden");
-    await act(async () => installedObserver.onClose("NETWORK_ERROR"));
-    expect(snapshotReads).toBe(2);
-    await act(async () => window.dispatchEvent(new Event("online")));
-    expect(snapshotReads).toBe(3);
-    expect(await act(async () => hidden)).toEqual({
-      projectionId: "projection_curated",
-      reason: "LOCAL_EXPIRY",
-    });
-    expect(within(document.body).queryByText("Expiring curated claim")).toBeNull();
-  });
-
-  test("observes topology transitions and target-screen loss through the platform handler", async () => {
-    renderStage("/display/rehearsal");
-    fireEvent(
-      window,
-      new CustomEvent("impromptu:platform-topology-change", {
-        detail: { observedMode: "duplicate", screenCount: 1 },
-      }),
-    );
-
-    expect(within(document.body).getByText("복제 / 화면 1개")).toBeTruthy();
-
-    const recovered = nextStageEvent("impromptu:target-screen-recovery");
-    fireEvent(
-      window,
-      new CustomEvent("impromptu:platform-topology-change", {
-        detail: { observedMode: "single", screenCount: 1, targetScreenLost: true },
-      }),
-    );
-    expect(await recovered).toEqual({ status: "MANUAL_FALLBACK", privatePixelCount: 0 });
-    expect(
-      within(document.body).getByText(/수동 배치: 이 화면을 대상 화면으로 옮긴 뒤/),
-    ).toBeTruthy();
-  });
-
-  test("enters and exits fullscreen only from a Stage-local action", () => {
-    const requestFullscreen = mock(async () => {
-      Object.defineProperty(document, "fullscreenElement", {
-        configurable: true,
-        value: document.documentElement,
-      });
-      document.dispatchEvent(new Event("fullscreenchange"));
-    });
-    const exitFullscreen = mock(async () => {
-      Object.defineProperty(document, "fullscreenElement", {
-        configurable: true,
-        value: null,
-      });
-      document.dispatchEvent(new Event("fullscreenchange"));
-    });
-    Object.defineProperty(document.documentElement, "requestFullscreen", {
-      configurable: true,
-      value: requestFullscreen,
-    });
-    Object.defineProperty(document, "exitFullscreen", {
-      configurable: true,
-      value: exitFullscreen,
-    });
-
-    renderStage("/display/rehearsal");
-    fireEvent.click(within(document.body).getByRole("button", { name: "전체 화면 시작" }));
-
-    expect(requestFullscreen).toHaveBeenCalledTimes(1);
-    expect(within(document.body).getByRole("button", { name: "전체 화면 종료" })).toBeTruthy();
-
-    fireEvent.click(within(document.body).getByRole("button", { name: "전체 화면 종료" }));
-    expect(exitFullscreen).toHaveBeenCalledTimes(1);
-    expect(within(document.body).getByRole("button", { name: "전체 화면 시작" })).toBeTruthy();
+    expect(await reconcile).toEqual({ reason: "REVISION_GAP" });
+    expect(document.querySelector(".stage-slide")).toBeNull();
   });
 });

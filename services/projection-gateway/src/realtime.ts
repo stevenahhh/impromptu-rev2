@@ -28,7 +28,6 @@ export type ProjectionRealtimeMessage =
         blackout: boolean;
       }>;
     }>
-  | Readonly<{ kind: "CARD"; payload: unknown }>
   | Readonly<{ kind: "RECEIPT"; payload: PublicStageAppliedReceipt }>
   | Readonly<{ kind: "CLOSE"; payload: Readonly<{ reason: StageSocketCloseReason }> }>
   | Readonly<{
@@ -166,9 +165,6 @@ export function createProjectionRealtimeProtocol(dependencies: ProjectionRealtim
               kind: "COMMAND",
               payload: event,
             });
-          },
-          onCard(event) {
-            send({ kind: "CARD", payload: event });
           },
           onClose(reason) {
             finish();

@@ -177,13 +177,8 @@ function snapshotFixture(occurrenceKey: string): StageSnapshotView {
     manifestHash: "b".repeat(64),
     deckSlides: renderedSlides as unknown as StageSnapshotView["deckSlides"],
     publicPlaybackRevision: "pbr_0",
-    publicationPolicyVersion: null,
     blackout: false,
     occurrence: { publicSlideKey: occurrenceKey, occurrenceSeq: 1 },
-    cards: [],
-    publicCardRevision: "pcr_0",
-    tombstoneWatermark: "pcr_0",
-    tombstoneRetentionMs: 60_000,
   };
 }
 

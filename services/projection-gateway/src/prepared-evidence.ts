@@ -5,52 +5,6 @@ import {
 
 export type PublicDeckArtifact = PublishedDeckArtifact;
 
-export interface PublicCardUpsert {
-  readonly projectionId: string;
-  readonly status: "PUBLISHED";
-  readonly mode?: "CURATED" | "LIVE" | undefined;
-  readonly leaseExpiresAtMs?: number | null | undefined;
-  readonly publicationPolicyVersion?: string | undefined;
-  readonly cardVersion?: string | undefined;
-  readonly liveBinding?:
-    | Readonly<{
-        presentationSessionEpoch: string;
-        displayBindingEpoch: string;
-        publicSlideOccurrence: Readonly<{
-          publicSlideKey: string;
-          occurrenceSeq: number;
-        }>;
-        publicationPolicyVersion: string;
-        cardVersion: string;
-      }>
-    | undefined;
-  readonly offlinePackage?:
-    | Readonly<{
-        readonly offlineDisplayAllowed: boolean;
-        readonly localExpiresAtMs: number;
-        readonly signature: string;
-      }>
-    | undefined;
-  readonly claim: string;
-  readonly supportSummary: string;
-  readonly sourceLabel: string;
-  readonly publishedAtMs: number;
-  readonly expiresAtMs: number | null;
-  readonly publicCardRevision: string;
-  readonly deckVersion: string;
-  readonly manifestHash: string;
-  readonly occurrence: { readonly publicSlideKey: string; readonly occurrenceSeq: number };
-}
-
-export interface PublicCardTombstone {
-  readonly projectionId: string;
-  readonly status: "RETRACTED" | "EXPIRED";
-  readonly publicCardRevision: string;
-  readonly occurredAtMs: number;
-}
-
-export type PublicCardEvent = PublicCardUpsert | PublicCardTombstone;
-
 export interface DisplayJoinLocator {
   readonly displayJoinId: string;
   readonly displayId: string;
@@ -100,8 +54,8 @@ export interface AudienceProjectionSnapshot {
   readonly deck: PublicDeckArtifact;
   readonly occurrence: { readonly publicSlideKey: string; readonly occurrenceSeq: number };
   readonly blackout: boolean;
-  readonly cards: readonly PublicCardUpsert[];
-  readonly tombstones: readonly PublicCardTombstone[];
+  readonly cards: readonly [];
+  readonly tombstones: readonly [];
   readonly tombstoneWatermark: string;
   readonly tombstoneRetentionMs: number;
 }
@@ -117,12 +71,8 @@ type ProjectionState = {
   displaySession: AudienceDisplaySessionRecord;
   deck: PublicDeckArtifact;
   publicPlaybackRevision: string;
-  publicCardRevision: string;
   occurrence: { readonly publicSlideKey: string; readonly occurrenceSeq: number };
   blackout: boolean;
-  cards: Map<string, PublicCardUpsert>;
-  tombstones: Map<string, PublicCardTombstone>;
-  liveDisplayBindingEpochs: Map<string, string>;
   publicationPolicyVersion: string | null;
 };
 
@@ -245,137 +195,6 @@ function parseDisplaySession(value: unknown): AudienceDisplaySessionRecord | nul
   };
 }
 
-function parseLiveBinding(value: unknown): NonNullable<PublicCardUpsert["liveBinding"]> | null {
-  if (
-    !snapshotRecord(value) ||
-    !exactKeys(value, [
-      "presentationSessionEpoch",
-      "displayBindingEpoch",
-      "publicSlideOccurrence",
-      "publicationPolicyVersion",
-      "cardVersion",
-    ]) ||
-    revisionValue(value.presentationSessionEpoch, "pse_") === null ||
-    revisionValue(value.displayBindingEpoch, "dbe_") === null ||
-    !snapshotRecord(value.publicSlideOccurrence) ||
-    !exactKeys(value.publicSlideOccurrence, ["publicSlideKey", "occurrenceSeq"]) ||
-    !validId(value.publicSlideOccurrence.publicSlideKey, "slide_") ||
-    typeof value.publicSlideOccurrence.occurrenceSeq !== "number" ||
-    !Number.isSafeInteger(value.publicSlideOccurrence.occurrenceSeq) ||
-    value.publicSlideOccurrence.occurrenceSeq <= 0 ||
-    typeof value.publicationPolicyVersion !== "string" ||
-    value.publicationPolicyVersion.length === 0 ||
-    typeof value.cardVersion !== "string" ||
-    value.cardVersion.length === 0
-  ) {
-    return null;
-  }
-  return value as NonNullable<PublicCardUpsert["liveBinding"]>;
-}
-
-function parseStoredCard(value: unknown): PublicCardUpsert | null {
-  if (
-    !snapshotRecord(value) ||
-    !Object.keys(value).every((key) =>
-      [
-        "projectionId",
-        "status",
-        "mode",
-        "leaseExpiresAtMs",
-        "publicationPolicyVersion",
-        "cardVersion",
-        "liveBinding",
-        "offlinePackage",
-        "claim",
-        "supportSummary",
-        "sourceLabel",
-        "publishedAtMs",
-        "expiresAtMs",
-        "publicCardRevision",
-        "deckVersion",
-        "manifestHash",
-        "occurrence",
-      ].includes(key),
-    ) ||
-    ![
-      "projectionId",
-      "status",
-      "claim",
-      "supportSummary",
-      "sourceLabel",
-      "publishedAtMs",
-      "expiresAtMs",
-      "publicCardRevision",
-      "deckVersion",
-      "manifestHash",
-      "occurrence",
-    ].every((key) => key in value) ||
-    !validId(value.projectionId, "projection_") ||
-    value.status !== "PUBLISHED" ||
-    (value.mode !== undefined && value.mode !== "CURATED" && value.mode !== "LIVE") ||
-    (value.leaseExpiresAtMs !== undefined &&
-      value.leaseExpiresAtMs !== null &&
-      !validTimestamp(value.leaseExpiresAtMs)) ||
-    (value.publicationPolicyVersion !== undefined &&
-      typeof value.publicationPolicyVersion !== "string") ||
-    (value.cardVersion !== undefined && typeof value.cardVersion !== "string") ||
-    (value.liveBinding !== undefined && parseLiveBinding(value.liveBinding) === null) ||
-    (value.offlinePackage !== undefined &&
-      (!snapshotRecord(value.offlinePackage) ||
-        !exactKeys(value.offlinePackage, [
-          "offlineDisplayAllowed",
-          "localExpiresAtMs",
-          "signature",
-        ]) ||
-        typeof value.offlinePackage.offlineDisplayAllowed !== "boolean" ||
-        !validTimestamp(value.offlinePackage.localExpiresAtMs) ||
-        typeof value.offlinePackage.signature !== "string")) ||
-    typeof value.claim !== "string" ||
-    value.claim.length < 1 ||
-    value.claim.length > 2_000 ||
-    typeof value.supportSummary !== "string" ||
-    value.supportSummary.length < 1 ||
-    value.supportSummary.length > 4_000 ||
-    typeof value.sourceLabel !== "string" ||
-    value.sourceLabel.length < 1 ||
-    value.sourceLabel.length > 500 ||
-    !validTimestamp(value.publishedAtMs) ||
-    (value.expiresAtMs !== null && !validTimestamp(value.expiresAtMs)) ||
-    revisionValue(value.publicCardRevision, "pcr_") === null ||
-    !validId(value.deckVersion, "deck_") ||
-    !validHash(value.manifestHash) ||
-    !snapshotRecord(value.occurrence) ||
-    !exactKeys(value.occurrence, ["publicSlideKey", "occurrenceSeq"]) ||
-    !validId(value.occurrence.publicSlideKey, "slide_") ||
-    typeof value.occurrence.occurrenceSeq !== "number" ||
-    !Number.isSafeInteger(value.occurrence.occurrenceSeq) ||
-    value.occurrence.occurrenceSeq <= 0
-  ) {
-    return null;
-  }
-  const binding = parseLiveBinding(value.liveBinding);
-  if (
-    value.mode === "LIVE" &&
-    (binding === null ||
-      value.publicationPolicyVersion !== binding.publicationPolicyVersion ||
-      value.cardVersion !== binding.cardVersion)
-  ) {
-    return null;
-  }
-  return value as unknown as PublicCardUpsert;
-}
-
-function parseStoredTombstone(value: unknown): PublicCardTombstone | null {
-  return snapshotRecord(value) &&
-    exactKeys(value, ["projectionId", "status", "publicCardRevision", "occurredAtMs"]) &&
-    validId(value.projectionId, "projection_") &&
-    (value.status === "RETRACTED" || value.status === "EXPIRED") &&
-    revisionValue(value.publicCardRevision, "pcr_") !== null &&
-    validTimestamp(value.occurredAtMs)
-    ? (value as unknown as PublicCardTombstone)
-    : null;
-}
-
 export function snapshotProjectionGatewayStore(store: ProjectionGatewayStore): unknown {
   return {
     stateKind: "PREPARED_EVIDENCE_PROJECTION_DATABASE_SNAPSHOT",
@@ -385,12 +204,12 @@ export function snapshotProjectionGatewayStore(store: ProjectionGatewayStore): u
       displaySession: projection.displaySession,
       deck: projection.deck,
       publicPlaybackRevision: projection.publicPlaybackRevision,
-      publicCardRevision: projection.publicCardRevision,
+      publicCardRevision: "pcr_0",
       occurrence: projection.occurrence,
       blackout: projection.blackout,
-      cards: [...projection.cards.values()],
-      tombstones: [...projection.tombstones.values()],
-      liveDisplayBindingEpochs: [...projection.liveDisplayBindingEpochs.entries()],
+      cards: [],
+      tombstones: [],
+      liveDisplayBindingEpochs: [],
       publicationPolicyVersion: projection.publicationPolicyVersion,
     })),
   };
@@ -473,12 +292,12 @@ export function restoreProjectionGatewayStore(input: unknown): ProjectionGateway
       occurrenceSeq: projectionInput.occurrence.occurrenceSeq,
     };
     const playbackRevision = revisionValue(projectionInput.publicPlaybackRevision, "pbr_");
-    const cardRevision = revisionValue(projectionInput.publicCardRevision, "pcr_");
+    const legacyCardRevision = revisionValue(projectionInput.publicCardRevision, "pcr_");
     if (
       displaySession === null ||
       deck === null ||
       playbackRevision === null ||
-      cardRevision === null ||
+      legacyCardRevision === null ||
       JSON.stringify(displaySession.binding) !== JSON.stringify(projectionInput.binding) ||
       displaySession.binding.deckVersion !== deck.deckVersion ||
       displaySession.binding.manifestHash !== deck.manifestHash ||
@@ -487,67 +306,13 @@ export function restoreProjectionGatewayStore(input: unknown): ProjectionGateway
     ) {
       return { outcome: "INVALID_SNAPSHOT" };
     }
-    const cards = new Map<string, PublicCardUpsert>();
-    for (const cardInput of projectionInput.cards) {
-      const card = parseStoredCard(cardInput);
-      if (card === null) return { outcome: "INVALID_SNAPSHOT" };
-      const eventRevision = revisionValue(card.publicCardRevision, "pcr_");
-      if (eventRevision === null || eventRevision > cardRevision || cards.has(card.projectionId)) {
-        return { outcome: "INVALID_SNAPSHOT" };
-      }
-      cards.set(card.projectionId, card);
-    }
-    const tombstones = new Map<string, PublicCardTombstone>();
-    for (const tombstoneInput of projectionInput.tombstones) {
-      const tombstone = parseStoredTombstone(tombstoneInput);
-      if (tombstone === null) return { outcome: "INVALID_SNAPSHOT" };
-      const eventRevision = revisionValue(tombstone.publicCardRevision, "pcr_");
-      if (
-        eventRevision === null ||
-        eventRevision > cardRevision ||
-        cards.has(tombstone.projectionId) ||
-        tombstones.has(tombstone.projectionId)
-      ) {
-        return { outcome: "INVALID_SNAPSHOT" };
-      }
-      tombstones.set(tombstone.projectionId, tombstone);
-    }
-    const representedRevisions = [...cards.values(), ...tombstones.values()].map((event) =>
-      revisionValue(event.publicCardRevision, "pcr_"),
-    );
-    if (
-      representedRevisions.some((revision) => revision === null) ||
-      (cardRevision === 0
-        ? representedRevisions.length !== 0
-        : Math.max(...representedRevisions.map((revision) => revision ?? -1)) !== cardRevision)
-    ) {
-      return { outcome: "INVALID_SNAPSHOT" };
-    }
-    const liveDisplayBindingEpochs = new Map<string, string>();
-    for (const entry of projectionInput.liveDisplayBindingEpochs) {
-      if (
-        !Array.isArray(entry) ||
-        entry.length !== 2 ||
-        typeof entry[0] !== "string" ||
-        typeof entry[1] !== "string" ||
-        !cards.has(entry[0]) ||
-        liveDisplayBindingEpochs.has(entry[0])
-      ) {
-        return { outcome: "INVALID_SNAPSHOT" };
-      }
-      liveDisplayBindingEpochs.set(entry[0], entry[1]);
-    }
     store.projections.set(displaySession.binding.presentationSessionId, {
       binding: displaySession.binding,
       displaySession,
       deck,
       publicPlaybackRevision: projectionInput.publicPlaybackRevision,
-      publicCardRevision: projectionInput.publicCardRevision,
       occurrence,
       blackout: projectionInput.blackout,
-      cards,
-      tombstones,
-      liveDisplayBindingEpochs,
       publicationPolicyVersion: projectionInput.publicationPolicyVersion,
     });
   }
@@ -592,18 +357,6 @@ export type ReconcileSnapshotResult =
   | Readonly<{ outcome: "RECONCILE_REQUIRED" }>
   | Readonly<{ outcome: "SESSION_EXPIRED" }>;
 
-export type ProjectCardResult =
-  | Readonly<{ outcome: "APPLIED" }>
-  | Readonly<{
-      outcome: "REJECTED";
-      reason:
-        | "SESSION_NOT_FOUND"
-        | "STALE_LIVE_BINDING"
-        | "REVISION_CONFLICT"
-        | "TERMINAL_PROJECTION"
-        | "DUPLICATE_PROJECTION";
-    }>;
-
 export type StageSocketCloseReason = "REBOUND" | "SESSION_EXPIRED" | "CLIENT_CLOSED";
 
 export interface StageSocket {
@@ -614,7 +367,6 @@ export interface StageSocket {
 
 type StageObserver = Readonly<{
   onPlayback: (event: PlaybackProjection) => void;
-  onCard: (event: PublicCardEvent) => void;
   onClose: (reason: StageSocketCloseReason) => void;
 }>;
 
@@ -743,15 +495,11 @@ export class PreparedEvidenceProjectionGateway {
       displaySession: session,
       deck: input.deck,
       publicPlaybackRevision: current?.publicPlaybackRevision ?? "pbr_0",
-      publicCardRevision: current?.publicCardRevision ?? "pcr_0",
       occurrence: current?.occurrence ?? {
         publicSlideKey: initialSlide.publicSlideKey,
         occurrenceSeq: 1,
       },
       blackout: current?.blackout ?? false,
-      cards: current?.cards ?? new Map(),
-      tombstones: current?.tombstones ?? new Map(),
-      liveDisplayBindingEpochs: current?.liveDisplayBindingEpochs ?? new Map(),
       publicationPolicyVersion:
         input.publicationPolicyVersion ?? current?.publicationPolicyVersion ?? null,
     });
@@ -867,115 +615,25 @@ export class PreparedEvidenceProjectionGateway {
     return true;
   }
 
-  projectCardResult(presentationSessionId: string, event: PublicCardEvent): ProjectCardResult {
-    const projection = this.#store.projections.get(presentationSessionId);
-    if (projection === undefined) return { outcome: "REJECTED", reason: "SESSION_NOT_FOUND" };
-    let acceptedLiveBinding: NonNullable<PublicCardUpsert["liveBinding"]> | null = null;
-    if (event.status === "PUBLISHED" && event.mode === "LIVE") {
-      const binding = event.liveBinding;
-      if (
-        event.leaseExpiresAtMs === undefined ||
-        event.leaseExpiresAtMs === null ||
-        event.leaseExpiresAtMs <= event.publishedAtMs ||
-        event.leaseExpiresAtMs - event.publishedAtMs > 3_000 ||
-        binding === undefined ||
-        binding.displayBindingEpoch !== projection.binding.displayBindingEpoch ||
-        binding.presentationSessionEpoch !== projection.binding.presentationSessionEpoch ||
-        binding.publicSlideOccurrence.publicSlideKey !== projection.occurrence.publicSlideKey ||
-        binding.publicSlideOccurrence.occurrenceSeq !== projection.occurrence.occurrenceSeq ||
-        (projection.publicationPolicyVersion !== null &&
-          binding.publicationPolicyVersion !== projection.publicationPolicyVersion) ||
-        event.publicationPolicyVersion !== binding.publicationPolicyVersion ||
-        event.cardVersion !== binding.cardVersion ||
-        binding.publicSlideOccurrence.publicSlideKey !== event.occurrence.publicSlideKey ||
-        binding.publicSlideOccurrence.occurrenceSeq !== event.occurrence.occurrenceSeq
-      ) {
-        return { outcome: "REJECTED", reason: "STALE_LIVE_BINDING" };
-      }
-      acceptedLiveBinding = binding;
-    }
-    const current = revisionValue(projection.publicCardRevision, "pcr_");
-    const next = revisionValue(event.publicCardRevision, "pcr_");
-    if (current === null || next !== current + 1) {
-      return { outcome: "REJECTED", reason: "REVISION_CONFLICT" };
-    }
-    if (projection.tombstones.has(event.projectionId)) {
-      return { outcome: "REJECTED", reason: "TERMINAL_PROJECTION" };
-    }
-    if (event.status === "PUBLISHED") {
-      if (projection.cards.has(event.projectionId)) {
-        return { outcome: "REJECTED", reason: "DUPLICATE_PROJECTION" };
-      }
-      projection.cards.set(event.projectionId, event);
-      if (event.mode === "LIVE" && acceptedLiveBinding !== null) {
-        projection.liveDisplayBindingEpochs.set(
-          event.projectionId,
-          acceptedLiveBinding.displayBindingEpoch,
-        );
-        if (projection.publicationPolicyVersion === null) {
-          projection.publicationPolicyVersion = event.publicationPolicyVersion ?? null;
-        }
-      }
-    } else {
-      projection.cards.delete(event.projectionId);
-      projection.liveDisplayBindingEpochs.delete(event.projectionId);
-      projection.tombstones.set(event.projectionId, event);
-    }
-    projection.publicCardRevision = event.publicCardRevision;
-    for (const socket of this.#sockets.get(presentationSessionId) ?? []) {
-      if (!socket.closed) socket.observer.onCard(event);
-    }
-    return { outcome: "APPLIED" };
-  }
-
-  projectCard(presentationSessionId: string, event: PublicCardEvent): boolean {
-    return this.projectCardResult(presentationSessionId, event).outcome === "APPLIED";
-  }
-
   snapshot(audienceDisplaySessionId: string, nowMs: number): AudienceProjectionSnapshot | null {
     const projection = Array.from(this.#store.projections.values()).find(
       (candidate) => candidate.displaySession.audienceDisplaySessionId === audienceDisplaySessionId,
     );
     if (projection === undefined || nowMs >= projection.displaySession.expiresAtMs) return null;
-    const retainedTombstones = Array.from(projection.tombstones.values()).filter(
-      (event) => nowMs - event.occurredAtMs <= this.#tombstoneRetentionMs,
-    );
-    const earliestRetained = retainedTombstones
-      .map((event) => revisionValue(event.publicCardRevision, "pcr_") ?? 0)
-      .reduce((minimum, revision) => Math.min(minimum, revision), Number.POSITIVE_INFINITY);
-    const watermark = Number.isFinite(earliestRetained) ? Math.max(0, earliestRetained - 1) : 0;
     const absoluteState = {
       role: "PUBLIC_STAGE" as const,
       presentationSessionId: projection.binding.presentationSessionId,
       presentationSessionEpoch: projection.binding.presentationSessionEpoch,
       displayBindingEpoch: projection.binding.displayBindingEpoch,
       publicPlaybackRevision: projection.publicPlaybackRevision,
-      publicCardRevision: projection.publicCardRevision,
+      publicCardRevision: "pcr_0",
       publicationPolicyVersion: projection.publicationPolicyVersion,
       deck: projection.deck,
       occurrence: projection.occurrence,
       blackout: projection.blackout,
-      cards: Array.from(projection.cards.values()).filter(
-        (card) =>
-          card.mode !== "LIVE" ||
-          (card.leaseExpiresAtMs !== undefined &&
-            card.leaseExpiresAtMs !== null &&
-            nowMs < card.leaseExpiresAtMs &&
-            card.liveBinding !== undefined &&
-            projection.liveDisplayBindingEpochs.get(card.projectionId) ===
-              projection.binding.displayBindingEpoch &&
-            card.liveBinding.presentationSessionEpoch ===
-              projection.binding.presentationSessionEpoch &&
-            card.liveBinding.displayBindingEpoch === projection.binding.displayBindingEpoch &&
-            card.publicationPolicyVersion === projection.publicationPolicyVersion &&
-            card.cardVersion === card.liveBinding.cardVersion &&
-            card.liveBinding.publicSlideOccurrence.publicSlideKey ===
-              projection.occurrence.publicSlideKey &&
-            card.liveBinding.publicSlideOccurrence.occurrenceSeq ===
-              projection.occurrence.occurrenceSeq),
-      ),
-      tombstones: retainedTombstones,
-      tombstoneWatermark: `pcr_${watermark}`,
+      cards: [] as const,
+      tombstones: [] as const,
+      tombstoneWatermark: "pcr_0",
       tombstoneRetentionMs: this.#tombstoneRetentionMs,
     };
     const stateHash = new Bun.CryptoHasher("sha256")

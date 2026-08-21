@@ -143,7 +143,7 @@ describe("Stage network event and receipt channel", () => {
     await reader.cancel();
   });
 
-  test("delivers card tombstones and closes the old channel on binding takeover", async () => {
+  test("delivers only playback and closes the old channel on binding takeover", async () => {
     const { gateway, session } = boundGateway();
     const handler = createProjectionGatewayHandler(
       parseProjectionGatewayConfig({ STAGE_ORIGIN: origin }),
@@ -165,20 +165,18 @@ describe("Stage network event and receipt channel", () => {
     );
     const reader = stream.body?.getReader();
     if (reader === undefined) throw new Error("SSE response has no body");
-    gateway.projectCard("ps_alpha", {
-      projectionId: "projection_alpha",
-      status: "RETRACTED",
-      publicCardRevision: "pcr_1",
-      occurredAtMs: 1_003,
-    });
-    expect(await nextServerEvent(reader)).toEqual({
-      kind: "CARD",
-      payload: {
-        projectionId: "projection_alpha",
-        status: "RETRACTED",
-        publicCardRevision: "pcr_1",
-        occurredAtMs: 1_003,
-      },
+    expect(
+      gateway.projectPlayback("ps_alpha", {
+        commandId: "cmd_before_rebind",
+        displayBindingEpoch: "dbe_1",
+        acceptedControlRevision: "cr_1",
+        occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 2 },
+        blackout: false,
+      }),
+    ).toBe(true);
+    expect(await nextServerEvent(reader)).toMatchObject({
+      kind: "PLAYBACK",
+      payload: { commandId: "cmd_before_rebind" },
     });
 
     const join = gateway.createDisplayJoin(

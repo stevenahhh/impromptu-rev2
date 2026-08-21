@@ -56,13 +56,8 @@ function clientWithSlide(imageUrl: string, runtime = false): StageSessionClient 
       },
     ],
     publicPlaybackRevision: "pbr_0",
-    publicationPolicyVersion: null,
     blackout: false,
     occurrence: { publicSlideKey, occurrenceSeq: 1 },
-    cards: [],
-    publicCardRevision: "pcr_0",
-    tombstoneWatermark: "pcr_0",
-    tombstoneRetentionMs: 60_000,
   };
   return {
     async createJoin() {

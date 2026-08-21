@@ -7,7 +7,6 @@ import { httpOutcome, type JsonLogger, type MetricsRegistry } from "./observabil
 import type {
   PlaybackProjectionInput,
   PreparedEvidenceProjectionGateway,
-  PublicCardEvent,
   StageSocket,
 } from "./prepared-evidence.ts";
 import { clientIpKey, type RateLimiter } from "./rate-limit.ts";
@@ -241,136 +240,6 @@ function playbackEvent(value: unknown): PlaybackProjectionInput | null {
     : null;
 }
 
-function cardEvent(value: unknown): PublicCardEvent | null {
-  if (!isRecord(value) || typeof value.projectionId !== "string") return null;
-  if (
-    (value.status === "RETRACTED" || value.status === "EXPIRED") &&
-    hasOnlyKeys(value, ["projectionId", "status", "publicCardRevision", "occurredAtMs"]) &&
-    typeof value.publicCardRevision === "string" &&
-    typeof value.occurredAtMs === "number"
-  ) {
-    return {
-      projectionId: value.projectionId,
-      status: value.status,
-      publicCardRevision: value.publicCardRevision,
-      occurredAtMs: value.occurredAtMs,
-    };
-  }
-  if (
-    value.status !== "PUBLISHED" ||
-    !hasOnlyKeys(value, [
-      "projectionId",
-      "status",
-      "mode",
-      "leaseExpiresAtMs",
-      "publicationPolicyVersion",
-      "cardVersion",
-      "liveBinding",
-      "offlinePackage",
-      "claim",
-      "supportSummary",
-      "sourceLabel",
-      "publishedAtMs",
-      "expiresAtMs",
-      "publicCardRevision",
-      "deckVersion",
-      "manifestHash",
-      "occurrence",
-    ]) ||
-    !isRecord(value.occurrence) ||
-    !hasOnlyKeys(value.occurrence, ["publicSlideKey", "occurrenceSeq"]) ||
-    (isRecord(value.liveBinding) &&
-      (!hasOnlyKeys(value.liveBinding, [
-        "presentationSessionEpoch",
-        "displayBindingEpoch",
-        "publicSlideOccurrence",
-        "publicationPolicyVersion",
-        "cardVersion",
-      ]) ||
-        !isRecord(value.liveBinding.publicSlideOccurrence) ||
-        !hasOnlyKeys(value.liveBinding.publicSlideOccurrence, [
-          "publicSlideKey",
-          "occurrenceSeq",
-        ]))) ||
-    (isRecord(value.offlinePackage) &&
-      !hasOnlyKeys(value.offlinePackage, [
-        "offlineDisplayAllowed",
-        "localExpiresAtMs",
-        "signature",
-      ]))
-  ) {
-    return null;
-  }
-  return typeof value.claim === "string" &&
-    typeof value.supportSummary === "string" &&
-    typeof value.sourceLabel === "string" &&
-    typeof value.publishedAtMs === "number" &&
-    (typeof value.expiresAtMs === "number" || value.expiresAtMs === null) &&
-    typeof value.publicCardRevision === "string" &&
-    typeof value.deckVersion === "string" &&
-    typeof value.manifestHash === "string" &&
-    typeof value.occurrence.publicSlideKey === "string" &&
-    typeof value.occurrence.occurrenceSeq === "number"
-    ? {
-        projectionId: value.projectionId,
-        status: value.status,
-        ...(value.mode === "CURATED" || value.mode === "LIVE" ? { mode: value.mode } : {}),
-        ...(typeof value.leaseExpiresAtMs === "number" || value.leaseExpiresAtMs === null
-          ? { leaseExpiresAtMs: value.leaseExpiresAtMs }
-          : {}),
-        ...(typeof value.publicationPolicyVersion === "string"
-          ? { publicationPolicyVersion: value.publicationPolicyVersion }
-          : {}),
-        ...(typeof value.cardVersion === "string" ? { cardVersion: value.cardVersion } : {}),
-        ...(isRecord(value.liveBinding) &&
-        typeof value.liveBinding.presentationSessionEpoch === "string" &&
-        typeof value.liveBinding.displayBindingEpoch === "string" &&
-        isRecord(value.liveBinding.publicSlideOccurrence) &&
-        typeof value.liveBinding.publicSlideOccurrence.publicSlideKey === "string" &&
-        typeof value.liveBinding.publicSlideOccurrence.occurrenceSeq === "number" &&
-        typeof value.liveBinding.publicationPolicyVersion === "string" &&
-        typeof value.liveBinding.cardVersion === "string"
-          ? {
-              liveBinding: {
-                presentationSessionEpoch: value.liveBinding.presentationSessionEpoch,
-                displayBindingEpoch: value.liveBinding.displayBindingEpoch,
-                publicSlideOccurrence: {
-                  publicSlideKey: value.liveBinding.publicSlideOccurrence.publicSlideKey,
-                  occurrenceSeq: value.liveBinding.publicSlideOccurrence.occurrenceSeq,
-                },
-                publicationPolicyVersion: value.liveBinding.publicationPolicyVersion,
-                cardVersion: value.liveBinding.cardVersion,
-              },
-            }
-          : {}),
-        ...(isRecord(value.offlinePackage) &&
-        typeof value.offlinePackage.offlineDisplayAllowed === "boolean" &&
-        typeof value.offlinePackage.localExpiresAtMs === "number" &&
-        typeof value.offlinePackage.signature === "string"
-          ? {
-              offlinePackage: {
-                offlineDisplayAllowed: value.offlinePackage.offlineDisplayAllowed,
-                localExpiresAtMs: value.offlinePackage.localExpiresAtMs,
-                signature: value.offlinePackage.signature,
-              },
-            }
-          : {}),
-        claim: value.claim,
-        supportSummary: value.supportSummary,
-        sourceLabel: value.sourceLabel,
-        publishedAtMs: value.publishedAtMs,
-        expiresAtMs: value.expiresAtMs,
-        publicCardRevision: value.publicCardRevision,
-        deckVersion: value.deckVersion,
-        manifestHash: value.manifestHash,
-        occurrence: {
-          publicSlideKey: value.occurrence.publicSlideKey,
-          occurrenceSeq: value.occurrence.occurrenceSeq,
-        },
-      }
-    : null;
-}
-
 async function requestBody(request: Request): Promise<Record<string, unknown> | null> {
   try {
     const body: unknown = await request.json();
@@ -388,7 +257,7 @@ function displayCookie(request: Request): string | null {
   return null;
 }
 
-function serverEvent(kind: "PLAYBACK" | "CARD" | "CLOSE", payload: unknown): Uint8Array {
+function serverEvent(kind: "PLAYBACK" | "CLOSE", payload: unknown): Uint8Array {
   return new TextEncoder().encode(`data: ${JSON.stringify({ kind, payload })}\n\n`);
 }
 
@@ -411,7 +280,6 @@ function eventStream(
         audienceDisplaySessionId,
         {
           onPlayback: (event) => controller.enqueue(serverEvent("PLAYBACK", event)),
-          onCard: (event) => controller.enqueue(serverEvent("CARD", event)),
           onClose: (reason) => {
             finish();
             if (!cancelled) {
@@ -503,6 +371,9 @@ export function createProjectionGatewayHandler(
       if (request.headers.get("authorization") !== `Bearer ${dependencies.internalAuthToken}`) {
         return json({ error: "internal_unauthorized" }, 401);
       }
+      if (url.pathname === "/internal/cards") {
+        return json({ error: "stage_cards_disabled" }, 410);
+      }
       const body = await requestBody(request);
       if (body === null) return json({ error: "invalid_request" }, 400);
       if (url.pathname === "/internal/display-bindings") {
@@ -586,20 +457,6 @@ export function createProjectionGatewayHandler(
         );
         if (applied) await dependencies.persist?.();
         return json({ applied }, applied ? 200 : 409);
-      }
-      if (url.pathname === "/internal/cards") {
-        if (!hasOnlyKeys(body, ["presentationSessionId", "event"])) {
-          return json({ error: "invalid_request" }, 400);
-        }
-        const event = cardEvent(body.event);
-        if (typeof body.presentationSessionId !== "string" || event === null) {
-          return json({ error: "invalid_request" }, 400);
-        }
-        const result = dependencies.gateway.projectCardResult(body.presentationSessionId, event);
-        if (result.outcome === "APPLIED") await dependencies.persist?.();
-        return result.outcome === "APPLIED"
-          ? json({ applied: true, outcome: "APPLIED" }, 200)
-          : json({ applied: false, outcome: "REJECTED", reason: result.reason }, 409);
       }
       return json({ error: "not_found" }, 404);
     }

@@ -4,22 +4,11 @@ export interface PublicSlideProjection {
   readonly occurrenceSeq: number;
 }
 
-export interface PublishedAudienceCard {
-  readonly projectionId: string;
-  readonly publicCardRevision: number;
-  readonly state: "PUBLISHED";
-  readonly title: string;
-  readonly body: string;
-  readonly expiresAt: string | null;
-}
-
 export interface PublicProjectionSnapshot {
   readonly presentationSessionEpoch: number;
   readonly displayBindingEpoch: number;
   readonly publicPlaybackRevision: number;
-  readonly publicCardRevision: number;
   readonly slide: PublicSlideProjection;
-  readonly cards: readonly PublishedAudienceCard[];
 }
 
 export interface StageAppliedReceipt {

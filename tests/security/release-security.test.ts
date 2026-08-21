@@ -209,7 +209,7 @@ describe("WP10 release security gate", () => {
           body: JSON.stringify(privateScope),
         }),
       );
-      expect(response.status, name).toBe(400);
+      expect(response.status, name).toBe(path === "/internal/cards" ? 410 : 400);
       await responseText(response);
       rejected += 1;
     }
@@ -301,31 +301,8 @@ describe("WP10 release security gate", () => {
   test("contains a compromised Stage with no private exposure", async () => {
     const gateway = new PreparedEvidenceProjectionGateway();
     const session = bindGateway(gateway);
-    const staleIngress = gateway.projectCardResult("ps_release", {
-      projectionId: "projection_stale_live",
-      status: "PUBLISHED",
-      mode: "LIVE",
-      leaseExpiresAtMs: 3_000,
-      publicationPolicyVersion: "publication-policy-1",
-      cardVersion: "card-version-release-1",
-      liveBinding: {
-        presentationSessionEpoch: "pse_1",
-        displayBindingEpoch: "dbe_0",
-        publicSlideOccurrence: { publicSlideKey: "slide_release", occurrenceSeq: 1 },
-        publicationPolicyVersion: "publication-policy-1",
-        cardVersion: "card-version-release-1",
-      },
-      claim: privateMarker,
-      supportSummary: privateMarker,
-      sourceLabel: privateMarker,
-      publishedAtMs: 1_001,
-      expiresAtMs: 3_000,
-      publicCardRevision: "pcr_1",
-      deckVersion: deck.deckVersion,
-      manifestHash: deck.manifestHash,
-      occurrence: { publicSlideKey: "slide_release", occurrenceSeq: 1 },
-    });
-    expect(staleIngress).toEqual({ outcome: "REJECTED", reason: "STALE_LIVE_BINDING" });
+    expect("projectCard" in gateway).toBe(false);
+    expect("projectCardResult" in gateway).toBe(false);
 
     const forged = structuredClone(
       snapshotProjectionGatewayStore(createProjectionGatewayStore()),
@@ -334,6 +311,19 @@ describe("WP10 release security gate", () => {
     expect(restoreProjectionGatewayStore(forged)).toEqual({ outcome: "INVALID_SNAPSHOT" });
 
     const { publicHandler } = releaseGateways();
+    const cardWrite = await publicHandler(
+      stageRequest("/internal/cards", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${internalToken}` },
+        body: JSON.stringify({
+          presentationSessionId: "ps_release",
+          event: { status: "PUBLISHED", claim: privateMarker },
+        }),
+      }),
+    );
+    expect(cardWrite.status).toBe(410);
+    expect(await responseText(cardWrite)).toBe('{"error":"stage_cards_disabled"}');
+
     const directWrite = await publicHandler(
       stageRequest("/v1/projections/ps_release", {
         method: "POST",
@@ -345,59 +335,34 @@ describe("WP10 release security gate", () => {
     expect(gateway.snapshot(session.audienceDisplaySessionId, 1_002)?.cards).toEqual([]);
   });
 
-  test("restores backup tombstones and cannot resurrect retention-deleted content", () => {
+  test("discards backup cards and tombstones instead of restoring public content", () => {
     const store = createProjectionGatewayStore();
     const gateway = new PreparedEvidenceProjectionGateway(store, { tombstoneRetentionMs: 60_000 });
     const session = bindGateway(gateway);
-    expect(
-      gateway.projectCard("ps_release", {
-        projectionId: "projection_deleted",
-        status: "PUBLISHED",
-        claim: "Public claim",
-        supportSummary: "Public support",
-        sourceLabel: "Public source",
-        publishedAtMs: 1_001,
-        expiresAtMs: null,
-        publicCardRevision: "pcr_1",
-        deckVersion: deck.deckVersion,
-        manifestHash: deck.manifestHash,
-        occurrence: { publicSlideKey: "slide_release", occurrenceSeq: 1 },
-      }),
-    ).toBe(true);
-    expect(
-      gateway.projectCard("ps_release", {
-        projectionId: "projection_deleted",
-        status: "RETRACTED",
-        publicCardRevision: "pcr_2",
-        occurredAtMs: 1_002,
-      }),
-    ).toBe(true);
-    expect(gateway.snapshot(session.audienceDisplaySessionId, 1_003)?.cards).toEqual([]);
+    const backup = snapshotProjectionGatewayStore(store) as {
+      projections: Array<{
+        publicCardRevision: string;
+        cards: unknown[];
+        tombstones: unknown[];
+      }>;
+    };
+    const projection = backup.projections[0];
+    if (projection === undefined) throw new Error("backup fixture missing projection");
+    projection.publicCardRevision = "pcr_2";
+    projection.cards = [{ projectionId: "projection_deleted", claim: "Public claim" }];
+    projection.tombstones = [{ projectionId: "projection_deleted", status: "RETRACTED" }];
 
-    const backup = snapshotProjectionGatewayStore(store);
     const restored = restoreProjectionGatewayStore(structuredClone(backup));
     expect(restored.outcome).toBe("RESTORED");
     if (restored.outcome !== "RESTORED") throw new Error("backup restore failed");
-    const restarted = new PreparedEvidenceProjectionGateway(restored.store, {
+    const snapshot = new PreparedEvidenceProjectionGateway(restored.store, {
       tombstoneRetentionMs: 60_000,
+    }).snapshot(session.audienceDisplaySessionId, 1_003);
+    expect(snapshot).toMatchObject({
+      publicCardRevision: "pcr_0",
+      cards: [],
+      tombstones: [],
+      tombstoneWatermark: "pcr_0",
     });
-    const snapshot = restarted.snapshot(session.audienceDisplaySessionId, 1_003);
-    expect(snapshot?.cards).toEqual([]);
-    expect(snapshot?.tombstones.map((entry) => entry.status)).toEqual(["RETRACTED"]);
-    expect(
-      restarted.projectCardResult("ps_release", {
-        projectionId: "projection_deleted",
-        status: "PUBLISHED",
-        claim: "Resurrection",
-        supportSummary: "Forbidden",
-        sourceLabel: "Forbidden",
-        publishedAtMs: 1_004,
-        expiresAtMs: null,
-        publicCardRevision: "pcr_3",
-        deckVersion: deck.deckVersion,
-        manifestHash: deck.manifestHash,
-        occurrence: { publicSlideKey: "slide_release", occurrenceSeq: 1 },
-      }),
-    ).toEqual({ outcome: "REJECTED", reason: "TERMINAL_PROJECTION" });
   });
 });
