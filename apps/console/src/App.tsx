@@ -20,6 +20,7 @@ import {
   useState,
 } from "react";
 import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation } from "react-router-dom";
+import { CoachingDisplay } from "./coaching-display";
 import { CockpitAudioCapture } from "./cockpit-audio-capture";
 import { type Locale, messages } from "./i18n";
 import {
@@ -61,8 +62,6 @@ function record(value: unknown): Record<string, unknown> | null {
 
 function coachingEventFromServer(input: unknown, sessionOffsetMs: number): unknown {
   const envelope = record(input);
-  if (envelope?.kind === "READY") return { kind: "OPT_IN", enabled: true };
-  if (envelope?.kind === "TERMINAL") return { kind: "OPT_IN", enabled: false };
   if (envelope?.kind !== "TRANSCRIPT") return null;
   const event = record(envelope.event);
   if (event === null) return null;
@@ -103,47 +102,6 @@ function coachingEventFromServer(input: unknown, sessionOffsetMs: number): unkno
       };
     }),
   };
-}
-
-export type CoachingDisplayState = Readonly<{
-  optedIn: boolean;
-  muted: boolean;
-  measurement:
-    | Readonly<{ outcome: "MEASUREMENT_UNAVAILABLE" }>
-    | Readonly<{
-        outcome: "AVAILABLE";
-        currentWordsPerMinute: number;
-        previousWordsPerMinute: number;
-        deltaWordsPerMinute: number;
-      }>;
-  cueCount: number;
-}>;
-
-export function CoachingDisplay({ state }: { readonly state: CoachingDisplayState }) {
-  if (!state.optedIn || state.muted) return null;
-  if (state.measurement.outcome === "MEASUREMENT_UNAVAILABLE") {
-    return <output data-coaching-state="unavailable">측정 불가</output>;
-  }
-  return (
-    <dl data-coaching-state="available">
-      <div>
-        <dt>현재 30초</dt>
-        <dd>{state.measurement.currentWordsPerMinute}</dd>
-      </div>
-      <div>
-        <dt>직전 30초</dt>
-        <dd>{state.measurement.previousWordsPerMinute}</dd>
-      </div>
-      <div>
-        <dt>변화량</dt>
-        <dd>{state.measurement.deltaWordsPerMinute}</dd>
-      </div>
-      <div>
-        <dt>큐 횟수</dt>
-        <dd>{state.cueCount}</dd>
-      </div>
-    </dl>
-  );
 }
 
 type SignUpOutcome = "SUCCESS" | AccountRegistrationFailure;
@@ -855,6 +813,7 @@ function PresentationWorkspacePage() {
   const text = messages(locale);
   const [activeIndex, setActiveIndex] = useState(0);
   const [coachingState, setCoachingState] = useState(createCoachingState);
+  const [wordTimingCapable, setWordTimingCapable] = useState(false);
   const coachingSessionOffsetMs = useRef(0);
   const coachingIdentity =
     activePresentation === null
@@ -873,10 +832,25 @@ function PresentationWorkspacePage() {
   useEffect(() => {
     if (coachingIdentity.length === 0) return;
     coachingSessionOffsetMs.current = 0;
+    setWordTimingCapable(false);
     setCoachingState(createCoachingState());
   }, [coachingIdentity]);
 
+  const onCoachingOptInChange = useCallback((enabled: boolean) => {
+    setCoachingState((state) => reduceCoachingState(state, { kind: "OPT_IN", enabled }).state);
+  }, []);
+
+  const onCoachingMuteChange = useCallback((muted: boolean) => {
+    setCoachingState((state) => reduceCoachingState(state, { kind: "MUTE", muted }).state);
+  }, []);
+
   const onAudioServerEvent = useCallback((input: unknown) => {
+    const envelope = record(input);
+    if (typeof envelope?.wordTimingCapable === "boolean") {
+      setWordTimingCapable(envelope.wordTimingCapable);
+    } else if (envelope?.kind === "TERMINAL") {
+      setWordTimingCapable(false);
+    }
     setCoachingState((state) => {
       const event = coachingEventFromServer(input, coachingSessionOffsetMs.current);
       const reduced = reduceCoachingState(state, event);
@@ -929,7 +903,22 @@ function PresentationWorkspacePage() {
               notice={CAPTURE_NOTICE}
               onServerEvent={onAudioServerEvent}
             />
-            <CoachingDisplay state={coachingState} />
+            <CoachingDisplay
+              state={coachingState}
+              wordTimingCapable={wordTimingCapable}
+              onOptInChange={onCoachingOptInChange}
+              onMuteChange={onCoachingMuteChange}
+              text={{
+                title: text.coachingTitle,
+                optIn: text.coachingOptIn,
+                mute: text.coachingMute,
+                unavailable: text.coachingUnavailable,
+                currentPace: text.coachingCurrentPace,
+                previousPace: text.coachingPreviousPace,
+                delta: text.coachingDelta,
+                cueCount: text.coachingCueCount,
+              }}
+            />
             <EvidencePreparationPanel
               key={`${activePresentation.presentationSessionId}:${activePresentation.deckVersion}:${activePresentation.manifestHash ?? ""}`}
             />

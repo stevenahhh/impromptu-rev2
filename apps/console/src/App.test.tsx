@@ -7,8 +7,10 @@ afterAll(() => GlobalRegistrator.unregister());
 const { act, cleanup, fireEvent, render, within } = await import("@testing-library/react");
 const { MemoryRouter } = await import("react-router-dom");
 
-const { AuthProvider, CoachingDisplay, ConsoleRoutes } = await import("./App");
+const { AuthProvider, ConsoleRoutes } = await import("./App");
+const { CoachingDisplay } = await import("./coaching-display");
 const { messages } = await import("./i18n");
+const { createCoachingState, reduceCoachingState } = await import("@impromptu/state/coaching");
 
 import {
   AccountRegistrationError,
@@ -89,44 +91,133 @@ const workspacePresentation: ActivePresentationView = {
 };
 
 describe("Console route boundary", () => {
-  test("renders coaching metrics only while opted in and unmuted", () => {
-    const unavailable = {
-      optedIn: true,
-      muted: false,
-      measurement: { outcome: "MEASUREMENT_UNAVAILABLE" as const },
-      cueCount: 0,
+  test("gates neutral coaching metrics by explicit opt-in, mute, words, and capability", () => {
+    const text = {
+      title: "코칭 지표",
+      optIn: "코칭 지표 표시",
+      mute: "코칭 표시 음소거",
+      unavailable: "측정 불가",
+      currentPace: "현재 30초",
+      previousPace: "직전 30초",
+      delta: "변화량",
+      cueCount: "큐 횟수",
     };
-    const view = render(<CoachingDisplay state={unavailable} />);
-    expect(document.querySelector("[data-coaching-state='unavailable']")?.textContent).toBe(
-      "측정 불가",
+    const apply = (state: ReturnType<typeof createCoachingState>, event: unknown) =>
+      reduceCoachingState(state, event).state;
+    let measured = apply(createCoachingState(), { kind: "OPT_IN", enabled: true });
+    measured = apply(measured, {
+      kind: "FINAL",
+      sessionGeneration: 1,
+      sequence: 1,
+      segmentId: "segment_previous",
+      finalSegmentId: "final_previous",
+      finalizedAtSessionMs: 45_000,
+      words: [
+        { text: "직전", startSessionMs: 34_800, endSessionMs: 35_000 },
+        { text: "구간", startSessionMs: 39_800, endSessionMs: 40_000 },
+      ],
+    });
+    measured = apply(measured, {
+      kind: "FINAL",
+      sessionGeneration: 1,
+      sequence: 2,
+      segmentId: "segment_current",
+      finalSegmentId: "final_current",
+      finalizedAtSessionMs: 90_000,
+      words: [
+        { text: "현재", startSessionMs: 64_800, endSessionMs: 65_000 },
+        { text: "고정", startSessionMs: 69_800, endSessionMs: 70_000 },
+        { text: "단어", startSessionMs: 79_800, endSessionMs: 80_000 },
+        { text: "fixture", startSessionMs: 89_800, endSessionMs: 90_000 },
+      ],
+    });
+
+    const optInChanges: boolean[] = [];
+    const muteChanges: boolean[] = [];
+    const noChange = () => {};
+    const view = render(
+      <CoachingDisplay
+        state={createCoachingState()}
+        text={text}
+        wordTimingCapable
+        onOptInChange={(enabled) => optInChanges.push(enabled)}
+        onMuteChange={(muted) => muteChanges.push(muted)}
+      />,
     );
+    expect(document.querySelectorAll("[data-coaching-metric]")).toHaveLength(0);
+    const optIn = within(document.body).getByRole("checkbox", { name: text.optIn });
+    expect(optIn.tabIndex).toBeGreaterThanOrEqual(0);
+    fireEvent.click(optIn);
+    expect(optInChanges).toEqual([true]);
 
     view.rerender(
       <CoachingDisplay
-        state={{
-          optedIn: true,
-          muted: false,
-          measurement: {
-            outcome: "AVAILABLE",
-            currentWordsPerMinute: 112,
-            previousWordsPerMinute: 104,
-            deltaWordsPerMinute: 8,
-          },
-          cueCount: 3,
-        }}
+        state={measured}
+        text={text}
+        wordTimingCapable
+        onOptInChange={noChange}
+        onMuteChange={(muted) => muteChanges.push(muted)}
       />,
     );
-    expect(document.querySelector("[data-coaching-state='available']")?.textContent).toContain(
-      "현재 30초112",
+    expect(document.querySelector("[data-coaching-metric='current']")?.textContent).toBe("8 WPM");
+    expect(document.querySelector("[data-coaching-metric='previous']")?.textContent).toBe("4 WPM");
+    expect(document.querySelector("[data-coaching-metric='delta']")?.textContent).toBe("+4 WPM");
+    expect(document.querySelector("[data-coaching-metric='cue-count']")?.textContent).toBe("2");
+    expect(document.querySelector("[aria-live='polite']")?.getAttribute("aria-atomic")).toBe(
+      "true",
     );
-    expect(document.querySelector("[data-coaching-state='available']")?.textContent).toContain(
-      "직전 30초104",
-    );
+    fireEvent.click(within(document.body).getByRole("checkbox", { name: text.mute }));
+    expect(muteChanges).toEqual([true]);
 
-    view.rerender(<CoachingDisplay state={{ ...unavailable, optedIn: false }} />);
-    expect(document.querySelector("[data-coaching-state]")).toBeNull();
-    view.rerender(<CoachingDisplay state={{ ...unavailable, muted: true }} />);
-    expect(document.querySelector("[data-coaching-state]")).toBeNull();
+    view.rerender(
+      <CoachingDisplay
+        state={{ ...measured, muted: true }}
+        text={text}
+        wordTimingCapable
+        onOptInChange={noChange}
+        onMuteChange={noChange}
+      />,
+    );
+    expect(document.querySelectorAll("[data-coaching-metric]")).toHaveLength(0);
+
+    view.rerender(
+      <CoachingDisplay
+        state={measured}
+        text={text}
+        wordTimingCapable={false}
+        onOptInChange={noChange}
+        onMuteChange={noChange}
+      />,
+    );
+    expect(document.querySelectorAll("[data-coaching-state]")).toHaveLength(1);
+    expect(document.querySelector("[data-coaching-state='unavailable']")?.textContent).toBe(
+      "측정 불가",
+    );
+    expect(document.querySelectorAll("[data-coaching-metric]")).toHaveLength(0);
+
+    const noWords = apply(apply(createCoachingState(), { kind: "OPT_IN", enabled: true }), {
+      kind: "FINAL",
+      sessionGeneration: 1,
+      sequence: 1,
+      segmentId: "segment_empty",
+      finalSegmentId: "final_empty",
+      finalizedAtSessionMs: 30_000,
+      words: [],
+    });
+    view.rerender(
+      <CoachingDisplay
+        state={noWords}
+        text={text}
+        wordTimingCapable
+        onOptInChange={noChange}
+        onMuteChange={noChange}
+      />,
+    );
+    expect(document.querySelectorAll("[data-coaching-state]")).toHaveLength(1);
+    expect(document.querySelector("[data-coaching-state='unavailable']")?.textContent).toBe(
+      "측정 불가",
+    );
+    expect(document.querySelectorAll("[data-coaching-metric]")).toHaveLength(0);
   });
 
   test("keeps locale catalogs structurally complete", () => {
