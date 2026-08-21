@@ -5,11 +5,11 @@
  * ingestion CLI. Runs
  *
  *   uv run --project <ingestionProject> impromptu-ingestion render <source> --output-dir <dir>
+ *   uv run --project <ingestionProject> impromptu-ingestion ingest <source> --output <dir>/ingestion.json
  *
- * as an argv array (never a shell string), passes the caller's AbortSignal to
- * a killable Bun.spawn process, captures bounded stdout/stderr, requires exit
- * code 0, and parses <outputDir>/render.json with a closed schema. Every
- * failure is a typed RenderSubprocessResult; this adapter never throws.
+ * as argv arrays (never shell strings), under one caller-owned AbortSignal. It
+ * validates both manifests before returning so the upload worker can promote
+ * the render and structural output as one immutable artifact.
  */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -29,7 +29,11 @@ export type RenderSubprocessFailureCode =
   | "aborted"
   | "render_failed"
   | "render_output_missing"
-  | "render_manifest_invalid";
+  | "render_manifest_invalid"
+  | "ingestion_failed"
+  | "ingestion_output_missing"
+  | "ingestion_manifest_invalid"
+  | "manifest_mismatch";
 
 /** The spawn seam, structurally compatible with Bun.spawn piped output. */
 export interface RenderSpawnOptions {
@@ -207,6 +211,124 @@ export const RenderJsonSchema = z
 
 export type RenderJson = z.infer<typeof RenderJsonSchema>;
 
+const PositionedElementShape = {
+  element_id: z.string().min(1).max(128),
+  x: z.number().nonnegative(),
+  y: z.number().nonnegative(),
+  width: z.number().nonnegative(),
+  height: z.number().nonnegative(),
+};
+
+const StructuralElementSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      ...PositionedElementShape,
+      kind: z.literal("text"),
+      text: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      ...PositionedElementShape,
+      kind: z.literal("table"),
+      rows: z.array(z.array(z.string())),
+    })
+    .strict(),
+  z
+    .object({
+      ...PositionedElementShape,
+      kind: z.literal("image"),
+      content_sha256: Sha256Schema,
+      media_type: z.string().regex(/^image\/[a-z0-9.+-]+$/),
+      pixel_width: z.number().int().positive().nullable(),
+      pixel_height: z.number().int().positive().nullable(),
+    })
+    .strict(),
+  z
+    .object({
+      ...PositionedElementShape,
+      kind: z.literal("chart"),
+      chart_type: z.string(),
+      categories: z.array(z.string()),
+      series: z.array(
+        z
+          .object({
+            name: z.string(),
+            values: z.array(z.string()),
+          })
+          .strict(),
+      ),
+    })
+    .strict(),
+]);
+
+const StructuralSlideSchema = z
+  .object({
+    slide_key: SlideKeySchema,
+    source_index: z.number().int().positive(),
+    source_id: z.string().min(1).max(128),
+    width_points: z.number().positive(),
+    height_points: z.number().positive(),
+    elements: z.array(StructuralElementSchema),
+    warnings: z.array(
+      z
+        .object({
+          code: ErrorCodeSchema,
+          message: z.string(),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+
+export const IngestionJsonSchema = z
+  .object({
+    status: z.literal("completed"),
+    job_id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$/),
+    manifest_hash: Sha256Schema,
+    manifest: z
+      .object({
+        schema_version: z.literal("1"),
+        deck_id: DeckIdSchema,
+        source_sha256: Sha256Schema,
+        source_kind: z.enum(["pptx", "pdf"]),
+        adapter_version: z.string().min(1).max(64),
+        slides: z.array(StructuralSlideSchema).min(1),
+        render_boundary: z
+          .object({
+            status: z.literal("not_performed"),
+            renderer: z.null(),
+            fidelity_verified: z.literal(false),
+            reason: z.string(),
+          })
+          .strict(),
+      })
+      .strict()
+      .superRefine((manifest, context) => {
+        for (const [offset, slide] of manifest.slides.entries()) {
+          if (slide.source_index !== offset + 1) {
+            context.addIssue({
+              code: "custom",
+              path: ["slides", offset, "source_index"],
+              message: "slides must have contiguous one-based source indices",
+            });
+          }
+        }
+        if (
+          new Set(manifest.slides.map((slide) => slide.slide_key)).size !== manifest.slides.length
+        ) {
+          context.addIssue({
+            code: "custom",
+            path: ["slides"],
+            message: "slide keys must be unique",
+          });
+        }
+      }),
+  })
+  .strict();
+
+export type IngestionJson = z.infer<typeof IngestionJsonSchema>;
+
 function defaultSpawn(options: RenderSpawnOptions): RenderSpawnedProcess {
   const process = Bun.spawn<"ignore", "pipe", "pipe">({
     cmd: [...options.cmd],
@@ -297,25 +419,20 @@ export function createDeckRenderSubprocess(
   const spawn = options.spawn ?? defaultSpawn;
   const limit = Math.max(0, options.maxCapturedBytes ?? DEFAULT_RENDER_CAPTURE_BYTES);
 
-  async function run(
-    request: RenderSubprocessRequest,
+  async function execute(
+    cmd: readonly string[],
     signal: AbortSignal,
-  ): Promise<RenderSubprocessResult> {
+    operation: "render" | "ingestion",
+  ): Promise<
+    | { readonly ok: true; readonly stdout: CapturedOutput; readonly stderr: CapturedOutput }
+    | { readonly ok: false; readonly result: RenderSubprocessResult }
+  > {
     if (signal.aborted) {
-      return { ok: false, code: "aborted", message: "render subprocess was already aborted" };
+      return {
+        ok: false,
+        result: { ok: false, code: "aborted", message: `${operation} subprocess was aborted` },
+      };
     }
-
-    const cmd = [
-      "uv",
-      "run",
-      "--project",
-      options.ingestionProject,
-      "impromptu-ingestion",
-      "render",
-      request.sourcePath,
-      "--output-dir",
-      request.outputDir,
-    ];
 
     let process: RenderSpawnedProcess;
     try {
@@ -330,22 +447,24 @@ export function createDeckRenderSubprocess(
     } catch (error) {
       return {
         ok: false,
-        code: "spawn_failed",
-        message: `render subprocess could not start: ${errorMessage(error)}`,
+        result: {
+          ok: false,
+          code: "spawn_failed",
+          message: `${operation} subprocess could not start: ${errorMessage(error)}`,
+        },
       };
     }
 
-    let signalAborted!: () => void;
+    let resolveAbort!: () => void;
     const aborted = new Promise<void>((resolve) => {
-      signalAborted = resolve;
+      resolveAbort = resolve;
     });
-    signal.addEventListener("abort", () => signalAborted(), { once: true });
-
-    const [stdout, stderr] = await Promise.all([
+    const onAbort = () => resolveAbort();
+    signal.addEventListener("abort", onAbort, { once: true });
+    const captures = Promise.all([
       captureBounded(process.stdout, limit),
       captureBounded(process.stderr, limit),
     ]);
-
     const outcome = await Promise.race([
       process.exited.then(
         (code) => ({ kind: "exited" as const, code }),
@@ -353,63 +472,175 @@ export function createDeckRenderSubprocess(
       ),
       aborted.then(() => ({ kind: "aborted" as const })),
     ]);
+    signal.removeEventListener("abort", onAbort);
 
     if (outcome.kind === "aborted") {
       process.kill();
       await process.exited.catch(() => 0);
+      await captures;
       return {
         ok: false,
-        code: "aborted",
-        message: "render subprocess was aborted before completion",
+        result: {
+          ok: false,
+          code: "aborted",
+          message: `${operation} subprocess was aborted before completion`,
+        },
       };
     }
 
+    const [stdout, stderr] = await captures;
     if (outcome.code !== 0) {
       const stderrText = describeCapture(stderr, limit);
       const stdoutText = describeCapture(stdout, limit);
       return {
         ok: false,
-        code: "render_failed",
-        message:
-          stderrText.length > 0
-            ? `renderer exited with code ${outcome.code}; stderr: ${stderrText}`
-            : `renderer exited with code ${outcome.code}; stdout: ${stdoutText}`,
+        result: {
+          ok: false,
+          code: operation === "render" ? "render_failed" : "ingestion_failed",
+          message:
+            stderrText.length > 0
+              ? `${operation} exited with code ${outcome.code}; stderr: ${stderrText}`
+              : `${operation} exited with code ${outcome.code}; stdout: ${stdoutText}`,
+        },
       };
     }
+    return { ok: true, stdout, stderr };
+  }
 
-    const manifestPath = join(request.outputDir, "render.json");
+  async function readJson(
+    path: string,
+    missingCode: "render_output_missing" | "ingestion_output_missing",
+    invalidCode: "render_manifest_invalid" | "ingestion_manifest_invalid",
+    label: string,
+  ): Promise<
+    | { readonly ok: true; readonly value: unknown }
+    | {
+        readonly ok: false;
+        readonly result: Extract<RenderSubprocessResult, { readonly ok: false }>;
+      }
+  > {
     let payload: string;
     try {
-      payload = await readFile(manifestPath, "utf8");
+      payload = await readFile(path, "utf8");
     } catch (error) {
       return {
         ok: false,
-        code: "render_output_missing",
-        message: `renderer exited 0 but ${manifestPath} could not be read: ${errorMessage(error)}`,
+        result: {
+          ok: false,
+          code: missingCode,
+          message: `${label} subprocess exited 0 but ${path} could not be read: ${errorMessage(error)}`,
+        },
       };
     }
-
-    let parsed: unknown;
     try {
-      parsed = JSON.parse(payload);
+      return { ok: true, value: JSON.parse(payload) };
     } catch (error) {
       return {
         ok: false,
-        code: "render_manifest_invalid",
-        message: `render.json is not valid JSON: ${errorMessage(error)}`,
+        result: {
+          ok: false,
+          code: invalidCode,
+          message: `${label} output is not valid JSON: ${errorMessage(error)}`,
+        },
       };
     }
+  }
 
-    const validated = RenderJsonSchema.safeParse(parsed);
-    if (!validated.success) {
+  async function run(
+    request: RenderSubprocessRequest,
+    signal: AbortSignal,
+  ): Promise<RenderSubprocessResult> {
+    const render = await execute(
+      [
+        "uv",
+        "run",
+        "--project",
+        options.ingestionProject,
+        "impromptu-ingestion",
+        "render",
+        request.sourcePath,
+        "--output-dir",
+        request.outputDir,
+      ],
+      signal,
+      "render",
+    );
+    if (!render.ok) return render.result;
+
+    const renderPayload = await readJson(
+      join(request.outputDir, "render.json"),
+      "render_output_missing",
+      "render_manifest_invalid",
+      "render",
+    );
+    if (!renderPayload.ok) return renderPayload.result;
+    const validatedRender = RenderJsonSchema.safeParse(renderPayload.value);
+    if (!validatedRender.success) {
       return {
         ok: false,
         code: "render_manifest_invalid",
-        message: `render.json is not a valid render manifest: ${zodSummary(validated.error)}`,
+        message: `render.json is not a valid render manifest: ${zodSummary(validatedRender.error)}`,
       };
     }
 
-    return { ok: true, renderManifest: validated.data };
+    const ingestionPath = join(request.outputDir, "ingestion.json");
+    const ingestion = await execute(
+      [
+        "uv",
+        "run",
+        "--project",
+        options.ingestionProject,
+        "impromptu-ingestion",
+        "ingest",
+        request.sourcePath,
+        "--job-id",
+        "production_ingest",
+        "--output",
+        ingestionPath,
+      ],
+      signal,
+      "ingestion",
+    );
+    if (!ingestion.ok) return ingestion.result;
+
+    const ingestionPayload = await readJson(
+      ingestionPath,
+      "ingestion_output_missing",
+      "ingestion_manifest_invalid",
+      "ingestion",
+    );
+    if (!ingestionPayload.ok) return ingestionPayload.result;
+    const validatedIngestion = IngestionJsonSchema.safeParse(ingestionPayload.value);
+    if (!validatedIngestion.success) {
+      return {
+        ok: false,
+        code: "ingestion_manifest_invalid",
+        message: `ingestion.json is not a valid structural manifest: ${zodSummary(validatedIngestion.error)}`,
+      };
+    }
+
+    const renderManifest = validatedRender.data;
+    const ingestionManifest = validatedIngestion.data;
+    const renderIndices = renderManifest.slides.map((slide) => slide.source_index);
+    const structuralIndices = ingestionManifest.manifest.slides.map((slide) => slide.source_index);
+    if (
+      renderManifest.deck_id !== ingestionManifest.manifest.deck_id ||
+      renderManifest.deck_id !== `deck_${ingestionManifest.manifest.source_sha256}` ||
+      renderIndices.length !== structuralIndices.length ||
+      renderIndices.some((sourceIndex, offset) => sourceIndex !== structuralIndices[offset])
+    ) {
+      return {
+        ok: false,
+        code: "manifest_mismatch",
+        message: "render.json and ingestion.json do not describe the same ordered source deck",
+      };
+    }
+
+    return {
+      ok: true,
+      renderManifest,
+      ingestionManifest,
+    };
   }
 
   return { run };

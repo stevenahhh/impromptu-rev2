@@ -71,7 +71,7 @@ function fakeSql() {
 }
 
 describe("PostgreSQL deck corpus retrieval", () => {
-  test("extracts SVG text, embeds chunks once, persists them, and ranks only the requested deck", async () => {
+  test("indexes structural manifest text for a PNG-rendered PDF and ranks only the requested deck", async () => {
     const root = mkdtempSync(join(tmpdir(), "deck-corpus-"));
     roots.push(root);
     const artifact = join(root, "artifact-1");
@@ -86,7 +86,7 @@ describe("PostgreSQL deck corpus retrieval", () => {
         {
           slide_key: slideKey,
           source_index: 1,
-          relative_path: "slides/slide-1.svg",
+          relative_path: "slides/slide-1.png",
           content_sha256: slideHash,
           width_points: 960,
           height_points: 540,
@@ -101,8 +101,46 @@ describe("PostgreSQL deck corpus retrieval", () => {
     };
     writeFileSync(join(artifact, "render.json"), JSON.stringify(manifest));
     writeFileSync(
-      join(artifact, "slides/slide-1.svg"),
-      '<svg xmlns="http://www.w3.org/2000/svg"><text>&lt;date/time&gt; Actual revenue &amp; margin 올리고 . 연결하고 . PPTX / PDF &lt;footer&gt; &lt;number&gt;</text></svg>',
+      join(artifact, "ingestion.json"),
+      JSON.stringify({
+        status: "completed",
+        job_id: "production_ingest",
+        manifest_hash: "d".repeat(64),
+        manifest: {
+          schema_version: "1",
+          deck_id: manifest.deck_id,
+          source_sha256: deckHash,
+          source_kind: "pdf",
+          adapter_version: "pymupdf-structural-v2",
+          slides: [
+            {
+              slide_key: slideKey,
+              source_index: 1,
+              source_id: "page:1",
+              width_points: 960,
+              height_points: 540,
+              elements: [
+                {
+                  kind: "text",
+                  element_id: "text:1:1:1",
+                  x: 0,
+                  y: 0,
+                  width: 100,
+                  height: 20,
+                  text: "<date/time> Actual revenue & margin 올리고 . 연결하고 . PPTX / PDF <footer> <number>",
+                },
+              ],
+              warnings: [],
+            },
+          ],
+          render_boundary: {
+            status: "not_performed",
+            renderer: null,
+            fidelity_verified: false,
+            reason: "Structural extraction only",
+          },
+        },
+      }),
     );
     const manifestHash = createHash("sha256")
       .update(`render-manifest:${manifest.deck_id}:${slideHash}`)
@@ -164,6 +202,7 @@ describe("PostgreSQL deck corpus retrieval", () => {
 
     expect(embedded).toEqual(["Actual revenue & margin 올리고. 연결하고. PPTX/PDF"]);
     expect(database.rows).toHaveLength(1);
+    expect(database.rows[0]?.source_revision).toBe(deckHash);
     expect(database.queries).toContainEqual(expect.stringContaining("?::double precision[]"));
     expect(indexEvents).toEqual([
       expect.objectContaining({ outcome: "INDEXED", reason: "COMPLETED", indexedChunkCount: 1 }),

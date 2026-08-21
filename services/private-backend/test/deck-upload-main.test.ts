@@ -202,26 +202,37 @@ function baseEnvironment(fixtureInput: MainFixture): Record<string, string> {
   };
 }
 
-/** A fake `uv` that stands in for `uv run --project ... impromptu-ingestion render`. */
+/** A fake `uv` that stands in for both production ingestion CLI invocations. */
 function installFakeUv(binDir: string): void {
   const script = `#!/usr/bin/env bash
 set -euo pipefail
+command=""
 out=""
 source_path=""
 prev=""
 for arg in "$@"; do
-  if [ "$prev" = "--output-dir" ]; then out="$arg"; fi
-  if [ "$prev" = "render" ]; then source_path="$arg"; fi
+  if [ "$arg" = "render" ] || [ "$arg" = "ingest" ]; then command="$arg"; fi
+  if [ "$prev" = "--output-dir" ] || [ "$prev" = "--output" ]; then out="$arg"; fi
+  if [ "$prev" = "render" ] || [ "$prev" = "ingest" ]; then source_path="$arg"; fi
   prev="$arg"
 done
-if [ -z "$out" ]; then echo "fake-uv: --output-dir missing" >&2; exit 2; fi
-if [ -z "$source_path" ]; then echo "fake-uv: render source missing" >&2; exit 2; fi
-printf '%s\n' "$source_path" >> "$FAKE_UV_SOURCE_LOG"
-mkdir -p "$out/slides"
-cat > "$out/render.json" <<'JSON'
+if [ -z "$out" ]; then echo "fake-uv: output missing" >&2; exit 2; fi
+if [ -z "$source_path" ]; then echo "fake-uv: source missing" >&2; exit 2; fi
+if [ "$command" = "render" ]; then
+  printf '%s\n' "$source_path" >> "$FAKE_UV_SOURCE_LOG"
+  mkdir -p "$out/slides"
+  cat > "$out/render.json" <<'JSON'
 {"deck_id":"deck_${"a".repeat(64)}","renderer":{"name":"libreoffice","version":"7.6.5.2"},"slides":[{"slide_key":"slide_${"b".repeat(64)}","source_index":1,"relative_path":"slides/slide-1.svg","content_sha256":"${"c".repeat(64)}","width_points":960,"height_points":540}],"assets":[],"fonts":[],"timelines":[],"mapping_issues":[],"animation_eligible":true,"ineligible_reason":null}
 JSON
-printf '%s' '<svg xmlns="http://www.w3.org/2000/svg"/>' > "$out/slides/slide-1.svg"
+  printf '%s' '<svg xmlns="http://www.w3.org/2000/svg"/>' > "$out/slides/slide-1.svg"
+elif [ "$command" = "ingest" ]; then
+  cat > "$out" <<'JSON'
+{"status":"completed","job_id":"production_ingest","manifest_hash":"${"d".repeat(64)}","manifest":{"schema_version":"1","deck_id":"deck_${"a".repeat(64)}","source_sha256":"${"a".repeat(64)}","source_kind":"pptx","adapter_version":"python-pptx-structural-v1","slides":[{"slide_key":"slide_${"e".repeat(64)}","source_index":1,"source_id":"slide:256","width_points":960,"height_points":540,"elements":[],"warnings":[]}],"render_boundary":{"status":"not_performed","renderer":null,"fidelity_verified":false,"reason":"Structural extraction only"}}}
+JSON
+else
+  echo "fake-uv: unsupported command" >&2
+  exit 2
+fi
 exit 0
 `;
   const path = join(binDir, "uv");
@@ -389,6 +400,10 @@ describe("production main deck upload wiring", () => {
       readFileSync(join(fixtureInput.artifactRoot, artifactId, "render.json"), "utf8"),
     );
     expect(promotedManifest.deck_id).toBe(`deck_${"a".repeat(64)}`);
+    const promotedIngestion = JSON.parse(
+      readFileSync(join(fixtureInput.artifactRoot, artifactId, "ingestion.json"), "utf8"),
+    );
+    expect(promotedIngestion.manifest.source_sha256).toBe("a".repeat(64));
     expect(readdirSync(fixtureInput.stagingRoot)).toEqual([]);
     expect(
       readdirSync(fixtureInput.artifactRoot).filter((entry) => entry.endsWith(".part")),

@@ -80,7 +80,11 @@ export interface RenderSubprocessRequest {
 }
 
 export type RenderSubprocessResult =
-  | { readonly ok: true; readonly renderManifest: unknown }
+  | {
+      readonly ok: true;
+      readonly renderManifest: unknown;
+      readonly ingestionManifest: unknown;
+    }
   | { readonly ok: false; readonly code: string; readonly message: string };
 
 export interface RenderSubprocessAdapter {
@@ -308,11 +312,14 @@ async function runWithDeadline(
   }
 }
 
-function stableArtifactId(manifest: unknown): string {
-  // Canonical JSON of the closed manifest: identical renders coalesce onto the
-  // same immutable artifact id; any change re-derives a different id.
+function stableArtifactId(renderManifest: unknown, ingestionManifest: unknown): string {
+  // Both validated manifests define the immutable artifact identity. This prevents a
+  // render from coalescing with a structurally different extraction.
   return createHash("sha256")
-    .update(`deck-artifact:${JSON.stringify(manifest)}`, "utf8")
+    .update(
+      `deck-artifact:${JSON.stringify(renderManifest)}:${JSON.stringify(ingestionManifest)}`,
+      "utf8",
+    )
     .digest("hex");
 }
 
@@ -465,7 +472,7 @@ export function createDeckUploadWorker(options: DeckUploadWorkerOptions): DeckUp
           );
         }
 
-        const artifactId = stableArtifactId(result.renderManifest);
+        const artifactId = stableArtifactId(result.renderManifest, result.ingestionManifest);
         const finalDir = join(artifactRoot, artifactId);
 
         // Stage the renderer output in an artifactRoot-local .part directory so

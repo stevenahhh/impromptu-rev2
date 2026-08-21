@@ -70,6 +70,36 @@ const VALID_RENDER_JSON = {
   ineligible_reason: null,
 } as const;
 
+const VALID_INGESTION_JSON = {
+  status: "completed",
+  job_id: "production_ingest",
+  manifest_hash: "d".repeat(64),
+  manifest: {
+    schema_version: "1",
+    deck_id: VALID_RENDER_JSON.deck_id,
+    source_sha256: "a".repeat(64),
+    source_kind: "pptx",
+    adapter_version: "python-pptx-structural-v1",
+    slides: [
+      {
+        slide_key: `slide_${"e".repeat(64)}`,
+        source_index: 1,
+        source_id: "slide:256",
+        width_points: 960,
+        height_points: 540,
+        elements: [],
+        warnings: [],
+      },
+    ],
+    render_boundary: {
+      status: "not_performed",
+      renderer: null,
+      fidelity_verified: false,
+      reason: "Structural extraction only",
+    },
+  },
+} as const;
+
 const SLIDE_SVG = "<svg xmlns='http://www.w3.org/2000/svg'/>";
 
 function chunkedStream(chunks: readonly Uint8Array[]): ReadableStream<Uint8Array> {
@@ -89,17 +119,28 @@ function chunkedStream(chunks: readonly Uint8Array[]): ReadableStream<Uint8Array
 }
 
 /** The real subprocess adapter with an injectable spawn; writes a valid render.json. */
-function realSubprocess(renderJson: unknown = VALID_RENDER_JSON) {
+function realSubprocess(
+  renderJson: unknown = VALID_RENDER_JSON,
+  ingestionJson: unknown = VALID_INGESTION_JSON,
+) {
   const spawnCalls: RenderSpawnOptions[] = [];
   const spawn: RenderSpawn = (options) => {
     spawnCalls.push(options);
-    const outputDirIndex = options.cmd.indexOf("--output-dir");
-    const outputDir = options.cmd[outputDirIndex + 1];
-    if (outputDirIndex !== -1 && outputDir !== undefined) {
-      mkdirSync(outputDir, { recursive: true });
-      mkdirSync(join(outputDir, "slides"), { recursive: true });
-      writeFileSync(join(outputDir, "render.json"), `${JSON.stringify(renderJson)}\n`);
-      writeFileSync(join(outputDir, "slides", "slide-1.svg"), SLIDE_SVG);
+    if (options.cmd.includes("render")) {
+      const outputDirIndex = options.cmd.indexOf("--output-dir");
+      const outputDir = options.cmd[outputDirIndex + 1];
+      if (outputDirIndex !== -1 && outputDir !== undefined) {
+        mkdirSync(outputDir, { recursive: true });
+        mkdirSync(join(outputDir, "slides"), { recursive: true });
+        writeFileSync(join(outputDir, "render.json"), `${JSON.stringify(renderJson)}\n`);
+        writeFileSync(join(outputDir, "slides", "slide-1.svg"), SLIDE_SVG);
+      }
+    } else {
+      const outputIndex = options.cmd.indexOf("--output");
+      const output = options.cmd[outputIndex + 1];
+      if (outputIndex !== -1 && output !== undefined) {
+        writeFileSync(output, `${JSON.stringify(ingestionJson)}\n`);
+      }
     }
     let resolveExit!: (code: number) => void;
     const exited = new Promise<number>((resolve) => {
@@ -204,6 +245,9 @@ describe("deck upload service", () => {
     expect(readFileSync(join(artifactRoot, artifactId, "slides", "slide-1.svg"), "utf8")).toBe(
       SLIDE_SVG,
     );
+    expect(
+      JSON.parse(readFileSync(join(artifactRoot, artifactId, "ingestion.json"), "utf8")),
+    ).toEqual(VALID_INGESTION_JSON);
 
     const publicAssetHandler = createProjectionGatewayHandler(
       parseProjectionGatewayConfig({ STAGE_ORIGIN: "https://stage.example.test" }),
@@ -228,7 +272,7 @@ describe("deck upload service", () => {
     expect(readdirSync(stagingRoot)).toEqual([]);
 
     // The render went through the real subprocess adapter argv contract.
-    expect(subprocess.spawnCalls).toHaveLength(1);
+    expect(subprocess.spawnCalls).toHaveLength(2);
     expect(subprocess.spawnCalls[0]?.cmd).toEqual([
       "uv",
       "run",
@@ -239,6 +283,19 @@ describe("deck upload service", () => {
       expect.stringContaining("upload"),
       "--output-dir",
       expect.any(String),
+    ]);
+    expect(subprocess.spawnCalls[1]?.cmd).toEqual([
+      "uv",
+      "run",
+      "--project",
+      INGESTION_PROJECT,
+      "impromptu-ingestion",
+      "ingest",
+      expect.stringContaining("upload"),
+      "--job-id",
+      "production_ingest",
+      "--output",
+      expect.stringContaining("ingestion.json"),
     ]);
   });
 
@@ -298,7 +355,7 @@ describe("deck upload service", () => {
     expect(subprocess.spawnCalls).toHaveLength(0);
   });
 
-  test("propagates a renderer failure as a rejection with no artifact residue", async () => {
+  test("propagates render or structural failure with no partial artifact residue", async () => {
     subprocess = realSubprocess({ not: "a valid render manifest" });
     await expect(
       service().acceptRawDeck({
@@ -308,6 +365,17 @@ describe("deck upload service", () => {
       }),
     ).rejects.toThrow();
     expect(readdirSync(artifactRoot).filter((entry) => !entry.endsWith(".part"))).toEqual([]);
+    expect(readdirSync(stagingRoot)).toEqual([]);
+
+    subprocess = realSubprocess(VALID_RENDER_JSON, { not: "a valid structural manifest" });
+    await expect(
+      service().acceptRawDeck({
+        accountId: ACCOUNT_ID,
+        actorId: ACTOR_ID,
+        upload: streamedUpload("quarterly-review.pptx", PPTX_MAGIC),
+      }),
+    ).rejects.toThrow();
+    expect(readdirSync(artifactRoot)).toEqual([]);
     expect(readdirSync(stagingRoot)).toEqual([]);
   });
 });

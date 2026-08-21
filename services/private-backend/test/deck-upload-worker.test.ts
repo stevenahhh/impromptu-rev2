@@ -26,7 +26,7 @@
  *     readonly outputDir: string;  // renderer writes its output here
  *   }
  *   export type RenderSubprocessResult =
- *     | { readonly ok: true; readonly renderManifest: unknown }
+ *     | { readonly ok: true; readonly renderManifest: unknown; readonly ingestionManifest: unknown }
  *     | { readonly ok: false; readonly code: string; readonly message: string };
  *
  *   export interface RenderSubprocessAdapter {
@@ -118,9 +118,14 @@ function recordingRenderer(behavior: RendererBehavior) {
           behavior.write(request.outputDir);
         } else {
           writeFileSync(join(request.outputDir, "render.json"), RENDER_JSON);
+          writeFileSync(join(request.outputDir, "ingestion.json"), RENDER_JSON);
           writeFileSync(join(request.outputDir, "slide-1.svg"), SLIDE_SVG);
         }
-        return { ok: true, renderManifest: behavior.manifest };
+        return {
+          ok: true,
+          renderManifest: behavior.manifest,
+          ingestionManifest: { structural: behavior.manifest },
+        };
       }
       if (behavior.kind === "fail") {
         return { ok: false, code: behavior.code, message: behavior.message };
@@ -319,11 +324,16 @@ describe("deck upload worker", () => {
         routes.push(route);
         mkdirSync(request.outputDir, { recursive: true });
         writeFileSync(join(request.outputDir, "render.json"), RENDER_JSON);
+        writeFileSync(join(request.outputDir, "ingestion.json"), RENDER_JSON);
         writeFileSync(
           join(request.outputDir, `slide-1.${route === "pdf" ? "png" : "svg"}`),
           SLIDE_SVG,
         );
-        return { ok: true, renderManifest: { route } };
+        return {
+          ok: true,
+          renderManifest: { route },
+          ingestionManifest: { structuralRoute: route },
+        };
       },
     };
     const instance = createDeckUploadWorker({
@@ -564,8 +574,10 @@ describe("deck upload worker", () => {
     const artifactDir = join(artifactRoot, outcome.artifactId);
     const slideBytes = new Uint8Array(readFileSync(join(artifactDir, "slide-1.svg")));
     const jsonBytes = new Uint8Array(readFileSync(join(artifactDir, "render.json")));
+    const ingestionBytes = new Uint8Array(readFileSync(join(artifactDir, "ingestion.json")));
     expect(slideBytes).toEqual(SLIDE_SVG);
     expect(jsonBytes).toEqual(RENDER_JSON);
+    expect(ingestionBytes).toEqual(RENDER_JSON);
     expect(createHash("sha256").update(slideBytes).digest("hex")).toBe(
       createHash("sha256").update(SLIDE_SVG).digest("hex"),
     );
