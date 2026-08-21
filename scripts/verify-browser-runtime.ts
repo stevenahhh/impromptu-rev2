@@ -39,7 +39,7 @@ export let artifactPath: string;
 interface AppSurface {
   app: "console" | "stage";
   cachePrefix: string;
-  expectedText: string;
+  readySelector: string;
   port: number;
   route: string;
 }
@@ -84,7 +84,9 @@ const surfaces: AppSurface[] = [
   {
     app: "stage",
     cachePrefix: "impromptu-stage-shell-",
-    expectedText: "흐름을 끊지 않는 근거",
+    // Stage is slide-only, so shell readiness is proven by the display container's own readiness
+    // attribute instead of copy. Card absence itself is asserted by the security and projection suites.
+    readySelector: "[data-audience-readiness]",
     port: stagePort,
     route: "/display/rehearsal",
   },
@@ -244,7 +246,7 @@ async function installOfflineShell(context: BrowserContext, surface: AppSurface)
     scriptUrl: "/sw.js?cohort=stable",
     timeoutMs: 10_000,
   });
-  await page.getByText(surface.expectedText, { exact: true }).waitFor({ state: "visible" });
+  await page.locator(surface.readySelector).waitFor({ state: "visible" });
   const policy = await response?.headerValue("content-security-policy");
   if (!policy?.includes("frame-ancestors 'none'")) {
     throw new Error(`${surface.app} preview response is missing frame-ancestors denial`);
@@ -281,7 +283,7 @@ async function installOfflineShell(context: BrowserContext, surface: AppSurface)
       { cacheName: "foreign-stale-canary", documentUrl: address(surface), marker: canary },
     );
     await page.reload({ waitUntil: "domcontentloaded" });
-    await page.getByText(surface.expectedText, { exact: true }).waitFor({ state: "visible" });
+    await page.locator(surface.readySelector).waitFor({ state: "visible" });
     if ((await page.locator("body").innerText()).includes(canary)) {
       throw new Error("Stage rendered a stale document from a foreign cache");
     }
@@ -442,7 +444,7 @@ async function verifyUpdateLifecycle(surface: AppSurface, index: number) {
       scriptUrl: "/sw.js?cohort=stable",
       timeoutMs: 10_000,
     });
-    await page.getByText(surface.expectedText, { exact: true }).waitFor({ state: "visible" });
+    await page.locator(surface.readySelector).waitFor({ state: "visible" });
     const firstInstall = await page.evaluate(async () => {
       const registration = await navigator.serviceWorker.getRegistration();
       return {
@@ -461,7 +463,7 @@ async function verifyUpdateLifecycle(surface: AppSurface, index: number) {
     }
 
     await page.reload({ waitUntil: "domcontentloaded" });
-    await page.getByText(surface.expectedText, { exact: true }).waitFor({ state: "visible" });
+    await page.locator(surface.readySelector).waitFor({ state: "visible" });
     const controlledAfterRefresh = await page.evaluate(
       () => navigator.serviceWorker.controller !== null,
     );
@@ -546,7 +548,7 @@ async function verifyUpdateLifecycle(surface: AppSurface, index: number) {
     });
 
     await page.reload({ waitUntil: "domcontentloaded" });
-    await page.getByText(surface.expectedText, { exact: true }).waitFor({ state: "visible" });
+    await page.locator(surface.readySelector).waitFor({ state: "visible" });
     if (!(await page.evaluate(() => navigator.serviceWorker.controller !== null))) {
       throw new Error(`${surface.app} activated update did not survive refresh`);
     }
@@ -560,9 +562,7 @@ async function verifyUpdateLifecycle(surface: AppSurface, index: number) {
     cleanup.add(() => restartContext.close());
     const restartPage = await restartContext.newPage();
     await restartPage.goto(`${origin.url}${surface.route}`, { waitUntil: "domcontentloaded" });
-    await restartPage
-      .getByText(surface.expectedText, { exact: true })
-      .waitFor({ state: "visible" });
+    await restartPage.locator(surface.readySelector).waitFor({ state: "visible" });
     const restartState = await restartPage.evaluate(
       async (cachePrefix) => ({
         cacheNames: (await caches.keys()).filter((name) => name.startsWith(cachePrefix)),
@@ -997,7 +997,7 @@ async function verifyReducedMotion(context: BrowserContext) {
     const page = await context.newPage();
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto(address(surface), { waitUntil: "domcontentloaded" });
-    await page.getByText(surface.expectedText, { exact: true }).waitFor({ state: "visible" });
+    await page.locator(surface.readySelector).waitFor({ state: "visible" });
     const offenders = await page.locator("*").evaluateAll((elements) => {
       const toMilliseconds = (value: string) =>
         value.split(",").map((part) => {
@@ -1108,9 +1108,9 @@ async function verifyColdOfflineRestart() {
     for (const surface of surfaces) {
       const page = await offlineContext.newPage();
       await page.goto(address(surface), { waitUntil: "domcontentloaded" });
-      await page.getByText(surface.expectedText, { exact: true }).waitFor({ state: "visible" });
+      await page.locator(surface.readySelector).waitFor({ state: "visible" });
       const rootText = await page.locator("#root").innerText();
-      if (!rootText.includes(surface.expectedText)) {
+      if (rootText.trim().length === 0) {
         throw new Error(`${surface.app} rendered a blank or incorrect cold offline shell`);
       }
       await page.screenshot({

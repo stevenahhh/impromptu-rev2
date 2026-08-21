@@ -316,20 +316,23 @@ describe("durable service-main restore boundary", () => {
         expiresAtMs: null,
       }),
     });
-    expect(publishedResponse.status).toBe(201);
-    const published = await publishedResponse.json();
+    // Stage is slide-only: both publication transitions are permanently closed, so the durable
+    // restore boundary must survive without any public card ever existing.
+    expect(publishedResponse.status).toBe(410);
+    expect((await publishedResponse.json()).error).toBe("stage_cards_disabled");
     const terminated = await fetch(`${privateOrigin}/v1/publications/terminate`, {
       method: "POST",
       headers: authenticatedHeaders,
       body: JSON.stringify({
         presentationSessionId: presentation.lifecycle.presentationSessionId,
-        projectionId: published.projectionId,
+        projectionId: "projection_never_published",
         expectedPublicCardRevision: "pcr_1",
         authorityId: presentation.authority.authorityId,
         status: "RETRACTED",
       }),
     });
-    expect(terminated.status).toBe(200);
+    expect(terminated.status).toBe(410);
+    expect((await terminated.json()).error).toBe("stage_cards_disabled");
 
     await stop(privateBackend);
     privateBackend = await start(
