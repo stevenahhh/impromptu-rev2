@@ -1,5 +1,7 @@
 import { Button, Panel } from "@impromptu/ui";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+const WEBM_OPUS_MIME_TYPE = "audio/webm;codecs=opus";
 
 export interface CaptureGrantView {
   readonly captureGrantId: string;
@@ -30,7 +32,9 @@ export type BrowserCaptureTerminal =
   | "CAPTURE_STOPPED"
   | "CONSENT_REQUIRED"
   | "GRANT_EXPIRED"
-  | "GRANT_REVOKED";
+  | "GRANT_REVOKED"
+  | "MICROPHONE_DENIED"
+  | "UNSUPPORTED_CODEC";
 
 export class BrowserCaptureError extends Error {
   constructor(readonly code: BrowserCaptureTerminal) {
@@ -46,17 +50,35 @@ export class BrowserCaptureController {
     readonly mediaDevices: Pick<MediaDevices, "getUserMedia">,
     readonly uploader: CaptureUploader,
     readonly now: () => number = Date.now,
+    readonly isTypeSupported: (mimeType: string) => boolean = (mimeType) =>
+      MediaRecorder.isTypeSupported(mimeType),
   ) {}
 
-  async start(grant: CaptureGrantView | undefined): Promise<void> {
-    if (grant === undefined) throw new BrowserCaptureError("CONSENT_REQUIRED");
-    if (this.now() >= grant.expiresAtMs) throw new BrowserCaptureError("GRANT_EXPIRED");
+  async start(
+    requestGrant: (() => Promise<CaptureGrantView>) | undefined,
+  ): Promise<CaptureGrantView> {
+    if (requestGrant === undefined) throw new BrowserCaptureError("CONSENT_REQUIRED");
     if (this.#active !== undefined) throw new BrowserCaptureError("CONSENT_REQUIRED");
+    if (!this.isTypeSupported(WEBM_OPUS_MIME_TYPE)) {
+      throw new BrowserCaptureError("UNSUPPORTED_CODEC");
+    }
 
-    const stream = await this.mediaDevices.getUserMedia({ audio: true, video: false });
+    let stream: MediaStream;
     try {
+      stream = await this.mediaDevices.getUserMedia({ audio: true, video: false });
+    } catch (caught) {
+      if (caught instanceof DOMException && caught.name === "NotAllowedError") {
+        throw new BrowserCaptureError("MICROPHONE_DENIED");
+      }
+      throw caught;
+    }
+
+    try {
+      const grant = await requestGrant();
+      if (this.now() >= grant.expiresAtMs) throw new BrowserCaptureError("GRANT_EXPIRED");
       await this.uploader.start(grant, stream);
       this.#active = { grant, stream };
+      return grant;
     } catch (caught) {
       stopTracks(stream);
       throw caught;
@@ -78,13 +100,22 @@ export class BrowserCaptureController {
   revoke(grantId: string): BrowserCaptureTerminal {
     const active = this.#active;
     if (active === undefined || active.grant.captureGrantId !== grantId) return "GRANT_REVOKED";
+    this.#cancelActive(active);
+    return "GRANT_REVOKED";
+  }
+
+  dispose(): void {
+    const active = this.#active;
+    if (active !== undefined) this.#cancelActive(active);
+  }
+
+  #cancelActive(active: Readonly<{ grant: CaptureGrantView; stream: MediaStream }>): void {
     this.#active = undefined;
     try {
       this.uploader.cancel();
     } finally {
       stopTracks(active.stream);
     }
-    return "GRANT_REVOKED";
   }
 }
 
@@ -106,12 +137,18 @@ export function AudioConsentControl({
   );
   const [pending, setPending] = useState(false);
 
+  useEffect(
+    () => () => {
+      controller?.dispose();
+    },
+    [controller],
+  );
+
   async function start() {
     if (!accepted || controller === undefined || requestGrant === undefined) return;
     setPending(true);
     try {
-      const issued = await requestGrant();
-      await controller.start(issued);
+      const issued = await controller.start(requestGrant);
       setGrant(issued);
       setStatus("Capturing with a short-lived session grant.");
     } catch (caught) {
