@@ -4,8 +4,11 @@ from pathlib import Path
 import pymupdf
 import pytest
 
-import impromptu_ingestion.ocr as ocr
+from impromptu_ingestion.adapters import PdfStructuralAdapter
 from impromptu_ingestion.adapters.base import StructuralExtractionError
+from impromptu_ingestion.contracts import IngestionJob
+from impromptu_ingestion.ocr import _rasterize, extract_ocr_text
+from impromptu_ingestion.validation import stage_input
 
 _TSV_HEADER = (
     b"level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\t"
@@ -49,7 +52,7 @@ class _Page:
 
 
 def _available(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(ocr, "_verify_installation", lambda: None)
+    monkeypatch.setattr("impromptu_ingestion.ocr._verify_installation", lambda: None)
 
 
 def _raised(call: object) -> StructuralExtractionError:
@@ -70,7 +73,7 @@ def test_ocr_runs_exact_bounded_tesseract_tsv_command_and_maps_line_bbox(
         invocations.append((command, options))
         return subprocess.CompletedProcess(command, 0, stdout=_VALID_TSV, stderr=b"")
 
-    elements = ocr.extract_ocr_text(page, timeout_seconds=17, runner=runner)
+    elements = extract_ocr_text(page, timeout_seconds=17, runner=runner)
 
     assert invocations == [
         (
@@ -132,7 +135,7 @@ def test_ocr_caps_the_longest_raster_edge_at_4096() -> None:
             return LargePixmap()
 
     page = LargePage()
-    _, width, height = ocr._rasterize(page)
+    _, width, height = _rasterize(page)
 
     assert (width, height) == (4096, 2048)
     assert page.matrix is not None
@@ -143,14 +146,16 @@ def test_ocr_missing_binary_or_model_is_unavailable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("TESSDATA_PREFIX", str(tmp_path))
-    monkeypatch.setattr(ocr.shutil, "which", lambda _: None)
+    monkeypatch.setattr("impromptu_ingestion.ocr.shutil.which", lambda _: None)
     with pytest.raises(StructuralExtractionError) as missing_binary:
-        ocr.extract_ocr_text(_Page(), timeout_seconds=1)
+        extract_ocr_text(_Page(), timeout_seconds=1)
     assert "binary is missing" in str(_raised(missing_binary.value))
 
-    monkeypatch.setattr(ocr.shutil, "which", lambda _: "/usr/bin/tesseract")
+    monkeypatch.setattr(
+        "impromptu_ingestion.ocr.shutil.which", lambda _: "/usr/bin/tesseract"
+    )
     with pytest.raises(StructuralExtractionError) as missing_model:
-        ocr.extract_ocr_text(_Page(), timeout_seconds=1)
+        extract_ocr_text(_Page(), timeout_seconds=1)
     assert "pinned kor model is missing" in str(_raised(missing_model.value))
 
 
@@ -161,7 +166,7 @@ def test_ocr_nonzero_exit_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> Non
         return subprocess.CompletedProcess(command, 7, stdout=b"", stderr=b"failed")
 
     with pytest.raises(StructuralExtractionError) as raised:
-        ocr.extract_ocr_text(_Page(), timeout_seconds=1, runner=runner)
+        extract_ocr_text(_Page(), timeout_seconds=1, runner=runner)
     assert "exited nonzero (7)" in str(_raised(raised.value))
 
 
@@ -172,7 +177,7 @@ def test_ocr_timeout_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
         raise subprocess.TimeoutExpired(command, 1)
 
     with pytest.raises(StructuralExtractionError) as raised:
-        ocr.extract_ocr_text(_Page(), timeout_seconds=1, runner=runner)
+        extract_ocr_text(_Page(), timeout_seconds=1, runner=runner)
     assert "operation deadline" in str(_raised(raised.value))
 
 
@@ -186,5 +191,25 @@ def test_ocr_empty_tsv_is_unavailable(
         return subprocess.CompletedProcess(command, 0, stdout=tsv, stderr=b"")
 
     with pytest.raises(StructuralExtractionError) as raised:
-        ocr.extract_ocr_text(_Page(), timeout_seconds=1, runner=runner)
+        extract_ocr_text(_Page(), timeout_seconds=1, runner=runner)
     assert "empty TSV" in str(_raised(raised.value))
+
+
+def test_ocr_encrypted_pdf_preserves_existing_rejection(tmp_path: Path) -> None:
+    encrypted = tmp_path / "encrypted.pdf"
+    with pymupdf.open() as document:
+        page = document.new_page(width=720, height=405)
+        page.insert_text((72, 72), "encrypted fixture")
+        document.save(
+            encrypted,
+            encryption=pymupdf.PDF_ENCRYPT_AES_256,
+            owner_pw="owner-password",
+            user_pw="user-password",
+        )
+
+    with (
+        stage_input(IngestionJob(job_id="ocr_encrypted", source=encrypted)) as source,
+        pytest.raises(StructuralExtractionError) as raised,
+    ):
+        PdfStructuralAdapter().extract(source)
+    assert raised.value.code == "encrypted_document"

@@ -1,0 +1,19 @@
+=== missing_binary ===
+error[ocr_unavailable]: ocr_unavailable: ocr_unavailable: scanned_page_requires_ocr: Tesseract binary is missing
+exit=2
+
+=== missing_model ===
+error[ocr_unavailable]: ocr_unavailable: ocr_unavailable: scanned_page_requires_ocr: pinned kor model is missing
+exit=2
+
+=== nonzero_exit ===
+error[ocr_unavailable]: ocr_unavailable: ocr_unavailable: scanned_page_requires_ocr: Tesseract exited nonzero (7)
+exit=2
+
+=== empty_tsv ===
+error[ocr_unavailable]: ocr_unavailable: ocr_unavailable: scanned_page_requires_ocr: Tesseract returned empty TSV
+exit=2
+
+=== encrypted_pdf ===
+error[encrypted_document]: encrypted_document: encrypted_document: encrypted PDFs are not supported
+exit=2

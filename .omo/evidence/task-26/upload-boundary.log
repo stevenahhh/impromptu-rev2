@@ -1,0 +1,17 @@
+bun test v1.3.14 (d1632b29)
+
+services/private-backend/test/deck-render-subprocess.test.ts:
+(pass) deck render subprocess adapter > preserves OCR unavailability from ingestion: Tesseract binary is missing [3.95ms]
+(pass) deck render subprocess adapter > preserves OCR unavailability from ingestion: Tesseract exited nonzero (2) [0.72ms]
+(pass) deck render subprocess adapter > preserves OCR unavailability from ingestion: Tesseract exceeded its operation deadline [0.74ms]
+(pass) deck render subprocess adapter > preserves OCR unavailability from ingestion: Tesseract returned empty TSV [0.53ms]
+(pass) deck render subprocess adapter > does not classify unrelated ingestion diagnostics mentioning OCR as unavailable [0.57ms]
+
+services/private-backend/test/deck-upload-http.test.ts:
+(pass) multipart deck upload HTTP boundary > maps a typed OCR failure to the dedicated 422 boundary response [6.96ms]
+
+ 6 pass
+ 19 filtered out
+ 0 fail
+ 8 expect() calls
+Ran 6 tests across 2 files. [64.00ms]

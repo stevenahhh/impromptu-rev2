@@ -1,0 +1,198 @@
+{
+  "failures": {
+    "actualAdapterVerification": "failure-paths.log",
+    "boundaryVerification": "upload-boundary.log",
+    "emptyTsv": {
+      "exitCode": 2,
+      "internalCode": "ocr_unavailable",
+      "visibleUpload": {
+        "error": "OCR_UNAVAILABLE",
+        "status": 422
+      }
+    },
+    "encryptedPdf": {
+      "existingRejectionPreserved": true,
+      "exitCode": 2,
+      "internalCode": "encrypted_document"
+    },
+    "missingBinary": {
+      "exitCode": 2,
+      "internalCode": "ocr_unavailable",
+      "visibleUpload": {
+        "error": "OCR_UNAVAILABLE",
+        "status": 422
+      }
+    },
+    "missingModel": {
+      "exitCode": 2,
+      "internalCode": "ocr_unavailable",
+      "visibleUpload": {
+        "error": "OCR_UNAVAILABLE",
+        "status": 422
+      }
+    },
+    "nonzeroExit": {
+      "exitCode": 2,
+      "internalCode": "ocr_unavailable",
+      "visibleUpload": {
+        "error": "OCR_UNAVAILABLE",
+        "status": 422
+      }
+    }
+  },
+  "host": {
+    "arch": "arm64",
+    "chip": "Apple M5 Pro",
+    "cores": 15,
+    "memoryBytes": 25769803776,
+    "modelIdentifier": "Mac17,9",
+    "modelName": "MacBook Pro",
+    "os": "darwin"
+  },
+  "recordedAt": "2026-08-21T05:35:19.458489+00:00",
+  "resource": {
+    "command": "/usr/bin/time -l docker run --rm --entrypoint /opt/ingestion-venv/bin/python ... ocr_resource_probe.py korean-scanned.pdf",
+    "concurrency": 1,
+    "exactSentinelPages": 0,
+    "inContainerUsage": {
+      "maxRssBytes": 142548992,
+      "sysSeconds": 0.18909,
+      "userSeconds": 2.164212,
+      "wallSeconds": 1.903298
+    },
+    "ocrAppliedPages": 10,
+    "pages": 10,
+    "performanceWarningRecorded": false,
+    "pmsetAfter": [
+      "Note: No thermal warning level has been recorded",
+      "Note: No performance warning level has been recorded",
+      "Note: No CPU power status has been recorded"
+    ],
+    "pmsetBefore": [
+      "Note: No thermal warning level has been recorded",
+      "Note: No performance warning level has been recorded",
+      "Note: No CPU power status has been recorded"
+    ],
+    "thermalWarningRecorded": false,
+    "timeL": {
+      "maxRssBytes": 30965760,
+      "measurementSurface": "macOS /usr/bin/time -l around the pinned OCR container process launcher",
+      "sysSeconds": 0.0,
+      "userSeconds": 0.01,
+      "wallSeconds": 2.37
+    }
+  },
+  "runtime": {
+    "image": "impromptu-private-backend:ocr-final",
+    "imageBytes": {
+      "delta": 17805650,
+      "post": 443599219,
+      "postImageId": "sha256:10268a8562064f4c632343d475f040f35d8dd1c534eb0333bfdb637652ed2ee3",
+      "pre": 425793569,
+      "preImageId": "sha256:bc4ee9b43553479724420c98f6c1e573a5028a7fc69e9b92cda06039179019fe"
+    },
+    "models": {
+      "eng": {
+        "bytes": 4113088,
+        "sha256": "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2"
+      },
+      "kor": {
+        "bytes": 1677415,
+        "sha256": "6b85e11d9bbf07863b97b3523b1b112844c43e713df8b66418a081fd1060b3b2"
+      },
+      "totalBytes": 5790503
+    },
+    "tesseractVersion": "5.3.0"
+  },
+  "schemaVersion": 1,
+  "status": {
+    "CORE5_GREEN": "UNCHANGED",
+    "OCR_GREEN": false,
+    "reasons": [
+      "PINNED_OCR_SENTINEL_NOT_EXACT"
+    ]
+  },
+  "verification": {
+    "dbChunkCountAfterScannedUpload": 1,
+    "pytest": {
+      "command": "/usr/bin/time -l uv run --project services/ingestion pytest -k ocr",
+      "deselected": 100,
+      "maxRssBytes": 116719616,
+      "passed": 9,
+      "sysSeconds": 0.11,
+      "userSeconds": 0.54,
+      "wallSeconds": 0.74
+    }
+  },
+  "vertical": {
+    "fixture": "/tmp/korean-scanned.pdf",
+    "hybridQuery": {
+      "denseVectorDimension": 768,
+      "expectedSlideChunkReturned": true,
+      "lexicalMatch": false,
+      "query": "형식 중립 근거 자료 2026",
+      "resultCount": 1,
+      "results": [
+        {
+          "anchor": "slide=1&chunk=1",
+          "objectId": "8475455fdc692390e2d85aff2e1483b20b40c89ce999521405c651ff7a696e86",
+          "sourceId": "page:1",
+          "title": "Slide 1"
+        }
+      ]
+    },
+    "indexing": {
+      "dbChunkCount": 1,
+      "rows": [
+        {
+          "anchor": "slide=1&chunk=1",
+          "content": "형식 ron —| 근거 자료 2026",
+          "lexical_match": false,
+          "object_id": "8475455fdc692390e2d85aff2e1483b20b40c89ce999521405c651ff7a696e86"
+        }
+      ]
+    },
+    "ocr": {
+      "exactSentinel": false,
+      "expectedSentinel": "형식 중립 근거 자료 2026",
+      "recognizedChunk": "형식 ron —| 근거 자료 2026",
+      "textElements": [
+        {
+          "element_id": "ocr:text:1",
+          "height": 25.56,
+          "kind": "text",
+          "text": "형식",
+          "width": 48.6,
+          "x": 74.16,
+          "y": 167.4
+        },
+        {
+          "element_id": "ocr:text:2",
+          "height": 19.8,
+          "kind": "text",
+          "text": "ron —|",
+          "width": 50.04,
+          "x": 158.04,
+          "y": 176.4
+        },
+        {
+          "element_id": "ocr:text:3",
+          "height": 25.2,
+          "kind": "text",
+          "text": "근거 자료 2026",
+          "width": 263.88,
+          "x": 242.28,
+          "y": 167.4
+        }
+      ]
+    },
+    "schemaVersion": 1,
+    "upload": {
+      "artifactId": "5fcb4658ada8b27c3fc832fd573a95c1e799d1b470dee50e79a2e7b68441eac5",
+      "outcome": "RENDERED",
+      "warningCodes": [
+        "ocr_applied"
+      ]
+    }
+  }
+}
