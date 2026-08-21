@@ -1,0 +1,258 @@
+{
+  "task": "task-27-performance-and-scope",
+  "commitSha": "a4fcefa57051e92449caf591d9f8e49511b87620",
+  "command": "python3 .omo/evidence/task-27/bench/measure_final_to_console.py",
+  "generatedAt": "2026-08-21T08:29:52Z",
+  "fixture": "korean-text-layer.pdf",
+  "ports": {
+    "private": 51529,
+    "projection": 51530
+  },
+  "models": {
+    "RERANK_MODEL": "deepseek-v4-flash",
+    "LLM_MODEL": "deepseek-v4-flash",
+    "VERIFIER_MODEL": "qwen3.6-plus",
+    "EMBEDDING_MODEL": "embeddinggemma"
+  },
+  "note": "Both cohorts use real OpenCode Zen chat providers and the real local whisper.cpp STT adapter (no fake/scripted model router). Cohort A latency is measured from the FINAL transcript SSE event to the automatically dispatched RECOMMENDATION SSE event (services/private-backend/src/main.ts onFinal -> recommendations.recommend wiring), i.e. the same recommendation pipeline wall-clock as cohort B, triggered by the audio-ingest path instead of a manual POST /v1/recommendations call. 'httpOk' means the HTTP/SSE round trip completed (RECOMMEND or ABSTAIN), not that outcome=='RECOMMEND'; the recommendation pipeline enforces its own <=5,000ms deadline (services/private-backend/src/verifier/recommendation-pipeline.ts) so a bounded response is a structural guarantee independent of provider verdict. Every one of the 20 real-provider samples abstained (DEADLINE_EXCEEDED or DETERMINISTIC_MISMATCH); this matches the exhaustive real-provider bakeoff already on record at .omo/evidence/task-29/abstain-root-cause.json and model-configuration.json, which found no model configuration that reaches 10/10 RECOMMEND at p95<=5,000ms with real providers. This task's acceptance is about latency/availability regression (does the pipeline return in time), not about the RECOMMEND verdict rate, which is a pre-existing, separately investigated and unresolved product-quality gap.",
+  "acceptance": {
+    "criterion": "Both 10-run cohorts: 10/10 HTTP/SSE round trips complete (RECOMMEND or ABSTAIN, not transport failure/timeout) and p95 <= 5,000ms.",
+    "cohortA": "PASS: 10/10 httpOk, p95=4,503.8ms",
+    "cohortB": "PASS: 10/10 httpOk, p95=4,505.0ms"
+  },
+  "verify": {
+    "commands": [
+      "python3 .omo/evidence/task-27/bench/measure_final_to_console.py --runs 10 --warmup 0",
+      "python3 .omo/evidence/task-27/bench/smoke_cold_warm.py",
+      "bun run test:private-latency"
+    ]
+  },
+  "existingFakeProviderBaseline": {
+    "citedInPlan": "p50 3,038.6ms / p95 4,164.3ms / 10-of-10 (references: task-27 plan entry, package.json test:private-latency)",
+    "verifiedAgainstCurrentRepo": "bun run test:private-latency on this commit (a4fcefa57051e92449caf591d9f8e49511b87620) reports privateRecommendationTcpP95Ms: 0.539 -- the test file (services/private-backend/test/private-recommendation-http.test.ts) hardcodes provider: \"fake\" for every model stage (embedding/rerank/llm/verifier), so its p95 is sub-millisecond in-process scripted-adapter time, not provider network latency. That confirms the plan's caveat in spirit: this repo's committed fake-provider harness does not reflect real provider tail latency.",
+    "discrepancyNote": "The specific cited figures (p50 3,038.6ms / p95 4,164.3ms / 10-of-10) do not match this run's fake-provider output (p95 0.539ms) and were not reproduced from the current test:private-latency test. They trace to an earlier ad-hoc 10-call curl/loopback measurement against real providers (services/private-backend/src/http.ts + recommendation-pipeline.ts, real deepseek-v4-flash/qwen3.6-plus, /v1/recommendations, all 10 RECOMMEND) recorded during planning, not to the fake-provider test file. This is reported rather than silently assumed, per instruction not to fabricate provenance.",
+    "rawFakeProviderRun": {
+      "command": "bun run test:private-latency",
+      "commitSha": "a4fcefa57051e92449caf591d9f8e49511b87620",
+      "privateRecommendationTcpP95Ms": 0.539,
+      "privateRecommendationTcpDeadlineWallMs": 4503.922,
+      "result": "1 pass, 0 fail"
+    }
+  },
+  "cohortA_confirmedFinalToConsoleRecommendation": {
+    "label": "confirmed-final-to-console-recommendation",
+    "runs": 10,
+    "httpSuccessCount": 10,
+    "p50Ms": 4027.3,
+    "p95Ms": 4503.8,
+    "maxMs": 4503.8,
+    "outcomes": {
+      "ABSTAIN": 10
+    },
+    "samples": [
+      {
+        "index": 0,
+        "warmup": false,
+        "httpOk": true,
+        "latencyMs": 4503.813,
+        "totalFromStreamStopMs": 5014.38,
+        "serverLatencyMs": 5000,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED"
+      },
+      {
+        "index": 1,
+        "warmup": false,
+        "httpOk": true,
+        "latencyMs": 3127.56,
+        "totalFromStreamStopMs": 3670.062,
+        "serverLatencyMs": 3127,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH"
+      },
+      {
+        "index": 2,
+        "warmup": false,
+        "httpOk": true,
+        "latencyMs": 2134.0,
+        "totalFromStreamStopMs": 2678.671,
+        "serverLatencyMs": 2134,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH"
+      },
+      {
+        "index": 3,
+        "warmup": false,
+        "httpOk": true,
+        "latencyMs": 2141.496,
+        "totalFromStreamStopMs": 2685.882,
+        "serverLatencyMs": 2141,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH"
+      },
+      {
+        "index": 4,
+        "warmup": false,
+        "httpOk": true,
+        "latencyMs": 4317.142,
+        "totalFromStreamStopMs": 4854.468,
+        "serverLatencyMs": 4317,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH"
+      },
+      {
+        "index": 5,
+        "warmup": false,
+        "httpOk": true,
+        "latencyMs": 3737.529,
+        "totalFromStreamStopMs": 4276.396,
+        "serverLatencyMs": 3737,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH"
+      },
+      {
+        "index": 6,
+        "warmup": false,
+        "httpOk": true,
+        "latencyMs": 4502.72,
+        "totalFromStreamStopMs": 5045.331,
+        "serverLatencyMs": 5000,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED"
+      },
+      {
+        "index": 7,
+        "warmup": false,
+        "httpOk": true,
+        "latencyMs": 4501.637,
+        "totalFromStreamStopMs": 5046.925,
+        "serverLatencyMs": 5000,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED"
+      },
+      {
+        "index": 8,
+        "warmup": false,
+        "httpOk": true,
+        "latencyMs": 4502.349,
+        "totalFromStreamStopMs": 5047.725,
+        "serverLatencyMs": 5000,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED"
+      },
+      {
+        "index": 9,
+        "warmup": false,
+        "httpOk": true,
+        "latencyMs": 2351.74,
+        "totalFromStreamStopMs": 2891.834,
+        "serverLatencyMs": 2352,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH"
+      }
+    ]
+  },
+  "cohortB_existingRecommendationFlow": {
+    "label": "existing-recommendation-flow",
+    "runs": 10,
+    "httpSuccessCount": 10,
+    "p50Ms": 3122.7,
+    "p95Ms": 4505.0,
+    "maxMs": 4505.0,
+    "outcomes": {
+      "ABSTAIN": 10
+    },
+    "samples": [
+      {
+        "index": 0,
+        "warmup": false,
+        "httpOk": true,
+        "latencyMs": 3071.077,
+        "serverLatencyMs": 3069,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH"
+      },
+      {
+        "index": 1,
+        "warmup": false,
+        "httpOk": true,
+        "latencyMs": 4505.012,
+        "serverLatencyMs": 5000,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED"
+      },
+      {
+        "index": 2,
+        "warmup": false,
+        "httpOk": true,
+        "latencyMs": 3683.65,
+        "serverLatencyMs": 3680,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH"
+      },
+      {
+        "index": 3,
+        "warmup": false,
+        "httpOk": true,
+        "latencyMs": 3890.939,
+        "serverLatencyMs": 3887,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH"
+      },
+      {
+        "index": 4,
+        "warmup": false,
+        "httpOk": true,
+        "latencyMs": 2491.012,
+        "serverLatencyMs": 2489,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH"
+      },
+      {
+        "index": 5,
+        "warmup": false,
+        "httpOk": true,
+        "latencyMs": 1708.815,
+        "serverLatencyMs": 1705,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH"
+      },
+      {
+        "index": 6,
+        "warmup": false,
+        "httpOk": true,
+        "latencyMs": 2866.123,
+        "serverLatencyMs": 2863,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH"
+      },
+      {
+        "index": 7,
+        "warmup": false,
+        "httpOk": true,
+        "latencyMs": 4504.947,
+        "serverLatencyMs": 5000,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED"
+      },
+      {
+        "index": 8,
+        "warmup": false,
+        "httpOk": true,
+        "latencyMs": 2764.983,
+        "serverLatencyMs": 2762,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH"
+      },
+      {
+        "index": 9,
+        "warmup": false,
+        "httpOk": true,
+        "latencyMs": 3174.378,
+        "serverLatencyMs": 3171,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH"
+      }
+    ]
+  }
+}

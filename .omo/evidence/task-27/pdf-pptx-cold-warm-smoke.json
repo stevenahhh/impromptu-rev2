@@ -1,0 +1,41 @@
+{
+  "task": "task-27-pdf-pptx-cold-warm-smoke",
+  "commitSha": "a4fcefa57051e92449caf591d9f8e49511b87620",
+  "command": "python3 .omo/evidence/task-27/bench/smoke_cold_warm.py",
+  "generatedAt": "2026-08-21T08:30:44Z",
+  "note": "Measured values only, no pass/fail judgment (task-27 scope excludes cold/concurrent capacity and long-run p95 conclusions). 'cold' is the first /v1/recommendations call against a just-booted private-backend + projection-gateway pair on ephemeral ports; 'warm' is the second call on the same process immediately after, same deck.",
+  "results": [
+    {
+      "fixture": "korean-text-layer.pdf",
+      "uploadMs": 487.18,
+      "cold": {
+        "latencyMs": 4505.149,
+        "serverLatencyMs": 5000,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED"
+      },
+      "warm": {
+        "latencyMs": 4507.97,
+        "serverLatencyMs": 5000,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED"
+      }
+    },
+    {
+      "fixture": "korean-structural.pptx",
+      "uploadMs": 1736.628,
+      "cold": {
+        "latencyMs": 4505.048,
+        "serverLatencyMs": 5000,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED"
+      },
+      "warm": {
+        "latencyMs": 4506.902,
+        "serverLatencyMs": 5000,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED"
+      }
+    }
+  ]
+}

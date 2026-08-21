@@ -51,3 +51,70 @@ Provisional live recommendation gates:
 - at least 299 representative non-supportable cases with zero false-support escapes.
 
 Live public evidence remains off until the signed evaluation record passes every applicable safety, usefulness, approval-load, lease, and recovery gate.
+
+## 48-hour observable acceptance vs. September hardening
+
+The five-feature compressed merge-train plan (`.omo/plans/impromptu-five-features-48h.md`) asked
+the user to choose, before execution, whether the 48-hour window itself would be treated as the
+completion boundary (`guarded-48h`) or whether September system-integration hardening would be
+folded into that boundary (`include-hardening`). The user's recorded decision is
+**`include-hardening`** (`.omo/evidence/decisions/completion-boundary.json`, decided 2026-08-21).
+
+Consequences of that decision, stated explicitly so this document cannot be read as a completion
+claim it does not make:
+
+- **48-hour completion is not declared.** This document does not assert that the guarded 48-hour
+  acceptance is complete, and the expanded five-feature request is not marked done.
+- **Completion is held open**, deferred to the September hardening pass. It becomes assertable
+  only when `CORE5_GREEN`, `OCR_GREEN`, `COACHING_WORD_TIMING_GREEN`, and `STAGE_ZERO_CARDS` are
+  each independently true (see plan "Owner-input gates" and final receipt section) — `OCR_GREEN`
+  is `false` today (below), so that bar is not yet met.
+- **The 48-hour constraint is lifted.** Work on core-5, OCR, coaching, and the report is not cut
+  off at the 48-hour mark to force a same-day completion claim; it continues under normal
+  engineering cadence into the September hardening pass.
+
+### What the 48-hour window produced (evidence-backed, not a completion claim)
+
+- Core-5 functional wiring (local Korean STT, external evidence search, lexical+dense retrieval,
+  real-time coaching, post-presentation report) exists and is exercised end-to-end; positive
+  `RECOMMEND` outcomes remain non-deterministic under real chat providers
+  (`.omo/evidence/task-29/abstain-root-cause.json`, `.omo/evidence/task-25/core5-run-summary.json`)
+  and that gap is not closed by this document.
+- Performance regression measurement (task-27, `.omo/evidence/task-27/performance-and-scope.json`):
+  two independent 10-run cohorts against real chat/embedding providers and the real local
+  whisper.cpp adapter, both 10/10 HTTP-complete with p95 <= 5,000ms — confirmed-FINAL-to-Console
+  recommendation (SSE audio-ingest auto-trigger) p50 4,027.3ms / p95 4,503.8ms, and the existing
+  direct `/v1/recommendations` flow p50 3,122.7ms / p95 4,505.0ms. Both cohorts abstained on every
+  run (`DEADLINE_EXCEEDED` or `DETERMINISTIC_MISMATCH`); "10/10" here means 10/10 bounded HTTP/SSE
+  responses, not 10/10 `RECOMMEND` verdicts — verdict rate is the separate, already-documented,
+  unresolved gap above. A prior fake-provider figure cited in planning (p50 3,038.6ms / p95
+  4,164.3ms / 10-of-10) does not reflect real provider tail latency; see the evidence JSON for the
+  full caveat and source discrepancy note.
+- Representative PDF/PPTX cold/warm smoke was recorded as measured values only
+  (`.omo/evidence/task-27/pdf-pptx-cold-warm-smoke.json`); per plan scope this is not used to
+  reach a cold/concurrent-capacity or long-run p95 conclusion.
+
+### What is deferred to September hardening
+
+- Cold/concurrent production capacity, soak testing, and any long-run p95 conclusion.
+- OCR production hardening (accuracy, throughput, and cost — see below).
+- The combined `CORE5_GREEN` / `OCR_GREEN` / `COACHING_WORD_TIMING_GREEN` / `STAGE_ZERO_CARDS`
+  receipt that this document's completion language is gated on.
+
+## OCR status and cost
+
+OCR is tracked as its own status and cost line, separate from `CORE5_GREEN`; an OCR shortfall does
+not change the core-5 latency/functional results above, and it is why overall completion remains
+held open under `include-hardening`.
+
+- **`OCR_GREEN = false`.** Current measurement (`.omo/evidence/task-26/`): the pinned Tesseract
+  path restores the fixture sentinel `형식 중립 근거 자료 2026` as `형식 ron —| 근거 자료 2026`
+  (`exactSentinel: false`) — garbled, not an exact restoration.
+- No thermal or performance warning was recorded during the OCR run (`pmset`: "No thermal warning
+  level has been recorded" / "No performance warning level has been recorded"); the shortfall is
+  recognition accuracy, not device throttling.
+- Four OCR failure paths are confirmed mapped to `422 OCR_UNAVAILABLE`: missing Tesseract binary,
+  missing pinned `kor` model, non-zero Tesseract exit, and empty TSV output. Encrypted PDFs are a
+  separate, distinct rejection (`encrypted_document`), not counted among the four.
+- Cost: pinned Tesseract models total 5,790,503 bytes (`eng` 4,113,088 + `kor` 1,677,415), and
+  rasterizing a scanned page for OCR adds 17,805,650 bytes of image data per the measured fixture.
