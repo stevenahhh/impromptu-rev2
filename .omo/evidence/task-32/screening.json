@@ -1,0 +1,719 @@
+{
+  "generatedAt": "2026-08-21T19:23:24.899Z",
+  "results": [
+    {
+      "model": "minimax-m3",
+      "alreadyTested": false,
+      "httpOk": 3,
+      "p50LatencyMs": 4506,
+      "maxLatencyMs": 4970,
+      "passCount": 1,
+      "verdicts": [
+        "FABRICATED_FACTS",
+        "FABRICATED_FACTS",
+        "PASS"
+      ],
+      "samples": [
+        {
+          "verdict": "FABRICATED_FACTS"
+        },
+        {
+          "verdict": "FABRICATED_FACTS"
+        },
+        {
+          "verdict": "PASS",
+          "claim": "제시된 근거 자료(e1)는 '형식 중립 근거 자료 2026'이라는 검색어만 포함하고 있어, 그 외의 구체적 사실·수치·출처를 확인할 수 없습니다."
+        }
+      ]
+    },
+    {
+      "model": "minimax-m2.7",
+      "alreadyTested": false,
+      "httpOk": 3,
+      "p50LatencyMs": 4828,
+      "maxLatencyMs": 5180,
+      "passCount": 1,
+      "verdicts": [
+        "SCHEMA_INVALID",
+        "PASS",
+        "SCHEMA_INVALID"
+      ],
+      "samples": [
+        {
+          "verdict": "SCHEMA_INVALID"
+        },
+        {
+          "verdict": "PASS",
+          "claim": "검증 가능한 형식 중립 근거 자료를 2026년 기준으로 제공할 수 없습니다."
+        },
+        {
+          "verdict": "SCHEMA_INVALID"
+        }
+      ]
+    },
+    {
+      "model": "minimax-m2.5",
+      "alreadyTested": false,
+      "httpOk": 0,
+      "p50LatencyMs": 0,
+      "maxLatencyMs": null,
+      "passCount": 0,
+      "verdicts": [
+        "HTTP_400",
+        "HTTP_400",
+        "HTTP_400"
+      ],
+      "samples": [
+        {
+          "verdict": "HTTP_400"
+        },
+        {
+          "verdict": "HTTP_400"
+        },
+        {
+          "verdict": "HTTP_400"
+        }
+      ]
+    },
+    {
+      "model": "kimi-k3",
+      "alreadyTested": false,
+      "httpOk": 0,
+      "p50LatencyMs": 0,
+      "maxLatencyMs": null,
+      "passCount": 0,
+      "verdicts": [
+        "HTTP_400",
+        "HTTP_400",
+        "HTTP_400"
+      ],
+      "samples": [
+        {
+          "verdict": "HTTP_400"
+        },
+        {
+          "verdict": "HTTP_400"
+        },
+        {
+          "verdict": "HTTP_400"
+        }
+      ]
+    },
+    {
+      "model": "kimi-k2.7-code",
+      "alreadyTested": false,
+      "httpOk": 0,
+      "p50LatencyMs": 0,
+      "maxLatencyMs": null,
+      "passCount": 0,
+      "verdicts": [
+        "HTTP_400",
+        "HTTP_400",
+        "HTTP_400"
+      ],
+      "samples": [
+        {
+          "verdict": "HTTP_400"
+        },
+        {
+          "verdict": "HTTP_400"
+        },
+        {
+          "verdict": "HTTP_400"
+        }
+      ]
+    },
+    {
+      "model": "kimi-k2.6",
+      "alreadyTested": false,
+      "httpOk": 3,
+      "p50LatencyMs": 2521,
+      "maxLatencyMs": 2578,
+      "passCount": 0,
+      "verdicts": [
+        "FABRICATED_FACTS",
+        "FABRICATED_FACTS",
+        "FABRICATED_FACTS"
+      ],
+      "samples": [
+        {
+          "verdict": "FABRICATED_FACTS"
+        },
+        {
+          "verdict": "FABRICATED_FACTS"
+        },
+        {
+          "verdict": "FABRICATED_FACTS"
+        }
+      ]
+    },
+    {
+      "model": "kimi-k2.5",
+      "alreadyTested": true,
+      "httpOk": 3,
+      "p50LatencyMs": 2094,
+      "maxLatencyMs": 2308,
+      "passCount": 0,
+      "verdicts": [
+        "FABRICATED_FACTS",
+        "FABRICATED_FACTS",
+        "FABRICATED_FACTS"
+      ],
+      "samples": [
+        {
+          "verdict": "FABRICATED_FACTS"
+        },
+        {
+          "verdict": "FABRICATED_FACTS"
+        },
+        {
+          "verdict": "FABRICATED_FACTS"
+        }
+      ]
+    },
+    {
+      "model": "glm-5.2",
+      "alreadyTested": false,
+      "httpOk": 3,
+      "p50LatencyMs": 2411,
+      "maxLatencyMs": 2821,
+      "passCount": 1,
+      "verdicts": [
+        "FABRICATED_FACTS",
+        "FABRICATED_FACTS",
+        "PASS"
+      ],
+      "samples": [
+        {
+          "verdict": "FABRICATED_FACTS"
+        },
+        {
+          "verdict": "FABRICATED_FACTS"
+        },
+        {
+          "verdict": "PASS",
+          "claim": "형식 중립 근거 자료 2026"
+        }
+      ]
+    },
+    {
+      "model": "glm-5.3",
+      "alreadyTested": false,
+      "httpOk": 0,
+      "p50LatencyMs": 0,
+      "maxLatencyMs": null,
+      "passCount": 0,
+      "verdicts": [
+        "HTTP_400",
+        "HTTP_400",
+        "HTTP_400"
+      ],
+      "samples": [
+        {
+          "verdict": "HTTP_400"
+        },
+        {
+          "verdict": "HTTP_400"
+        },
+        {
+          "verdict": "HTTP_400"
+        }
+      ]
+    },
+    {
+      "model": "glm-5.1",
+      "alreadyTested": false,
+      "httpOk": 3,
+      "p50LatencyMs": 2205,
+      "maxLatencyMs": 3026,
+      "passCount": 0,
+      "verdicts": [
+        "FABRICATED_FACTS",
+        "FABRICATED_FACTS",
+        "FABRICATED_FACTS"
+      ],
+      "samples": [
+        {
+          "verdict": "FABRICATED_FACTS"
+        },
+        {
+          "verdict": "FABRICATED_FACTS"
+        },
+        {
+          "verdict": "FABRICATED_FACTS"
+        }
+      ]
+    },
+    {
+      "model": "glm-5",
+      "alreadyTested": false,
+      "httpOk": 3,
+      "p50LatencyMs": 6814,
+      "maxLatencyMs": 7018,
+      "passCount": 0,
+      "verdicts": [
+        "FABRICATED_FACTS",
+        "FABRICATED_FACTS",
+        "FABRICATED_FACTS"
+      ],
+      "samples": [
+        {
+          "verdict": "FABRICATED_FACTS"
+        },
+        {
+          "verdict": "FABRICATED_FACTS"
+        },
+        {
+          "verdict": "FABRICATED_FACTS"
+        }
+      ]
+    },
+    {
+      "model": "ox-alpha-free",
+      "alreadyTested": false,
+      "httpOk": 0,
+      "p50LatencyMs": 0,
+      "maxLatencyMs": null,
+      "passCount": 0,
+      "verdicts": [
+        "HTTP_400",
+        "HTTP_400",
+        "HTTP_400"
+      ],
+      "samples": [
+        {
+          "verdict": "HTTP_400"
+        },
+        {
+          "verdict": "HTTP_400"
+        },
+        {
+          "verdict": "HTTP_400"
+        }
+      ]
+    },
+    {
+      "model": "deepseek-v4-pro",
+      "alreadyTested": false,
+      "httpOk": 0,
+      "p50LatencyMs": 0,
+      "maxLatencyMs": null,
+      "passCount": 0,
+      "verdicts": [
+        "HTTP_400",
+        "HTTP_400",
+        "HTTP_400"
+      ],
+      "samples": [
+        {
+          "verdict": "HTTP_400"
+        },
+        {
+          "verdict": "HTTP_400"
+        },
+        {
+          "verdict": "HTTP_400"
+        }
+      ]
+    },
+    {
+      "model": "deepseek-v4-flash",
+      "alreadyTested": true,
+      "httpOk": 3,
+      "p50LatencyMs": 976,
+      "maxLatencyMs": 1591,
+      "passCount": 2,
+      "verdicts": [
+        "FABRICATED_FACTS",
+        "PASS",
+        "PASS"
+      ],
+      "samples": [
+        {
+          "verdict": "FABRICATED_FACTS"
+        },
+        {
+          "verdict": "PASS",
+          "claim": "형식 중립 근거 자료 2026에 대한 구체적 권고는 제공된 근거만으로 확인할 수 없습니다."
+        },
+        {
+          "verdict": "PASS",
+          "claim": "형식 중립 근거 자료 2026에 대한 구체적 정보는 제공된 자료에 없습니다."
+        }
+      ]
+    },
+    {
+      "model": "deepseek-v4-flash-vision-exp",
+      "alreadyTested": false,
+      "httpOk": 0,
+      "p50LatencyMs": 0,
+      "maxLatencyMs": null,
+      "passCount": 0,
+      "verdicts": [
+        "HTTP_400",
+        "HTTP_400",
+        "HTTP_400"
+      ],
+      "samples": [
+        {
+          "verdict": "HTTP_400"
+        },
+        {
+          "verdict": "HTTP_400"
+        },
+        {
+          "verdict": "HTTP_400"
+        }
+      ]
+    },
+    {
+      "model": "qwen3.7-max",
+      "alreadyTested": false,
+      "httpOk": 3,
+      "p50LatencyMs": 2820,
+      "maxLatencyMs": 3946,
+      "passCount": 1,
+      "verdicts": [
+        "FABRICATED_FACTS",
+        "PASS",
+        "FABRICATED_FACTS"
+      ],
+      "samples": [
+        {
+          "verdict": "FABRICATED_FACTS"
+        },
+        {
+          "verdict": "PASS",
+          "claim": "형식 중립 근거 자료 2026에 대한 구체적인 내용은 제공된 증거에서 확인되지 않는다."
+        },
+        {
+          "verdict": "FABRICATED_FACTS"
+        }
+      ]
+    },
+    {
+      "model": "qwen3.8-max",
+      "alreadyTested": false,
+      "httpOk": 3,
+      "p50LatencyMs": 2665,
+      "maxLatencyMs": 4253,
+      "passCount": 2,
+      "verdicts": [
+        "FABRICATED_FACTS",
+        "PASS",
+        "PASS"
+      ],
+      "samples": [
+        {
+          "verdict": "FABRICATED_FACTS"
+        },
+        {
+          "verdict": "PASS",
+          "claim": "형식 중립 근거 자료 2026에 대한 구체적인 내용은 제공된 증거에서 확인되지 않는다."
+        },
+        {
+          "verdict": "PASS",
+          "claim": "형식 중립 근거 자료 2026에 대한 구체적인 내용은 제공된 증거에서 확인되지 않는다."
+        }
+      ]
+    },
+    {
+      "model": "qwen3.7-plus",
+      "alreadyTested": true,
+      "httpOk": 3,
+      "p50LatencyMs": 2985,
+      "maxLatencyMs": 4458,
+      "passCount": 1,
+      "verdicts": [
+        "WRONG_EVIDENCE_ID",
+        "WRONG_EVIDENCE_ID",
+        "PASS"
+      ],
+      "samples": [
+        {
+          "verdict": "WRONG_EVIDENCE_ID"
+        },
+        {
+          "verdict": "WRONG_EVIDENCE_ID"
+        },
+        {
+          "verdict": "PASS",
+          "claim": "형식 중립 근거 자료 2026"
+        }
+      ]
+    },
+    {
+      "model": "qwen3.6-plus",
+      "alreadyTested": true,
+      "httpOk": 3,
+      "p50LatencyMs": 1811,
+      "maxLatencyMs": 1916,
+      "passCount": 3,
+      "verdicts": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "samples": [
+        {
+          "verdict": "PASS",
+          "claim": "형식 중립 근거 자료 2026"
+        },
+        {
+          "verdict": "PASS",
+          "claim": "형식 중립 근거 자료 2026"
+        },
+        {
+          "verdict": "PASS",
+          "claim": "형식 중립 근거 자료 2026"
+        }
+      ]
+    },
+    {
+      "model": "qwen3.5-plus",
+      "alreadyTested": false,
+      "httpOk": 3,
+      "p50LatencyMs": 2142,
+      "maxLatencyMs": 2289,
+      "passCount": 3,
+      "verdicts": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "samples": [
+        {
+          "verdict": "PASS",
+          "claim": "제시된 근거 자료에는 '형식 중립 근거 자료 2026'이라는 제목 외의 구체적인 내용이 포함되어 있지 않습니다."
+        },
+        {
+          "verdict": "PASS",
+          "claim": "제시된 근거 자료에는 2026 년 형식 중립에 대한 구체적인 내용이 포함되어 있지 않습니다."
+        },
+        {
+          "verdict": "PASS",
+          "claim": "제시된 근거 자료에는 '형식 중립 근거 자료 2026'이라는 문구만 포함되어 있어 구체적인 내용을 확인할 수 없습니다."
+        }
+      ]
+    },
+    {
+      "model": "mimo-v2-pro",
+      "alreadyTested": false,
+      "httpOk": 0,
+      "p50LatencyMs": 0,
+      "maxLatencyMs": null,
+      "passCount": 0,
+      "verdicts": [
+        "HTTP_400",
+        "HTTP_400",
+        "HTTP_400"
+      ],
+      "samples": [
+        {
+          "verdict": "HTTP_400"
+        },
+        {
+          "verdict": "HTTP_400"
+        },
+        {
+          "verdict": "HTTP_400"
+        }
+      ]
+    },
+    {
+      "model": "mimo-v2-omni",
+      "alreadyTested": false,
+      "httpOk": 0,
+      "p50LatencyMs": 0,
+      "maxLatencyMs": null,
+      "passCount": 0,
+      "verdicts": [
+        "HTTP_400",
+        "HTTP_400",
+        "HTTP_400"
+      ],
+      "samples": [
+        {
+          "verdict": "HTTP_400"
+        },
+        {
+          "verdict": "HTTP_400"
+        },
+        {
+          "verdict": "HTTP_400"
+        }
+      ]
+    },
+    {
+      "model": "mimo-v2.5-pro",
+      "alreadyTested": false,
+      "httpOk": 3,
+      "p50LatencyMs": 5892,
+      "maxLatencyMs": 7426,
+      "passCount": 0,
+      "verdicts": [
+        "FABRICATED_FACTS",
+        "FABRICATED_FACTS",
+        "FABRICATED_FACTS"
+      ],
+      "samples": [
+        {
+          "verdict": "FABRICATED_FACTS"
+        },
+        {
+          "verdict": "FABRICATED_FACTS"
+        },
+        {
+          "verdict": "FABRICATED_FACTS"
+        }
+      ]
+    },
+    {
+      "model": "mimo-v2.5",
+      "alreadyTested": false,
+      "httpOk": 3,
+      "p50LatencyMs": 3851,
+      "maxLatencyMs": 6501,
+      "passCount": 0,
+      "verdicts": [
+        "FABRICATED_FACTS",
+        "FABRICATED_FACTS",
+        "FABRICATED_FACTS"
+      ],
+      "samples": [
+        {
+          "verdict": "FABRICATED_FACTS"
+        },
+        {
+          "verdict": "FABRICATED_FACTS"
+        },
+        {
+          "verdict": "FABRICATED_FACTS"
+        }
+      ]
+    },
+    {
+      "model": "hy3",
+      "alreadyTested": false,
+      "httpOk": 3,
+      "p50LatencyMs": 2938,
+      "maxLatencyMs": 3844,
+      "passCount": 0,
+      "verdicts": [
+        "FABRICATED_FACTS",
+        "FABRICATED_FACTS",
+        "FABRICATED_FACTS"
+      ],
+      "samples": [
+        {
+          "verdict": "FABRICATED_FACTS"
+        },
+        {
+          "verdict": "FABRICATED_FACTS"
+        },
+        {
+          "verdict": "FABRICATED_FACTS"
+        }
+      ]
+    },
+    {
+      "model": "hy3-preview",
+      "alreadyTested": false,
+      "httpOk": 0,
+      "p50LatencyMs": 0,
+      "maxLatencyMs": null,
+      "passCount": 0,
+      "verdicts": [
+        "HTTP_400",
+        "HTTP_400",
+        "HTTP_400"
+      ],
+      "samples": [
+        {
+          "verdict": "HTTP_400"
+        },
+        {
+          "verdict": "HTTP_400"
+        },
+        {
+          "verdict": "HTTP_400"
+        }
+      ]
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "alreadyTested": false,
+      "httpOk": 3,
+      "p50LatencyMs": 3097,
+      "maxLatencyMs": 3401,
+      "passCount": 0,
+      "verdicts": [
+        "FABRICATED_FACTS",
+        "FABRICATED_FACTS",
+        "FABRICATED_FACTS"
+      ],
+      "samples": [
+        {
+          "verdict": "FABRICATED_FACTS"
+        },
+        {
+          "verdict": "FABRICATED_FACTS"
+        },
+        {
+          "verdict": "FABRICATED_FACTS"
+        }
+      ]
+    },
+    {
+      "model": "grok-4.5",
+      "alreadyTested": false,
+      "httpOk": 0,
+      "p50LatencyMs": 0,
+      "maxLatencyMs": null,
+      "passCount": 0,
+      "verdicts": [
+        "HTTP_503",
+        "HTTP_503",
+        "HTTP_503"
+      ],
+      "samples": [
+        {
+          "verdict": "HTTP_503"
+        },
+        {
+          "verdict": "HTTP_503"
+        },
+        {
+          "verdict": "HTTP_503"
+        }
+      ]
+    },
+    {
+      "model": "muse-spark-1.2-contributor",
+      "alreadyTested": false,
+      "httpOk": 3,
+      "p50LatencyMs": 6505,
+      "maxLatencyMs": 7841,
+      "passCount": 3,
+      "verdicts": [
+        "PASS",
+        "PASS",
+        "PASS"
+      ],
+      "samples": [
+        {
+          "verdict": "PASS",
+          "claim": "형식 중립 근거 자료 2026이 증거로 제공되었다."
+        },
+        {
+          "verdict": "PASS",
+          "claim": "형식 중립 근거 자료 2026이 제시되었다."
+        },
+        {
+          "verdict": "PASS",
+          "claim": "형식 중립 근거 자료 2026이 제공되었다."
+        }
+      ]
+    }
+  ]
+}

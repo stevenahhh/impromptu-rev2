@@ -1,0 +1,141 @@
+{
+  "generatedAt": "2026-08-21T19:27:33.377Z",
+  "report": {
+    "qwen3.5-plus": {
+      "verifier": {
+        "runs": [
+          "SUPPORTED",
+          "SUPPORTED",
+          "SUPPORTED",
+          "SUPPORTED",
+          "SUPPORTED"
+        ],
+        "latencies": [
+          1914,
+          1538,
+          1538,
+          1539,
+          1714
+        ]
+      },
+      "rerank": {
+        "runs": [
+          "[\"e1\",\"e2\"]",
+          "[\"e1\",\"e2\"]",
+          "[\"e1\",\"e2\"]",
+          "[\"e1\",\"e2\"]",
+          "[\"e1\",\"e2\"]"
+        ],
+        "latencies": [
+          1466,
+          1129,
+          1334,
+          1332,
+          1231
+        ]
+      }
+    },
+    "qwen3.8-max": {
+      "verifier": {
+        "runs": [
+          "SUPPORTED",
+          "SUPPORTED",
+          "SUPPORTED",
+          "SUPPORTED",
+          "SUPPORTED"
+        ],
+        "latencies": [
+          1334,
+          1435,
+          1744,
+          1334,
+          1539
+        ]
+      },
+      "rerank": {
+        "runs": [
+          "[\"e1\",\"e2\"]",
+          "[\"e1\",\"e2\"]",
+          "[\"e1\",\"e2\"]",
+          "[\"e1\",\"e2\"]",
+          "[\"e1\",\"e2\"]"
+        ],
+        "latencies": [
+          1740,
+          1746,
+          1232,
+          1743,
+          1744
+        ]
+      }
+    },
+    "deepseek-v4-flash": {
+      "verifier": {
+        "runs": [
+          "SUPPORTED",
+          "SUPPORTED",
+          "SUPPORTED",
+          "SUPPORTED",
+          "SUPPORTED"
+        ],
+        "latencies": [
+          924,
+          822,
+          1129,
+          925,
+          2050
+        ]
+      },
+      "rerank": {
+        "runs": [
+          "[\"e1\",\"e2\"]",
+          "[\"e1\",\"e2\"]",
+          "[\"e1\",\"e2\"]",
+          "[\"e1\",\"e2\"]",
+          "[\"e1\",\"e2\"]"
+        ],
+        "latencies": [
+          977,
+          1588,
+          821,
+          7042,
+          745
+        ]
+      }
+    },
+    "qwen3.6-plus": {
+      "verifier": {
+        "runs": [
+          "SUPPORTED",
+          "SUPPORTED",
+          "SUPPORTED",
+          "SUPPORTED",
+          "SUPPORTED"
+        ],
+        "latencies": [
+          1642,
+          1540,
+          1436,
+          1635,
+          1442
+        ]
+      },
+      "rerank": {
+        "runs": [
+          "[\"e1\",\"e2\"]",
+          "[\"e1\",\"e2\"]",
+          "[\"e1\",\"e2\"]",
+          "[\"e1\",\"e2\"]",
+          "[\"e1\",\"e2\"]"
+        ],
+        "latencies": [
+          1436,
+          1437,
+          2255,
+          1233,
+          1538
+        ]
+      }
+    }
+  }
+}
