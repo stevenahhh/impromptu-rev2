@@ -1,0 +1,30 @@
+{
+  "taskId": "st_01a022d7",
+  "commit": "d3d34d7",
+  "feature": "owner-only finalized presentation report",
+  "assertions": {
+    "ownerFinalizeThenReloadIdenticalDom": true,
+    "finalizationUsesGet": false,
+    "reloadUsesSingleGet": true,
+    "pollingLoopCount": 0,
+    "exactReportReadySignalAwaited": true,
+    "slideOrder": ["A", "B", "A"],
+    "occurrenceSequence": [1, 1, 2],
+    "dwellMs": [300, 300, 400],
+    "dwellTotalMs": 1000,
+    "nonOwnerStatus": 403,
+    "nonOwnerReportDomCount": 0,
+    "nonOwnerSlideVisitDomCount": 0,
+    "nonOwnerEvidenceDomCount": 0,
+    "reportJsonForbiddenSentinelCount": 0,
+    "reportDomForbiddenSentinelCount": 0,
+    "preparedEvidenceLabelPresent": true
+  },
+  "forbiddenSentinels": ["TRANSCRIPT_BODY_SENTINEL", "SILENCE_SENTINEL", "사용한 근거"],
+  "verification": {
+    "bun test apps/console": { "exitCode": 0, "tests": 64, "failures": 0 },
+    "bun run build": { "exitCode": 0 },
+    "bun run typecheck": { "exitCode": 0 },
+    "biomeChangedFiles": { "exitCode": 0 }
+  }
+}

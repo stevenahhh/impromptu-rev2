@@ -108,9 +108,7 @@
   "status": {
     "CORE5_GREEN": "UNCHANGED",
     "OCR_GREEN": false,
-    "reasons": [
-      "PINNED_OCR_SENTINEL_NOT_EXACT"
-    ]
+    "reasons": ["PINNED_OCR_SENTINEL_NOT_EXACT"]
   },
   "verification": {
     "dbChunkCountAfterScannedUpload": 1,
@@ -190,9 +188,7 @@
     "upload": {
       "artifactId": "5fcb4658ada8b27c3fc832fd573a95c1e799d1b470dee50e79a2e7b68441eac5",
       "outcome": "RENDERED",
-      "warningCodes": [
-        "ocr_applied"
-      ]
+      "warningCodes": ["ocr_applied"]
     }
   }
 }

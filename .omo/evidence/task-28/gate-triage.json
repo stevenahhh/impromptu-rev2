@@ -1,0 +1,64 @@
+{
+  "run": "in-session (codex quota exhausted, DAG delegation unavailable)",
+  "gatesPassing": {
+    "typecheck": 0,
+    "build": 0,
+    "boundaries": 0,
+    "browser-boundary": 0,
+    "browser-runtime": 0,
+    "lint": 0,
+    "test:db": 0,
+    "test:security": 0,
+    "test:retrieval": 0,
+    "ingestion-pytest": 0,
+    "ingestion-ruff": 0,
+    "ingestion-basedpyright": 0
+  },
+  "myInvocationErrors": [
+    "ruff/basedpyright were run from repo root instead of services/ingestion; correct cwd gives 'All checks passed' and '0 errors'",
+    "lint failures were unformatted .omo/evidence/*.json artifacts written by subagent nodes, not product code",
+    "bare 'bun test' without CI database env; CI uses impromptu_bootstrap role, not private_app"
+  ],
+  "realRegressionsFound": [
+    {
+      "id": "whisper-env-hard-required",
+      "cause": "Wave1 whisper adapter made FFMPEG_BINARY_PATH / WHISPER_CPP_BINARY_PATH / WHISPER_CPP_MODEL_PATH required in private-backend main.ts, so the service refused to boot anywhere those are absent (all E2E harnesses and CI).",
+      "fix": "Compose local capture optionally: whisper registration and createAudioIngestService run only when all three paths exist; http.ts already returns 503 audio_ingest_unavailable when audio is undefined.",
+      "recovered": [
+        "runnable WP3 service composition",
+        "production main deck upload wiring (2 tests)"
+      ],
+      "verified": {
+        "private-backend": "158 pass",
+        "security": "15 pass",
+        "retrieval": "24 pass",
+        "typecheck": 0,
+        "boundaries": 0
+      }
+    },
+    {
+      "id": "browser-runtime-stale-copy",
+      "cause": "verify-browser-runtime.ts waited for Stage evidence copy '흐름을 끊지 않는 근거', which slide-only enforcement removed from the rendered tree.",
+      "fix": "Wait on the machine-consumed [data-audience-readiness] attribute instead of prose, per the repo rule against asserting prose.",
+      "result": "check:browser-runtime exit 0"
+    }
+  ],
+  "remainingFailures": {
+    "count": 4,
+    "environmentConflict": {
+      "test": "custom deck upload real-browser QA",
+      "cause": "ports 4173/4174 held by a pre-existing developer dev stack (uptime 15h+), not by this work. Not killed deliberately."
+    },
+    "staleCardContract": {
+      "tests": [
+        "durable service-main restore boundary",
+        "WP5 venue-like realtime and reconnect soak",
+        "WP3 prepared evidence real-browser E2E",
+        "WP4 Windows topology real-browser E2E"
+      ],
+      "cause": "These suites still exercise the live-card publication path that the user-confirmed slide-only decision closed (681559e makes /v1/publications/approve and /terminate return 410 stage_cards_disabled; 94494ae removed 366 lines of projection card state).",
+      "partialProgress": "durable-main-restart publication block now asserts the 410 fail-closed contract; it then fails earlier at a tampered-projection-snapshot expectation whose card-projection state model no longer exists.",
+      "assessment": "Reconciling these four harnesses with the slide-only contract is genuine remaining work and requires a product judgement about which durability invariants survive card removal."
+    }
+  }
+}

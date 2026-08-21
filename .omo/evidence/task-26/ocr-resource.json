@@ -1,1 +1,40 @@
-{"concurrency": 1, "exactSentinelPages": 0, "expectedSentinel": "형식 중립 근거 자료 2026", "fixture": "/tmp/korean-scanned.pdf", "hardware": {"machine": "aarch64", "processor": "", "system": "Linux"}, "inContainerUsage": {"maxRssBytes": 142548992, "sysSeconds": 0.18909, "userSeconds": 2.164212, "wallSeconds": 1.903298}, "ocrAppliedPages": 10, "pageCount": 10, "recognizedTexts": ["형식 ron —| 근거 자료 2026", "형식 ron —| 근거 자료 2026", "형식 ron —| 근거 자료 2026", "형식 ron —| 근거 자료 2026", "형식 ron —| 근거 자료 2026", "형식 ron —| 근거 자료 2026", "형식 ron —| 근거 자료 2026", "형식 ron —| 근거 자료 2026", "형식 ron —| 근거 자료 2026", "형식 ron —| 근거 자료 2026"], "schemaVersion": 1, "warningCodesByPage": [["ocr_applied"], ["ocr_applied"], ["ocr_applied"], ["ocr_applied"], ["ocr_applied"], ["ocr_applied"], ["ocr_applied"], ["ocr_applied"], ["ocr_applied"], ["ocr_applied"]]}
+{
+  "concurrency": 1,
+  "exactSentinelPages": 0,
+  "expectedSentinel": "형식 중립 근거 자료 2026",
+  "fixture": "/tmp/korean-scanned.pdf",
+  "hardware": { "machine": "aarch64", "processor": "", "system": "Linux" },
+  "inContainerUsage": {
+    "maxRssBytes": 142548992,
+    "sysSeconds": 0.18909,
+    "userSeconds": 2.164212,
+    "wallSeconds": 1.903298
+  },
+  "ocrAppliedPages": 10,
+  "pageCount": 10,
+  "recognizedTexts": [
+    "형식 ron —| 근거 자료 2026",
+    "형식 ron —| 근거 자료 2026",
+    "형식 ron —| 근거 자료 2026",
+    "형식 ron —| 근거 자료 2026",
+    "형식 ron —| 근거 자료 2026",
+    "형식 ron —| 근거 자료 2026",
+    "형식 ron —| 근거 자료 2026",
+    "형식 ron —| 근거 자료 2026",
+    "형식 ron —| 근거 자료 2026",
+    "형식 ron —| 근거 자료 2026"
+  ],
+  "schemaVersion": 1,
+  "warningCodesByPage": [
+    ["ocr_applied"],
+    ["ocr_applied"],
+    ["ocr_applied"],
+    ["ocr_applied"],
+    ["ocr_applied"],
+    ["ocr_applied"],
+    ["ocr_applied"],
+    ["ocr_applied"],
+    ["ocr_applied"],
+    ["ocr_applied"]
+  ]
+}

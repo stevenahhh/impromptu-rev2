@@ -1,0 +1,7 @@
+{
+  "boundary": "include-hardening",
+  "decidedBy": "user",
+  "decidedAt": "2026-08-21T02:09:16.441Z",
+  "source": "30으로 가고, q5는 include-hardening",
+  "implication": "48시간 완료를 선언하지 않는다. 9월 hardening을 완료 경계 안에 포함한다."
+}

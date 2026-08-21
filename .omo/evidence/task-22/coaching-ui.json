@@ -1,0 +1,42 @@
+{
+  "taskId": "st_01a022c6",
+  "rollingWindowSeconds": 30,
+  "testCommand": "bun test apps/console/src/App.test.tsx apps/console/src/audio-capture.test.tsx",
+  "testExitCode": 0,
+  "testSummary": {
+    "passed": 28,
+    "failed": 0,
+    "expectCalls": 144
+  },
+  "acceptance": {
+    "optInFalseMetricDomCount": 0,
+    "muteTrueMetricDomCount": 0,
+    "enabledTimedFinal": {
+      "currentWordsPerMinute": 8,
+      "previousWordsPerMinute": 4,
+      "deltaWordsPerMinute": 4,
+      "renderedDelta": "+4 WPM",
+      "cueCount": 2
+    },
+    "noWords": {
+      "coachingState": "unavailable",
+      "metricDomCount": 0
+    },
+    "wordTimingCapableFalse": {
+      "coachingState": "unavailable",
+      "metricDomCount": 0
+    },
+    "keyboard": "native checkbox controls are tab-focusable and callback-tested",
+    "ariaLive": "polite",
+    "ariaAtomic": true
+  },
+  "requiredCommands": {
+    "build": { "log": "build.log", "exitCode": 0 },
+    "browserBoundary": { "log": "browser-boundary.log", "exitCode": 0 }
+  },
+  "sourceReceipts": {
+    "forbiddenFields": 0,
+    "stageCoachingImports": 0,
+    "log": "scope-receipt.log"
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "task": "task-29-abstain-root-cause",
+  "question": "Core-5 positive 0/2 를 만든 ABSTAIN:INSUFFICIENT_EVIDENCE 의 근본 원인",
+  "hypotheses": {
+    "1-indexing-pipeline": {
+      "verdict": "REJECTED",
+      "evidence": "deck-index INDEXED:COMPLETED, 콜드 색인 147ms, tenant 컨텍스트에서 chunk 9행 (초기 0행은 RLS 미설정 조회 착시)"
+    },
+    "2-approval-gate": {
+      "verdict": "REJECTED",
+      "evidence": "동일 요청·동일 승인 상태에서 RECOMMEND 가 실제로 반환됨"
+    },
+    "3-query-construction": {
+      "verdict": "REJECTED",
+      "evidence": "internal chunk 가 evidenceIds 로 선택됨: internal:2020f87c...:34eac2a5..."
+    },
+    "4-model-stage": {
+      "verdict": "CONFIRMED",
+      "evidence": "완주 요청 전부 verifier SUCCESS + INSUFFICIENT_EVIDENCE ⇒ verdict=UNSUPPORTED. 나머지는 4,500ms abort"
+    }
+  },
+  "interleavedAbTest": {
+    "design": "베이스라인(HEAD worktree)과 패치 스택을 동시 기동해 요청 교차 실행, 워밍업 1회 제외 각 10회",
+    "baseline": {
+      "recommend": "3/10",
+      "p50Ms": 4088,
+      "p95Ms": 4506,
+      "deadlineExceeded": 3,
+      "insufficientEvidence": 4
+    },
+    "patched": {
+      "recommend": "4/10",
+      "p50Ms": 4473,
+      "p95Ms": 4505,
+      "deadlineExceeded": 4,
+      "insufficientEvidence": 2
+    },
+    "conclusion": "차이는 노이즈. verifier 를 llm 완료 직후 시작시키는 구조 변경은 측정 가능한 이득이 없어 원복함."
+  },
+  "stageLatencyMs": {
+    "embedding": [165, 193],
+    "retrievalGap": 550,
+    "rerank": [818, 3553],
+    "llm": [921, 3565],
+    "verifier": [891, 1744]
+  },
+  "deadline": {
+    "budgetMs": 5000,
+    "guardMs": 500,
+    "abortAtMs": 4500,
+    "source": "recommendation-pipeline.ts:96"
+  },
+  "blockers": [
+    "지연: rerank·llm 단일 콜이 최대 3.5s 로 출렁여 embedding+retrieval+llm+verifier 직렬 합이 4,500ms 예산을 넘김",
+    "판정: 얇은 fixture 에서 LLM 이 '근거에 없음' 류 주장을 생성하고 verifier 가 UNSUPPORTED 로 fail-closed. 제품 설계대로의 동작"
+  ],
+  "notChanged": ["임계값", "fixture", "테스트 기대값", "게이트"],
+  "implication": "acceptance 의 positive 판정은 모델 비결정성에 의존함. 동일 입력이 회차에 따라 RECOMMEND 와 ABSTAIN 을 오감."
+}

@@ -1,0 +1,37 @@
+{
+  "task": 23,
+  "commit": "14c57e0",
+  "status": "PASS",
+  "consoleExternalFixture": {
+    "originTitle": "Origin annual report",
+    "sourceUrl": "https://example.test/annual-report",
+    "sourceDate": "2025-03-04",
+    "rightsLabel": "권리 미확인(UNKNOWN)",
+    "providerSnippetSentinelDomCount": 0,
+    "test": "Console route boundary > adds evidence as each slide finishes without blocking presentation readiness"
+  },
+  "closedPrivateMapper": {
+    "safeExternalCards": 1,
+    "unsafeExternalCards": 0,
+    "preservedInternalCards": 1,
+    "providerSnippetSentinelDtoCount": 0,
+    "test": "recommend maps only closed private provenance and drops unsafe external URLs"
+  },
+  "stageLeakage": {
+    "privateDtoSourceCount": 0,
+    "privateDtoBundleCount": 0,
+    "externalFixtureUrlSourceCount": 0,
+    "externalFixtureUrlBundleCount": 0,
+    "externalPrivateDomCount": 0,
+    "externalPrivateNetworkUrlCount": 0,
+    "publicContractPrivateMapperCount": 0,
+    "domTest": "slide-only public Stage > renders no evidence or source DOM even when a malicious snapshot object carries cards",
+    "networkBasis": "The exact private DTO and external fixture URL are absent from Stage source and production bundle; Stage has no mapper/import capable of constructing that request."
+  },
+  "commands": {
+    "consoleTests": { "exitCode": 0, "passes": 59, "failures": 0, "log": "console-tests.log" },
+    "build": { "exitCode": 0, "log": "build.log" },
+    "browserBoundary": { "exitCode": 0, "log": "browser-boundary.log" },
+    "browserTests": { "exitCode": 0, "passes": 26, "failures": 0, "log": "browser-test.log" }
+  }
+}

@@ -33,72 +33,56 @@
       "command": "Console denied getUserMedia + request observer",
       "exitCode": 0,
       "verdict": "PASS",
-      "assertions": [
-        "audio-request-count=0"
-      ]
+      "assertions": ["audio-request-count=0"]
     },
     {
       "name": "negative-external-429-internal-only",
       "command": "bun test services/private-backend/test/recommendation-pipeline.test.ts",
       "exitCode": 0,
       "verdict": "PASS",
-      "assertions": [
-        "HTTP_429 retains internal RECOMMEND"
-      ]
+      "assertions": ["HTTP_429 retains internal RECOMMEND"]
     },
     {
       "name": "negative-stage-snapshot-cards-zero",
       "command": "bun test tests/security/release-security.test.ts",
       "exitCode": 0,
       "verdict": "PASS",
-      "assertions": [
-        "snapshot cards=0"
-      ]
+      "assertions": ["snapshot cards=0"]
     },
     {
       "name": "negative-stage-sse-cards-zero",
       "command": "bun test services/projection-gateway/test/prepared-evidence.test.ts",
       "exitCode": 0,
       "verdict": "PASS",
-      "assertions": [
-        "SSE CARD dropped"
-      ]
+      "assertions": ["SSE CARD dropped"]
     },
     {
       "name": "negative-stage-ws-cards-zero",
       "command": "bun test apps/stage/src/stage-client.test.ts",
       "exitCode": 0,
       "verdict": "PASS",
-      "assertions": [
-        "WS CARD dropped"
-      ]
+      "assertions": ["WS CARD dropped"]
     },
     {
       "name": "negative-aba-reload-dwell-identical",
       "command": "bun test services/private-backend/test/session-report-finalizer.test.ts",
       "exitCode": 0,
       "verdict": "PASS",
-      "assertions": [
-        "A-B-A report dwell byte-equivalent after reload"
-      ]
+      "assertions": ["A-B-A report dwell byte-equivalent after reload"]
     },
     {
       "name": "stt-partial-before-final",
       "command": "bun test services/private-backend/test/stt-whisper-cpp.test.ts",
       "exitCode": 0,
       "verdict": "PASS",
-      "assertions": [
-        "PARTIAL precedes exactly-one FINAL"
-      ]
+      "assertions": ["PARTIAL precedes exactly-one FINAL"]
     },
     {
       "name": "stt-revoke-stops-and-blocks-late-delivery",
       "command": "bun test services/private-backend/test/audio-ingest-http.test.ts",
       "exitCode": 0,
       "verdict": "PASS",
-      "assertions": [
-        "revoke terminal blocks late delivery"
-      ]
+      "assertions": ["revoke terminal blocks late delivery"]
     }
   ],
   "positive": "0/2",
