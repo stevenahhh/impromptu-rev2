@@ -1,0 +1,339 @@
+{
+  "label": "patched-verifier-qwen3.7-plus",
+  "models": {
+    "rerank": "deepseek-v4-flash",
+    "llm": "deepseek-v4-flash",
+    "verifier": "qwen3.7-plus"
+  },
+  "fixture": "korean-text-layer.pdf",
+  "runs": 10,
+  "recommend": 6,
+  "p50Ms": 3732,
+  "p95Ms": 5000,
+  "maxMs": 5000,
+  "reasons": {
+    "CONFLICTING_EVIDENCE": 3,
+    "DEADLINE_EXCEEDED": 1
+  },
+  "detail": [
+    {
+      "index": 0,
+      "warmup": true,
+      "outcome": "ABSTAIN",
+      "reason": "DEADLINE_EXCEEDED",
+      "latencyMs": 5000,
+      "stages": [
+        {
+          "stage": "embedding",
+          "latencyMs": 178,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "rerank",
+          "latencyMs": 1306,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "llm",
+          "latencyMs": 1605,
+          "outcome": "SUCCESS"
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "warmup": false,
+      "outcome": "RECOMMEND",
+      "reason": null,
+      "latencyMs": 4167,
+      "stages": [
+        {
+          "stage": "verifier",
+          "latencyMs": 1605,
+          "outcome": "FAILED:cancelled"
+        },
+        {
+          "stage": "embedding",
+          "latencyMs": 180,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "rerank",
+          "latencyMs": 755,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "llm",
+          "latencyMs": 1579,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "verifier",
+          "latencyMs": 1873,
+          "outcome": "SUCCESS"
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "warmup": false,
+      "outcome": "ABSTAIN",
+      "reason": "DEADLINE_EXCEEDED",
+      "latencyMs": 5000,
+      "stages": [
+        {
+          "stage": "embedding",
+          "latencyMs": 176,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "rerank",
+          "latencyMs": 869,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "llm",
+          "latencyMs": 2472,
+          "outcome": "SUCCESS"
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "warmup": false,
+      "outcome": "RECOMMEND",
+      "reason": null,
+      "latencyMs": 3395,
+      "stages": [
+        {
+          "stage": "verifier",
+          "latencyMs": 1287,
+          "outcome": "FAILED:cancelled"
+        },
+        {
+          "stage": "embedding",
+          "latencyMs": 177,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "rerank",
+          "latencyMs": 1322,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "llm",
+          "latencyMs": 1323,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "verifier",
+          "latencyMs": 1382,
+          "outcome": "SUCCESS"
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "warmup": false,
+      "outcome": "ABSTAIN",
+      "reason": "CONFLICTING_EVIDENCE",
+      "latencyMs": 4039,
+      "stages": [
+        {
+          "stage": "embedding",
+          "latencyMs": 169,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "rerank",
+          "latencyMs": 875,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "llm",
+          "latencyMs": 1373,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "verifier",
+          "latencyMs": 1949,
+          "outcome": "SUCCESS"
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "warmup": false,
+      "outcome": "ABSTAIN",
+      "reason": "CONFLICTING_EVIDENCE",
+      "latencyMs": 4399,
+      "stages": [
+        {
+          "stage": "embedding",
+          "latencyMs": 176,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "rerank",
+          "latencyMs": 1372,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "llm",
+          "latencyMs": 2091,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "verifier",
+          "latencyMs": 1636,
+          "outcome": "SUCCESS"
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "warmup": false,
+      "outcome": "RECOMMEND",
+      "reason": null,
+      "latencyMs": 3590,
+      "stages": [
+        {
+          "stage": "embedding",
+          "latencyMs": 176,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "llm",
+          "latencyMs": 1245,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "rerank",
+          "latencyMs": 1353,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "verifier",
+          "latencyMs": 1536,
+          "outcome": "SUCCESS"
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "warmup": false,
+      "outcome": "RECOMMEND",
+      "reason": null,
+      "latencyMs": 3679,
+      "stages": [
+        {
+          "stage": "embedding",
+          "latencyMs": 177,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "rerank",
+          "latencyMs": 1104,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "llm",
+          "latencyMs": 1205,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "verifier",
+          "latencyMs": 1738,
+          "outcome": "SUCCESS"
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "warmup": false,
+      "outcome": "ABSTAIN",
+      "reason": "CONFLICTING_EVIDENCE",
+      "latencyMs": 3784,
+      "stages": [
+        {
+          "stage": "embedding",
+          "latencyMs": 165,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "rerank",
+          "latencyMs": 1026,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "llm",
+          "latencyMs": 1229,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "verifier",
+          "latencyMs": 1843,
+          "outcome": "SUCCESS"
+        }
+      ]
+    },
+    {
+      "index": 9,
+      "warmup": false,
+      "outcome": "RECOMMEND",
+      "reason": null,
+      "latencyMs": 3620,
+      "stages": [
+        {
+          "stage": "embedding",
+          "latencyMs": 177,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "rerank",
+          "latencyMs": 841,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "llm",
+          "latencyMs": 1358,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "verifier",
+          "latencyMs": 1567,
+          "outcome": "SUCCESS"
+        }
+      ]
+    },
+    {
+      "index": 10,
+      "warmup": false,
+      "outcome": "RECOMMEND",
+      "reason": null,
+      "latencyMs": 3650,
+      "stages": [
+        {
+          "stage": "embedding",
+          "latencyMs": 176,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "rerank",
+          "latencyMs": 1219,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "llm",
+          "latencyMs": 1359,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "verifier",
+          "latencyMs": 1696,
+          "outcome": "SUCCESS"
+        }
+      ]
+    }
+  ]
+}

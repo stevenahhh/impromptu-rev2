@@ -1,0 +1,797 @@
+[
+  {
+    "label": "baseline-all-deepseek",
+    "models": {
+      "rerank": "deepseek-v4-flash",
+      "llm": "deepseek-v4-flash",
+      "verifier": "deepseek-v4-flash"
+    },
+    "runs": 10,
+    "recommend": 0,
+    "p50Ms": 3052,
+    "p95Ms": 5000,
+    "maxMs": 5000,
+    "reasons": {
+      "DEADLINE_EXCEEDED": 3,
+      "DETERMINISTIC_MISMATCH": 6,
+      "INSUFFICIENT_EVIDENCE": 1
+    },
+    "detail": [
+      {
+        "index": 0,
+        "warmup": true,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED",
+        "latencyMs": 5000,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 164,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "rerank",
+            "latencyMs": 2459,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH",
+        "latencyMs": 2966,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 176,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "rerank",
+            "latencyMs": 822,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "llm",
+            "latencyMs": 2153,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 2,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED",
+        "latencyMs": 5000,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 176,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 3,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH",
+        "latencyMs": 2694,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 177,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "rerank",
+            "latencyMs": 1271,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "llm",
+            "latencyMs": 1970,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 4,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED",
+        "latencyMs": 5000,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 175,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "llm",
+            "latencyMs": 1467,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 5,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH",
+        "latencyMs": 4320,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 171,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "rerank",
+            "latencyMs": 1337,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "llm",
+            "latencyMs": 3711,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 6,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH",
+        "latencyMs": 2458,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 171,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "rerank",
+            "latencyMs": 920,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "llm",
+            "latencyMs": 1741,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 7,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED",
+        "latencyMs": 5000,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 170,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "rerank",
+            "latencyMs": 738,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 8,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "INSUFFICIENT_EVIDENCE",
+        "latencyMs": 3139,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 175,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "rerank",
+            "latencyMs": 1025,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "llm",
+            "latencyMs": 1568,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "verifier",
+            "latencyMs": 859,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 9,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH",
+        "latencyMs": 2363,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 166,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "rerank",
+            "latencyMs": 998,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "llm",
+            "latencyMs": 1611,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 10,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH",
+        "latencyMs": 1951,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 171,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "rerank",
+            "latencyMs": 818,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "llm",
+            "latencyMs": 1228,
+            "outcome": "SUCCESS"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "label": "verifier-qwen3.6",
+    "models": {
+      "rerank": "deepseek-v4-flash",
+      "llm": "deepseek-v4-flash",
+      "verifier": "qwen3.6-plus"
+    },
+    "runs": 10,
+    "recommend": 2,
+    "p50Ms": 4188,
+    "p95Ms": 5000,
+    "maxMs": 5000,
+    "reasons": {
+      "DEADLINE_EXCEEDED": 4,
+      "DETERMINISTIC_MISMATCH": 4
+    },
+    "detail": [
+      {
+        "index": 0,
+        "warmup": true,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED",
+        "latencyMs": 5000,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 175,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "rerank",
+            "latencyMs": 1534,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED",
+        "latencyMs": 5000,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 177,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "llm",
+            "latencyMs": 1949,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 2,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH",
+        "latencyMs": 2351,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 177,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "rerank",
+            "latencyMs": 922,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "llm",
+            "latencyMs": 1615,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 3,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED",
+        "latencyMs": 5000,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 173,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "llm",
+            "latencyMs": 1744,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 4,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED",
+        "latencyMs": 5000,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 174,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "llm",
+            "latencyMs": 1880,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 5,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH",
+        "latencyMs": 2228,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 178,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "rerank",
+            "latencyMs": 845,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "llm",
+            "latencyMs": 1561,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 6,
+        "warmup": false,
+        "outcome": "RECOMMEND",
+        "reason": null,
+        "latencyMs": 3997,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 167,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "rerank",
+            "latencyMs": 1089,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "llm",
+            "latencyMs": 1537,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "verifier",
+            "latencyMs": 1642,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 7,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH",
+        "latencyMs": 2654,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 170,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "rerank",
+            "latencyMs": 923,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "llm",
+            "latencyMs": 1945,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 8,
+        "warmup": false,
+        "outcome": "RECOMMEND",
+        "reason": null,
+        "latencyMs": 4378,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 174,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "rerank",
+            "latencyMs": 747,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "llm",
+            "latencyMs": 2048,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "verifier",
+            "latencyMs": 1580,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 9,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED",
+        "latencyMs": 5000,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 177,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "llm",
+            "latencyMs": 925,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 10,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH",
+        "latencyMs": 2970,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 166,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "rerank",
+            "latencyMs": 760,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "llm",
+            "latencyMs": 2192,
+            "outcome": "SUCCESS"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "label": "verifier-qwen3.7",
+    "models": {
+      "rerank": "deepseek-v4-flash",
+      "llm": "deepseek-v4-flash",
+      "verifier": "qwen3.7-plus"
+    },
+    "runs": 10,
+    "recommend": 1,
+    "p50Ms": 4236,
+    "p95Ms": 5000,
+    "maxMs": 5000,
+    "reasons": {
+      "DEADLINE_EXCEEDED": 4,
+      "DETERMINISTIC_MISMATCH": 5
+    },
+    "detail": [
+      {
+        "index": 0,
+        "warmup": true,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH",
+        "latencyMs": 2920,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 184,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "rerank",
+            "latencyMs": 1157,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "llm",
+            "latencyMs": 2006,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "warmup": false,
+        "outcome": "RECOMMEND",
+        "reason": null,
+        "latencyMs": 4375,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 177,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "rerank",
+            "latencyMs": 790,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "llm",
+            "latencyMs": 1666,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "verifier",
+            "latencyMs": 1652,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 2,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED",
+        "latencyMs": 5000,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 181,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "rerank",
+            "latencyMs": 1128,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 3,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH",
+        "latencyMs": 2341,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 168,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "rerank",
+            "latencyMs": 818,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "llm",
+            "latencyMs": 1535,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 4,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH",
+        "latencyMs": 2760,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 210,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "rerank",
+            "latencyMs": 961,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "llm",
+            "latencyMs": 1676,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 5,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED",
+        "latencyMs": 5000,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 171,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "rerank",
+            "latencyMs": 1025,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 6,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED",
+        "latencyMs": 5000,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 170,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "llm",
+            "latencyMs": 1233,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 7,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH",
+        "latencyMs": 4097,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 177,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "rerank",
+            "latencyMs": 1189,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "llm",
+            "latencyMs": 3118,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 8,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH",
+        "latencyMs": 2190,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 172,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "rerank",
+            "latencyMs": 1317,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "llm",
+            "latencyMs": 1488,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 9,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "DETERMINISTIC_MISMATCH",
+        "latencyMs": 3163,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 171,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "rerank",
+            "latencyMs": 1294,
+            "outcome": "SUCCESS"
+          },
+          {
+            "stage": "llm",
+            "latencyMs": 2450,
+            "outcome": "SUCCESS"
+          }
+        ]
+      },
+      {
+        "index": 10,
+        "warmup": false,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED",
+        "latencyMs": 5000,
+        "stages": [
+          {
+            "stage": "embedding",
+            "latencyMs": 172,
+            "outcome": "SUCCESS"
+          }
+        ]
+      }
+    ]
+  }
+]

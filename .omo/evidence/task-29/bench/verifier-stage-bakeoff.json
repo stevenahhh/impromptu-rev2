@@ -1,0 +1,57 @@
+{
+  "deepseek-v4-flash": {
+    "latencyMs": [1152, 2557, 1125],
+    "p50": 1152,
+    "verdicts": ["INSUFFICIENT", "INSUFFICIENT", "INSUFFICIENT"]
+  },
+  "deepseek-v4-pro": {
+    "latencyMs": [948, 986, 1026],
+    "p50": 986,
+    "verdicts": [null, null, null]
+  },
+  "qwen3.6-plus": {
+    "latencyMs": [1579, 1938, 1878],
+    "p50": 1878,
+    "verdicts": ["SUPPORTED", "SUPPORTED", "SUPPORTED"]
+  },
+  "qwen3.7-plus": {
+    "latencyMs": [1865, 2073, 1834],
+    "p50": 1865,
+    "verdicts": ["SUPPORTED", "SUPPORTED", "SUPPORTED"]
+  },
+  "kimi-k2.6": {
+    "latencyMs": [2161, 2239, 1856],
+    "p50": 2161,
+    "verdicts": ["INSUFFICIENT", "SUPPORTED", "SUPPORTED"]
+  },
+  "glm-5.2": {
+    "latencyMs": [2128, 1969, 1897],
+    "p50": 1969,
+    "verdicts": ["INSUFFICIENT", "INSUFFICIENT", "INSUFFICIENT"]
+  },
+  "gpt-5.6-luna": {
+    "latencyMs": [2909, 2974, 3278],
+    "p50": 2974,
+    "verdicts": ["INSUFFICIENT", "SUPPORTED", "SUPPORTED"]
+  },
+  "hy3": {
+    "latencyMs": [3025, 3220, 2972],
+    "p50": 3025,
+    "verdicts": ["INSUFFICIENT", "INSUFFICIENT", "INSUFFICIENT"]
+  },
+  "minimax-m3": {
+    "latencyMs": [9808, 4733, 4811],
+    "p50": 4811,
+    "verdicts": ["INSUFFICIENT", "INSUFFICIENT", "INSUFFICIENT"]
+  },
+  "mimo-v2.5": {
+    "latencyMs": [4193, 3691, 5249],
+    "p50": 4193,
+    "verdicts": ["INSUFFICIENT", "INSUFFICIENT", "INSUFFICIENT"]
+  },
+  "kimi-k2.5": {
+    "latencyMs": [2219, 2259, 3138],
+    "p50": 2259,
+    "verdicts": ["SUPPORTED", "INSUFFICIENT", "INSUFFICIENT"]
+  }
+}

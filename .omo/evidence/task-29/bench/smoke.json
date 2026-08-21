@@ -1,0 +1,101 @@
+{
+  "label": "smoke",
+  "models": {
+    "rerank": "deepseek-v4-flash",
+    "llm": "deepseek-v4-flash",
+    "verifier": "deepseek-v4-flash"
+  },
+  "fixture": "korean-text-layer.pdf",
+  "runs": 2,
+  "recommend": 1,
+  "p50Ms": 4051,
+  "p95Ms": 5000,
+  "maxMs": 5000,
+  "reasons": {
+    "DEADLINE_EXCEEDED": 1
+  },
+  "detail": [
+    {
+      "index": 0,
+      "warmup": true,
+      "outcome": "ABSTAIN",
+      "reason": "DEADLINE_EXCEEDED",
+      "latencyMs": 5000,
+      "stages": [
+        {
+          "stage": "embedding",
+          "latencyMs": 731,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "rerank",
+          "latencyMs": 1152,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "llm",
+          "latencyMs": 2040,
+          "outcome": "SUCCESS"
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "warmup": false,
+      "outcome": "RECOMMEND",
+      "reason": null,
+      "latencyMs": 3102,
+      "stages": [
+        {
+          "stage": "verifier",
+          "latencyMs": 109,
+          "outcome": "FAILED:cancelled"
+        },
+        {
+          "stage": "embedding",
+          "latencyMs": 162,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "llm",
+          "latencyMs": 802,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "rerank",
+          "latencyMs": 1203,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "verifier",
+          "latencyMs": 1012,
+          "outcome": "SUCCESS"
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "warmup": false,
+      "outcome": "ABSTAIN",
+      "reason": "DEADLINE_EXCEEDED",
+      "latencyMs": 5000,
+      "stages": [
+        {
+          "stage": "embedding",
+          "latencyMs": 191,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "rerank",
+          "latencyMs": 1660,
+          "outcome": "SUCCESS"
+        },
+        {
+          "stage": "llm",
+          "latencyMs": 2278,
+          "outcome": "SUCCESS"
+        }
+      ]
+    }
+  ]
+}

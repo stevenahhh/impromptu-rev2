@@ -1,0 +1,226 @@
+{
+  "task": "task-29-core5-positive-determinism",
+  "question": "Core-5 positive 경로가 결정적으로 RECOMMEND 에 도달하는 구성이 존재하는가",
+  "answer": "NO. 가용한 모델 구성 중 (a) 10/10 RECOMMEND 와 (b) p95 <= 5,000ms 를 동시에 만족하는 구성은 존재하지 않는다.",
+  "harness": {
+    "bench": ".omo/evidence/task-29/bench/bench.py",
+    "interleaved": ".omo/evidence/task-29/bench/interleaved.py",
+    "modelBakeoff": ".omo/evidence/task-29/bench/model-bakeoff.py",
+    "comboBakeoff": ".omo/evidence/task-29/bench/combo-bakeoff.py",
+    "note": "임시 포트만 사용하고 4173/4174 개발 스택은 건드리지 않음. 요청은 acceptance 와 동일한 query/maxResults 로 /v1/recommendations 에 직접 전송."
+  },
+  "stageLatencyMs": {
+    "method": "private-backend 구조적 stdout 의 /internal/recommendation/<stage> durationMs + 절대 타임스탬프 차이",
+    "embedding": { "cold": 714, "p50": 175, "range": [151, 210] },
+    "retrievalGapBeforeFix": { "p50": 785, "range": [717, 1614], "source": "smoke run" },
+    "retrievalGapAfterFix": { "p50": 520, "range": [383, 1132], "n": 33 },
+    "gapComposition": {
+      "internalPostgres": "수십 ms 수준 (materialize 병렬화 후 관측 하한 383ms 는 외부 분기 대기)",
+      "externalBranch": "DuckDuckGo HTML 검색 단독 305~690ms (curl 실측) + 후보 fetch. internal-only 요청에서도 예산을 먹는다는 가설은 CONFIRMED",
+      "fix": "외부 분기를 embedding·내부 retrieval 과 동시에 시작하고, 후보 fetch 를 분기 예산 안에서 병렬화. 후보 순서·게이트는 불변"
+    },
+    "rerank": { "deepseek-v4-flash": { "p50": 1025, "tail": 3893 } },
+    "llm": {
+      "deepseek-v4-flash": { "p50": 1611, "tail": 3711 },
+      "qwen3.6-plus": { "range": [1994, 3262] }
+    },
+    "verifier": {
+      "deepseek-v4-flash": { "range": [859, 2294] },
+      "qwen3.6-plus": { "range": [1481, 2112] },
+      "qwen3.7-plus": { "range": [1287, 1949] }
+    }
+  },
+  "pipelineRuns": [
+    {
+      "label": "patched-deepseek-v4-flash",
+      "mode": "sequential",
+      "models": {
+        "rerank": "deepseek-v4-flash",
+        "llm": "deepseek-v4-flash",
+        "verifier": "deepseek-v4-flash"
+      },
+      "recommend": "2/10",
+      "p50Ms": 4546,
+      "p95Ms": 5000,
+      "reasons": { "DEADLINE_EXCEEDED": 5, "INSUFFICIENT_EVIDENCE": 3 }
+    },
+    {
+      "label": "patched-verifier-qwen3.6-plus",
+      "mode": "sequential",
+      "models": {
+        "rerank": "deepseek-v4-flash",
+        "llm": "deepseek-v4-flash",
+        "verifier": "qwen3.6-plus"
+      },
+      "recommend": "7/10",
+      "p50Ms": 3648,
+      "p95Ms": 4221,
+      "reasons": { "CONFLICTING_EVIDENCE": 3 },
+      "note": "가장 좋은 관측치. 데드라인 초과 0건이지만 10/10 은 아님"
+    },
+    {
+      "label": "patched-verifier-qwen3.7-plus",
+      "mode": "sequential",
+      "models": {
+        "rerank": "deepseek-v4-flash",
+        "llm": "deepseek-v4-flash",
+        "verifier": "qwen3.7-plus"
+      },
+      "recommend": "6/10",
+      "p50Ms": 3732,
+      "p95Ms": 5000,
+      "reasons": { "CONFLICTING_EVIDENCE": 3, "DEADLINE_EXCEEDED": 1 }
+    },
+    {
+      "label": "patched-verifier-kimi-k2.5",
+      "mode": "sequential",
+      "models": {
+        "rerank": "deepseek-v4-flash",
+        "llm": "deepseek-v4-flash",
+        "verifier": "kimi-k2.5"
+      },
+      "recommend": "0/10",
+      "p50Ms": 5000,
+      "p95Ms": 5000,
+      "reasons": { "DEADLINE_EXCEEDED": 9, "INSUFFICIENT_EVIDENCE": 1 },
+      "note": "공급자 정체 구간. 동일 창에서 직접 호출도 52초 뒤 HTTP 500 을 반환했다"
+    },
+    {
+      "label": "interleaved-llm-qwen / llm-qwen3.6",
+      "mode": "interleaved",
+      "models": {
+        "rerank": "deepseek-v4-flash",
+        "llm": "qwen3.6-plus",
+        "verifier": "qwen3.6-plus"
+      },
+      "recommend": "0/10",
+      "p50Ms": 5000,
+      "p95Ms": 5000,
+      "reasons": { "DEADLINE_EXCEEDED": 9, "DETERMINISTIC_MISMATCH": 1 },
+      "note": "llm 2,277~3,262ms 로 verifier 가 4,500ms abort 전에 끝나지 못함"
+    },
+    {
+      "label": "interleaved-llm-qwen / llm-deepseek",
+      "mode": "interleaved",
+      "models": {
+        "rerank": "deepseek-v4-flash",
+        "llm": "deepseek-v4-flash",
+        "verifier": "qwen3.6-plus"
+      },
+      "recommend": "1/10",
+      "p50Ms": 3732,
+      "p95Ms": 5000,
+      "reasons": { "CONFLICTING_EVIDENCE": 1, "DEADLINE_EXCEEDED": 2, "DETERMINISTIC_MISMATCH": 6 }
+    },
+    {
+      "label": "interleaved-final / baseline-all-deepseek",
+      "mode": "interleaved",
+      "models": {
+        "rerank": "deepseek-v4-flash",
+        "llm": "deepseek-v4-flash",
+        "verifier": "deepseek-v4-flash"
+      },
+      "recommend": "0/10",
+      "p50Ms": 3052,
+      "p95Ms": 5000,
+      "reasons": { "DEADLINE_EXCEEDED": 3, "DETERMINISTIC_MISMATCH": 6, "INSUFFICIENT_EVIDENCE": 1 }
+    },
+    {
+      "label": "interleaved-final / verifier-qwen3.6",
+      "mode": "interleaved",
+      "models": {
+        "rerank": "deepseek-v4-flash",
+        "llm": "deepseek-v4-flash",
+        "verifier": "qwen3.6-plus"
+      },
+      "recommend": "2/10",
+      "p50Ms": 4188,
+      "p95Ms": 5000,
+      "reasons": { "DEADLINE_EXCEEDED": 4, "DETERMINISTIC_MISMATCH": 4 }
+    },
+    {
+      "label": "interleaved-final / verifier-qwen3.7",
+      "mode": "interleaved",
+      "models": {
+        "rerank": "deepseek-v4-flash",
+        "llm": "deepseek-v4-flash",
+        "verifier": "qwen3.7-plus"
+      },
+      "recommend": "1/10",
+      "p50Ms": 4236,
+      "p95Ms": 5000,
+      "reasons": { "DEADLINE_EXCEEDED": 4, "DETERMINISTIC_MISMATCH": 5 }
+    }
+  ],
+  "stageBakeoffs": {
+    "rerankLatencyP50Ms": {
+      "deepseek-v4-flash": 1081,
+      "qwen3.6-plus": 1758,
+      "gpt-5.6-luna": 1945,
+      "qwen3.7-plus": 2180,
+      "kimi-k2.6": 2291,
+      "glm-5.2": 2674
+    },
+    "llmStage": {
+      "criterion": "facts 가 비어야 결정적 근거 재조정을 통과한다. 이 fixture 의 한국어 근거에서는 dates/entities 추출이 0건이므로 모델이 선언한 dates·entities 는 전부 MISMATCH 가 된다",
+      "qwen3.6-plus": { "p50Ms": 2819, "emptyFacts": "3/3", "claim": "근거 원문과 동일" },
+      "qwen3.7-plus": { "p50Ms": 3644, "emptyFacts": "3/3" },
+      "deepseek-v4-flash": {
+        "p50Ms": 1611,
+        "emptyFacts": "0/3 (세션 후반)",
+        "note": "세션 전반에는 3/3 이었다. 공급자 출력이 시간에 따라 드리프트한다"
+      },
+      "gpt-5.6-luna": { "p50Ms": 3106, "emptyFacts": "0/3" },
+      "kimi-k2.6": { "p50Ms": 3174, "emptyFacts": "0/3" },
+      "minimax-m2.7": {
+        "p50Ms": 15906,
+        "emptyFacts": "3/3",
+        "note": "너무 느리고 주장 자체가 부정형"
+      },
+      "deepseek-v4-pro": { "p50Ms": 1042, "schema": "실패" },
+      "kimi-k2.7-code": { "p50Ms": 1266, "schema": "실패" }
+    },
+    "verifierStage": {
+      "input": "claim=근거 원문과 동일, facts 전부 빈 배열",
+      "qwen3.6-plus": { "p50Ms": 1878, "supported": "3/3" },
+      "qwen3.7-plus": { "p50Ms": 1865, "supported": "3/3" },
+      "kimi-k2.6": { "p50Ms": 2161, "supported": "2/3" },
+      "gpt-5.6-luna": { "p50Ms": 2974, "supported": "2/3" },
+      "kimi-k2.5": { "p50Ms": 2259, "supported": "1/3" },
+      "deepseek-v4-flash": { "p50Ms": 1152, "supported": "0/3" },
+      "glm-5.2": { "p50Ms": 1969, "supported": "0/3" },
+      "hy3": { "p50Ms": 3025, "supported": "0/3" },
+      "minimax-m3": { "p50Ms": 4811, "supported": "0/3" },
+      "mimo-v2.5": { "p50Ms": 4193, "supported": "0/3" }
+    }
+  },
+  "impossibilityArgument": {
+    "budget": "4,500ms abort - embedding 175ms - retrieval/외부 분기 잔여 대기 520ms = 모델 3단계에 약 3,800ms",
+    "pipelineShape": "[rerank || llm] -> verifier 이므로 소요 = max(rerank, llm) + verifier",
+    "case1": "빈 facts 를 안정적으로 내는 유일한 llm 은 qwen3.6-plus (2,277~3,262ms). 가장 빠른 SUPPORTED 판정 verifier 는 qwen3.6-plus (1,481~2,112ms). 합계 3,758~5,374ms 로 예산을 상시 초과하며 실측 0/10",
+    "case2": "예산에 맞는 유일한 llm 은 deepseek-v4-flash 지만, 이 모델은 dates/entities 를 선언하는 구간이 있고 그때마다 결정적 근거 게이트가 MISMATCH 로 fail-closed 한다 (실측 4~6/10). 이 게이트·임계값은 변경 대상이 아니다",
+    "case3": "공급자 자체가 구간별로 정체한다. 동일 창에서 rerank/llm 단일 호출이 4,500ms abort 까지 응답하지 않거나 52초 뒤 HTTP 500 을 반환했다. 어떤 모델 조합도 이 구간에서는 p95 <= 5,000ms 를 보장하지 못한다"
+  },
+  "adopted": {
+    "code": [
+      "외부 근거 분기를 embedding·내부 retrieval 과 동시에 시작 (직렬 왕복 제거)",
+      "내부 근거 materialize 를 병렬화 (각 참조가 자체 재승인을 수행하므로 게이트 동일)",
+      "외부 후보 fetch 를 공유 1,800ms 분기 예산 안에서 병렬화, 후보 순서 유지",
+      "결과 확정 후 남은 분기를 abort"
+    ],
+    "configuration": "VERIFIER_MODEL 기본값 deepseek-v4-flash -> qwen3.6-plus (compose.production.yaml, .env.example)",
+    "effect": "retrieval 구간 p50 785ms -> 520ms, verifier 슬롯의 SUPPORTED 판정률 개선. 그래도 10/10 은 달성되지 않는다",
+    "notChanged": [
+      "게이트",
+      "임계값",
+      "fixture",
+      "테스트 기대값",
+      "5,000ms 예산",
+      "1,800ms 외부 분기 예산"
+    ]
+  },
+  "limitations": [
+    "scripts/verify-five-private-presentation-features.py 는 VERIFIER_MODEL 을 deepseek-v4-flash 로 명시 고정한다. 이 파일은 본 작업의 쓰기 범위 밖이라 기본값 변경이 acceptance 실행에는 반영되지 않는다",
+    "docs/runbooks/deploy-production.md 의 모델 기본값 문구도 범위 밖이라 갱신하지 않았다"
+  ]
+}

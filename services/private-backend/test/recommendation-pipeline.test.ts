@@ -410,7 +410,8 @@ describe("private recommendation verifier", () => {
     });
     const recommendation = flow.pipeline.recommend("session-a", request);
     await fetchStarted;
-    expect(deadlines.map((deadline) => deadline.atMs)).toEqual([4_500, 2_600]);
+    // The external branch starts beside embedding, so its single 1,800ms window opens at t=0.
+    expect(deadlines.map((deadline) => deadline.atMs)).toEqual([4_500, 1_800]);
     const externalDeadline = deadlines[1];
     if (externalDeadline === undefined) throw new Error("expected external deadline");
     externalDeadline.run();

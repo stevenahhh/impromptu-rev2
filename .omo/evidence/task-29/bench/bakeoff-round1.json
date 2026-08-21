@@ -1,0 +1,664 @@
+{
+  "deepseek-v4-flash": {
+    "trials": 3,
+    "supported": 0,
+    "schemaOk": 3,
+    "modelPhaseP50Ms": 3054,
+    "modelPhaseMaxMs": 4043,
+    "rerankMs": [1103, 1089, 1053],
+    "llmMs": [1377, 1912, 1322],
+    "verifierMs": [1197, 2131, 1732],
+    "verdicts": ["INSUFFICIENT", "INSUFFICIENT", "INSUFFICIENT"],
+    "detail": [
+      {
+        "rerankMs": 1103,
+        "llmMs": 1377,
+        "verifierMs": 1197,
+        "rerank": {
+          "orderedEvidenceIds": ["e1"]
+        },
+        "structured": {
+          "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+          "evidenceIds": ["e1"],
+          "facts": {
+            "numbers": [],
+            "units": [],
+            "dates": [],
+            "entities": []
+          }
+        },
+        "verdict": {
+          "verdict": "INSUFFICIENT",
+          "rationaleCode": "insufficientEvidence"
+        }
+      },
+      {
+        "rerankMs": 1089,
+        "llmMs": 1912,
+        "verifierMs": 2131,
+        "rerank": {
+          "orderedEvidenceIds": ["e1"]
+        },
+        "structured": {
+          "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+          "evidenceIds": ["e1"],
+          "facts": {
+            "numbers": [],
+            "units": [],
+            "dates": [],
+            "entities": []
+          }
+        },
+        "verdict": {
+          "verdict": "INSUFFICIENT",
+          "rationaleCode": "insufficientEvidence"
+        }
+      },
+      {
+        "rerankMs": 1053,
+        "llmMs": 1322,
+        "verifierMs": 1732,
+        "rerank": {
+          "orderedEvidenceIds": ["e1"]
+        },
+        "structured": {
+          "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+          "evidenceIds": ["e1"],
+          "facts": {
+            "numbers": [],
+            "units": [],
+            "dates": [],
+            "entities": []
+          }
+        },
+        "verdict": {
+          "verdict": "INSUFFICIENT",
+          "rationaleCode": "insufficientEvidence"
+        }
+      }
+    ]
+  },
+  "qwen3.5-plus": {
+    "trials": 3,
+    "supported": 0,
+    "schemaOk": 3,
+    "modelPhaseP50Ms": 4144,
+    "modelPhaseMaxMs": 4196,
+    "rerankMs": [1622, 1740, 1962],
+    "llmMs": [2230, 2347, 2228],
+    "verifierMs": [1687, 1849, 1916],
+    "verdicts": ["CONFLICTING", "CONFLICTING", "CONFLICTING"],
+    "detail": [
+      {
+        "rerankMs": 1622,
+        "llmMs": 2230,
+        "verifierMs": 1687,
+        "rerank": {
+          "orderedEvidenceIds": ["e1"]
+        },
+        "structured": {
+          "claim": "제시된 근거 자료에는 2026년 형식 중립에 대한 구체적인 내용이 포함되어 있지 않습니다.",
+          "evidenceIds": ["e1"],
+          "facts": {
+            "numbers": [],
+            "units": [],
+            "dates": [],
+            "entities": []
+          }
+        },
+        "verdict": {
+          "verdict": "CONFLICTING",
+          "rationaleCode": "evidence_title_matches_claim_topic"
+        }
+      },
+      {
+        "rerankMs": 1740,
+        "llmMs": 2347,
+        "verifierMs": 1849,
+        "rerank": {
+          "orderedEvidenceIds": ["e1"]
+        },
+        "structured": {
+          "claim": "제시된 근거 자료에는 2026년 형식 중립에 대한 구체적인 내용이 포함되어 있지 않습니다.",
+          "evidenceIds": ["e1"],
+          "facts": {
+            "numbers": [],
+            "units": [],
+            "dates": [],
+            "entities": []
+          }
+        },
+        "verdict": {
+          "verdict": "CONFLICTING",
+          "rationaleCode": "evidence_title_matches_claim_year"
+        }
+      },
+      {
+        "rerankMs": 1962,
+        "llmMs": 2228,
+        "verifierMs": 1916,
+        "rerank": {
+          "orderedEvidenceIds": ["e1"]
+        },
+        "structured": {
+          "claim": "제시된 근거 자료에는 2026년 형식 중립에 대한 구체적인 내용이 포함되어 있지 않습니다.",
+          "evidenceIds": ["e1"],
+          "facts": {
+            "numbers": [],
+            "units": [],
+            "dates": [],
+            "entities": []
+          }
+        },
+        "verdict": {
+          "verdict": "CONFLICTING",
+          "rationaleCode": "evidence_title_matches_claim_year"
+        }
+      }
+    ]
+  },
+  "glm-5": {
+    "trials": 3,
+    "supported": 3,
+    "schemaOk": 3,
+    "modelPhaseP50Ms": 32051,
+    "modelPhaseMaxMs": 43785,
+    "rerankMs": [12333, 9420, 12230],
+    "llmMs": [7364, 21204, 19271],
+    "verifierMs": [9318, 10847, 24514],
+    "verdicts": ["SUPPORTED", "SUPPORTED", "SUPPORTED"],
+    "detail": [
+      {
+        "rerankMs": 12333,
+        "llmMs": 7364,
+        "verifierMs": 9318,
+        "rerank": {
+          "orderedEvidenceIds": ["e1"]
+        },
+        "structured": {
+          "claim": "형식 중립 근거 자료 2026에 대한 정보가 제공되었습니다.",
+          "evidenceIds": ["e1"],
+          "facts": {
+            "numbers": ["2026"],
+            "units": [],
+            "dates": ["2026"],
+            "entities": ["형식 중립 근거 자료"]
+          }
+        },
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence-matches-claim"
+        }
+      },
+      {
+        "rerankMs": 9420,
+        "llmMs": 21204,
+        "verifierMs": 10847,
+        "rerank": {
+          "orderedEvidenceIds": ["e1"]
+        },
+        "structured": {
+          "claim": "형식 중립 근거 자료 2026에 대한 정보가 제공되었습니다.",
+          "evidenceIds": ["e1"],
+          "facts": {
+            "numbers": ["2026"],
+            "units": [],
+            "dates": ["2026"],
+            "entities": ["형식 중립 근거 자료"]
+          }
+        },
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence-matches-claim"
+        }
+      },
+      {
+        "rerankMs": 12230,
+        "llmMs": 19271,
+        "verifierMs": 24514,
+        "rerank": {
+          "orderedEvidenceIds": ["e1"]
+        },
+        "structured": {
+          "claim": "형식 중립 근거 자료 2026에 대한 정보가 제공되었습니다.",
+          "evidenceIds": ["e1"],
+          "facts": {
+            "numbers": ["2026"],
+            "units": [],
+            "dates": ["2026"],
+            "entities": ["형식 중립 근거 자료"]
+          }
+        },
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence-matches-claim"
+        }
+      }
+    ]
+  },
+  "minimax-m2.5": {
+    "trials": 3,
+    "supported": 0,
+    "schemaOk": 0,
+    "modelPhaseP50Ms": 1385,
+    "modelPhaseMaxMs": 1790,
+    "rerankMs": [608, 870, 718],
+    "llmMs": [618, 718, 681],
+    "verifierMs": [764, 920, 667],
+    "verdicts": [null, null, null],
+    "detail": [
+      {
+        "rerankMs": 608,
+        "llmMs": 618,
+        "verifierMs": 764,
+        "rerank": {
+          "error": "HTTP Error 400: Bad Request"
+        },
+        "structured": {
+          "error": "HTTP Error 400: Bad Request"
+        },
+        "verdict": {
+          "error": "HTTP Error 400: Bad Request"
+        }
+      },
+      {
+        "rerankMs": 870,
+        "llmMs": 718,
+        "verifierMs": 920,
+        "rerank": {
+          "error": "HTTP Error 400: Bad Request"
+        },
+        "structured": {
+          "error": "HTTP Error 400: Bad Request"
+        },
+        "verdict": {
+          "error": "HTTP Error 400: Bad Request"
+        }
+      },
+      {
+        "rerankMs": 718,
+        "llmMs": 681,
+        "verifierMs": 667,
+        "rerank": {
+          "error": "HTTP Error 400: Bad Request"
+        },
+        "structured": {
+          "error": "HTTP Error 400: Bad Request"
+        },
+        "verdict": {
+          "error": "HTTP Error 400: Bad Request"
+        }
+      }
+    ]
+  },
+  "kimi-k2.5": {
+    "trials": 3,
+    "supported": 3,
+    "schemaOk": 3,
+    "modelPhaseP50Ms": 5505,
+    "modelPhaseMaxMs": 7329,
+    "rerankMs": [2212, 4139, 1680],
+    "llmMs": [3046, 5195, 2887],
+    "verifierMs": [1951, 2134, 2618],
+    "verdicts": ["SUPPORTED", "SUPPORTED", "SUPPORTED"],
+    "detail": [
+      {
+        "rerankMs": 2212,
+        "llmMs": 3046,
+        "verifierMs": 1951,
+        "rerank": {
+          "orderedEvidenceIds": ["e1"]
+        },
+        "structured": {
+          "claim": "형식 중립 근거 자료 2026",
+          "evidenceIds": ["e1"],
+          "facts": {
+            "numbers": ["2026"],
+            "units": [],
+            "dates": [],
+            "entities": []
+          }
+        },
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "exact-match"
+        }
+      },
+      {
+        "rerankMs": 4139,
+        "llmMs": 5195,
+        "verifierMs": 2134,
+        "rerank": {
+          "orderedEvidenceIds": ["e1"]
+        },
+        "structured": {
+          "claim": "형식 중립 근거 자료 2026에 대한 정보가 제공됩니다.",
+          "evidenceIds": ["e1"],
+          "facts": {
+            "numbers": [],
+            "units": [],
+            "dates": ["2026"],
+            "entities": []
+          }
+        },
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "exact-match"
+        }
+      },
+      {
+        "rerankMs": 1680,
+        "llmMs": 2887,
+        "verifierMs": 2618,
+        "rerank": {
+          "orderedEvidenceIds": ["e1"]
+        },
+        "structured": {
+          "claim": "형식 중립 근거 자료 2026",
+          "evidenceIds": ["e1"],
+          "facts": {
+            "numbers": [],
+            "units": [],
+            "dates": ["2026"],
+            "entities": []
+          }
+        },
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "exact-match"
+        }
+      }
+    ]
+  },
+  "gpt-5.6-luna": {
+    "trials": 3,
+    "supported": 3,
+    "schemaOk": 3,
+    "modelPhaseP50Ms": 5635,
+    "modelPhaseMaxMs": 7882,
+    "rerankMs": [2222, 2500, 2146],
+    "llmMs": [3436, 4807, 3375],
+    "verifierMs": [2109, 3075, 2260],
+    "verdicts": ["SUPPORTED", "SUPPORTED", "SUPPORTED"],
+    "detail": [
+      {
+        "rerankMs": 2222,
+        "llmMs": 3436,
+        "verifierMs": 2109,
+        "rerank": {
+          "orderedEvidenceIds": ["e1"]
+        },
+        "structured": {
+          "claim": "2026년 형식 중립 근거 자료에 대한 요청입니다.",
+          "evidenceIds": ["e1"],
+          "facts": {
+            "numbers": [],
+            "units": [],
+            "dates": ["2026"],
+            "entities": []
+          }
+        },
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence-directly-matches-claim"
+        }
+      },
+      {
+        "rerankMs": 2500,
+        "llmMs": 4807,
+        "verifierMs": 3075,
+        "rerank": {
+          "orderedEvidenceIds": ["e1"]
+        },
+        "structured": {
+          "claim": "요청 주제는 ‘형식 중립 근거 자료 2026’입니다.",
+          "evidenceIds": ["e1"],
+          "facts": {
+            "numbers": [],
+            "units": [],
+            "dates": ["2026"],
+            "entities": []
+          }
+        },
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "e1-directly-matches-claim"
+        }
+      },
+      {
+        "rerankMs": 2146,
+        "llmMs": 3375,
+        "verifierMs": 2260,
+        "rerank": {
+          "orderedEvidenceIds": ["e1"]
+        },
+        "structured": {
+          "claim": "요청 대상은 2026년 형식 중립 근거 자료이다.",
+          "evidenceIds": ["e1"],
+          "facts": {
+            "numbers": [],
+            "units": [],
+            "dates": ["2026"],
+            "entities": []
+          }
+        },
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence-directly-supports-claim"
+        }
+      }
+    ]
+  },
+  "grok-4.5": {
+    "trials": 3,
+    "supported": 0,
+    "schemaOk": 0,
+    "modelPhaseP50Ms": 1614,
+    "modelPhaseMaxMs": 1706,
+    "rerankMs": [580, 911, 571],
+    "llmMs": [829, 806, 795],
+    "verifierMs": [750, 795, 819],
+    "verdicts": [null, null, null],
+    "detail": [
+      {
+        "rerankMs": 580,
+        "llmMs": 829,
+        "verifierMs": 750,
+        "rerank": {
+          "error": "HTTP Error 503: Service Unavailable"
+        },
+        "structured": {
+          "error": "HTTP Error 503: Service Unavailable"
+        },
+        "verdict": {
+          "error": "HTTP Error 503: Service Unavailable"
+        }
+      },
+      {
+        "rerankMs": 911,
+        "llmMs": 806,
+        "verifierMs": 795,
+        "rerank": {
+          "error": "HTTP Error 503: Service Unavailable"
+        },
+        "structured": {
+          "error": "HTTP Error 503: Service Unavailable"
+        },
+        "verdict": {
+          "error": "HTTP Error 503: Service Unavailable"
+        }
+      },
+      {
+        "rerankMs": 571,
+        "llmMs": 795,
+        "verifierMs": 819,
+        "rerank": {
+          "error": "HTTP Error 503: Service Unavailable"
+        },
+        "structured": {
+          "error": "HTTP Error 503: Service Unavailable"
+        },
+        "verdict": {
+          "error": "HTTP Error 503: Service Unavailable"
+        }
+      }
+    ]
+  },
+  "hy3": {
+    "trials": 3,
+    "supported": 2,
+    "schemaOk": 2,
+    "modelPhaseP50Ms": 6917,
+    "modelPhaseMaxMs": 7185,
+    "rerankMs": [3556, 3534, 2866],
+    "llmMs": [4926, 2822, 2768],
+    "verifierMs": [2259, 3383, 2946],
+    "verdicts": [null, "SUPPORTED", "SUPPORTED"],
+    "detail": [
+      {
+        "rerankMs": 3556,
+        "llmMs": 4926,
+        "verifierMs": 2259,
+        "rerank": {
+          "orderedEvidenceIds": ["e1"]
+        },
+        "structured": {
+          "claim": "형식 중립 근거 자료 2026이라는 증거가 존재한다.",
+          "evidenceIds": ["e1"],
+          "facts": {
+            "dates": ["2026"],
+            "entities": ["형식 중립 근거 자료"],
+            "numbers": [],
+            "units": []
+          }
+        },
+        "verdict": {
+          "error": "HTTP Error 503: Service Unavailable"
+        }
+      },
+      {
+        "rerankMs": 3534,
+        "llmMs": 2822,
+        "verifierMs": 3383,
+        "rerank": {
+          "orderedEvidenceIds": ["e1"]
+        },
+        "structured": {
+          "claim": "형식 중립 근거 자료 2026이 evidence e1에 언급되어 있다.",
+          "evidenceIds": ["e1"],
+          "facts": {
+            "dates": ["2026"],
+            "entities": ["형식 중립 근거 자료"],
+            "numbers": [],
+            "units": []
+          }
+        },
+        "verdict": {
+          "rationaleCode": "ev-matches-claim",
+          "verdict": "SUPPORTED"
+        }
+      },
+      {
+        "rerankMs": 2866,
+        "llmMs": 2768,
+        "verifierMs": 2946,
+        "rerank": {
+          "orderedEvidenceIds": ["e1"]
+        },
+        "structured": {
+          "claim": "형식 중립 근거 자료 2026이 evidenceId e1에 언급되어 있다.",
+          "evidenceIds": ["e1"],
+          "facts": {
+            "dates": ["2026"],
+            "entities": ["형식 중립 근거 자료"],
+            "numbers": [],
+            "units": []
+          }
+        },
+        "verdict": {
+          "rationaleCode": "ev-e1-matches-claim",
+          "verdict": "SUPPORTED"
+        }
+      }
+    ]
+  },
+  "mimo-v2.5": {
+    "trials": 3,
+    "supported": 0,
+    "schemaOk": 3,
+    "modelPhaseP50Ms": 11059,
+    "modelPhaseMaxMs": 29646,
+    "rerankMs": [6266, 5118, 22983],
+    "llmMs": [7904, 6555, 10303],
+    "verifierMs": [3155, 2758, 6663],
+    "verdicts": ["INSUFFICIENT", "INSUFFICIENT", "CONFLICTING"],
+    "detail": [
+      {
+        "rerankMs": 6266,
+        "llmMs": 7904,
+        "verifierMs": 3155,
+        "rerank": {
+          "orderedEvidenceIds": ["e1"]
+        },
+        "structured": {
+          "claim": "형식 중립 근거 자료 2026은 존재하지 않거나 확인된 정보가 없습니다.",
+          "evidenceIds": ["e1"],
+          "facts": {
+            "numbers": [],
+            "units": [],
+            "dates": ["2026"],
+            "entities": ["형식 중립 근거 자료"]
+          }
+        },
+        "verdict": {
+          "verdict": "INSUFFICIENT",
+          "rationaleCode": "Evidence only repeats the term without verifying"
+        }
+      },
+      {
+        "rerankMs": 5118,
+        "llmMs": 6555,
+        "verifierMs": 2758,
+        "rerank": {
+          "orderedEvidenceIds": ["e1"]
+        },
+        "structured": {
+          "claim": "형식 중립 근거 자료 2026은 존재하지 않거나 확인된 정보가 없습니다.",
+          "evidenceIds": ["e1"],
+          "facts": {
+            "numbers": [],
+            "units": [],
+            "dates": ["2026"],
+            "entities": ["형식 중립 근거 자료"]
+          }
+        },
+        "verdict": {
+          "verdict": "INSUFFICIENT",
+          "rationaleCode": "Evidence only repeats the term without providing"
+        }
+      },
+      {
+        "rerankMs": 22983,
+        "llmMs": 10303,
+        "verifierMs": 6663,
+        "rerank": {
+          "orderedEvidenceIds": ["e1"]
+        },
+        "structured": {
+          "claim": "형식 중립 근거 자료 2026에 대한 정보는 제공된 증거에 포함되어 있지 않습니다.",
+          "evidenceIds": ["e1"],
+          "facts": {
+            "numbers": [],
+            "units": [],
+            "dates": ["2026"],
+            "entities": ["형식 중립 근거 자료"]
+          }
+        },
+        "verdict": {
+          "verdict": "CONFLICTING",
+          "rationaleCode": "Evidence e1 explicitly mentions '형식 중립 근거 자료 202"
+        }
+      }
+    ]
+  }
+}

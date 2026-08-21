@@ -138,7 +138,9 @@ services:
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:?Set EMBEDDING_MODEL}
       RERANK_MODEL: ${RERANK_MODEL:-deepseek-v4-flash}
       LLM_MODEL: ${LLM_MODEL:-deepseek-v4-flash}
-      VERIFIER_MODEL: ${VERIFIER_MODEL:-deepseek-v4-flash}
+      # Measured in .omo/evidence/task-29/model-configuration.json: at equal verifier latency
+      # this slot returns SUPPORTED for grounded claims that deepseek-v4-flash rejects.
+      VERIFIER_MODEL: ${VERIFIER_MODEL:-qwen3.6-plus}
     healthcheck:
       test: ["CMD", "bun", "-e", "const r=await fetch('http://127.0.0.1:3001/readyz');process.exit(r.ok?0:1)"]
       interval: 10s

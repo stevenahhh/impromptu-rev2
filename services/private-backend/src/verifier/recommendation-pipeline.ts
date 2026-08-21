@@ -113,6 +113,8 @@ export class PrivateRecommendationPipeline {
       ]);
     } finally {
       removeDeadline();
+      // Cancels any evidence branch that is still in flight once the outcome is decided.
+      controller.abort("private recommendation complete");
     }
   }
 
@@ -162,29 +164,43 @@ export class PrivateRecommendationPipeline {
       signal,
     });
 
+    // The external branch only reads the request, so it runs beside embedding and internal
+    // retrieval instead of after them. Its evidence is still appended after the internal set,
+    // so candidate ordering and every downstream gate stay byte-identical.
+    const externalEvidence = this.#retrieveExternal(request.data, deadlineAtMs, signal);
+
     const embedded = await this.#model(
       "embedding",
       { task: "EMBED_RETRIEVAL_QUERY", query: request.data.query },
       embeddingOutputSchema,
       trustedContext,
     );
-    if (!embedded.ok) return abstain(modelReason(embedded.errorCode), startedAtMs, this.#now());
+    if (!embedded.ok) {
+      await externalEvidence;
+      return abstain(modelReason(embedded.errorCode), startedAtMs, this.#now());
+    }
 
     const references = await this.#internal.retrieve(
       accountSessionId,
       request.data,
       embedded.output.vector,
     );
+    // Each materialization re-authorizes its own reference, so they are independent.
+    const materializations = await Promise.all(
+      references.map(async (reference) => ({
+        reference,
+        materialized: await this.#internal.materialize(reference),
+      })),
+    );
     const evidence: RetrievedEvidence[] = [];
     const referenceByEvidenceId = new Map<string, AuthorizedEvidenceReference>();
-    for (const reference of references) {
-      const materialized = await this.#internal.materialize(reference);
+    for (const { reference, materialized } of materializations) {
       if (materialized.outcome === "MATERIALIZED") {
         evidence.push(materialized.evidence);
         referenceByEvidenceId.set(materialized.evidence.evidenceId, reference);
       }
     }
-    evidence.push(...(await this.#retrieveExternal(request.data, deadlineAtMs, signal)));
+    evidence.push(...(await externalEvidence));
     if (signal.aborted) return abstain("DEADLINE_EXCEEDED", startedAtMs, deadlineAtMs);
     if (evidence.length === 0) return abstain("INSUFFICIENT_EVIDENCE", startedAtMs, this.#now());
 
@@ -342,22 +358,26 @@ export class PrivateRecommendationPipeline {
       } catch {
         return [];
       }
-      const evidence: RetrievedEvidence[] = [];
-      for (const candidate of candidates.slice(0, request.maxResults)) {
-        if (controller.signal.aborted) return evidence;
-        try {
-          const fetched = await externalFetch.fetchCandidate(candidate, {
-            deckVersion: request.deckVersion,
-            manifestHash: request.manifestHash,
-            deadlineAtMs,
-            signal: controller.signal,
-          });
-          if (fetched.outcome === "FETCHED") evidence.push(fetched.evidence);
-        } catch {
-          // A provider or origin failure is an internal-only degradation path.
-        }
-      }
-      return evidence;
+      // Candidate fetches are independent origin reads under one shared branch deadline, so
+      // they run together and are collapsed back in candidate order for a deterministic set.
+      const fetched = await Promise.all(
+        candidates.slice(0, request.maxResults).map(async (candidate) => {
+          if (controller.signal.aborted) return null;
+          try {
+            const result = await externalFetch.fetchCandidate(candidate, {
+              deckVersion: request.deckVersion,
+              manifestHash: request.manifestHash,
+              deadlineAtMs,
+              signal: controller.signal,
+            });
+            return result.outcome === "FETCHED" ? result.evidence : null;
+          } catch {
+            // A provider or origin failure is an internal-only degradation path.
+            return null;
+          }
+        }),
+      );
+      return fetched.filter((item): item is RetrievedEvidence => item !== null);
     })();
     try {
       return await Promise.race([external, deadline]);

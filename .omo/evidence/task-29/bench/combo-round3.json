@@ -1,0 +1,542 @@
+{
+  "llm=deepseek-v4-flash verifier=qwen3.6-plus": {
+    "trials": [
+      {
+        "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence_matches_claim"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence_matches_claim"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence_matches_claim"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence_matches_claim"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence_matches_claim"
+        }
+      }
+    ],
+    "llmMs": [1218, 1560, 1040, 2067, 1813],
+    "verifierMs": [2479, 2085, 2115, 1971, 2181],
+    "verdicts": ["SUPPORTED", "SUPPORTED", "SUPPORTED", "SUPPORTED", "SUPPORTED"],
+    "supported": "5/5",
+    "llmP50Ms": 1560,
+    "verifierP50Ms": 2115
+  },
+  "llm=deepseek-v4-flash verifier=qwen3.7-plus": {
+    "trials": [
+      {
+        "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence_matches_claim"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence_matches_claim"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence_matches_claim"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence_matches_claim"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence_matches_claim"
+        }
+      }
+    ],
+    "llmMs": [1218, 1560, 1040, 2067, 1813],
+    "verifierMs": [2085, 2088, 2077, 2050, 2351],
+    "verdicts": ["SUPPORTED", "SUPPORTED", "SUPPORTED", "SUPPORTED", "SUPPORTED"],
+    "supported": "5/5",
+    "llmP50Ms": 1560,
+    "verifierP50Ms": 2085
+  },
+  "llm=deepseek-v4-flash verifier=kimi-k2.5": {
+    "trials": [
+      {
+        "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence-explicit-match"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "EXACT_MATCH"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+        "verdict": {
+          "verdict": "INSUFFICIENT",
+          "rationaleCode": "evidence-content-ambiguous"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "text-explicit-match"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "exact-match"
+        }
+      }
+    ],
+    "llmMs": [1218, 1560, 1040, 2067, 1813],
+    "verifierMs": [5060, 1955, 3334, 2444, 2768],
+    "verdicts": ["SUPPORTED", "SUPPORTED", "INSUFFICIENT", "SUPPORTED", "SUPPORTED"],
+    "supported": "4/5",
+    "llmP50Ms": 1560,
+    "verifierP50Ms": 2768
+  },
+  "llm=deepseek-v4-flash verifier=glm-5.2": {
+    "trials": [
+      {
+        "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence-matches-claim"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+        "verdict": {
+          "verdict": "INSUFFICIENT",
+          "rationaleCode": "evidence-lacks-verifiable-detail"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence-matches-claim"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence-matches-claim"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence-matches-claim"
+        }
+      }
+    ],
+    "llmMs": [1218, 1560, 1040, 2067, 1813],
+    "verifierMs": [2048, 2175, 1901, 1752, 2451],
+    "verdicts": ["SUPPORTED", "INSUFFICIENT", "SUPPORTED", "SUPPORTED", "SUPPORTED"],
+    "supported": "4/5",
+    "llmP50Ms": 1560,
+    "verifierP50Ms": 2048
+  },
+  "llm=gpt-5.6-luna verifier=qwen3.6-plus": {
+    "trials": [
+      {
+        "claim": "2026년 형식 중립 근거 자료입니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence_matches_claim"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료에 대한 요청입니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence_matches_claim"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료를 요청합니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence_matches_claim"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료에 관한 요청입니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence_matches_claim"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료가 요청되었습니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence_matches_claim"
+        }
+      }
+    ],
+    "llmMs": [2874, 3055, 3734, 3462, 3008],
+    "verifierMs": [1852, 2032, 2204, 2206, 1839],
+    "verdicts": ["SUPPORTED", "SUPPORTED", "SUPPORTED", "SUPPORTED", "SUPPORTED"],
+    "supported": "5/5",
+    "llmP50Ms": 3055,
+    "verifierP50Ms": 2032
+  },
+  "llm=gpt-5.6-luna verifier=qwen3.7-plus": {
+    "trials": [
+      {
+        "claim": "2026년 형식 중립 근거 자료입니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "EXACT_MATCH"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료에 대한 요청입니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence_matches_claim"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료를 요청합니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence_matches_claim"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료에 관한 요청입니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence_matches_claim"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료가 요청되었습니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence_matches_claim"
+        }
+      }
+    ],
+    "llmMs": [2874, 3055, 3734, 3462, 3008],
+    "verifierMs": [1733, 2497, 1843, 1870, 1771],
+    "verdicts": ["SUPPORTED", "SUPPORTED", "SUPPORTED", "SUPPORTED", "SUPPORTED"],
+    "supported": "5/5",
+    "llmP50Ms": 3055,
+    "verifierP50Ms": 1843
+  },
+  "llm=gpt-5.6-luna verifier=kimi-k2.5": {
+    "trials": [
+      {
+        "claim": "2026년 형식 중립 근거 자료입니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "exact-match"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료에 대한 요청입니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "exact-match"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료를 요청합니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "exact-match"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료에 관한 요청입니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "exact-match"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료가 요청되었습니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence-matches-claim"
+        }
+      }
+    ],
+    "llmMs": [2874, 3055, 3734, 3462, 3008],
+    "verifierMs": [7638, 1918, 2559, 2171, 3042],
+    "verdicts": ["SUPPORTED", "SUPPORTED", "SUPPORTED", "SUPPORTED", "SUPPORTED"],
+    "supported": "5/5",
+    "llmP50Ms": 3055,
+    "verifierP50Ms": 2559
+  },
+  "llm=gpt-5.6-luna verifier=glm-5.2": {
+    "trials": [
+      {
+        "claim": "2026년 형식 중립 근거 자료입니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence-matches-claim"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료에 대한 요청입니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence-matches-claim"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료를 요청합니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence-matches-claim"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료에 관한 요청입니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence-matches-claim"
+        }
+      },
+      {
+        "claim": "2026년 형식 중립 근거 자료가 요청되었습니다.",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence-matches-claim"
+        }
+      }
+    ],
+    "llmMs": [2874, 3055, 3734, 3462, 3008],
+    "verifierMs": [2927, 1740, 1864, 1907, 3278],
+    "verdicts": ["SUPPORTED", "SUPPORTED", "SUPPORTED", "SUPPORTED", "SUPPORTED"],
+    "supported": "5/5",
+    "llmP50Ms": 3055,
+    "verifierP50Ms": 1907
+  },
+  "llm=kimi-k2.5 verifier=qwen3.6-plus": {
+    "trials": [
+      {
+        "claim": "형식 중립 근거 자료 2026",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "exact_match"
+        }
+      },
+      {
+        "claim": "형식 중립 근거 자료 2026",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence_matches_claim"
+        }
+      },
+      {
+        "claim": "형식 중립 근거 자료 2026",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "exact_match"
+        }
+      },
+      {
+        "claim": "형식 중립 근거 자료 2026",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence_matches_claim"
+        }
+      },
+      {
+        "claim": "형식 중립 근거 자료 2026",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence_matches_claim"
+        }
+      }
+    ],
+    "llmMs": [7973, 4403, 2457, 2776, 4477],
+    "verifierMs": [1856, 1946, 1767, 1737, 1961],
+    "verdicts": ["SUPPORTED", "SUPPORTED", "SUPPORTED", "SUPPORTED", "SUPPORTED"],
+    "supported": "5/5",
+    "llmP50Ms": 4403,
+    "verifierP50Ms": 1856
+  },
+  "llm=kimi-k2.5 verifier=qwen3.7-plus": {
+    "trials": [
+      {
+        "claim": "형식 중립 근거 자료 2026",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence_matches_claim"
+        }
+      },
+      {
+        "claim": "형식 중립 근거 자료 2026",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "exact_match"
+        }
+      },
+      {
+        "claim": "형식 중립 근거 자료 2026",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence_matches_claim"
+        }
+      },
+      {
+        "claim": "형식 중립 근거 자료 2026",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "exact_match"
+        }
+      },
+      {
+        "claim": "형식 중립 근거 자료 2026",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "evidence_matches_claim"
+        }
+      }
+    ],
+    "llmMs": [7973, 4403, 2457, 2776, 4477],
+    "verifierMs": [2356, 1740, 2329, 1854, 1842],
+    "verdicts": ["SUPPORTED", "SUPPORTED", "SUPPORTED", "SUPPORTED", "SUPPORTED"],
+    "supported": "5/5",
+    "llmP50Ms": 4403,
+    "verifierP50Ms": 1854
+  },
+  "llm=kimi-k2.5 verifier=kimi-k2.5": {
+    "trials": [
+      {
+        "claim": "형식 중립 근거 자료 2026",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "exact-match"
+        }
+      },
+      {
+        "claim": "형식 중립 근거 자료 2026",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "exact-match"
+        }
+      },
+      {
+        "claim": "형식 중립 근거 자료 2026",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "exact-match"
+        }
+      },
+      {
+        "claim": "형식 중립 근거 자료 2026",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "exact-match"
+        }
+      },
+      {
+        "claim": "형식 중립 근거 자료 2026",
+        "verdict": {
+          "verdict": "SUPPORTED",
+          "rationaleCode": "exact-match"
+        }
+      }
+    ],
+    "llmMs": [7973, 4403, 2457, 2776, 4477],
+    "verifierMs": [1861, 5678, 2565, 1905, 3797],
+    "verdicts": ["SUPPORTED", "SUPPORTED", "SUPPORTED", "SUPPORTED", "SUPPORTED"],
+    "supported": "5/5",
+    "llmP50Ms": 4403,
+    "verifierP50Ms": 2565
+  },
+  "llm=kimi-k2.5 verifier=glm-5.2": {
+    "trials": [
+      {
+        "claim": "형식 중립 근거 자료 2026",
+        "verdict": {
+          "verdict": "INSUFFICIENT",
+          "rationaleCode": "no-verifiable-facts"
+        }
+      },
+      {
+        "claim": "형식 중립 근거 자료 2026",
+        "verdict": {
+          "verdict": "INSUFFICIENT",
+          "rationaleCode": "evidence-content-mirrors-claim-no-substantive-b"
+        }
+      },
+      {
+        "claim": "형식 중립 근거 자료 2026",
+        "verdict": {
+          "verdict": "INSUFFICIENT",
+          "rationaleCode": "no-verifiable-facts"
+        }
+      },
+      {
+        "claim": "형식 중립 근거 자료 2026",
+        "verdict": {
+          "verdict": "INSUFFICIENT",
+          "rationaleCode": "no-verifiable-facts"
+        }
+      },
+      {
+        "claim": "형식 중립 근거 자료 2026",
+        "verdict": {
+          "verdict": "INSUFFICIENT",
+          "rationaleCode": "no-verifiable-facts"
+        }
+      }
+    ],
+    "llmMs": [7973, 4403, 2457, 2776, 4477],
+    "verifierMs": [2439, 2411, 2139, 1988, 2449],
+    "verdicts": ["INSUFFICIENT", "INSUFFICIENT", "INSUFFICIENT", "INSUFFICIENT", "INSUFFICIENT"],
+    "supported": "0/5",
+    "llmP50Ms": 4403,
+    "verifierP50Ms": 2411
+  }
+}
