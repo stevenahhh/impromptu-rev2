@@ -60,6 +60,27 @@ function required(name: string): string {
   return value;
 }
 
+function optionalWhisperCppPaths(): {
+  readonly ffmpegPath: string;
+  readonly whisperBinaryPath: string;
+  readonly modelPath: string;
+} | null {
+  const ffmpegPath = Bun.env.FFMPEG_BINARY_PATH;
+  const whisperBinaryPath = Bun.env.WHISPER_CPP_BINARY_PATH;
+  const modelPath = Bun.env.WHISPER_CPP_MODEL_PATH;
+  if (
+    ffmpegPath === undefined ||
+    ffmpegPath.length === 0 ||
+    whisperBinaryPath === undefined ||
+    whisperBinaryPath.length === 0 ||
+    modelPath === undefined ||
+    modelPath.length === 0
+  ) {
+    return null;
+  }
+  return { ffmpegPath, whisperBinaryPath, modelPath };
+}
+
 function existingAbsoluteDirectory(path: string, name: string): string {
   if (!isAbsolute(path)) {
     throw new Error(`${name} must be an existing absolute directory: ${path}`);
@@ -180,13 +201,13 @@ const chatModel = {
   apiPrefix: apiPrefix(chatModelBaseUrl),
   model: required("LLM_MODEL"),
 };
-const whisperPaths = {
-  ffmpegPath: required("FFMPEG_BINARY_PATH"),
-  whisperBinaryPath: required("WHISPER_CPP_BINARY_PATH"),
-  modelPath: required("WHISPER_CPP_MODEL_PATH"),
-};
-await verifyWhisperCppInstallation(whisperPaths);
-registerWhisperCppStreamingStt(modelRegistry, whisperPaths);
+// Local capture is an optional deployment capability. Without a pinned whisper.cpp installation the
+// service still composes and every /v1/audio route stays closed, instead of refusing to boot at all.
+const whisperPaths = optionalWhisperCppPaths();
+if (whisperPaths !== null) {
+  await verifyWhisperCppInstallation(whisperPaths);
+  registerWhisperCppStreamingStt(modelRegistry, whisperPaths);
+}
 const modelAdapterBindings = registerOpenAiCompatibleAdapters(modelRegistry, {
   embedding: {
     origin: embeddingModelBaseUrl.origin,
@@ -380,57 +401,61 @@ coordinator = new PreparedEvidenceCoordinator(projection, store, {
     },
   },
 });
-const audio = createAudioIngestService({
-  router: modelRouter,
-  adapterId: WHISPER_CPP_ADAPTER_ID,
-  createGrantId: () => `capture_${crypto.randomUUID()}`,
-  coachingPreviewEnabledFor: () => true,
-  recommendations: {
-    resolveContext(identity) {
-      const presentation = store.presentations.get(identity.presentationSessionId);
-      if (
-        presentation?.lifecycle.ownerAccountId !== identity.accountId ||
-        presentation.lifecycle.presentationSessionEpoch !== identity.presentationSessionEpoch ||
-        presentation.lifecycle.status !== "ACTIVE"
-      ) {
-        return null;
-      }
-      return {
-        deckVersion: presentation.privateDeck.deckVersion,
-        manifestHash: presentation.privateDeck.manifestHash,
-      };
-    },
-    recommend(accountSessionId, input) {
-      return recommendations.recommend(accountSessionId, input);
-    },
-  },
-  onFinal(identity, event) {
-    sessionReportFinalizer.recordFinal(
-      {
-        tenantId: identity.accountId,
-        presentationSessionId: identity.presentationSessionId,
-        ownerSubject: identity.accountId,
-      },
-      {
-        finalSegmentId: event.finalSegmentId,
-        transcript: event.transcript,
-      },
-    );
-  },
-  contextFor(identity, signal) {
-    const startedAtMs = Date.now();
-    const requestId = `audio-stt:${crypto.randomUUID()}`;
-    return createTrustedModelContext({
-      tenantId: identity.accountId,
-      principalId: identity.actorId,
-      requestId,
-      traceId: `${requestId}:${identity.presentationSessionId}`,
-      policyVersion: "model-policy-v1",
-      deadlineAtMs: startedAtMs + 60_000,
-      signal,
-    });
-  },
-});
+const audio =
+  whisperPaths === null
+    ? undefined
+    : createAudioIngestService({
+        router: modelRouter,
+        adapterId: WHISPER_CPP_ADAPTER_ID,
+        createGrantId: () => `capture_${crypto.randomUUID()}`,
+        coachingPreviewEnabledFor: () => true,
+        recommendations: {
+          resolveContext(identity) {
+            const presentation = store.presentations.get(identity.presentationSessionId);
+            if (
+              presentation?.lifecycle.ownerAccountId !== identity.accountId ||
+              presentation.lifecycle.presentationSessionEpoch !==
+                identity.presentationSessionEpoch ||
+              presentation.lifecycle.status !== "ACTIVE"
+            ) {
+              return null;
+            }
+            return {
+              deckVersion: presentation.privateDeck.deckVersion,
+              manifestHash: presentation.privateDeck.manifestHash,
+            };
+          },
+          recommend(accountSessionId, input) {
+            return recommendations.recommend(accountSessionId, input);
+          },
+        },
+        onFinal(identity, event) {
+          sessionReportFinalizer.recordFinal(
+            {
+              tenantId: identity.accountId,
+              presentationSessionId: identity.presentationSessionId,
+              ownerSubject: identity.accountId,
+            },
+            {
+              finalSegmentId: event.finalSegmentId,
+              transcript: event.transcript,
+            },
+          );
+        },
+        contextFor(identity, signal) {
+          const startedAtMs = Date.now();
+          const requestId = `audio-stt:${crypto.randomUUID()}`;
+          return createTrustedModelContext({
+            tenantId: identity.accountId,
+            principalId: identity.actorId,
+            requestId,
+            traceId: `${requestId}:${identity.presentationSessionId}`,
+            policyVersion: "model-policy-v1",
+            deadlineAtMs: startedAtMs + 60_000,
+            signal,
+          });
+        },
+      });
 const reportOwners = {
   async resolve({
     accountId: requestedAccountId,
@@ -507,7 +532,7 @@ const server = Bun.serve({
     accountRegistrar: accountDirectory,
     now: Date.now,
     recommendations,
-    audio,
+    ...(audio === undefined ? {} : { audio }),
     sessionReportRead,
     persist: persistence.persist,
     uploads: deckUploadService,
