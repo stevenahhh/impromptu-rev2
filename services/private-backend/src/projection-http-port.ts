@@ -1,8 +1,4 @@
-import type {
-  PublicationTombstone,
-  PublishedAudienceCard,
-  PublishedDeckArtifact,
-} from "@impromptu/contracts/public";
+import type { PublishedDeckArtifact } from "@impromptu/contracts/public";
 import type { PreparedEvidenceProjectionPort } from "./prepared-evidence.ts";
 
 async function responseJson(response: Response): Promise<unknown> {
@@ -103,17 +99,6 @@ export class ProjectionHttpPort implements PreparedEvidenceProjectionPort {
           publicPlaybackRevision,
         })
       ).ok;
-    } catch {
-      return false;
-    }
-  }
-
-  async projectCard(
-    presentationSessionId: string,
-    event: PublishedAudienceCard | PublicationTombstone,
-  ): Promise<boolean> {
-    try {
-      return (await this.#post("/internal/cards", { presentationSessionId, event })).ok;
     } catch {
       return false;
     }

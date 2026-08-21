@@ -26,16 +26,13 @@ import {
   displayBindingEpoch,
   type PublicationTombstone,
   PublicationTombstoneSchema,
-  PublicCardRevisionSchema,
   PublicSlideKeySchema,
   type PublishedAudienceCard,
   PublishedAudienceCardSchema,
   type PublishedDeckArtifact,
   PublishedDeckArtifactSchema,
-  publicCardRevision,
 } from "@impromptu/contracts/public";
 import {
-  applyAuthorizedPublicCardEvent,
   type CandidateLifecycleState,
   createCandidateLifecycle,
   createPlaybackAuthorityState,
@@ -92,10 +89,6 @@ export interface PreparedEvidenceProjectionPort {
     displayBindingEpoch: string,
     publicPlaybackRevision: string,
   ): MaybePromise<boolean>;
-  projectCard(
-    presentationSessionId: string,
-    event: PublishedAudienceCard | PublicationTombstone,
-  ): MaybePromise<boolean>;
 }
 
 type CandidateRecord = {
@@ -106,11 +99,6 @@ type CandidateRecord = {
 type IdempotentPublicationRecord = Readonly<{
   requestHash: string;
   event: PublishedAudienceCard | PublicationTombstone;
-}>;
-
-type InFlightPublication = Readonly<{
-  requestHash: string;
-  operation: Promise<OperationResult<PublishedAudienceCard | PublicationTombstone>>;
 }>;
 
 type PresentationRecord = {
@@ -263,7 +251,7 @@ export function restorePreparedEvidenceStore(input: unknown): PreparedEvidenceSt
     const privateDeck = PrivateDeckContextSchema.safeParse(presentationInput.privateDeck);
     const publicDeck = PublishedDeckArtifactSchema.safeParse(presentationInput.publicDeck);
     const playback = restorePlaybackAuthority(presentationInput.playback);
-    const cards = restorePublicCardStream(presentationInput.cards);
+    const legacyCards = restorePublicCardStream(presentationInput.cards);
     const audienceDisplaySession =
       presentationInput.audienceDisplaySession === null
         ? { success: true as const, data: null }
@@ -273,12 +261,12 @@ export function restorePreparedEvidenceStore(input: unknown): PreparedEvidenceSt
       !privateDeck.success ||
       !publicDeck.success ||
       playback.outcome !== "RESTORED" ||
-      cards.outcome !== "RESTORED" ||
+      legacyCards.outcome !== "RESTORED" ||
       !audienceDisplaySession.success ||
       lifecycle.data.presentationSessionId !== playback.state.presentationSessionId ||
-      lifecycle.data.presentationSessionId !== cards.state.presentationSessionId ||
+      lifecycle.data.presentationSessionId !== legacyCards.state.presentationSessionId ||
       lifecycle.data.presentationSessionEpoch !== playback.state.presentationSessionEpoch ||
-      lifecycle.data.presentationSessionEpoch !== cards.state.presentationSessionEpoch ||
+      lifecycle.data.presentationSessionEpoch !== legacyCards.state.presentationSessionEpoch ||
       lifecycle.data.deckVersion !== publicDeck.data.deckVersion ||
       privateDeck.data.deckVersion !== publicDeck.data.deckVersion ||
       privateDeck.data.manifestHash !== publicDeck.data.manifestHash ||
@@ -312,9 +300,11 @@ export function restorePreparedEvidenceStore(input: unknown): PreparedEvidenceSt
       ) {
         return { outcome: "INVALID_SNAPSHOT" };
       }
+      const privateLifecycle = discardLegacyCandidatePublication(candidateLifecycle.state);
+      if (privateLifecycle === null) return { outcome: "INVALID_SNAPSHOT" };
       candidates.set(candidate.data.candidateId, {
         candidate: candidate.data,
-        lifecycle: candidateLifecycle.state,
+        lifecycle: privateLifecycle,
       });
     }
     const approvedPublicationActorIds = new Set<string>();
@@ -325,11 +315,16 @@ export function restorePreparedEvidenceStore(input: unknown): PreparedEvidenceSt
       approvedPublicationActorIds.add(actorId);
     }
     if (
-      cards.state.authority === null ||
-      !approvedPublicationActorIds.has(cards.state.authority.actorId)
+      legacyCards.state.authority === null ||
+      !approvedPublicationActorIds.has(legacyCards.state.authority.actorId)
     ) {
       return { outcome: "INVALID_SNAPSHOT" };
     }
+    const cards = createPublicCardStream({
+      presentationSessionId: lifecycle.data.presentationSessionId,
+      presentationSessionEpoch: lifecycle.data.presentationSessionEpoch,
+      authority: legacyCards.state.authority,
+    });
     const publicationOperations = new Map<string, IdempotentPublicationRecord>();
     for (const operationInput of presentationInput.publicationOperations) {
       if (
@@ -346,17 +341,14 @@ export function restorePreparedEvidenceStore(input: unknown): PreparedEvidenceSt
       if (!published.success && !tombstone.success) return { outcome: "INVALID_SNAPSHOT" };
       const event = published.success ? published.data : tombstone.success ? tombstone.data : null;
       if (event === null) return { outcome: "INVALID_SNAPSHOT" };
-      publicationOperations.set(operationInput.operationId, {
-        requestHash: operationInput.requestHash,
-        event,
-      });
+      // Legacy publication operations are validated for snapshot compatibility, then discarded.
     }
     store.presentations.set(lifecycle.data.presentationSessionId, {
       lifecycle: lifecycle.data,
       privateDeck: privateDeck.data,
       publicDeck: publicDeck.data,
       playback: playback.state,
-      cards: cards.state,
+      cards,
       candidates,
       approvedPublicationActorIds,
       publicationOperations,
@@ -419,6 +411,26 @@ function accountSessionRejection(
   return null;
 }
 
+function discardLegacyCandidatePublication(
+  state: CandidateLifecycleState,
+): CandidateLifecycleState | null {
+  if (state.publicationState === "PRIVATE") return state;
+  let privateState = createCandidateLifecycle({
+    presentationSessionId: state.presentationSessionId,
+    presentationSessionEpoch: state.presentationSessionEpoch,
+    candidateId: state.candidateId,
+    candidateVersion: state.candidateVersion,
+    contentHash: state.contentHash,
+  });
+  for (const operation of Object.values(state.eventsByRevision)) {
+    if (operation.type === "PUBLISH") continue;
+    const replayed = reduceCandidateLifecycle(privateState, operation);
+    if (replayed.outcome !== "APPLIED") return null;
+    privateState = replayed.state;
+  }
+  return privateState;
+}
+
 export class PreparedEvidenceCoordinator {
   readonly #store: PreparedEvidenceStore;
   readonly #projection: PreparedEvidenceProjectionPort;
@@ -428,8 +440,6 @@ export class PreparedEvidenceCoordinator {
   readonly #liveEvidenceAuthorizer: LiveEvidenceAuthorizer | undefined;
   readonly #livePublicEnabled: boolean;
   readonly #controllerSockets = new Map<string, Set<MutableControllerSocket>>();
-  readonly #publicationInFlight = new Map<string, InFlightPublication>();
-  readonly #publicationTails = new Map<string, Promise<void>>();
 
   constructor(
     projection: PreparedEvidenceProjectionPort,
@@ -1001,326 +1011,19 @@ export class PreparedEvidenceCoordinator {
   }
 
   async approveCandidate(
-    accountSessionId: string,
-    input: CandidateApprovalInput,
-    nowMs: number,
+    _accountSessionId: string,
+    _input: CandidateApprovalInput,
+    _nowMs: number,
   ): Promise<OperationResult<PublishedAudienceCard>> {
-    const operationId = input.approvalId;
-    if (operationId === undefined) {
-      return this.#serializePublication(input.presentationSessionId, () =>
-        this.#approveCandidate(accountSessionId, input, nowMs),
-      );
-    }
-    const key = `${input.presentationSessionId}:approve:${operationId}`;
-    const operationHash = requestHash(input);
-    const pending = this.#publicationInFlight.get(key);
-    if (pending !== undefined) {
-      if (pending.requestHash !== operationHash) {
-        return { outcome: "REJECTED", reason: "IDEMPOTENCY_CONFLICT" };
-      }
-      const replay = await pending.operation;
-      if (replay.outcome === "REJECTED") return replay;
-      return replay.value.status === "PUBLISHED"
-        ? { outcome: "APPLIED", value: replay.value }
-        : { outcome: "REJECTED", reason: "IDEMPOTENCY_CONFLICT" };
-    }
-    const operation = this.#serializePublication(input.presentationSessionId, () =>
-      this.#approveCandidate(accountSessionId, input, nowMs),
-    );
-    this.#publicationInFlight.set(key, { requestHash: operationHash, operation });
-    try {
-      return await operation;
-    } finally {
-      this.#publicationInFlight.delete(key);
-    }
-  }
-
-  async #approveCandidate(
-    accountSessionId: string,
-    input: CandidateApprovalInput,
-    nowMs: number,
-  ): Promise<OperationResult<PublishedAudienceCard>> {
-    const authorized = await this.#authorizedPresentation(
-      accountSessionId,
-      input.presentationSessionId,
-      nowMs,
-    );
-    if (authorized.outcome === "REJECTED") return authorized;
-    const account = await this.readAccountSession(accountSessionId, nowMs);
-    if (
-      account.outcome === "REJECTED" ||
-      !authorized.value.approvedPublicationActorIds.has(account.value.actorId)
-    ) {
-      return { outcome: "REJECTED", reason: "PUBLICATION_AUTHORITY_REQUIRED" };
-    }
-    const operationHash = requestHash(input);
-    if (input.approvalId !== undefined) {
-      const prior = authorized.value.publicationOperations.get(input.approvalId);
-      if (prior !== undefined) {
-        return prior.requestHash === operationHash && prior.event.status === "PUBLISHED"
-          ? { outcome: "APPLIED", value: prior.event }
-          : { outcome: "REJECTED", reason: "IDEMPOTENCY_CONFLICT" };
-      }
-    }
-    const record = authorized.value.candidates.get(input.candidateId);
-    if (record === undefined) return { outcome: "REJECTED", reason: "CANDIDATE_NOT_FOUND" };
-    if (
-      record.candidate.causal.presentationSessionEpoch !==
-        authorized.value.lifecycle.presentationSessionEpoch ||
-      record.candidate.causal.displayBindingEpoch !==
-        authorized.value.playback.displayBindingEpoch ||
-      record.candidate.causal.deckVersion !== authorized.value.publicDeck.deckVersion ||
-      record.candidate.causal.manifestHash !== authorized.value.publicDeck.manifestHash ||
-      !sameOccurrence(record.candidate.causal.occurrence, authorized.value.playback.occurrence) ||
-      record.candidate.causal.decisions.publicationPolicy !==
-        authorized.value.cards.authority?.policyVersion
-    ) {
-      return { outcome: "REJECTED", reason: "STALE_CANDIDATE" };
-    }
-    if (
-      record.lifecycle.candidateRevision !== input.expectedCandidateRevision ||
-      (input.candidateVersion !== undefined &&
-        input.candidateVersion !== record.candidate.candidateVersion)
-    ) {
-      return { outcome: "REJECTED", reason: "CANDIDATE_CAS_CONFLICT" };
-    }
-    if (
-      record.candidate.provenance === "LIVE_VERIFIED" &&
-      (this.#liveEvidenceAuthorizer === undefined ||
-        !(await this.#liveEvidenceAuthorizer.authorize(record.candidate)))
-    ) {
-      return { outcome: "REJECTED", reason: "EVIDENCE_AUTHORIZATION_DENIED" };
-    }
-    const expectedPublicCardRevision = PublicCardRevisionSchema.safeParse(
-      input.expectedPublicCardRevision,
-    );
-    if (!expectedPublicCardRevision.success) {
-      return { outcome: "REJECTED", reason: "INVALID_PUBLIC_CARD_REVISION" };
-    }
-    const nextRevision = publicCardRevision(Number(expectedPublicCardRevision.data.slice(4)) + 1);
-    const projectionId = `projection_${opaqueHex(24)}` as PublishedAudienceCard["projectionId"];
-    const isLive = record.candidate.provenance === "LIVE_VERIFIED";
-    const leaseExpiresAtMs = isLive ? nowMs + 3_000 : input.expiresAtMs;
-    const cardVersion = `card-${opaqueHex(12)}`;
-    const event: PublishedAudienceCard = {
-      projectionId,
-      status: "PUBLISHED",
-      ...(isLive
-        ? {
-            mode: "LIVE" as const,
-            leaseExpiresAtMs,
-            publicationPolicyVersion: record.candidate.causal.decisions.publicationPolicy,
-            cardVersion,
-            liveBinding: {
-              presentationSessionEpoch: record.candidate.causal.presentationSessionEpoch,
-              displayBindingEpoch: record.candidate.causal.displayBindingEpoch,
-              publicSlideOccurrence: record.candidate.causal.occurrence,
-              publicationPolicyVersion: record.candidate.causal.decisions.publicationPolicy,
-              cardVersion,
-            },
-          }
-        : {}),
-      claim: record.candidate.claimText,
-      supportSummary: record.candidate.evidenceExcerpt,
-      sourceLabel: `Prepared source ${projectionId.slice(-8)}`,
-      publishedAtMs: nowMs,
-      expiresAtMs: leaseExpiresAtMs,
-      publicCardRevision: nextRevision,
-      deckVersion: record.candidate.causal.deckVersion,
-      manifestHash: record.candidate.causal.manifestHash,
-      occurrence: record.candidate.causal.occurrence,
-    };
-    const applied = applyAuthorizedPublicCardEvent(
-      authorized.value.cards,
-      record.lifecycle,
-      {
-        presentationSessionId: authorized.value.lifecycle.presentationSessionId,
-        presentationSessionEpoch: authorized.value.lifecycle.presentationSessionEpoch,
-        authorityId: input.authorityId,
-        expectedRevision: expectedPublicCardRevision.data,
-        payload: event,
-      },
-      nowMs,
-    );
-    if (applied.outcome !== "APPLIED") return { outcome: "REJECTED", reason: applied.reason };
-    const published = reduceCandidateLifecycle(record.lifecycle, {
-      type: "PUBLISH",
-      presentationSessionId: record.lifecycle.presentationSessionId,
-      presentationSessionEpoch: record.lifecycle.presentationSessionEpoch,
-      candidateId: record.lifecycle.candidateId,
-      candidateVersion: record.lifecycle.candidateVersion,
-      expectedRevision: record.lifecycle.candidateRevision,
-      projectionId,
-      publicCardRevision: nextRevision,
-    });
-    if (published.outcome !== "APPLIED") throw new Error("publication lifecycle invariant failed");
-    // This second check is intentionally adjacent to the publication side effect.
-    if (
-      record.candidate.provenance === "LIVE_VERIFIED" &&
-      (this.#liveEvidenceAuthorizer === undefined ||
-        !(await this.#liveEvidenceAuthorizer.authorize(record.candidate)))
-    ) {
-      return { outcome: "REJECTED", reason: "EVIDENCE_AUTHORIZATION_DENIED" };
-    }
-    if (record.candidate.provenance === "LIVE_VERIFIED") {
-      if (!this.#livePublicEnabled) {
-        return { outcome: "REJECTED", reason: "LIVE_PUBLIC_DISABLED" };
-      }
-      if (
-        input.approvalId === undefined ||
-        input.candidateVersion === undefined ||
-        input.authoritativeSnapshotHash !==
-          this.#liveCandidateSnapshot(authorized.value).authoritativeSnapshotHash
-      ) {
-        return { outcome: "REJECTED", reason: "FRESH_AUTHORITATIVE_SNAPSHOT_REQUIRED" };
-      }
-    }
-    const previousCards = authorized.value.cards;
-    const previousLifecycle = record.lifecycle;
-    authorized.value.cards = applied.state;
-    record.lifecycle = published.state;
-    if (input.approvalId !== undefined) {
-      authorized.value.publicationOperations.set(input.approvalId, {
-        requestHash: operationHash,
-        event,
-      });
-    }
-    if (!(await this.#projection.projectCard(input.presentationSessionId, event))) {
-      authorized.value.cards = previousCards;
-      record.lifecycle = previousLifecycle;
-      if (input.approvalId !== undefined) {
-        authorized.value.publicationOperations.delete(input.approvalId);
-      }
-      return { outcome: "REJECTED", reason: "PROJECTION_REJECTED" };
-    }
-    return { outcome: "APPLIED", value: event };
+    return { outcome: "REJECTED", reason: "PUBLICATION_DISABLED" };
   }
 
   async terminateCard(
-    accountSessionId: string,
-    input: CardTerminationInput,
-    nowMs: number,
+    _accountSessionId: string,
+    _input: CardTerminationInput,
+    _nowMs: number,
   ): Promise<OperationResult<PublicationTombstone>> {
-    const operationId = input.operationId;
-    if (operationId === undefined) {
-      return this.#serializePublication(input.presentationSessionId, () =>
-        this.#terminateCard(accountSessionId, input, nowMs),
-      );
-    }
-    const key = `${input.presentationSessionId}:terminate:${operationId}`;
-    const operationHash = requestHash(input);
-    const pending = this.#publicationInFlight.get(key);
-    if (pending !== undefined) {
-      if (pending.requestHash !== operationHash) {
-        return { outcome: "REJECTED", reason: "IDEMPOTENCY_CONFLICT" };
-      }
-      const replay = await pending.operation;
-      if (replay.outcome === "REJECTED") return replay;
-      return replay.value.status !== "PUBLISHED"
-        ? { outcome: "APPLIED", value: replay.value }
-        : { outcome: "REJECTED", reason: "IDEMPOTENCY_CONFLICT" };
-    }
-    const operation = this.#serializePublication(input.presentationSessionId, () =>
-      this.#terminateCard(accountSessionId, input, nowMs),
-    );
-    this.#publicationInFlight.set(key, { requestHash: operationHash, operation });
-    try {
-      return await operation;
-    } finally {
-      this.#publicationInFlight.delete(key);
-    }
-  }
-
-  async #terminateCard(
-    accountSessionId: string,
-    input: CardTerminationInput,
-    nowMs: number,
-  ): Promise<OperationResult<PublicationTombstone>> {
-    const authorized = await this.#authorizedPresentation(
-      accountSessionId,
-      input.presentationSessionId,
-      nowMs,
-    );
-    if (authorized.outcome === "REJECTED") return authorized;
-    const account = await this.readAccountSession(accountSessionId, nowMs);
-    if (
-      account.outcome === "REJECTED" ||
-      !authorized.value.approvedPublicationActorIds.has(account.value.actorId)
-    ) {
-      return { outcome: "REJECTED", reason: "PUBLICATION_AUTHORITY_REQUIRED" };
-    }
-    const operationHash = requestHash(input);
-    if (input.operationId !== undefined) {
-      const prior = authorized.value.publicationOperations.get(input.operationId);
-      if (prior !== undefined) {
-        return prior.requestHash === operationHash && prior.event.status !== "PUBLISHED"
-          ? { outcome: "APPLIED", value: prior.event }
-          : { outcome: "REJECTED", reason: "IDEMPOTENCY_CONFLICT" };
-      }
-    }
-    if (authorized.value.cards.cards[input.projectionId] === undefined) {
-      return { outcome: "REJECTED", reason: "PUBLICATION_NOT_ACTIVE" };
-    }
-    const expectedPublicCardRevision = PublicCardRevisionSchema.safeParse(
-      input.expectedPublicCardRevision,
-    );
-    if (!expectedPublicCardRevision.success) {
-      return { outcome: "REJECTED", reason: "INVALID_PUBLIC_CARD_REVISION" };
-    }
-    const event: PublicationTombstone = {
-      projectionId: input.projectionId as PublicationTombstone["projectionId"],
-      status: input.status,
-      publicCardRevision: publicCardRevision(Number(expectedPublicCardRevision.data.slice(4)) + 1),
-      occurredAtMs: nowMs,
-    };
-    const applied = applyAuthorizedPublicCardEvent(
-      authorized.value.cards,
-      null,
-      {
-        presentationSessionId: authorized.value.lifecycle.presentationSessionId,
-        presentationSessionEpoch: authorized.value.lifecycle.presentationSessionEpoch,
-        authorityId: input.authorityId,
-        expectedRevision: expectedPublicCardRevision.data,
-        payload: event,
-      },
-      nowMs,
-    );
-    if (applied.outcome !== "APPLIED") return { outcome: "REJECTED", reason: applied.reason };
-    const previousCards = authorized.value.cards;
-    authorized.value.cards = applied.state;
-    if (input.operationId !== undefined) {
-      authorized.value.publicationOperations.set(input.operationId, {
-        requestHash: operationHash,
-        event,
-      });
-    }
-    if (!(await this.#projection.projectCard(input.presentationSessionId, event))) {
-      authorized.value.cards = previousCards;
-      if (input.operationId !== undefined) {
-        authorized.value.publicationOperations.delete(input.operationId);
-      }
-      return { outcome: "REJECTED", reason: "PROJECTION_REJECTED" };
-    }
-    return { outcome: "APPLIED", value: event };
-  }
-
-  #serializePublication<Value>(
-    presentationSessionId: string,
-    operation: () => Promise<OperationResult<Value>>,
-  ): Promise<OperationResult<Value>> {
-    const previous = this.#publicationTails.get(presentationSessionId) ?? Promise.resolve();
-    const result = previous.then(operation);
-    const tail = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    this.#publicationTails.set(presentationSessionId, tail);
-    void tail.finally(() => {
-      if (this.#publicationTails.get(presentationSessionId) === tail) {
-        this.#publicationTails.delete(presentationSessionId);
-      }
-    });
-    return result;
+    return { outcome: "REJECTED", reason: "PUBLICATION_DISABLED" };
   }
 
   #liveCandidateSnapshot(presentation: PresentationRecord): LiveCandidateSnapshot {

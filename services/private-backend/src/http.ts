@@ -418,6 +418,13 @@ export function createPrivateBackendHandler(
       }
     }
 
+    if (
+      request.method === "POST" &&
+      (url.pathname === "/v1/publications/approve" || url.pathname === "/v1/publications/terminate")
+    ) {
+      return json({ error: "stage_cards_disabled" }, 410, origin);
+    }
+
     if (request.method === "GET" && url.pathname === "/v1/account-session") {
       return json(
         {
@@ -671,57 +678,6 @@ export function createPrivateBackendHandler(
       return json(
         result.outcome === "APPLIED" ? { status: "approved" } : { error: result.reason },
         result.outcome === "APPLIED" ? 200 : 403,
-        origin,
-      );
-    }
-    if (request.method === "POST" && url.pathname === "/v1/publications/approve") {
-      const result = await dependencies.coordinator.approveCandidate(
-        accountSessionId,
-        {
-          presentationSessionId: String(body.presentationSessionId ?? ""),
-          candidateId: String(body.candidateId ?? ""),
-          ...(typeof body.candidateVersion === "string"
-            ? { candidateVersion: body.candidateVersion }
-            : {}),
-          expectedCandidateRevision: String(body.expectedCandidateRevision ?? ""),
-          expectedPublicCardRevision: String(body.expectedPublicCardRevision ?? ""),
-          authorityId: String(body.authorityId ?? ""),
-          ...(typeof body.approvalId === "string" ? { approvalId: body.approvalId } : {}),
-          ...(typeof body.authoritativeSnapshotHash === "string"
-            ? { authoritativeSnapshotHash: body.authoritativeSnapshotHash }
-            : {}),
-          expiresAtMs: typeof body.expiresAtMs === "number" ? body.expiresAtMs : null,
-        },
-        dependencies.now(),
-      );
-      if (result.outcome === "APPLIED") await dependencies.persist?.();
-      return json(
-        result.outcome === "APPLIED" ? result.value : { error: result.reason },
-        result.outcome === "APPLIED" ? 201 : 409,
-        origin,
-      );
-    }
-    if (request.method === "POST" && url.pathname === "/v1/publications/terminate") {
-      const status = body.status;
-      if (status !== "RETRACTED" && status !== "EXPIRED") {
-        return json({ error: "invalid_request" }, 400, origin);
-      }
-      const result = await dependencies.coordinator.terminateCard(
-        accountSessionId,
-        {
-          presentationSessionId: String(body.presentationSessionId ?? ""),
-          projectionId: String(body.projectionId ?? ""),
-          expectedPublicCardRevision: String(body.expectedPublicCardRevision ?? ""),
-          authorityId: String(body.authorityId ?? ""),
-          ...(typeof body.operationId === "string" ? { operationId: body.operationId } : {}),
-          status,
-        },
-        dependencies.now(),
-      );
-      if (result.outcome === "APPLIED") await dependencies.persist?.();
-      return json(
-        result.outcome === "APPLIED" ? result.value : { error: result.reason },
-        result.outcome === "APPLIED" ? 200 : 409,
         origin,
       );
     }

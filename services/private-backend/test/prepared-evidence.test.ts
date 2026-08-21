@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { EvidenceCandidate } from "@impromptu/contracts/private";
-import type { PublicationTombstone, PublishedAudienceCard } from "@impromptu/contracts/public";
 import { PreparedEvidenceProjectionGateway } from "@impromptu/projection-gateway";
+import { applyAuthorizedPublicCardEvent, reduceCandidateLifecycle } from "@impromptu/state";
 import {
   createPreparedEvidenceStore,
   PreparedEvidenceCoordinator,
@@ -73,29 +73,10 @@ async function createBoundFlow(
   nowMs = 1_000,
   liveEvidenceAuthorizer?: { authorize(candidate: EvidenceCandidate): Promise<boolean> },
   livePublicEnabled = false,
-  observeProjection?: (
-    store: ReturnType<typeof createPreparedEvidenceStore>,
-    event: PublishedAudienceCard | PublicationTombstone,
-  ) => void,
 ) {
   const gateway = new PreparedEvidenceProjectionGateway();
   const store = createPreparedEvidenceStore();
-  const projection =
-    observeProjection === undefined
-      ? gateway
-      : {
-          bindDisplay: gateway.bindDisplay.bind(gateway),
-          projectPlayback: gateway.projectPlayback.bind(gateway),
-          recordPlaybackApplied: gateway.recordPlaybackApplied.bind(gateway),
-          projectCard(
-            presentationSessionId: string,
-            event: PublishedAudienceCard | PublicationTombstone,
-          ) {
-            observeProjection(store, event);
-            return gateway.projectCard(presentationSessionId, event);
-          },
-        };
-  const coordinator = new PreparedEvidenceCoordinator(projection, store, {
+  const coordinator = new PreparedEvidenceCoordinator(gateway, store, {
     accountSessionTtlMs: 10_000,
     presentationCapabilityTtlMs: 10_000,
     ...(liveEvidenceAuthorizer === undefined ? {} : { liveEvidenceAuthorizer }),
@@ -136,6 +117,39 @@ async function createBoundFlow(
 }
 
 describe("prepared evidence private coordinator", () => {
+  test("rejects every forged public-card transition before state or projection side effects", async () => {
+    const flow = await createBoundFlow();
+    const before = JSON.stringify(snapshotPreparedEvidenceStore(flow.store));
+    const forgedApproval = {
+      presentationSessionId: flow.created.lifecycle.presentationSessionId,
+      candidateId: "candidate_forged_source_kind",
+      expectedCandidateRevision: "candrev_9007199254740991",
+      expectedPublicCardRevision: "pcr_9007199254740991",
+      authorityId: flow.created.authority.authorityId,
+      expiresAtMs: null,
+      sourceKind: "CURATED_PREAPPROVED",
+    };
+
+    expect(
+      await flow.coordinator.approveCandidate(flow.account.accountSessionId, forgedApproval, 1_001),
+    ).toEqual({ outcome: "REJECTED", reason: "PUBLICATION_DISABLED" });
+    expect(
+      await flow.coordinator.terminateCard(
+        flow.account.accountSessionId,
+        {
+          presentationSessionId: flow.created.lifecycle.presentationSessionId,
+          projectionId: "projection_forged",
+          expectedPublicCardRevision: "pcr_9007199254740991",
+          authorityId: flow.created.authority.authorityId,
+          status: "RETRACTED",
+        },
+        1_001,
+      ),
+    ).toEqual({ outcome: "REJECTED", reason: "PUBLICATION_DISABLED" });
+    expect(JSON.stringify(snapshotPreparedEvidenceStore(flow.store))).toBe(before);
+    expect(flow.gateway.snapshot(flow.bound.audienceDisplaySessionId, 1_002)?.cards).toEqual([]);
+  });
+
   test("rejects expired and revoked account sessions", async () => {
     const gateway = new PreparedEvidenceProjectionGateway();
     const coordinator = new PreparedEvidenceCoordinator(gateway, undefined, {
@@ -311,6 +325,97 @@ describe("prepared evidence private coordinator", () => {
     });
   });
 
+  test("reads and discards legacy card revisions and published candidate lifecycle on restore", async () => {
+    const flow = await createBoundFlow();
+    const candidate = {
+      candidateId: "candidate_legacy_published",
+      candidateVersion: "candidate-version-legacy",
+      provenance: "CURATED_PREAPPROVED",
+      verdict: "SUPPORTED",
+      claimText: "Legacy public claim",
+      evidenceExcerpt: "Legacy public support",
+      privateSourceUri: "private://source/legacy",
+      causal: {
+        presentationSessionId: flow.created.lifecycle.presentationSessionId,
+        presentationSessionEpoch: "pse_1",
+        displayBindingEpoch: "dbe_1",
+        deckVersion: publicDeck.deckVersion,
+        manifestHash,
+        occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
+        transcriptFinalId: null,
+        source: {
+          sourceId: "source_legacy",
+          revision: "source-revision-legacy",
+          contentHash: sourceHash,
+        },
+        decisions: {
+          acl: "acl-1",
+          publicationPolicy: "publication-policy-1",
+          rights: "rights-1",
+          dlp: "dlp-1",
+        },
+      },
+    } as const;
+    expect(
+      (await flow.coordinator.addCuratedCandidate(flow.account.accountSessionId, candidate, 1_002))
+        .outcome,
+    ).toBe("APPLIED");
+    const presentation = flow.store.presentations.get(flow.created.lifecycle.presentationSessionId);
+    const record = presentation?.candidates.get(candidate.candidateId);
+    if (presentation === undefined || record === undefined) {
+      throw new Error("legacy snapshot fixture is incomplete");
+    }
+    const legacyCard = {
+      projectionId: "projection_legacy_published",
+      status: "PUBLISHED",
+      claim: candidate.claimText,
+      supportSummary: candidate.evidenceExcerpt,
+      sourceLabel: "Legacy source",
+      publishedAtMs: 1_003,
+      expiresAtMs: null,
+      publicCardRevision: "pcr_1",
+      deckVersion: publicDeck.deckVersion,
+      manifestHash,
+      occurrence: candidate.causal.occurrence,
+    } as const;
+    const cardResult = applyAuthorizedPublicCardEvent(
+      presentation.cards,
+      record.lifecycle,
+      {
+        presentationSessionId: flow.created.lifecycle.presentationSessionId,
+        presentationSessionEpoch: "pse_1",
+        authorityId: flow.created.authority.authorityId,
+        expectedRevision: "pcr_0",
+        payload: legacyCard,
+      },
+      1_003,
+    );
+    const lifecycleResult = reduceCandidateLifecycle(record.lifecycle, {
+      type: "PUBLISH",
+      presentationSessionId: flow.created.lifecycle.presentationSessionId,
+      presentationSessionEpoch: "pse_1",
+      candidateId: candidate.candidateId,
+      candidateVersion: candidate.candidateVersion,
+      expectedRevision: "candrev_1",
+      projectionId: legacyCard.projectionId,
+      publicCardRevision: "pcr_1",
+    });
+    if (cardResult.outcome !== "APPLIED" || lifecycleResult.outcome !== "APPLIED") {
+      throw new Error("legacy publication fixture failed");
+    }
+    presentation.cards = cardResult.state;
+    record.lifecycle = lifecycleResult.state;
+
+    const restored = restorePreparedEvidenceStore(snapshotPreparedEvidenceStore(flow.store));
+    expect(restored.outcome).toBe("RESTORED");
+    if (restored.outcome !== "RESTORED") throw new Error("legacy restore failed");
+    const normalized = JSON.stringify(snapshotPreparedEvidenceStore(restored.store));
+    expect(normalized).not.toContain(legacyCard.projectionId);
+    expect(normalized).toContain('"publicCardRevision":"pcr_0"');
+    expect(normalized).toContain('"publicationState":"PRIVATE"');
+    expect(normalized).not.toContain('"publicationState":"PUBLISHED"');
+  });
+
   test("accepts absolute slide.set and records only the ordered Stage prefix after restart", async () => {
     const flow = await createBoundFlow();
     const playbackEvents: string[] = [];
@@ -318,7 +423,6 @@ describe("prepared evidence private coordinator", () => {
       flow.bound.audienceDisplaySessionId,
       {
         onPlayback: (event) => playbackEvents.push(event.commandId),
-        onCard: () => undefined,
         onClose: () => undefined,
       },
       1_001,
@@ -376,18 +480,8 @@ describe("prepared evidence private coordinator", () => {
     expect(String(appliedSecond.value.publicPlaybackRevision)).toBe("pbr_2");
   });
 
-  test("publishes curated evidence with an uncorrelatable ID and terminal CAS tombstone", async () => {
+  test("keeps curated evidence private without mutating its lifecycle or card revision", async () => {
     const flow = await createBoundFlow();
-    const cardEvents: string[] = [];
-    flow.gateway.connectStage(
-      flow.bound.audienceDisplaySessionId,
-      {
-        onPlayback: () => undefined,
-        onCard: (event) => cardEvents.push(`${event.publicCardRevision}:${event.status}`),
-        onClose: () => undefined,
-      },
-      1_001,
-    );
     const candidate = {
       candidateId: "candidate_private_alpha",
       candidateVersion: "candidate-version-1",
@@ -416,61 +510,29 @@ describe("prepared evidence private coordinator", () => {
           dlp: "dlp-1",
         },
       },
-    };
-    const added = await flow.coordinator.addCuratedCandidate(
-      flow.account.accountSessionId,
-      candidate,
-      1_002,
-    );
-    expect(added.outcome).toBe("APPLIED");
-    const published = await flow.coordinator.approveCandidate(
-      flow.account.accountSessionId,
-      {
-        presentationSessionId: flow.created.lifecycle.presentationSessionId,
-        candidateId: candidate.candidateId,
-        expectedCandidateRevision: "candrev_1",
-        expectedPublicCardRevision: "pcr_0",
-        authorityId: flow.created.authority.authorityId,
-        expiresAtMs: null,
-      },
-      1_003,
-    );
-    if (published.outcome !== "APPLIED") throw new Error("fixture failed to publish");
-    expect(published.value.projectionId).not.toContain(candidate.candidateId);
-    expect(published.value.sourceLabel).toBe(
-      `Prepared source ${published.value.projectionId.slice(-8)}`,
-    );
-    const publicProjection = JSON.stringify(published.value);
-    expect(publicProjection).not.toContain("private://");
-    expect(publicProjection).not.toContain(candidate.candidateId);
-    expect(publicProjection).not.toContain(candidate.causal.source.sourceId);
-    expect(publicProjection).not.toContain(candidate.causal.source.contentHash);
-    const stale = await flow.coordinator.terminateCard(
-      flow.account.accountSessionId,
-      {
-        presentationSessionId: flow.created.lifecycle.presentationSessionId,
-        projectionId: published.value.projectionId,
-        expectedPublicCardRevision: "pcr_0",
-        authorityId: flow.created.authority.authorityId,
-        status: "RETRACTED",
-      },
-      1_004,
-    );
-    expect(stale).toEqual({ outcome: "REJECTED", reason: "CAS_CONFLICT" });
-    const retracted = await flow.coordinator.terminateCard(
-      flow.account.accountSessionId,
-      {
-        presentationSessionId: flow.created.lifecycle.presentationSessionId,
-        projectionId: published.value.projectionId,
-        expectedPublicCardRevision: "pcr_1",
-        authorityId: flow.created.authority.authorityId,
-        status: "RETRACTED",
-      },
-      1_005,
-    );
-    expect(retracted.outcome).toBe("APPLIED");
-    expect(cardEvents).toEqual(["pcr_1:PUBLISHED", "pcr_2:RETRACTED"]);
-    expect(flow.gateway.snapshot(flow.bound.audienceDisplaySessionId, 1_006)?.cards).toEqual([]);
+    } as const;
+    expect(
+      (await flow.coordinator.addCuratedCandidate(flow.account.accountSessionId, candidate, 1_002))
+        .outcome,
+    ).toBe("APPLIED");
+    const before = JSON.stringify(snapshotPreparedEvidenceStore(flow.store));
+
+    expect(
+      await flow.coordinator.approveCandidate(
+        flow.account.accountSessionId,
+        {
+          presentationSessionId: flow.created.lifecycle.presentationSessionId,
+          candidateId: candidate.candidateId,
+          expectedCandidateRevision: "candrev_1",
+          expectedPublicCardRevision: "pcr_0",
+          authorityId: flow.created.authority.authorityId,
+          expiresAtMs: null,
+        },
+        1_003,
+      ),
+    ).toEqual({ outcome: "REJECTED", reason: "PUBLICATION_DISABLED" });
+    expect(JSON.stringify(snapshotPreparedEvidenceStore(flow.store))).toBe(before);
+    expect(flow.gateway.snapshot(flow.bound.audienceDisplaySessionId, 1_004)?.cards).toEqual([]);
   });
 
   test("denies live publication when ACL is revoked immediately before projection", async () => {
@@ -523,8 +585,8 @@ describe("prepared evidence private coordinator", () => {
         },
         1_003,
       ),
-    ).toEqual({ outcome: "REJECTED", reason: "EVIDENCE_AUTHORIZATION_DENIED" });
-    expect(authorizationChecks).toBe(3);
+    ).toEqual({ outcome: "REJECTED", reason: "PUBLICATION_DISABLED" });
+    expect(authorizationChecks).toBe(1);
     expect(flow.gateway.snapshot(flow.bound.audienceDisplaySessionId, 1_004)?.cards).toEqual([]);
   });
 
@@ -588,7 +650,7 @@ describe("prepared evidence private coordinator", () => {
       authoritativeSnapshotHash: snapshot.value.authoritativeSnapshotHash,
       expiresAtMs: null,
     } as const;
-    const [winner, conflict] = await Promise.all([
+    const results = await Promise.all([
       flow.coordinator.approveCandidate(flow.account.accountSessionId, approval, 1_004),
       flow.coordinator.approveCandidate(
         flow.account.accountSessionId,
@@ -596,94 +658,46 @@ describe("prepared evidence private coordinator", () => {
         1_004,
       ),
     ]);
-    expect(winner.outcome).toBe("APPLIED");
-    expect(conflict).toEqual({ outcome: "REJECTED", reason: "IDEMPOTENCY_CONFLICT" });
+    expect(results).toEqual([
+      { outcome: "REJECTED", reason: "PUBLICATION_DISABLED" },
+      { outcome: "REJECTED", reason: "PUBLICATION_DISABLED" },
+    ]);
   });
 
-  test("commits private publication before emitting it and orders a racing retract", async () => {
-    const projectionObservations: string[] = [];
-    let resolveRacingRetraction: (result: unknown) => void = () => undefined;
-    const racingRetraction = new Promise<unknown>((resolve) => {
-      resolveRacingRetraction = resolve;
-    });
-    let launchRacingRetraction: (event: PublishedAudienceCard) => void = () => undefined;
-    const flow = await createBoundFlow(1_000, undefined, false, (store, event) => {
-      const presentation = [...store.presentations.values()][0];
-      const isPrivatelyVisible =
-        event.status === "PUBLISHED"
-          ? presentation?.cards.cards[event.projectionId] !== undefined
-          : presentation?.cards.cards[event.projectionId] === undefined;
-      projectionObservations.push(`${event.status}:${String(isPrivatelyVisible)}`);
-      if (event.status === "PUBLISHED") launchRacingRetraction(event);
-    });
-    launchRacingRetraction = (event) => {
-      void flow.coordinator
-        .terminateCard(
-          flow.account.accountSessionId,
-          {
-            presentationSessionId: flow.created.lifecycle.presentationSessionId,
-            projectionId: event.projectionId,
-            expectedPublicCardRevision: "pcr_1",
-            authorityId: flow.created.authority.authorityId,
-            operationId: "retract_commit_order",
-            status: "RETRACTED",
-          },
-          1_004,
-        )
-        .then(resolveRacingRetraction);
-    };
-    const candidate = {
-      candidateId: "candidate_curated_commit_order",
-      candidateVersion: "candidate-version-1",
-      provenance: "CURATED_PREAPPROVED",
-      verdict: "SUPPORTED",
-      claimText: "Committed first",
-      evidenceExcerpt: "Curated support",
-      privateSourceUri: "private://source/commit-order",
-      causal: {
-        presentationSessionId: flow.created.lifecycle.presentationSessionId,
-        presentationSessionEpoch: "pse_1",
-        displayBindingEpoch: "dbe_1",
-        deckVersion: publicDeck.deckVersion,
-        manifestHash,
-        occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
-        transcriptFinalId: null,
-        source: {
-          sourceId: "source_commit_order",
-          revision: "source-revision-1",
-          contentHash: sourceHash,
-        },
-        decisions: {
-          acl: "acl-1",
-          publicationPolicy: "publication-policy-1",
-          rights: "rights-1",
-          dlp: "dlp-1",
-        },
-      },
-    } as const;
+  test("rejects approval and termination before projection", async () => {
+    const flow = await createBoundFlow();
     expect(
-      (await flow.coordinator.addCuratedCandidate(flow.account.accountSessionId, candidate, 1_002))
-        .outcome,
-    ).toBe("APPLIED");
-    const publication = await flow.coordinator.approveCandidate(
-      flow.account.accountSessionId,
-      {
-        presentationSessionId: flow.created.lifecycle.presentationSessionId,
-        candidateId: candidate.candidateId,
-        expectedCandidateRevision: "candrev_1",
-        expectedPublicCardRevision: "pcr_0",
-        authorityId: flow.created.authority.authorityId,
-        approvalId: "approval_commit_order",
-        expiresAtMs: null,
-      },
-      1_003,
-    );
-    if (publication.outcome !== "APPLIED") throw new Error("publication failed");
-    expect(await racingRetraction).toMatchObject({ outcome: "APPLIED" });
-    expect(projectionObservations).toEqual(["PUBLISHED:true", "RETRACTED:true"]);
+      await flow.coordinator.approveCandidate(
+        flow.account.accountSessionId,
+        {
+          presentationSessionId: flow.created.lifecycle.presentationSessionId,
+          candidateId: "candidate_missing",
+          expectedCandidateRevision: "candrev_0",
+          expectedPublicCardRevision: "pcr_0",
+          authorityId: flow.created.authority.authorityId,
+          expiresAtMs: null,
+        },
+        1_003,
+      ),
+    ).toEqual({ outcome: "REJECTED", reason: "PUBLICATION_DISABLED" });
+    expect(
+      await flow.coordinator.terminateCard(
+        flow.account.accountSessionId,
+        {
+          presentationSessionId: flow.created.lifecycle.presentationSessionId,
+          projectionId: "projection_missing",
+          expectedPublicCardRevision: "pcr_0",
+          authorityId: flow.created.authority.authorityId,
+          operationId: "termination_disabled",
+          status: "RETRACTED",
+        },
+        1_004,
+      ),
+    ).toEqual({ outcome: "REJECTED", reason: "PUBLICATION_DISABLED" });
+    expect(flow.gateway.snapshot(flow.bound.audienceDisplaySessionId, 1_005)?.cards).toEqual([]);
   });
 
-  test("linearizes supervised live approval and retract with durable idempotency", async () => {
+  test("rejects concurrent supervised live approvals without an idempotency winner", async () => {
     const flow = await createBoundFlow(
       1_000,
       {
@@ -693,160 +707,30 @@ describe("prepared evidence private coordinator", () => {
       },
       true,
     );
-    const teammate = await flow.coordinator.createAccountSession(
-      { accountId: "account_alpha", actorId: "actor_teammate" },
-      1_001,
-    );
-    expect(
-      (
-        await flow.coordinator.approvePublicationTeammate(
-          flow.account.accountSessionId,
-          flow.created.lifecycle.presentationSessionId,
-          teammate.actorId,
-          1_001,
-        )
-      ).outcome,
-    ).toBe("APPLIED");
-    const candidate = {
-      candidateId: "candidate_live_supervised",
-      candidateVersion: "candidate-version-1",
-      provenance: "LIVE_VERIFIED",
-      verdict: "SUPPORTED",
-      claimText: "Supervised live claim",
-      evidenceExcerpt: "Authoritative live support",
-      privateSourceUri: "private://source/supervised-live",
-      causal: {
-        presentationSessionId: flow.created.lifecycle.presentationSessionId,
-        presentationSessionEpoch: "pse_1",
-        displayBindingEpoch: "dbe_1",
-        deckVersion: publicDeck.deckVersion,
-        manifestHash,
-        occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
-        transcriptFinalId: "transcript_supervised_live",
-        source: {
-          sourceId: "source_supervised_live",
-          revision: "source-revision-1",
-          contentHash: sourceHash,
-        },
-        decisions: {
-          acl: "acl-1",
-          publicationPolicy: "publication-policy-1",
-          rights: "rights-1",
-          dlp: "dlp-1",
-        },
-      },
-    } as const;
-    expect(
-      (await flow.coordinator.addLiveCandidate(flow.account.accountSessionId, candidate, 1_002))
-        .outcome,
-    ).toBe("APPLIED");
-    const snapshot = await flow.coordinator.readLiveCandidateSnapshot(
-      teammate.accountSessionId,
-      flow.created.lifecycle.presentationSessionId,
-      1_003,
-    );
-    if (snapshot.outcome !== "APPLIED") throw new Error("live snapshot was rejected");
-    expect(snapshot.value.candidates).toHaveLength(1);
-
-    const takeover = await flow.coordinator.takeoverPlaybackLease(
-      teammate.accountSessionId,
-      {
-        presentationSessionId: flow.created.lifecycle.presentationSessionId,
-        expectedDisplayBindingEpoch: "dbe_1",
-      },
-      1_003,
-    );
-    expect(takeover.outcome).toBe("APPLIED");
-    expect(
-      await flow.coordinator.readLiveCandidateSnapshot(
-        teammate.accountSessionId,
-        flow.created.lifecycle.presentationSessionId,
-        1_003,
-      ),
-    ).toMatchObject({
-      outcome: "APPLIED",
-      value: { authoritativeSnapshotHash: snapshot.value.authoritativeSnapshotHash },
-    });
-
-    const cardEvents: string[] = [];
-    flow.gateway.connectStage(
-      flow.bound.audienceDisplaySessionId,
-      {
-        onPlayback: () => undefined,
-        onCard: (event) => cardEvents.push(`${event.publicCardRevision}:${event.status}`),
-        onClose: () => undefined,
-      },
-      1_003,
-    );
-    const approval = {
+    const input = {
       presentationSessionId: flow.created.lifecycle.presentationSessionId,
-      candidateId: candidate.candidateId,
-      candidateVersion: candidate.candidateVersion,
+      candidateId: "candidate_live_disabled",
+      candidateVersion: "candidate-version-1",
       expectedCandidateRevision: "candrev_1",
       expectedPublicCardRevision: "pcr_0",
       authorityId: flow.created.authority.authorityId,
-      authoritativeSnapshotHash: snapshot.value.authoritativeSnapshotHash,
+      approvalId: "approval_disabled",
+      authoritativeSnapshotHash: "f".repeat(64),
       expiresAtMs: null,
     } as const;
     const approvals = await Promise.all([
+      flow.coordinator.approveCandidate(flow.account.accountSessionId, input, 1_004),
       flow.coordinator.approveCandidate(
         flow.account.accountSessionId,
-        { ...approval, approvalId: "approval_presenter" },
-        1_004,
-      ),
-      flow.coordinator.approveCandidate(
-        teammate.accountSessionId,
-        { ...approval, approvalId: "approval_teammate" },
+        { ...input, approvalId: "approval_disabled_two" },
         1_004,
       ),
     ]);
-    const winners = approvals.filter((result) => result.outcome === "APPLIED");
-    expect(winners).toHaveLength(1);
-    const winner = winners[0];
-    if (winner?.outcome !== "APPLIED") throw new Error("approval race had no winner");
-    expect(winner.value).toMatchObject({
-      mode: "LIVE",
-      leaseExpiresAtMs: 4_004,
-      expiresAtMs: 4_004,
-      liveBinding: {
-        presentationSessionEpoch: "pse_1",
-        displayBindingEpoch: "dbe_1",
-        publicSlideOccurrence: candidate.causal.occurrence,
-        publicationPolicyVersion: "publication-policy-1",
-      },
-    });
-    const winnerInput =
-      approvals[0]?.outcome === "APPLIED"
-        ? { ...approval, approvalId: "approval_presenter" }
-        : { ...approval, approvalId: "approval_teammate" };
-    expect(
-      (
-        await flow.coordinator.approveCandidate(
-          approvals[0]?.outcome === "APPLIED"
-            ? flow.account.accountSessionId
-            : teammate.accountSessionId,
-          winnerInput,
-          1_005,
-        )
-      ).outcome,
-    ).toBe("APPLIED");
-    expect(cardEvents).toEqual(["pcr_1:PUBLISHED"]);
-
-    const termination = {
-      presentationSessionId: flow.created.lifecycle.presentationSessionId,
-      projectionId: winner.value.projectionId,
-      expectedPublicCardRevision: "pcr_1",
-      authorityId: flow.created.authority.authorityId,
-      operationId: "retract_live_once",
-      status: "RETRACTED" as const,
-    };
-    const retractions = await Promise.all([
-      flow.coordinator.terminateCard(teammate.accountSessionId, termination, 1_006),
-      flow.coordinator.terminateCard(teammate.accountSessionId, termination, 1_006),
+    expect(approvals).toEqual([
+      { outcome: "REJECTED", reason: "PUBLICATION_DISABLED" },
+      { outcome: "REJECTED", reason: "PUBLICATION_DISABLED" },
     ]);
-    expect(retractions.every((result) => result.outcome === "APPLIED")).toBe(true);
-    expect(cardEvents).toEqual(["pcr_1:PUBLISHED", "pcr_2:RETRACTED"]);
-    expect(flow.gateway.snapshot(flow.bound.audienceDisplaySessionId, 1_007)?.cards).toEqual([]);
+    expect(flow.gateway.snapshot(flow.bound.audienceDisplaySessionId, 1_005)?.cards).toEqual([]);
   });
 
   test("keeps verified live evidence private when the safety gate is fail-closed", async () => {
@@ -914,7 +798,7 @@ describe("prepared evidence private coordinator", () => {
         },
         1_004,
       ),
-    ).toEqual({ outcome: "REJECTED", reason: "LIVE_PUBLIC_DISABLED" });
+    ).toEqual({ outcome: "REJECTED", reason: "PUBLICATION_DISABLED" });
     const join = flow.gateway.createDisplayJoin(
       {
         displayId: "display_fail_closed_rebind",
@@ -962,7 +846,7 @@ describe("prepared evidence private coordinator", () => {
         },
         1_006,
       ),
-    ).toEqual({ outcome: "REJECTED", reason: "STALE_CANDIDATE" });
+    ).toEqual({ outcome: "REJECTED", reason: "PUBLICATION_DISABLED" });
     expect(flow.gateway.snapshot(flow.bound.audienceDisplaySessionId, 1_007)).toBeNull();
   });
 
@@ -1035,6 +919,6 @@ describe("prepared evidence private coordinator", () => {
         },
         1_005,
       ),
-    ).toEqual({ outcome: "REJECTED", reason: "STALE_CANDIDATE" });
+    ).toEqual({ outcome: "REJECTED", reason: "PUBLICATION_DISABLED" });
   });
 });
