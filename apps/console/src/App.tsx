@@ -1,3 +1,4 @@
+import { createCoachingState, reduceCoachingState } from "@impromptu/state/coaching";
 import {
   Badge,
   Brand,
@@ -19,6 +20,7 @@ import {
   useState,
 } from "react";
 import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation } from "react-router-dom";
+import { CockpitAudioCapture } from "./cockpit-audio-capture";
 import { type Locale, messages } from "./i18n";
 import {
   AccountRegistrationError,
@@ -32,6 +34,117 @@ import {
   type DisplayJoinView,
   type LiveCandidateSnapshotView,
 } from "./session-client";
+
+declare global {
+  var CAPTURE_NOTICE: Readonly<{
+    purpose: string;
+    vendors: readonly string[];
+    region: string;
+    retention: string;
+    deletion: string;
+  }>;
+}
+
+globalThis.CAPTURE_NOTICE = {
+  purpose: "Local speech transcription and private presenter assistance",
+  vendors: ["local-whisper"],
+  region: "Local device service",
+  retention: "Memory queue only, up to 30 seconds",
+  deletion: "Deleted when capture stops",
+} as const;
+
+function record(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function coachingEventFromServer(input: unknown, sessionOffsetMs: number): unknown {
+  const envelope = record(input);
+  if (envelope?.kind === "READY") return { kind: "OPT_IN", enabled: true };
+  if (envelope?.kind === "TERMINAL") return { kind: "OPT_IN", enabled: false };
+  if (envelope?.kind !== "TRANSCRIPT") return null;
+  const event = record(envelope.event);
+  if (event === null) return null;
+  const base = {
+    sessionGeneration: event.sessionGeneration,
+    sequence: event.sequence,
+    segmentId: event.segmentId,
+  };
+  const transcript = record(event.transcript);
+  if (event.kind === "PARTIAL") {
+    return { ...base, kind: "PARTIAL", preview: transcript?.text };
+  }
+  if (event.kind === "REPLACE") {
+    return {
+      ...base,
+      kind: "REPLACE",
+      replacesSequence: event.replacesSequence,
+      preview: transcript?.text,
+    };
+  }
+  if (event.kind !== "FINAL" || transcript === null || !Array.isArray(transcript.words)) {
+    return null;
+  }
+  const durationMs = transcript.durationMs;
+  if (typeof durationMs !== "number") return null;
+  return {
+    ...base,
+    kind: "FINAL",
+    finalSegmentId: event.finalSegmentId,
+    finalizedAtSessionMs: sessionOffsetMs + durationMs,
+    words: transcript.words.map((value) => {
+      const word = record(value);
+      return {
+        text: word?.text,
+        startSessionMs:
+          typeof word?.startMs === "number" ? sessionOffsetMs + word.startMs : word?.startMs,
+        endSessionMs: typeof word?.endMs === "number" ? sessionOffsetMs + word.endMs : word?.endMs,
+      };
+    }),
+  };
+}
+
+export type CoachingDisplayState = Readonly<{
+  optedIn: boolean;
+  muted: boolean;
+  measurement:
+    | Readonly<{ outcome: "MEASUREMENT_UNAVAILABLE" }>
+    | Readonly<{
+        outcome: "AVAILABLE";
+        currentWordsPerMinute: number;
+        previousWordsPerMinute: number;
+        deltaWordsPerMinute: number;
+      }>;
+  cueCount: number;
+}>;
+
+export function CoachingDisplay({ state }: { readonly state: CoachingDisplayState }) {
+  if (!state.optedIn || state.muted) return null;
+  if (state.measurement.outcome === "MEASUREMENT_UNAVAILABLE") {
+    return <output data-coaching-state="unavailable">측정 불가</output>;
+  }
+  return (
+    <dl data-coaching-state="available">
+      <div>
+        <dt>현재 30초</dt>
+        <dd>{state.measurement.currentWordsPerMinute}</dd>
+      </div>
+      <div>
+        <dt>직전 30초</dt>
+        <dd>{state.measurement.previousWordsPerMinute}</dd>
+      </div>
+      <div>
+        <dt>변화량</dt>
+        <dd>{state.measurement.deltaWordsPerMinute}</dd>
+      </div>
+      <div>
+        <dt>큐 횟수</dt>
+        <dd>{state.cueCount}</dd>
+      </div>
+    </dl>
+  );
+}
 
 type SignUpOutcome = "SUCCESS" | AccountRegistrationFailure;
 
@@ -609,6 +722,7 @@ function SessionUploadPanel({
       setView(next);
       setActivePresentation({
         presentationSessionId: next.presentationSessionId,
+        presentationSessionEpoch: next.presentationSessionEpoch,
         deckVersion: next.deckVersion,
         ...publicManifest(next.publicDeck),
         slides: publicSlides(next.publicDeck),
@@ -740,6 +854,12 @@ function PresentationWorkspacePage() {
   const { activePresentation, client, locale, session, setActivePresentation } = useAuth();
   const text = messages(locale);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [coachingState, setCoachingState] = useState(createCoachingState);
+  const coachingSessionOffsetMs = useRef(0);
+  const coachingIdentity =
+    activePresentation === null
+      ? ""
+      : `${activePresentation.presentationSessionId}:${activePresentation.presentationSessionEpoch}`;
   const headingRef = useRef<HTMLHeadingElement>(null);
   const previousPresentation = useRef(activePresentation);
 
@@ -749,6 +869,29 @@ function PresentationWorkspacePage() {
     }
     previousPresentation.current = activePresentation;
   }, [activePresentation]);
+
+  useEffect(() => {
+    if (coachingIdentity.length === 0) return;
+    coachingSessionOffsetMs.current = 0;
+    setCoachingState(createCoachingState());
+  }, [coachingIdentity]);
+
+  const onAudioServerEvent = useCallback((input: unknown) => {
+    setCoachingState((state) => {
+      const event = coachingEventFromServer(input, coachingSessionOffsetMs.current);
+      const reduced = reduceCoachingState(state, event);
+      const eventRecord = record(event);
+      const finalizedAtSessionMs = eventRecord?.finalizedAtSessionMs;
+      if (
+        reduced.outcome === "APPLIED" &&
+        eventRecord?.kind === "FINAL" &&
+        typeof finalizedAtSessionMs === "number"
+      ) {
+        coachingSessionOffsetMs.current = finalizedAtSessionMs;
+      }
+      return reduced.state;
+    });
+  }, []);
 
   return (
     <section
@@ -777,6 +920,16 @@ function PresentationWorkspacePage() {
             <PlaybackPanel index={activeIndex} onIndexChange={setActiveIndex} />
           </div>
           <div className="console-cockpit__side">
+            <CockpitAudioCapture
+              key={`${activePresentation.presentationSessionId}:${activePresentation.presentationSessionEpoch}`}
+              csrfToken={session.csrfToken}
+              presentationSessionId={activePresentation.presentationSessionId}
+              presentationSessionEpoch={activePresentation.presentationSessionEpoch}
+              actorId={session.account.actorId}
+              notice={CAPTURE_NOTICE}
+              onServerEvent={onAudioServerEvent}
+            />
+            <CoachingDisplay state={coachingState} />
             <EvidencePreparationPanel
               key={`${activePresentation.presentationSessionId}:${activePresentation.deckVersion}:${activePresentation.manifestHash ?? ""}`}
             />

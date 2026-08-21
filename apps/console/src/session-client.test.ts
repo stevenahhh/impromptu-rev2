@@ -261,6 +261,7 @@ test("uploadDeck sends a PPTX as one multipart file part over credentialed XHR",
 
   harness.complete(201, {
     presentationSessionId: "ps_deck-upload-1",
+    presentationSessionEpoch: "pse_3",
     deckVersion: "deck-v1",
     sourceHash: "a".repeat(64),
     privateDeck: { deckId: "private_deck-1" },
@@ -269,6 +270,7 @@ test("uploadDeck sends a PPTX as one multipart file part over credentialed XHR",
   const view = await upload;
   expect(view).toEqual({
     presentationSessionId: "ps_deck-upload-1",
+    presentationSessionEpoch: "pse_3",
     deckVersion: "deck-v1",
     sourceHash: "a".repeat(64),
     privateDeck: { deckId: "private_deck-1" },
@@ -296,9 +298,14 @@ test("uploadDeck preserves PDF filename and MIME inside the multipart file part"
     type: PDF_CONTENT_TYPE,
     size: file.size,
   });
-  harness.complete(201, { presentationSessionId: "ps_pdf-1", deckVersion: "deck_pdf" });
+  harness.complete(201, {
+    presentationSessionId: "ps_pdf-1",
+    presentationSessionEpoch: "pse_1",
+    deckVersion: "deck_pdf",
+  });
   await expect(upload).resolves.toMatchObject({
     presentationSessionId: "ps_pdf-1",
+    presentationSessionEpoch: "pse_1",
     deckVersion: "deck_pdf",
   });
 });
@@ -310,10 +317,10 @@ test("uploadDeck strictly parses the typed 201 receipt requiring nonempty sessio
     [],
     {},
     { presentationSessionId: "" },
-    { presentationSessionId: "ps_1", deckVersion: "" },
-    { presentationSessionId: "", deckVersion: "deck_v1" },
+    { presentationSessionId: "ps_1", presentationSessionEpoch: "pse_1", deckVersion: "" },
+    { presentationSessionId: "", presentationSessionEpoch: "pse_1", deckVersion: "deck_v1" },
     { deckVersion: "deck_v1" },
-    { presentationSessionId: "ps_1" },
+    { presentationSessionId: "ps_1", presentationSessionEpoch: "pse_1" },
   ];
   for (const body of invalidBodies) {
     const harness = createUploadHarness();
@@ -392,7 +399,11 @@ test("uploadDeck emits deterministic progress for each XHR upload progress event
   expect(harness.transport.upload.onprogress).not.toBeNull();
   harness.progress(64, 100);
   harness.progress(100, 100);
-  harness.complete(201, { presentationSessionId: "ps_progress-1", deckVersion: "deck_v1" });
+  harness.complete(201, {
+    presentationSessionId: "ps_progress-1",
+    presentationSessionEpoch: "pse_1",
+    deckVersion: "deck_v1",
+  });
   await upload;
 
   expect(progress).toEqual([

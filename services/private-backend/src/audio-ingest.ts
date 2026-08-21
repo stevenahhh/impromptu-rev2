@@ -114,6 +114,10 @@ export interface AudioIngestServiceOptions {
     recommend(accountSessionId: string, input: unknown): Promise<RecommendationOutcome>;
   }>;
   readonly coachingPreviewEnabledFor?: (identity: AudioCaptureIdentity) => boolean;
+  readonly onFinal?: (
+    identity: AudioCaptureIdentity,
+    event: Extract<SttStreamEvent, { kind: "FINAL" }>,
+  ) => void;
   readonly adapterId?: string;
   readonly grantTtlMs?: number;
   readonly createGrantId: () => string;
@@ -194,10 +198,12 @@ class DefaultAudioIngestService implements AudioIngestService {
   readonly #coachingPreviewEnabledFor: NonNullable<
     AudioIngestServiceOptions["coachingPreviewEnabledFor"]
   >;
+  readonly #onFinal: AudioIngestServiceOptions["onFinal"];
 
   constructor(options: AudioIngestServiceOptions) {
     this.#recommendations = options.recommendations;
     this.#coachingPreviewEnabledFor = options.coachingPreviewEnabledFor ?? (() => false);
+    this.#onFinal = options.onFinal;
     this.#port = new EventForwardingAudioSttPort(
       options.router,
       options.contextFor,
@@ -441,6 +447,7 @@ class DefaultAudioIngestService implements AudioIngestService {
       return;
     }
 
+    this.#onFinal?.(binding.identity, event);
     const recommendations = this.#recommendations;
     if (recommendations === undefined) {
       this.#publish(grantId, { kind: "TRANSCRIPT", event });

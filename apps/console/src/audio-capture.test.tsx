@@ -79,10 +79,14 @@ class FakeEventSource extends EventTarget {
     this.closed = true;
   }
 
-  ready() {
-    const event = new Event("READY");
-    Object.defineProperty(event, "data", { value: JSON.stringify({ kind: "READY" }) });
+  emit(type: "READY" | "TRANSCRIPT" | "RECOMMENDATION" | "TERMINAL", data: unknown) {
+    const event = new Event(type);
+    Object.defineProperty(event, "data", { value: JSON.stringify(data) });
     this.dispatchEvent(event);
+  }
+
+  ready() {
+    this.emit("READY", { kind: "READY" });
   }
 }
 
@@ -116,7 +120,7 @@ type CapturedRequest = Readonly<{
   body: BodyInit | null;
 }>;
 
-function uploaderRuntime() {
+function uploaderRuntime(onServerEvent?: (event: unknown) => void) {
   const source = new FakeEventSource();
   const recorder = new FakeMediaRecorder();
   const requests: CapturedRequest[] = [];
@@ -140,6 +144,7 @@ function uploaderRuntime() {
       expect(options.mimeType).toBe(WEBM_OPUS_MIME_TYPE);
       return recorder;
     },
+    ...(onServerEvent === undefined ? {} : { onServerEvent }),
   });
   return { source, recorder, requests, uploader };
 }
@@ -244,6 +249,29 @@ describe("browser audio consent", () => {
 });
 
 describe("WebM Opus private upload", () => {
+  test("forwards named private stream events only while the capture stream is open", async () => {
+    const events: unknown[] = [];
+    const { source, uploader } = uploaderRuntime((event) => events.push(event));
+    const starting = uploader.start(grant, { getTracks: () => [] } as unknown as MediaStream);
+    source.ready();
+    await starting;
+    source.emit("TRANSCRIPT", {
+      kind: "TRANSCRIPT",
+      event: { kind: "PARTIAL", transcript: { text: "미리보기" } },
+    });
+    expect(events).toEqual([
+      { kind: "READY" },
+      {
+        kind: "TRANSCRIPT",
+        event: { kind: "PARTIAL", transcript: { text: "미리보기" } },
+      },
+    ]);
+
+    uploader.cancel();
+    source.emit("TRANSCRIPT", { kind: "TRANSCRIPT", event: { kind: "PARTIAL" } });
+    expect(events).toHaveLength(2);
+  });
+
   test("opens SSE before start, waits for exact READY, uploads ordered 1,000 ms frames, and stops", async () => {
     const { recorder, requests, source, uploader } = uploaderRuntime();
     const stream = { getTracks: () => [] } as unknown as MediaStream;

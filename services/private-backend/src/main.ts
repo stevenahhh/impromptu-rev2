@@ -34,8 +34,12 @@ import { PreparedEvidenceCoordinator } from "./prepared-evidence.ts";
 import { createPostgresPreparedEvidencePersistence } from "./prepared-evidence-store-postgres.ts";
 import { ProjectionHttpPort } from "./projection-http-port.ts";
 import { createTokenBucketRateLimiter } from "./rate-limit.ts";
-import { createSessionReportReadRouteHandler } from "./report/http.ts";
+import { createSessionReportRouteHandler } from "./report/http.ts";
 import { createPostgresSessionReportRepository } from "./report/postgres-session-report-repository.ts";
+import {
+  createPreparedEvidenceReportObserver,
+  SessionReportFinalizer,
+} from "./report/session-report-finalizer.ts";
 import {
   NodePinnedHttpsTransport,
   NodePublicDnsResolver,
@@ -155,6 +159,15 @@ const persistence = await createPostgresPreparedEvidencePersistence(preparedEvid
   ...(privateStateKey === undefined ? {} : { stateKey: privateStateKey }),
 });
 const store = persistence.store;
+const sessionReports = createPostgresSessionReportRepository(privateSql);
+const sessionReportFinalizer = new SessionReportFinalizer(sessionReports);
+const reportObserver = createPreparedEvidenceReportObserver(sessionReportFinalizer, (error) => {
+  logger.error({
+    requestId: `session-report:${crypto.randomUUID()}`,
+    path: "/internal/session-report",
+    errorType: error instanceof Error ? error.name : "UnknownError",
+  });
+});
 let coordinator: PreparedEvidenceCoordinator;
 const chatModelApiKey = required("CHAT_MODEL_API_KEY");
 const embeddingModelApiKey = required("EMBEDDING_MODEL_API_KEY");
@@ -360,6 +373,7 @@ const recommendations = new PrivateRecommendationPipeline({
 coordinator = new PreparedEvidenceCoordinator(projection, store, {
   accountSessionStore: createPostgresAccountSessionStore(privateSql),
   livePublicEnabled: config.livePublicEnabled,
+  reportObserver,
   liveEvidenceAuthorizer: {
     async authorize(candidate) {
       return await recommendations.authorizeCandidateForPublication(candidate);
@@ -370,6 +384,39 @@ const audio = createAudioIngestService({
   router: modelRouter,
   adapterId: WHISPER_CPP_ADAPTER_ID,
   createGrantId: () => `capture_${crypto.randomUUID()}`,
+  coachingPreviewEnabledFor: () => true,
+  recommendations: {
+    resolveContext(identity) {
+      const presentation = store.presentations.get(identity.presentationSessionId);
+      if (
+        presentation?.lifecycle.ownerAccountId !== identity.accountId ||
+        presentation.lifecycle.presentationSessionEpoch !== identity.presentationSessionEpoch ||
+        presentation.lifecycle.status !== "ACTIVE"
+      ) {
+        return null;
+      }
+      return {
+        deckVersion: presentation.privateDeck.deckVersion,
+        manifestHash: presentation.privateDeck.manifestHash,
+      };
+    },
+    recommend(accountSessionId, input) {
+      return recommendations.recommend(accountSessionId, input);
+    },
+  },
+  onFinal(identity, event) {
+    sessionReportFinalizer.recordFinal(
+      {
+        tenantId: identity.accountId,
+        presentationSessionId: identity.presentationSessionId,
+        ownerSubject: identity.accountId,
+      },
+      {
+        finalSegmentId: event.finalSegmentId,
+        transcript: event.transcript,
+      },
+    );
+  },
   contextFor(identity, signal) {
     const startedAtMs = Date.now();
     const requestId = `audio-stt:${crypto.randomUUID()}`;
@@ -384,9 +431,14 @@ const audio = createAudioIngestService({
     });
   },
 });
-const sessionReports = createPostgresSessionReportRepository(privateSql);
-const sessionReportRead = createSessionReportReadRouteHandler(sessionReports, {
-  async resolve({ accountId: requestedAccountId, presentationSessionId }) {
+const reportOwners = {
+  async resolve({
+    accountId: requestedAccountId,
+    presentationSessionId,
+  }: {
+    readonly accountId: string;
+    readonly presentationSessionId: string;
+  }) {
     const presentation = store.presentations.get(presentationSessionId);
     if (presentation?.lifecycle.ownerAccountId !== requestedAccountId) return null;
     return {
@@ -395,7 +447,43 @@ const sessionReportRead = createSessionReportReadRouteHandler(sessionReports, {
       ownerSubject: requestedAccountId,
     };
   },
-});
+};
+const preparedEvidenceFor = (presentationSessionId: string) => {
+  const presentation = store.presentations.get(presentationSessionId);
+  return {
+    label: "준비된 근거" as const,
+    items:
+      presentation === undefined
+        ? []
+        : [...presentation.candidates.values()].map(({ candidate }) => ({
+            evidenceId: candidate.candidateId,
+            sourceId: candidate.causal.source.sourceId,
+            sourceUrl: null,
+            provenance: candidate.provenance,
+          })),
+  };
+};
+const sessionReportRead = createSessionReportRouteHandler(
+  sessionReportFinalizer,
+  reportOwners,
+  {
+    async resolve(principal) {
+      return preparedEvidenceFor(principal.presentationSessionId);
+    },
+  },
+  {
+    async resolve(principal) {
+      const presentation = store.presentations.get(principal.presentationSessionId);
+      if (presentation === undefined) return null;
+      const finalizedAtMs = Date.now();
+      return {
+        endedOffsetMs: Math.max(0, finalizedAtMs - presentation.lifecycle.createdAtMs),
+        finalizedAtMs,
+        preparedEvidence: preparedEvidenceFor(principal.presentationSessionId),
+      };
+    },
+  },
+);
 const metrics = createMetricsRegistry("private_backend");
 const loginRateLimiters = {
   account: createTokenBucketRateLimiter({

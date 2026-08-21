@@ -21,7 +21,11 @@ function createUploadClient(options: { readonly failWith?: Error } = {}) {
   });
   const settled: Promise<DeckUploadView> = gate.then(() => {
     if (options.failWith !== undefined) throw options.failWith;
-    return { presentationSessionId: "ps_deck-upload-1", deckVersion: "deck-v1" };
+    return {
+      presentationSessionId: "ps_deck-upload-1",
+      presentationSessionEpoch: "pse_1",
+      deckVersion: "deck-v1",
+    };
   });
   const client: ConsoleDeckUploadClient = {
     async signUp() {

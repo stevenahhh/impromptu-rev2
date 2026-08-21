@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./coaching": "./src/coaching.ts",
     "./realtime": "./src/realtime-reconcile.ts"
   },
   "dependencies": {

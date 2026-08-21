@@ -157,6 +157,7 @@ type DeckUploadRejectionCode = keyof typeof DECK_UPLOAD_REJECTION_STATUS;
 
 export interface DeckUploadView {
   readonly presentationSessionId: string;
+  readonly presentationSessionEpoch: string;
   readonly deckVersion: string;
   readonly sourceHash?: string;
   readonly privateDeck?: unknown;
@@ -165,6 +166,7 @@ export interface DeckUploadView {
 
 export interface ActivePresentationView {
   readonly presentationSessionId: string;
+  readonly presentationSessionEpoch: string;
   readonly deckVersion: string;
   readonly manifestHash?: string;
   readonly slides: readonly Readonly<{
@@ -380,10 +382,12 @@ function parseDeckUploadView(text: string, status: number): DeckUploadView {
     throw new DeckUploadError("invalid_upload_receipt", { status });
   }
   const candidate = body as Record<string, unknown>;
-  const { presentationSessionId, deckVersion } = candidate;
+  const { presentationSessionId, presentationSessionEpoch, deckVersion } = candidate;
   if (
     typeof presentationSessionId !== "string" ||
     presentationSessionId.length === 0 ||
+    typeof presentationSessionEpoch !== "string" ||
+    presentationSessionEpoch.length === 0 ||
     typeof deckVersion !== "string" ||
     deckVersion.length === 0
   ) {
@@ -391,6 +395,7 @@ function parseDeckUploadView(text: string, status: number): DeckUploadView {
   }
   return {
     presentationSessionId,
+    presentationSessionEpoch,
     deckVersion,
     ...(typeof candidate.sourceHash === "string" ? { sourceHash: candidate.sourceHash } : {}),
     ...(candidate.privateDeck !== undefined ? { privateDeck: candidate.privateDeck } : {}),

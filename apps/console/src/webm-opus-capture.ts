@@ -3,9 +3,11 @@ import type { AudioConsentNoticeView, CaptureGrantView, CaptureUploader } from "
 export const WEBM_OPUS_MIME_TYPE = "audio/webm;codecs=opus" as const;
 export const MEDIA_RECORDER_TIMESLICE_MS = 1_000;
 
+type CaptureEventType = "READY" | "TRANSCRIPT" | "RECOMMENDATION" | "TERMINAL" | "error";
+
 interface CaptureEventSource {
-  addEventListener(type: "READY" | "error", listener: EventListener): void;
-  removeEventListener(type: "READY" | "error", listener: EventListener): void;
+  addEventListener(type: CaptureEventType, listener: EventListener): void;
+  removeEventListener(type: CaptureEventType, listener: EventListener): void;
   close(): void;
 }
 
@@ -27,6 +29,7 @@ export interface WebmOpusCaptureUploaderOptions {
     options: MediaRecorderOptions,
   ) => CaptureMediaRecorder;
   readonly readyTimeoutMs?: number;
+  readonly onServerEvent?: (event: unknown) => void;
 }
 
 export interface CaptureGrantRequestInput {
@@ -141,6 +144,7 @@ export class WebmOpusCaptureUploader implements CaptureUploader {
     options: MediaRecorderOptions,
   ) => CaptureMediaRecorder;
   readonly #readyTimeoutMs: number;
+  readonly #onServerEvent: ((event: unknown) => void) | undefined;
 
   #abortController: AbortController | undefined;
   #eventSource: CaptureEventSource | undefined;
@@ -161,6 +165,7 @@ export class WebmOpusCaptureUploader implements CaptureUploader {
       options.createMediaRecorder ??
       ((stream, recorderOptions) => new MediaRecorder(stream, recorderOptions));
     this.#readyTimeoutMs = options.readyTimeoutMs ?? DEFAULT_READY_TIMEOUT_MS;
+    this.#onServerEvent = options.onServerEvent;
   }
 
   async start(_grant: CaptureGrantView, stream: MediaStream): Promise<void> {
@@ -174,6 +179,9 @@ export class WebmOpusCaptureUploader implements CaptureUploader {
     this.#abortController = new AbortController();
     const source = this.#createEventSource(`${this.#baseUrl}/v1/audio/events`);
     this.#eventSource = source;
+    for (const type of ["READY", "TRANSCRIPT", "RECOMMENDATION", "TERMINAL"] as const) {
+      source.addEventListener(type, this.#forwardServerEvent);
+    }
     const ready = boundedReady(source, this.#readyTimeoutMs);
     this.#readyWait = ready;
 
@@ -246,6 +254,11 @@ export class WebmOpusCaptureUploader implements CaptureUploader {
     await this.#revoke;
   }
 
+  readonly #forwardServerEvent: EventListener = (event) => {
+    const data = eventData(event);
+    if (data !== null) this.#onServerEvent?.(data);
+  };
+
   readonly #onDataAvailable: EventListener = (event) => {
     const data = "data" in event ? event.data : undefined;
     if (!(data instanceof Blob) || data.size === 0) return;
@@ -299,7 +312,12 @@ export class WebmOpusCaptureUploader implements CaptureUploader {
 
   #closeLocalResources(): void {
     this.#readyWait = undefined;
-    this.#eventSource?.close();
+    if (this.#eventSource !== undefined) {
+      for (const type of ["READY", "TRANSCRIPT", "RECOMMENDATION", "TERMINAL"] as const) {
+        this.#eventSource.removeEventListener(type, this.#forwardServerEvent);
+      }
+      this.#eventSource.close();
+    }
     this.#eventSource = undefined;
     this.#recorder = undefined;
     this.#abortController = undefined;

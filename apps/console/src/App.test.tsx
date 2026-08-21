@@ -7,7 +7,7 @@ afterAll(() => GlobalRegistrator.unregister());
 const { act, cleanup, fireEvent, render, within } = await import("@testing-library/react");
 const { MemoryRouter } = await import("react-router-dom");
 
-const { AuthProvider, ConsoleRoutes } = await import("./App");
+const { AuthProvider, CoachingDisplay, ConsoleRoutes } = await import("./App");
 const { messages } = await import("./i18n");
 
 import {
@@ -80,6 +80,7 @@ function workspaceClient(
 
 const workspacePresentation: ActivePresentationView = {
   presentationSessionId: "ps_workspace",
+  presentationSessionEpoch: "pse_1",
   deckVersion: "deck_workspace",
   slides: [
     { publicSlideKey: "slide_one", ordinal: 1, accessibilityLabel: "Opening slide" },
@@ -88,6 +89,46 @@ const workspacePresentation: ActivePresentationView = {
 };
 
 describe("Console route boundary", () => {
+  test("renders coaching metrics only while opted in and unmuted", () => {
+    const unavailable = {
+      optedIn: true,
+      muted: false,
+      measurement: { outcome: "MEASUREMENT_UNAVAILABLE" as const },
+      cueCount: 0,
+    };
+    const view = render(<CoachingDisplay state={unavailable} />);
+    expect(document.querySelector("[data-coaching-state='unavailable']")?.textContent).toBe(
+      "측정 불가",
+    );
+
+    view.rerender(
+      <CoachingDisplay
+        state={{
+          optedIn: true,
+          muted: false,
+          measurement: {
+            outcome: "AVAILABLE",
+            currentWordsPerMinute: 112,
+            previousWordsPerMinute: 104,
+            deltaWordsPerMinute: 8,
+          },
+          cueCount: 3,
+        }}
+      />,
+    );
+    expect(document.querySelector("[data-coaching-state='available']")?.textContent).toContain(
+      "현재 30초112",
+    );
+    expect(document.querySelector("[data-coaching-state='available']")?.textContent).toContain(
+      "직전 30초104",
+    );
+
+    view.rerender(<CoachingDisplay state={{ ...unavailable, optedIn: false }} />);
+    expect(document.querySelector("[data-coaching-state]")).toBeNull();
+    view.rerender(<CoachingDisplay state={{ ...unavailable, muted: true }} />);
+    expect(document.querySelector("[data-coaching-state]")).toBeNull();
+  });
+
   test("keeps locale catalogs structurally complete", () => {
     expect(Object.keys(messages("ko")).sort()).toEqual(Object.keys(messages("en")).sort());
   });
@@ -136,6 +177,7 @@ describe("Console route boundary", () => {
         uploadedFiles.push(file.name);
         return {
           presentationSessionId: workspacePresentation.presentationSessionId,
+          presentationSessionEpoch: workspacePresentation.presentationSessionEpoch,
           deckVersion: workspacePresentation.deckVersion,
           publicDeck: { slides: workspacePresentation.slides },
         };
@@ -673,6 +715,7 @@ describe("Console route boundary", () => {
           initialAuthenticated
           initialPresentation={{
             presentationSessionId: "ps_live-ui",
+            presentationSessionEpoch: "pse_1",
             deckVersion: "deck_live-ui",
             slides: [],
           }}
@@ -705,6 +748,7 @@ describe("Console route boundary", () => {
   test("uses the active presentation without asking for a session id", async () => {
     const activePresentation: ActivePresentationView = {
       presentationSessionId: "ps_active",
+      presentationSessionEpoch: "pse_1",
       deckVersion: "deck_active",
       slides: [],
     };
@@ -770,6 +814,7 @@ describe("Console route boundary", () => {
     const slideCommands: string[] = [];
     const activePresentation: ActivePresentationView = {
       presentationSessionId: "ps_active",
+      presentationSessionEpoch: "pse_1",
       deckVersion: "deck_active",
       slides: [
         { publicSlideKey: "slide_one", ordinal: 1, accessibilityLabel: "Opening" },

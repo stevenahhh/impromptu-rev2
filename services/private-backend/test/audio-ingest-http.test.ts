@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import type { AudioCaptureConsent } from "@impromptu/contracts/private";
 import { PreparedEvidenceProjectionGateway } from "@impromptu/projection-gateway";
+import { createCoachingState, reduceCoachingState } from "@impromptu/state/coaching";
 import type { StreamingSttRouterBoundary } from "../src/audio-capture.ts";
 import { createAudioIngestService } from "../src/audio-ingest.ts";
 import { parsePrivateBackendConfig } from "../src/config.ts";
@@ -410,7 +413,10 @@ describe("private audio ingest HTTP transport", () => {
     await bounded(router.completed.promise, "timed out waiting for revoked router cleanup");
   });
 
-  test("invokes recommendations once on FINAL and keeps the result private and ephemeral", async () => {
+  test("connects one text-layer PDF session from PARTIAL through FINAL, coaching, recommendation, and report aggregate", async () => {
+    const fixtureBytes = readFileSync("tests/fixtures/format-neutral-decks/korean-text-layer.pdf");
+    expect(fixtureBytes.subarray(0, 5).toString()).toBe("%PDF-");
+    const fixtureManifestHash = createHash("sha256").update(fixtureBytes).digest("hex");
     const router = new FinalRecommendationRouter();
     const store = createPreparedEvidenceStore();
     const projectionCalls: string[] = [];
@@ -432,16 +438,41 @@ describe("private audio ingest HTTP transport", () => {
       store,
     );
     const recommendationInputs: unknown[] = [];
+    const finalAggregates: unknown[] = [];
+    let coachingState = reduceCoachingState(createCoachingState(), {
+      kind: "OPT_IN",
+      enabled: true,
+    }).state;
     const persistedSnapshots: string[] = [];
     const logEvents: Array<Parameters<JsonLogger["request"]>[0]> = [];
     const audio = createAudioIngestService({
       router,
       contextFor: (identity, signal) => ({ tenantId: identity.accountId, signal }),
       coachingPreviewEnabledFor: () => true,
+      onFinal(identity, event) {
+        finalAggregates.push({
+          presentationSessionId: identity.presentationSessionId,
+          finalSegmentId: event.finalSegmentId,
+          wordCount: event.transcript.words.length,
+        });
+        coachingState = reduceCoachingState(coachingState, {
+          sessionGeneration: event.sessionGeneration,
+          sequence: event.sequence,
+          segmentId: event.segmentId,
+          kind: "FINAL",
+          finalSegmentId: event.finalSegmentId,
+          finalizedAtSessionMs: event.transcript.durationMs,
+          words: event.transcript.words.map((word) => ({
+            text: word.text,
+            startSessionMs: word.startMs,
+            endSessionMs: word.endMs,
+          })),
+        }).state;
+      },
       recommendations: {
         resolveContext(identity) {
           expect(identity.presentationSessionId).toBe("ps_http");
-          return { deckVersion: "deck_current", manifestHash: "a".repeat(64) };
+          return { deckVersion: "deck_current", manifestHash: fixtureManifestHash };
         },
         async recommend(_accountSessionId, input) {
           recommendationInputs.push(structuredClone(input));
@@ -534,10 +565,22 @@ describe("private audio ingest HTTP transport", () => {
       {
         query: "FINAL_PRIVATE_SENTINEL",
         deckVersion: "deck_current",
-        manifestHash: "a".repeat(64),
+        manifestHash: fixtureManifestHash,
         maxResults: 3,
       },
     ]);
+    expect(finalAggregates).toEqual([
+      {
+        presentationSessionId: "ps_http",
+        finalSegmentId: "final-exactly-once",
+        wordCount: 1,
+      },
+    ]);
+    expect(coachingState).toMatchObject({
+      optedIn: true,
+      cueCount: 1,
+      measurement: { outcome: "MEASUREMENT_UNAVAILABLE" },
+    });
 
     await bounded(router.duplicateProcessed.promise, "duplicate FINAL was not processed");
     expect(recommendationInputs).toHaveLength(1);

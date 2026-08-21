@@ -13,6 +13,7 @@ export interface CockpitAudioCaptureProps {
   readonly presentationSessionEpoch: string;
   readonly actorId: string;
   readonly notice: AudioConsentNoticeView;
+  readonly onServerEvent?: (event: unknown) => void;
   readonly baseUrl?: string;
 }
 
@@ -26,6 +27,7 @@ export function CockpitAudioCapture({
   baseUrl,
   csrfToken,
   notice,
+  onServerEvent,
   presentationSessionEpoch,
   presentationSessionId,
 }: CockpitAudioCaptureProps) {
@@ -35,6 +37,7 @@ export function CockpitAudioCapture({
     const uploader = new WebmOpusCaptureUploader({
       csrfToken,
       ...(baseUrl === undefined ? {} : { baseUrl }),
+      ...(onServerEvent === undefined ? {} : { onServerEvent }),
     });
     const controller = new BrowserCaptureController(navigator.mediaDevices, uploader);
     const captureDeviceId = `device_${crypto.randomUUID()}`;
@@ -55,7 +58,15 @@ export function CockpitAudioCapture({
       })();
     setRuntime({ controller, requestGrant });
     return () => controller.dispose();
-  }, [actorId, baseUrl, csrfToken, notice, presentationSessionEpoch, presentationSessionId]);
+  }, [
+    actorId,
+    baseUrl,
+    csrfToken,
+    notice,
+    onServerEvent,
+    presentationSessionEpoch,
+    presentationSessionId,
+  ]);
 
   return (
     <AudioConsentControl
