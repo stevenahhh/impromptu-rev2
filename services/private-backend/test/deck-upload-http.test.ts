@@ -4,6 +4,7 @@ import { PublishedDeckArtifactSchema } from "@impromptu/contracts/public";
 import { PreparedEvidenceProjectionGateway } from "@impromptu/projection-gateway";
 import type { z } from "zod";
 import { parsePrivateBackendConfig } from "../src/config.ts";
+import { DeckUploadWorkerError } from "../src/deck-upload-worker.ts";
 import {
   createPrivateBackendHandler,
   type PrivateBackendHandler,
@@ -75,7 +76,7 @@ function multipartClosing(boundary: string): Uint8Array {
   return new TextEncoder().encode(`\r\n--${boundary}--\r\n`);
 }
 
-function uploadHarness(onFileChunk?: () => void) {
+function uploadHarness(onFileChunk?: () => void, uploadFailure?: Error) {
   let lastInput: Parameters<DeckUploadService["acceptRawDeck"]>[0] | null = null;
   let received: Uint8Array | null = null;
   const sourceHash = "e".repeat(64);
@@ -144,6 +145,7 @@ function uploadHarness(onFileChunk?: () => void) {
         );
       }
       received = actual;
+      if (uploadFailure !== undefined) throw uploadFailure;
       return receipt;
     },
   };
@@ -335,6 +337,27 @@ describe("multipart deck upload HTTP boundary", () => {
     );
     expect(missingBoundary.status).toBe(400);
     expect(lastInput()).toBeNull();
+  });
+
+  test("maps a typed OCR failure to the dedicated 422 boundary response", async () => {
+    const { handler } = uploadHarness(
+      undefined,
+      new DeckUploadWorkerError(
+        "ocr_unavailable",
+        "Renderer failed (ocr_unavailable): private OCR diagnostic",
+      ),
+    );
+    const auth = await signIn(handler);
+    const response = await handler(
+      request("/v1/deck-uploads", {
+        method: "POST",
+        headers: authenticatedHeaders(auth),
+        body: uploadForm("scanned.pdf", PDF_CONTENT_TYPE, new TextEncoder().encode("%PDF-1.7")),
+      }),
+    );
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: "OCR_UNAVAILABLE" });
   });
 
   test("accepts only one file field and validates its filename/MIME pair", async () => {

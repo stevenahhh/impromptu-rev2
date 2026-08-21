@@ -406,6 +406,51 @@ describe("deck render subprocess adapter", () => {
     });
   });
 
+  test.each([
+    "Tesseract binary is missing",
+    "Tesseract exited nonzero (2)",
+    "Tesseract exceeded its operation deadline",
+    "Tesseract returned empty TSV",
+  ])("preserves OCR unavailability from ingestion: %s", async (detail) => {
+    const renderer = fakeRenderer({
+      exitCode: 0,
+      ingestionExitCode: 2,
+      stderr: `error[ocr_unavailable]: ocr_unavailable: scanned_page_requires_ocr: ${detail}`,
+      renderJson: VALID_RENDER_JSON,
+    });
+
+    const result = await bounded(
+      createDeckRenderSubprocess({
+        ingestionProject: INGESTION_PROJECT,
+        spawn: renderer.spawn,
+      }).run(request(), controller.signal),
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      code: "ocr_unavailable",
+      message: expect.stringContaining("scanned_page_requires_ocr"),
+    });
+  });
+
+  test("does not classify unrelated ingestion diagnostics mentioning OCR as unavailable", async () => {
+    const renderer = fakeRenderer({
+      exitCode: 0,
+      ingestionExitCode: 2,
+      stderr: "error[invalid_document]: notes mention error[ocr_unavailable] only in prose",
+      renderJson: VALID_RENDER_JSON,
+    });
+
+    const result = await bounded(
+      createDeckRenderSubprocess({
+        ingestionProject: INGESTION_PROJECT,
+        spawn: renderer.spawn,
+      }).run(request(), controller.signal),
+    );
+
+    expect(result).toMatchObject({ ok: false, code: "ingestion_failed" });
+  });
+
   test("aborts structural ingestion under the same upload signal", async () => {
     const renderer = fakeRenderer({
       exitCode: 0,

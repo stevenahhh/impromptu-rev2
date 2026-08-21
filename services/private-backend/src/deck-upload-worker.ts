@@ -102,6 +102,7 @@ export class DeckUploadWorkerError extends Error {
   constructor(
     readonly code:
       | "render_failed"
+      | "ocr_unavailable"
       | "deadline_exceeded"
       | "artifact_collision"
       | "artifact_path_rejected",
@@ -467,7 +468,7 @@ export function createDeckUploadWorker(options: DeckUploadWorkerOptions): DeckUp
 
         if (!result.ok) {
           throw new DeckUploadWorkerError(
-            "render_failed",
+            result.code === "ocr_unavailable" ? "ocr_unavailable" : "render_failed",
             `Renderer failed (${result.code}): ${result.message}`,
           );
         }

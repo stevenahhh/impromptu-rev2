@@ -31,6 +31,7 @@ export type RenderSubprocessFailureCode =
   | "render_output_missing"
   | "render_manifest_invalid"
   | "ingestion_failed"
+  | "ocr_unavailable"
   | "ingestion_output_missing"
   | "ingestion_manifest_invalid"
   | "manifest_mismatch";
@@ -492,11 +493,14 @@ export function createDeckRenderSubprocess(
     if (outcome.code !== 0) {
       const stderrText = describeCapture(stderr, limit);
       const stdoutText = describeCapture(stdout, limit);
+      const ingestionFailureCode = /^error\[ocr_unavailable\]:/m.test(stderr.text)
+        ? "ocr_unavailable"
+        : "ingestion_failed";
       return {
         ok: false,
         result: {
           ok: false,
-          code: operation === "render" ? "render_failed" : "ingestion_failed",
+          code: operation === "render" ? "render_failed" : ingestionFailureCode,
           message:
             stderrText.length > 0
               ? `${operation} exited with code ${outcome.code}; stderr: ${stderrText}`

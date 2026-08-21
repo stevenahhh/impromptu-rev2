@@ -10,7 +10,7 @@ import {
 import type { ExactOrigin, PrivateBackendConfig } from "./config.ts";
 import { type ParsedDeckMultipart, parseDeckUploadMultipart } from "./deck-upload-multipart.ts";
 import { DeckUploadRejectedError } from "./deck-upload-service.ts";
-import type { DeckUploadRejectionCode } from "./deck-upload-worker.ts";
+import { type DeckUploadRejectionCode, DeckUploadWorkerError } from "./deck-upload-worker.ts";
 import { httpOutcome, type JsonLogger, type MetricsRegistry } from "./observability.ts";
 import { createPreparedDeckArtifacts } from "./prepared-deck-upload.ts";
 import type { PreparedEvidenceCoordinator } from "./prepared-evidence.ts";
@@ -49,6 +49,7 @@ export interface DeckUploadReceipt {
 
 export interface DeckUploadAccepted extends DeckUploadReceipt {
   readonly presentationSessionId: string;
+  readonly presentationSessionEpoch: string;
   readonly deckVersion: string;
 }
 
@@ -727,6 +728,9 @@ export function createPrivateBackendHandler(
         if (rejection instanceof DeckUploadRejectedError) {
           return deckUploadRejected(rejection.code, origin);
         }
+        if (rejection instanceof DeckUploadWorkerError && rejection.code === "ocr_unavailable") {
+          return json({ error: "OCR_UNAVAILABLE" }, 422, origin);
+        }
         return json({ error: "deck_upload_rejected" }, 400, origin);
       }
       const presentation = await dependencies.coordinator.createPresentation(
@@ -741,6 +745,7 @@ export function createPrivateBackendHandler(
       return json(
         {
           presentationSessionId: presentation.value.lifecycle.presentationSessionId,
+          presentationSessionEpoch: presentation.value.lifecycle.presentationSessionEpoch,
           deckVersion: receipt.privateDeck.deckVersion,
           ...receipt,
         } satisfies DeckUploadAccepted,
