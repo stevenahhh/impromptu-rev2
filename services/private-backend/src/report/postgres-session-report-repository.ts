@@ -122,6 +122,7 @@ export interface SessionReportRepository {
     | Readonly<{ outcome: "DUPLICATE"; visit: SlideVisit }>
   >;
   compareAndSetState(input: CompareAndSetSessionReportStateInput): Promise<SessionReportState>;
+  readSlideVisits(principal: SessionReportPrincipal): Promise<readonly SlideVisit[]>;
   readForOwner(principal: SessionReportPrincipal): Promise<SessionReportState | null>;
 }
 
@@ -454,6 +455,28 @@ export function createPostgresSessionReportRepository(sql: Sql): SessionReportRe
           throw new SessionReportFinalizedError("session report state is finalized");
         }
         throw new SessionReportStateConflictError("session report state revision is stale");
+      });
+    },
+
+    async readSlideVisits(principal) {
+      return await sql.begin(async (transactionSql) => {
+        await establishTenant(transactionSql, principal.tenantId);
+        await assertOwner(transactionSql, principal);
+        const rows = await transactionSql<readonly VisitRow[]>`
+          SELECT
+            presentation_session_epoch,
+            seq,
+            public_slide_key,
+            occurrence_seq,
+            entered_offset_ms,
+            left_offset_ms,
+            producer_id
+          FROM private_app.slide_visits
+          WHERE tenant_id = ${principal.tenantId}::uuid
+            AND session_id = ${principal.presentationSessionId}::uuid
+          ORDER BY seq
+        `;
+        return rows.map(visitFromRow);
       });
     },
 

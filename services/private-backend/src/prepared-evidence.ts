@@ -2,6 +2,7 @@ import {
   CommandIdSchema,
   ControlRevisionSchema,
   controllerEpoch,
+  controlRevisionValue,
   PlaybackControlLeaseSchema,
   type StageAppliedReceipt,
   type SupersededCommandReceipt,
@@ -18,6 +19,7 @@ import {
   type PrivateDeckContext,
   PrivateDeckContextSchema,
   type PublicationAuthority,
+  presentationSessionEpochValue,
 } from "@impromptu/contracts/private";
 import {
   type AudienceDisplaySession,
@@ -154,6 +156,20 @@ export type LiveCandidateSnapshot = Readonly<{
 
 export interface LiveEvidenceAuthorizer {
   authorize(candidate: EvidenceCandidate): Promise<boolean>;
+}
+
+export interface PreparedEvidenceReportObserver {
+  onAcceptedSlideSet(input: {
+    readonly tenantId: string;
+    readonly presentationSessionId: string;
+    readonly ownerSubject: string;
+    readonly presentationSessionEpoch: number;
+    readonly sequence: number;
+    readonly publicSlideKey: string;
+    readonly acceptedOffsetMs: number;
+    readonly producerId: string;
+  }): void;
+  onFailure(error: unknown): void;
 }
 
 export interface PreparedEvidenceStore {
@@ -439,6 +455,7 @@ export class PreparedEvidenceCoordinator {
   readonly #presentationCapabilityTtlMs: number;
   readonly #liveEvidenceAuthorizer: LiveEvidenceAuthorizer | undefined;
   readonly #livePublicEnabled: boolean;
+  readonly #reportObserver: PreparedEvidenceReportObserver | undefined;
   readonly #controllerSockets = new Map<string, Set<MutableControllerSocket>>();
 
   constructor(
@@ -450,6 +467,7 @@ export class PreparedEvidenceCoordinator {
       readonly presentationCapabilityTtlMs?: number;
       readonly liveEvidenceAuthorizer?: LiveEvidenceAuthorizer;
       readonly livePublicEnabled?: boolean;
+      readonly reportObserver?: PreparedEvidenceReportObserver;
     } = {},
   ) {
     this.#projection = projection;
@@ -460,6 +478,7 @@ export class PreparedEvidenceCoordinator {
     this.#presentationCapabilityTtlMs = options.presentationCapabilityTtlMs ?? 4 * 60 * 60 * 1_000;
     this.#liveEvidenceAuthorizer = options.liveEvidenceAuthorizer;
     this.#livePublicEnabled = options.livePublicEnabled === true;
+    this.#reportObserver = options.reportObserver;
     for (const [id, presentation] of store.presentations) {
       const playback = restorePlaybackAuthority(presentation.playback);
       const cards = restorePublicCardStream(presentation.cards);
@@ -825,6 +844,24 @@ export class PreparedEvidenceCoordinator {
     ) {
       authorized.value.playback = playback;
       return { outcome: "REJECTED", reason: "PROJECTION_REJECTED" };
+    }
+    if (this.#reportObserver !== undefined) {
+      try {
+        this.#reportObserver.onAcceptedSlideSet({
+          tenantId: authorized.value.lifecycle.ownerAccountId,
+          presentationSessionId: authorized.value.lifecycle.presentationSessionId,
+          ownerSubject: authorized.value.lifecycle.ownerAccountId,
+          presentationSessionEpoch: presentationSessionEpochValue(
+            authorized.value.lifecycle.presentationSessionEpoch,
+          ),
+          sequence: controlRevisionValue(reduction.effect.acceptedControlRevision),
+          publicSlideKey: reduction.effect.occurrence.publicSlideKey,
+          acceptedOffsetMs: nowMs - authorized.value.lifecycle.createdAtMs,
+          producerId: reduction.effect.commandId,
+        });
+      } catch (error) {
+        this.#reportObserver.onFailure(error);
+      }
     }
     return { outcome: "APPLIED", value: reduction.receipt };
   }
