@@ -389,6 +389,16 @@ const recommendations = new PrivateRecommendationPipeline({
           event.errorCode === undefined ? event.outcome : `${event.outcome}:${event.errorCode}`,
       });
     },
+    observeReconciliation(event) {
+      logger.request({
+        requestId: `recommendation-reconcile:${crypto.randomUUID()}`,
+        method: "RECONCILE",
+        path: "/internal/recommendation/deterministic",
+        status: 422,
+        durationMs: 0,
+        outcome: `${event.category}:${event.value}`,
+      });
+    },
   },
 });
 coordinator = new PreparedEvidenceCoordinator(projection, store, {

@@ -55,8 +55,15 @@ export type RecommendationModelStageEvent = Readonly<{
   errorCode?: ModelErrorCode;
 }>;
 
+export type RecommendationReconciliationEvent = Readonly<{
+  category: "NUMBER" | "UNIT" | "DATE" | "ENTITY" | "SOURCE";
+  /** The rejected fact token itself; never claim or evidence prose. */
+  value: string;
+}>;
+
 export interface RecommendationStageObserver {
   observe(event: RecommendationModelStageEvent): void;
+  observeReconciliation?(event: RecommendationReconciliationEvent): void;
 }
 
 export class PrivateRecommendationPipeline {
@@ -261,6 +268,10 @@ export class PrivateRecommendationPipeline {
     });
     const deterministic = reconcileEvidence(canonicalStructured, ordered);
     if (deterministic.outcome === "MISMATCH") {
+      this.#stageObserver?.observeReconciliation?.({
+        category: deterministic.category,
+        value: deterministic.value,
+      });
       return abstain("DETERMINISTIC_MISMATCH", startedAtMs, this.#now());
     }
     const selected = canonicalStructured.evidenceIds
