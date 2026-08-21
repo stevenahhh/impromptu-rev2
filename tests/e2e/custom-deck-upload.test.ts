@@ -5,8 +5,10 @@ describe("custom deck upload real-browser QA", () => {
   test("uploads representative PPTX and PDF fixtures through Console and proves them on Stage", async () => {
     const evidence = await runCustomDeckUploadE2e();
 
+    // The harness prefers 4173 but falls back to an ephemeral port when anything already holds it,
+    // so the origin's shape is the invariant here, not one fixed port number.
+    expect(evidence.environment.consoleOrigin).toMatch(/^http:\/\/localhost:\d+$/);
     expect(evidence.environment).toMatchObject({
-      consoleOrigin: "http://localhost:4173",
       sofficePath: "/Applications/LibreOffice.app/Contents/MacOS/soffice",
       libreOfficeVersion: expect.stringContaining("LibreOffice 26.2.5.2"),
       fontVersion: "DejaVu 2.37 (Homebrew font-dejavu cask)",

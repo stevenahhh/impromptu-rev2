@@ -182,9 +182,11 @@ async function availablePort(): Promise<number> {
 async function preferredPort(port: number): Promise<number> {
   const server = createNetServer();
   try {
+    // The services bind the wildcard address, so probing 127.0.0.1 alone reports a free port while
+    // an existing wildcard listener (a developer stack on ::) still makes the real bind fail.
     await new Promise<void>((resolveListen, reject) => {
       server.once("error", reject);
-      server.listen(port, "127.0.0.1", resolveListen);
+      server.listen(port, resolveListen);
     });
     return port;
   } catch {
