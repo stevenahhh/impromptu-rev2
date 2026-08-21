@@ -80,7 +80,7 @@ class FakeEventSource extends EventTarget {
   }
 
   ready() {
-    const event = new Event("message");
+    const event = new Event("READY");
     Object.defineProperty(event, "data", { value: JSON.stringify({ kind: "READY" }) });
     this.dispatchEvent(event);
   }

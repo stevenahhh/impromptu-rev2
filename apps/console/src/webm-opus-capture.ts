@@ -4,8 +4,8 @@ export const WEBM_OPUS_MIME_TYPE = "audio/webm;codecs=opus" as const;
 export const MEDIA_RECORDER_TIMESLICE_MS = 1_000;
 
 interface CaptureEventSource {
-  addEventListener(type: "message" | "error", listener: EventListener): void;
-  removeEventListener(type: "message" | "error", listener: EventListener): void;
+  addEventListener(type: "READY" | "error", listener: EventListener): void;
+  removeEventListener(type: "READY" | "error", listener: EventListener): void;
   close(): void;
 }
 
@@ -89,7 +89,7 @@ function boundedReady(
   let rejectReady: ((error: Error) => void) | undefined;
 
   const cleanup = () => {
-    source.removeEventListener("message", onMessage);
+    source.removeEventListener("READY", onReady);
     source.removeEventListener("error", onError);
     if (timeout !== undefined) clearTimeout(timeout);
   };
@@ -99,7 +99,7 @@ function boundedReady(
     cleanup();
     action();
   };
-  const onMessage: EventListener = (event) => {
+  const onReady: EventListener = (event) => {
     if (isReadyEvent(event)) complete(() => resolveReady?.());
   };
   const onError: EventListener = () =>
@@ -108,7 +108,7 @@ function boundedReady(
   const promise = new Promise<void>((resolve, reject) => {
     resolveReady = resolve;
     rejectReady = reject;
-    source.addEventListener("message", onMessage);
+    source.addEventListener("READY", onReady);
     source.addEventListener("error", onError);
     timeout = setTimeout(
       () => complete(() => reject(new Error("Audio event stream timed out before READY"))),
