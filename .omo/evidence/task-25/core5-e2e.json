@@ -13,7 +13,34 @@
         "hybrid-rrf-recommend",
         "opt-in-coaching"
       ],
-      "detail": "hybrid retrieval did not recommend: {\"outcome\":\"ABSTAIN\",\"reason\":\"INSUFFICIENT_EVIDENCE\",\"completedAtMs\":1787292472095,\"latencyMs\":3863}"
+      "detail": "hybrid retrieval did not recommend: {\"outcome\":\"ABSTAIN\",\"reason\":\"DEADLINE_EXCEEDED\",\"completedAtMs\":1787300084004,\"latencyMs\":5000}",
+      "stepLatencyMs": {
+        "sign-in": 1422,
+        "upload": 587,
+        "capture-final": 1867,
+        "recommendation": 4534
+      },
+      "diagnostics": {
+        "failedStep": "recommendation",
+        "presentationSessionId": "ps_838bb717cccf00bdaf2bf919caefb1ec",
+        "deckVersion": "deck_34eac2a55addb409359febc4ec28e911f10c719abd28ce7b427421ab9a985c86",
+        "finalKind": "FINAL",
+        "finalSequence": 1,
+        "transcriptCharacters": 6,
+        "transcriptWordCount": 1,
+        "transcriptDurationMs": 960,
+        "recommendationStatus": 200,
+        "recommendationOutcome": "ABSTAIN",
+        "recommendationReason": "DEADLINE_EXCEEDED",
+        "recommendationLatencyMs": 5000,
+        "recommendationEvidenceCount": 0,
+        "recommendationResponseBody": {
+          "outcome": "ABSTAIN",
+          "reason": "DEADLINE_EXCEEDED",
+          "completedAtMs": 1787300084004,
+          "latencyMs": 5000
+        }
+      }
     },
     {
       "name": "positive-korean-structural.pptx",
@@ -26,66 +53,236 @@
         "hybrid-rrf-recommend",
         "opt-in-coaching"
       ],
-      "detail": "hybrid retrieval did not recommend: {\"outcome\":\"ABSTAIN\",\"reason\":\"INSUFFICIENT_EVIDENCE\",\"completedAtMs\":1787292478953,\"latencyMs\":2749}"
+      "detail": "hybrid retrieval did not recommend: {\"outcome\":\"ABSTAIN\",\"reason\":\"DEADLINE_EXCEEDED\",\"completedAtMs\":1787300092997,\"latencyMs\":5000}",
+      "stepLatencyMs": {
+        "sign-in": 534,
+        "upload": 1943,
+        "capture-final": 1852,
+        "recommendation": 4615
+      },
+      "diagnostics": {
+        "failedStep": "recommendation",
+        "presentationSessionId": "ps_2177317f291d3fcdca68dfd278ea7e32",
+        "deckVersion": "deck_a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d",
+        "finalKind": "FINAL",
+        "finalSequence": 1,
+        "transcriptCharacters": 18,
+        "transcriptWordCount": 3,
+        "transcriptDurationMs": 960,
+        "recommendationStatus": 200,
+        "recommendationOutcome": "ABSTAIN",
+        "recommendationReason": "DEADLINE_EXCEEDED",
+        "recommendationLatencyMs": 5000,
+        "recommendationEvidenceCount": 0,
+        "recommendationResponseBody": {
+          "outcome": "ABSTAIN",
+          "reason": "DEADLINE_EXCEEDED",
+          "completedAtMs": 1787300092997,
+          "latencyMs": 5000
+        }
+      }
     },
     {
       "name": "negative-mic-denied-audio-request-zero",
       "command": "Console denied getUserMedia + request observer",
       "exitCode": 0,
       "verdict": "PASS",
-      "assertions": ["audio-request-count=0"]
+      "assertions": [
+        "audio-request-count=0"
+      ]
     },
     {
       "name": "negative-external-429-internal-only",
       "command": "bun test services/private-backend/test/recommendation-pipeline.test.ts",
       "exitCode": 0,
       "verdict": "PASS",
-      "assertions": ["HTTP_429 retains internal RECOMMEND"]
+      "assertions": [
+        "HTTP_429 retains internal RECOMMEND"
+      ]
     },
     {
       "name": "negative-stage-snapshot-cards-zero",
       "command": "bun test tests/security/release-security.test.ts",
       "exitCode": 0,
       "verdict": "PASS",
-      "assertions": ["snapshot cards=0"]
+      "assertions": [
+        "snapshot cards=0"
+      ]
     },
     {
       "name": "negative-stage-sse-cards-zero",
       "command": "bun test services/projection-gateway/test/prepared-evidence.test.ts",
       "exitCode": 0,
       "verdict": "PASS",
-      "assertions": ["SSE CARD dropped"]
+      "assertions": [
+        "SSE CARD dropped"
+      ]
     },
     {
       "name": "negative-stage-ws-cards-zero",
       "command": "bun test apps/stage/src/stage-client.test.ts",
       "exitCode": 0,
       "verdict": "PASS",
-      "assertions": ["WS CARD dropped"]
+      "assertions": [
+        "WS CARD dropped"
+      ]
     },
     {
       "name": "negative-aba-reload-dwell-identical",
       "command": "bun test services/private-backend/test/session-report-finalizer.test.ts",
       "exitCode": 0,
       "verdict": "PASS",
-      "assertions": ["A-B-A report dwell byte-equivalent after reload"]
+      "assertions": [
+        "A-B-A report dwell byte-equivalent after reload"
+      ]
     },
     {
       "name": "stt-partial-before-final",
       "command": "bun test services/private-backend/test/stt-whisper-cpp.test.ts",
       "exitCode": 0,
       "verdict": "PASS",
-      "assertions": ["PARTIAL precedes exactly-one FINAL"]
+      "assertions": [
+        "PARTIAL precedes exactly-one FINAL"
+      ]
     },
     {
       "name": "stt-revoke-stops-and-blocks-late-delivery",
       "command": "bun test services/private-backend/test/audio-ingest-http.test.ts",
       "exitCode": 0,
       "verdict": "PASS",
-      "assertions": ["revoke terminal blocks late delivery"]
+      "assertions": [
+        "revoke terminal blocks late delivery"
+      ]
     }
   ],
   "positive": "0/2",
   "negative": "6/6",
-  "stt": "2/2"
+  "stt": "2/2",
+  "models": {
+    "RERANK_MODEL": "deepseek-v4-flash",
+    "LLM_MODEL": "deepseek-v4-flash",
+    "VERIFIER_MODEL": "qwen3.6-plus"
+  },
+  "recommendationStageLatencyMs": [
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 183,
+      "timestampMs": 1787300077423
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 135,
+      "timestampMs": 1787300079108
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 127,
+      "timestampMs": 1787300079132
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1236,
+      "timestampMs": 1787300080998
+    },
+    {
+      "stage": "llm",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 3376,
+      "timestampMs": 1787300081743
+    },
+    {
+      "stage": "rerank",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 3378,
+      "timestampMs": 1787300081743
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 2345,
+      "timestampMs": 1787300082107
+    },
+    {
+      "stage": "verifier",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 1364,
+      "timestampMs": 1787300083474
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 3506,
+      "timestampMs": 1787300083477
+    },
+    {
+      "stage": "rerank",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 3537,
+      "timestampMs": 1787300083508
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 145,
+      "timestampMs": 1787300086156
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 818,
+      "timestampMs": 1787300087574
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 147,
+      "timestampMs": 1787300088033
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 116,
+      "timestampMs": 1787300088114
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1229,
+      "timestampMs": 1787300089868
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1270,
+      "timestampMs": 1787300089870
+    },
+    {
+      "stage": "llm",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 3757,
+      "timestampMs": 1787300090513
+    },
+    {
+      "stage": "rerank",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 3751,
+      "timestampMs": 1787300092390
+    },
+    {
+      "stage": "llm",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 3900,
+      "timestampMs": 1787300092500
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 140,
+      "timestampMs": 1787300093821
+    }
+  ]
 }

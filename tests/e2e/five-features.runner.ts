@@ -10,6 +10,10 @@ type Scenario = Readonly<{
   verdict: Verdict;
   assertions: readonly string[];
   detail?: string;
+  /** Wall-clock duration of every completed positive step, in declaration order. */
+  stepLatencyMs?: Readonly<Record<string, number>>;
+  /** Machine-readable observations captured at the exact point a positive step stopped. */
+  diagnostics?: Readonly<Record<string, unknown>>;
 }>;
 
 type Upload = Readonly<{
@@ -145,7 +149,7 @@ async function recommendation(
   page: Page,
   csrfToken: string,
   uploadReceipt: Upload,
-): Promise<Record<string, unknown>> {
+): Promise<{ status: number; body: Record<string, unknown> }> {
   const response = await page.evaluate(
     async ({ csrf, deckVersion, manifestHash }) => {
       const response = await fetch("/v1/recommendations", {
@@ -167,50 +171,97 @@ async function recommendation(
       manifestHash: uploadReceipt.manifestHash,
     },
   );
-  if (response.status !== 200) fail(`recommendation returned ${response.status}`);
-  return record(response.body, "recommendation response");
+  return {
+    status: response.status,
+    body: record(response.body, "recommendation response"),
+  };
+}
+
+/** Counts only machine values; transcript text itself is never recorded. */
+function transcriptMetrics(final: Record<string, unknown>): Record<string, unknown> {
+  const payload = record(final.event, "FINAL payload");
+  const transcript = record(payload.transcript, "FINAL transcript");
+  const words = Array.isArray(transcript.words) ? transcript.words.length : null;
+  return {
+    finalKind: payload.kind,
+    finalSequence: payload.sequence,
+    transcriptCharacters: typeof transcript.text === "string" ? transcript.text.length : null,
+    transcriptWordCount: words,
+    transcriptDurationMs: transcript.durationMs ?? null,
+  };
 }
 
 async function runPositive(context: BrowserContext, fixture: string): Promise<Scenario> {
   const page = await context.newPage();
+  const assertions = [
+    "upload-201",
+    "fake-device-webm-final",
+    "hybrid-rrf-recommend",
+    "opt-in-coaching",
+  ] as const;
+  const command = "Console upload + fake-device WebM capture + private HTTP recommendation";
+  const stepLatencyMs: Record<string, number> = {};
+  const diagnostics: Record<string, unknown> = {};
+  let step = "sign-in";
+  async function measure<T>(name: string, work: () => Promise<T>): Promise<T> {
+    step = name;
+    const startedAtMs = Date.now();
+    try {
+      return await work();
+    } finally {
+      stepLatencyMs[name] = Date.now() - startedAtMs;
+    }
+  }
   try {
-    const csrfToken = await signIn(page);
-    const receipt = await upload(page, fixture);
-    const final = await captureFinal(page, csrfToken);
-    const finalPayload = record(final.event, "FINAL payload");
-    if (finalPayload.kind !== "FINAL") fail("whisper did not emit FINAL");
-    const result = await recommendation(page, csrfToken, receipt);
-    const outcome = string(result.outcome, "recommendation outcome");
+    const csrfToken = await measure("sign-in", async () => await signIn(page));
+    const receipt = await measure("upload", async () => await upload(page, fixture));
+    diagnostics.presentationSessionId = receipt.presentationSessionId;
+    diagnostics.deckVersion = receipt.deckVersion;
+    const final = await measure("capture-final", async () => await captureFinal(page, csrfToken));
+    Object.assign(diagnostics, transcriptMetrics(final));
+    if (diagnostics.finalKind !== "FINAL") fail("whisper did not emit FINAL");
+    const result = await measure(
+      "recommendation",
+      async () => await recommendation(page, csrfToken, receipt),
+    );
+    diagnostics.recommendationStatus = result.status;
+    diagnostics.recommendationOutcome = result.body.outcome ?? null;
+    diagnostics.recommendationReason = result.body.reason ?? null;
+    diagnostics.recommendationLatencyMs = result.body.latencyMs ?? null;
+    diagnostics.recommendationEvidenceCount = Array.isArray(result.body.evidence)
+      ? result.body.evidence.length
+      : 0;
+    diagnostics.recommendationResponseBody = result.body;
+    if (result.status !== 200) fail(`recommendation returned ${result.status}`);
+    const outcome = string(result.body.outcome, "recommendation outcome");
     if (outcome !== "RECOMMEND")
-      fail(`hybrid retrieval did not recommend: ${JSON.stringify(result)}`);
-    const coaching = page.locator('[data-coaching-state="active"]');
-    await page.getByRole("checkbox", { name: /coaching/i }).check();
-    if ((await coaching.count()) !== 1) fail("opt-in coaching did not render active state");
+      fail(`hybrid retrieval did not recommend: ${JSON.stringify(result.body)}`);
+    await measure("opt-in-coaching", async () => {
+      const coaching = page.locator('[data-coaching-state="active"]');
+      await page.getByRole("checkbox", { name: /coaching/i }).check();
+      const rendered = await coaching.count();
+      diagnostics.coachingActiveNodes = rendered;
+      if (rendered !== 1) fail("opt-in coaching did not render active state");
+    });
     return {
       name: `positive-${fixture}`,
-      command: "Console upload + fake-device WebM capture + private HTTP recommendation",
+      command,
       exitCode: 0,
       verdict: "PASS",
-      assertions: [
-        "upload-201",
-        "fake-device-webm-final",
-        "hybrid-rrf-recommend",
-        "opt-in-coaching",
-      ],
+      assertions: [...assertions],
+      stepLatencyMs,
+      diagnostics,
     };
   } catch (error) {
     return {
       name: `positive-${fixture}`,
-      command: "Console upload + fake-device WebM capture + private HTTP recommendation",
+      command,
       exitCode: 1,
       verdict: "FAIL",
-      assertions: [
-        "upload-201",
-        "fake-device-webm-final",
-        "hybrid-rrf-recommend",
-        "opt-in-coaching",
-      ],
+      assertions: [...assertions],
       detail: error instanceof Error ? error.message : String(error),
+      stepLatencyMs,
+      diagnostics: { failedStep: step, ...diagnostics },
     };
   } finally {
     await page.close();

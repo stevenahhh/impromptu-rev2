@@ -14,8 +14,8 @@ import signal
 import socket
 import subprocess
 import sys
+import threading
 from pathlib import Path
-from typing import TextIO
 
 ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE = ROOT / ".omo/evidence/task-25"
@@ -48,7 +48,25 @@ def wait_for_line(process: subprocess.Popen[str], expected: str) -> None:
             raise RuntimeError(f"{process.args!r} exited {code} before {expected!r}")
 
 
-def start(command: list[str], cwd: Path, env: dict[str, str], ready: str) -> subprocess.Popen[str]:
+def drain(process: subprocess.Popen[str], log: Path, collected: list[str]) -> threading.Thread:
+    """Keeps consuming service stdout so no service ever blocks on a full pipe."""
+
+    def pump() -> None:
+        assert process.stdout is not None
+        with log.open("a", encoding="utf-8") as sink:
+            for line in process.stdout:
+                sink.write(line)
+                sink.flush()
+                collected.append(line)
+
+    thread = threading.Thread(target=pump, daemon=True)
+    thread.start()
+    return thread
+
+
+def start(
+    command: list[str], cwd: Path, env: dict[str, str], ready: str, name: str
+) -> tuple[subprocess.Popen[str], list[str]]:
     process = subprocess.Popen(
         command,
         cwd=cwd,
@@ -59,7 +77,36 @@ def start(command: list[str], cwd: Path, env: dict[str, str], ready: str) -> sub
         start_new_session=True,
     )
     wait_for_line(process, ready)
-    return process
+    log = EVIDENCE / f"{name}.log"
+    log.write_text("", encoding="utf-8")
+    collected: list[str] = []
+    drain(process, log, collected)
+    return process, collected
+
+
+def recommendation_stages(lines: list[str]) -> list[dict[str, object]]:
+    """Extracts the private-backend structured per-stage model latencies."""
+    stages: list[dict[str, object]] = []
+    for line in lines:
+        stripped = line.strip()
+        if "/internal/recommendation/" not in stripped:
+            continue
+        try:
+            event = json.loads(stripped)
+        except json.JSONDecodeError:
+            continue
+        path = event.get("path")
+        if not isinstance(path, str) or not path.startswith("/internal/recommendation/"):
+            continue
+        stages.append(
+            {
+                "stage": path.rsplit("/", 1)[1],
+                "outcome": event.get("outcome"),
+                "durationMs": event.get("durationMs"),
+                "timestampMs": event.get("timestampMs"),
+            }
+        )
+    return stages
 
 
 def stop(process: subprocess.Popen[str]) -> None:
@@ -101,6 +148,9 @@ def main() -> int:
     env = os.environ.copy()
     env.update(dotenv(ROOT / ".env.local"))
     env["CHAT_MODEL_API_KEY"] = env["OPENCODE_ZEN_API_KEY"]
+    # Model slots follow the shipped configuration instead of a copy that can drift from it.
+    shipped = dotenv(ROOT / ".env.example")
+    models = {key: shipped[key] for key in ("RERANK_MODEL", "LLM_MODEL", "VERIFIER_MODEL")}
     env.update(
         {
             "CONSOLE_ORIGIN": console_origin,
@@ -117,15 +167,14 @@ def main() -> int:
             "EMBEDDING_MODEL_BASE_URL": "https://127.0.0.1:8443/v1",
             "EMBEDDING_MODEL": "embeddinggemma",
             "NODE_EXTRA_CA_CERTS": "/Users/gahn/Library/Application Support/mkcert/rootCA.pem",
-            "RERANK_MODEL": "deepseek-v4-flash",
-            "LLM_MODEL": "deepseek-v4-flash",
-            "VERIFIER_MODEL": "deepseek-v4-flash",
-            "PRIVATE_DATABASE_URL": "postgresql://private_app@127.0.0.1:5432/impromptu_private",
+            **models,
+            # E2E uses the CI role; private_app lacks prepared_evidence_state privileges.
+            "PRIVATE_DATABASE_URL": "postgresql://impromptu_bootstrap@127.0.0.1:5432/impromptu_private",
             "PRIVATE_BACKEND_PORT": str(private_port),
             "PRIVATE_PREPARED_EVIDENCE_STATE_KEY": "five-features-acceptance-private",
             "PROJECTION_GATEWAY_ORIGIN": projection_origin,
             "PROJECTION_GATEWAY_PORT": str(projection_port),
-            "PROJECTION_DATABASE_URL": "postgresql://projection_app@127.0.0.1:5432/impromptu_projection",
+            "PROJECTION_DATABASE_URL": "postgresql://impromptu_bootstrap@127.0.0.1:5432/impromptu_projection",
             "PROJECTION_GATEWAY_STATE_KEY": "five-features-acceptance-projection",
             "PRIVATE_BACKEND_ORIGIN": private_origin,
             "STAGE_ORIGIN": stage_origin,
@@ -139,10 +188,14 @@ def main() -> int:
     )
     processes: list[subprocess.Popen[str]] = []
     try:
-        processes.append(start(["bun", "run", "dev"], ROOT / "services/projection-gateway", env, "projection-gateway listening"))
-        processes.append(start(["bun", "run", "dev"], ROOT / "services/private-backend", env, "private-backend listening"))
-        processes.append(start(["bun", "run", "dev", "--", "--port", str(console_port)], ROOT / "apps/console", env, "Ready"))
-        processes.append(start(["bun", "run", "dev", "--", "--port", str(stage_port)], ROOT / "apps/stage", env, "Local"))
+        gateway, _ = start(["bun", "run", "dev"], ROOT / "services/projection-gateway", env, "projection-gateway listening", "projection-gateway")
+        processes.append(gateway)
+        private, private_lines = start(["bun", "run", "dev"], ROOT / "services/private-backend", env, "private-backend listening", "private-backend")
+        processes.append(private)
+        console, _ = start(["bun", "run", "dev", "--", "--port", str(console_port)], ROOT / "apps/console", env, "Ready", "console")
+        processes.append(console)
+        stage, _ = start(["bun", "run", "dev", "--", "--port", str(stage_port)], ROOT / "apps/stage", env, "Local", "stage")
+        processes.append(stage)
         runner = subprocess.run(
             ["bun", "run", "tests/e2e/five-features.runner.ts"], cwd=ROOT, env=env, text=True, capture_output=True
         )
@@ -152,6 +205,11 @@ def main() -> int:
             print(runner.stdout, end="")
         if runner.stderr:
             print(runner.stderr, end="", file=sys.stderr)
+        if RESULT.exists():
+            result = json.loads(RESULT.read_text(encoding="utf-8"))
+            result["models"] = models
+            result["recommendationStageLatencyMs"] = recommendation_stages(private_lines)
+            RESULT.write_text(f"{json.dumps(result, indent=2, ensure_ascii=False)}\n", encoding="utf-8")
         return runner.returncode
     finally:
         for process in reversed(processes):
