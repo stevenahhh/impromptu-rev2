@@ -6,6 +6,7 @@ import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
 import { extname, join, resolve } from "node:path";
 import type { Readable } from "node:stream";
+import { SQL } from "bun";
 import { type Browser, type BrowserContext, chromium, type Page } from "playwright-core";
 
 interface JsonRecord {
@@ -1023,6 +1024,10 @@ export async function runCustomDeckUploadE2e(): Promise<CustomDeckUploadEvidence
     cleanup.push("backend and gateway stopped");
     rmSync(runtimeRoot, { recursive: true, force: true });
     cleanup.push("temporary staging, snapshots, and promoted assets removed");
+    await deleteHarnessStateRows(
+      join(runtimeRoot, "private.json"),
+      join(runtimeRoot, "projection.json"),
+    );
   }
 
   if (evidence === null) throw new Error("custom deck E2E completed without evidence");
@@ -1031,4 +1036,46 @@ export async function runCustomDeckUploadE2e(): Promise<CustomDeckUploadEvidence
   await Bun.write(actionLogPath, `${JSON.stringify(complete, null, 2)}\n`);
   await runCommand([resolve("node_modules/.bin/biome"), "format", "--write", actionLogPath]);
   return complete;
+}
+
+/**
+ * Service state is persisted in PostgreSQL keyed by these strings, so removing the temporary
+ * directory is a no-op for them. Delete this run's own rows so abandoned snapshots do not
+ * accumulate in the shared test databases. Best effort: a failed cleanup must not mask the
+ * harness result, and the key is unique per run (mkdtemp) so it can never leak into another run.
+ */
+async function deleteHarnessStateRows(
+  privateStateKey: string,
+  projectionStateKey: string,
+): Promise<void> {
+  const targets: readonly { readonly url: string; readonly key: string; readonly table: string }[] =
+    [
+      {
+        url: globalThis.process.env.PRIVATE_DATABASE_URL ?? "",
+        key: privateStateKey,
+        table: "private_app.prepared_evidence_state",
+      },
+      {
+        url: globalThis.process.env.PROJECTION_DATABASE_URL ?? "",
+        key: projectionStateKey,
+        table: "public_projection.gateway_state",
+      },
+    ];
+  for (const target of targets) {
+    if (target.url.length === 0) continue;
+    try {
+      const sql = new SQL(target.url);
+      try {
+        if (target.table === "private_app.prepared_evidence_state") {
+          await sql`DELETE FROM private_app.prepared_evidence_state WHERE state_key = ${target.key}`;
+        } else {
+          await sql`DELETE FROM public_projection.gateway_state WHERE state_key = ${target.key}`;
+        }
+      } finally {
+        await sql.close({ timeout: 1 }).catch(() => undefined);
+      }
+    } catch {
+      // Leave the row; it is unreachable for other runs because the key is unique per run.
+    }
+  }
 }

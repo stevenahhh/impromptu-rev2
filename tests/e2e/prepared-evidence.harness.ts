@@ -1007,5 +1007,58 @@ async function runPreparedEvidenceE2EWithWorkspace({
     rmSync(profilePath, { force: true, recursive: true });
     rmSync(privateSnapshotPath, { force: true });
     rmSync(projectionDatabasePath, { force: true });
+    await deleteHarnessStateRows(privateSnapshotPath, projectionDatabasePath);
+  }
+}
+
+/**
+ * Service state is persisted in PostgreSQL keyed by these strings, so removing the legacy file
+ * paths is a no-op. Delete this run's own rows so abandoned snapshots do not accumulate in the
+ * shared test databases. Best effort: a failed cleanup must not mask the harness result, and the
+ * key is unique per run (pid-suffixed) so it can never leak into another run.
+ */
+async function deleteHarnessStateRows(
+  privateStateKey: string,
+  projectionStateKey: string,
+): Promise<void> {
+  const targets: readonly { readonly url: string; readonly key: string; readonly table: string }[] =
+    [
+      {
+        url: globalThis.process.env.PRIVATE_DATABASE_URL ?? "",
+        key: privateStateKey,
+        table: "private_app.prepared_evidence_state",
+      },
+      {
+        url: globalThis.process.env.PROJECTION_DATABASE_URL ?? "",
+        key: projectionStateKey,
+        table: "public_projection.gateway_state",
+      },
+    ];
+  // This harness also runs under `node --experimental-strip-types`, so the delete is delegated to
+  // a short-lived `bun -e` process instead of importing Bun's SQL client directly.
+  const script =
+    "const sql = new Bun.SQL(Bun.argv[1]); const key = Bun.argv[3];" +
+    "if (Bun.argv[2].startsWith('private_app')) " +
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: template literal executed by `bun -e`
+    "await sql`DELETE FROM private_app.prepared_evidence_state WHERE state_key = ${key}`;" +
+    "else " +
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: template literal executed by `bun -e`
+    "await sql`DELETE FROM public_projection.gateway_state WHERE state_key = ${key}`;" +
+    "await sql.close({ timeout: 1 });";
+  for (const target of targets) {
+    if (target.url.length === 0) continue;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const child = spawn("bun", ["-e", script, target.url, target.table, target.key], {
+          stdio: "ignore",
+        });
+        child.once("exit", (code) =>
+          code === 0 ? resolve() : reject(new Error(`state row cleanup exited ${code}`)),
+        );
+        child.once("error", reject);
+      });
+    } catch {
+      // Leave the row; it is unreachable for other runs because the key is unique per run.
+    }
   }
 }
