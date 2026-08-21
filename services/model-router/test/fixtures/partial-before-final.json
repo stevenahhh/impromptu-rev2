@@ -1,0 +1,42 @@
+{
+  "events": [
+    {
+      "kind": "PARTIAL",
+      "sessionGeneration": 1,
+      "sequence": 0,
+      "segmentId": "segment-1",
+      "transcript": {
+        "text": "안녕",
+        "language": "ko-KR",
+        "durationMs": 240,
+        "words": [{ "text": "안녕", "startMs": 20, "endMs": 220 }]
+      }
+    },
+    {
+      "kind": "REPLACE",
+      "sessionGeneration": 1,
+      "sequence": 1,
+      "segmentId": "segment-1",
+      "replacesSequence": 0,
+      "transcript": {
+        "text": "안녕하세요",
+        "language": "ko-KR",
+        "durationMs": 460,
+        "words": [{ "text": "안녕하세요", "startMs": 20, "endMs": 440 }]
+      }
+    },
+    {
+      "kind": "FINAL",
+      "sessionGeneration": 1,
+      "sequence": 2,
+      "segmentId": "segment-1",
+      "finalSegmentId": "final-segment-1",
+      "transcript": {
+        "text": "안녕하세요",
+        "language": "ko-KR",
+        "durationMs": 460,
+        "words": [{ "text": "안녕하세요", "startMs": 20, "endMs": 440 }]
+      }
+    }
+  ]
+}

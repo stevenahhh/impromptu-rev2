@@ -36,12 +36,16 @@ export async function* transcribe(chunks) {
   let sequence = 0;
   for await (const chunk of chunks) {
     yield {
-      kind: chunk.sequence === 0 ? "partial" : "final",
+      kind: chunk.sequence === 0 ? "PARTIAL" : "FINAL",
+      sessionGeneration: 1,
       sequence,
+      segmentId: "isolated-segment-1",
+      ...(chunk.sequence === 0 ? {} : { finalSegmentId: "isolated-final-segment-1" }),
       transcript: {
         text: `chunk-${chunk.sequence}`,
         language: "ko",
         durationMs: chunk.sequence * 100,
+        words: [],
       },
     };
     sequence += 1;

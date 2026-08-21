@@ -411,7 +411,16 @@ describe("dispatch policy gates", () => {
     registry.registerDeterministicFakeStreamingStt(
       createScriptedSttAdapter({
         transcript,
-        events: [{ kind: "final", sequence: 0, transcript }],
+        events: [
+          {
+            kind: "FINAL",
+            sessionGeneration: 1,
+            sequence: 0,
+            segmentId: "segment-policy",
+            finalSegmentId: "final-policy",
+            transcript: { ...transcript, words: [] },
+          },
+        ],
       }),
     );
     const router = new ServerModelRouter(routerOptions(registry, time, gates));

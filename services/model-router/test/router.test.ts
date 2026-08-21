@@ -595,8 +595,21 @@ describe("server model router", () => {
       createScriptedSttAdapter({
         transcript,
         events: [
-          { kind: "partial", sequence: 0, transcript: { ...transcript, text: "확" } },
-          { kind: "final", sequence: 1, transcript },
+          {
+            kind: "PARTIAL",
+            sessionGeneration: 1,
+            sequence: 0,
+            segmentId: "segment-stream",
+            transcript: { ...transcript, text: "확", words: [] },
+          },
+          {
+            kind: "FINAL",
+            sessionGeneration: 1,
+            sequence: 1,
+            segmentId: "segment-stream",
+            finalSegmentId: "final-stream",
+            transcript: { ...transcript, words: [] },
+          },
         ],
       }),
     );
@@ -621,7 +634,16 @@ describe("server model router", () => {
     registry.registerDeterministicFakeStreamingStt(
       createScriptedSttAdapter({
         transcript,
-        events: [{ kind: "final", sequence: 0, transcript }],
+        events: [
+          {
+            kind: "FINAL",
+            sessionGeneration: 1,
+            sequence: 0,
+            segmentId: "segment-replayed-audio",
+            finalSegmentId: "final-replayed-audio",
+            transcript: { ...transcript, words: [] },
+          },
+        ],
       }),
     );
     const router = createRouter(registry, time);
@@ -644,12 +666,16 @@ describe("server model router", () => {
     const time = new ManualTime();
     const registry = new ModelRoutingRegistry();
     const event = {
-      kind: "final" as const,
+      kind: "FINAL" as const,
+      sessionGeneration: 1,
       sequence: 0,
+      segmentId: "segment-permissive",
+      finalSegmentId: "final-permissive",
       transcript: {
         text: "smuggled",
         language: "ko",
         durationMs: 50,
+        words: [],
         unexpected: "must fail",
       },
     };
@@ -685,7 +711,15 @@ describe("server model router", () => {
     const adapter = createScriptedSttAdapter({
       adapterId: "cleanup-stt",
       transcript,
-      events: [{ kind: "partial", sequence: 0, transcript }],
+      events: [
+        {
+          kind: "PARTIAL",
+          sessionGeneration: 1,
+          sequence: 0,
+          segmentId: "segment-cleanup",
+          transcript: { ...transcript, words: [] },
+        },
+      ],
       pendingAfterEvents: true,
       onEvent: signalPartialProduced,
     });
@@ -713,7 +747,16 @@ describe("server model router", () => {
     registry.registerDeterministicFakeStreamingStt(
       createScriptedSttAdapter({
         transcript,
-        events: [{ kind: "final", sequence: 0, transcript }],
+        events: [
+          {
+            kind: "FINAL",
+            sessionGeneration: 1,
+            sequence: 0,
+            segmentId: "segment-cancellation",
+            finalSegmentId: "final-cancellation",
+            transcript: { ...transcript, words: [] },
+          },
+        ],
       }),
     );
     let signalNextStarted: () => void = () => undefined;
@@ -762,8 +805,21 @@ describe("server model router", () => {
       createScriptedSttAdapter({
         transcript,
         events: [
-          { kind: "partial", sequence: 0, transcript: { ...transcript, text: "part" } },
-          { kind: "final", sequence: 1, transcript },
+          {
+            kind: "PARTIAL",
+            sessionGeneration: 1,
+            sequence: 0,
+            segmentId: "segment-terminal",
+            transcript: { ...transcript, text: "part", words: [] },
+          },
+          {
+            kind: "FINAL",
+            sessionGeneration: 1,
+            sequence: 1,
+            segmentId: "segment-terminal",
+            finalSegmentId: "final-terminal",
+            transcript: { ...transcript, words: [] },
+          },
         ],
       }),
     );

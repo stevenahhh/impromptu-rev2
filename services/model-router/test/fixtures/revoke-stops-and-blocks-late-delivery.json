@@ -1,0 +1,137 @@
+{
+  "scenarios": [
+    {
+      "name": "post-abort late event",
+      "accepted": [
+        {
+          "kind": "PARTIAL",
+          "sessionGeneration": 7,
+          "sequence": 0,
+          "segmentId": "segment-revoked",
+          "transcript": {
+            "text": "취소 전",
+            "language": "ko-KR",
+            "durationMs": 100,
+            "words": []
+          }
+        },
+        {
+          "kind": "ABORT",
+          "sessionGeneration": 7,
+          "sequence": 1,
+          "segmentId": "segment-revoked"
+        }
+      ],
+      "rejected": {
+        "kind": "FINAL",
+        "sessionGeneration": 7,
+        "sequence": 2,
+        "segmentId": "segment-revoked",
+        "finalSegmentId": "late-final",
+        "transcript": {
+          "text": "늦은 확정",
+          "language": "ko-KR",
+          "durationMs": 200,
+          "words": []
+        }
+      },
+      "expectedCode": "POST_ABORT_EVENT"
+    },
+    {
+      "name": "duplicate final",
+      "accepted": [
+        {
+          "kind": "FINAL",
+          "sessionGeneration": 8,
+          "sequence": 0,
+          "segmentId": "segment-final",
+          "finalSegmentId": "final-segment-8",
+          "transcript": {
+            "text": "확정",
+            "language": "ko-KR",
+            "durationMs": 200,
+            "words": []
+          }
+        }
+      ],
+      "rejected": {
+        "kind": "FINAL",
+        "sessionGeneration": 8,
+        "sequence": 1,
+        "segmentId": "segment-final",
+        "finalSegmentId": "final-segment-8-duplicate",
+        "transcript": {
+          "text": "중복 확정",
+          "language": "ko-KR",
+          "durationMs": 220,
+          "words": []
+        }
+      },
+      "expectedCode": "DUPLICATE_FINAL"
+    },
+    {
+      "name": "post-final replacement",
+      "accepted": [
+        {
+          "kind": "FINAL",
+          "sessionGeneration": 9,
+          "sequence": 0,
+          "segmentId": "segment-closed",
+          "finalSegmentId": "final-segment-9",
+          "transcript": {
+            "text": "종료",
+            "language": "ko-KR",
+            "durationMs": 200,
+            "words": []
+          }
+        }
+      ],
+      "rejected": {
+        "kind": "REPLACE",
+        "sessionGeneration": 9,
+        "sequence": 1,
+        "segmentId": "segment-closed",
+        "replacesSequence": 0,
+        "transcript": {
+          "text": "종료 수정",
+          "language": "ko-KR",
+          "durationMs": 220,
+          "words": []
+        }
+      },
+      "expectedCode": "POST_FINAL_EVENT"
+    },
+    {
+      "name": "reused final segment identity",
+      "accepted": [
+        {
+          "kind": "FINAL",
+          "sessionGeneration": 10,
+          "sequence": 0,
+          "segmentId": "segment-first",
+          "finalSegmentId": "final-segment-shared",
+          "transcript": {
+            "text": "첫 확정",
+            "language": "ko-KR",
+            "durationMs": 200,
+            "words": []
+          }
+        }
+      ],
+      "rejected": {
+        "kind": "FINAL",
+        "sessionGeneration": 10,
+        "sequence": 1,
+        "segmentId": "segment-second",
+        "finalSegmentId": "final-segment-shared",
+        "transcript": {
+          "text": "두 번째 확정",
+          "language": "ko-KR",
+          "durationMs": 220,
+          "words": []
+        }
+      },
+      "expectedCode": "DUPLICATE_FINAL_SEGMENT_ID"
+    }
+  ]
+}

@@ -200,8 +200,21 @@ describe("deterministic fake adapters", () => {
     const adapter = createScriptedSttAdapter({
       transcript,
       events: [
-        { kind: "partial", sequence: 0, transcript: { ...transcript, text: "안녕" } },
-        { kind: "final", sequence: 1, transcript },
+        {
+          kind: "PARTIAL",
+          sessionGeneration: 1,
+          sequence: 0,
+          segmentId: "segment-1",
+          transcript: { ...transcript, text: "안녕", words: [] },
+        },
+        {
+          kind: "FINAL",
+          sessionGeneration: 1,
+          sequence: 1,
+          segmentId: "segment-1",
+          finalSegmentId: "final-segment-1",
+          transcript: { ...transcript, words: [] },
+        },
       ],
     });
     const context = createTrustedModelContext(trustedContextInput);
@@ -209,7 +222,11 @@ describe("deterministic fake adapters", () => {
 
     await expect(
       adapter.invoke(
-        { audio: new Uint8Array([1, 2]), encoding: "pcm-s16le", sampleRateHz: 16_000 },
+        {
+          audio: new Uint8Array([1, 2]),
+          encoding: "audio/webm;codecs=opus",
+          sampleRateHz: 16_000,
+        },
         invocation,
       ),
     ).resolves.toEqual(transcript);
@@ -219,8 +236,21 @@ describe("deterministic fake adapters", () => {
       events.push(event);
     }
     expect(events).toEqual([
-      { kind: "partial", sequence: 0, transcript: { ...transcript, text: "안녕" } },
-      { kind: "final", sequence: 1, transcript },
+      {
+        kind: "PARTIAL",
+        sessionGeneration: 1,
+        sequence: 0,
+        segmentId: "segment-1",
+        transcript: { ...transcript, text: "안녕", words: [] },
+      },
+      {
+        kind: "FINAL",
+        sessionGeneration: 1,
+        sequence: 1,
+        segmentId: "segment-1",
+        finalSegmentId: "final-segment-1",
+        transcript: { ...transcript, words: [] },
+      },
     ]);
     expect(sttTranscriptSchema.parse(transcript)).toEqual(transcript);
   });

@@ -1,7 +1,28 @@
+import {
+  type SttStreamEvent as ContractSttStreamEvent,
+  createSttStreamEventValidator,
+  STT_AUDIO_MIME_TYPE,
+  STT_STREAM_EVENT_KINDS,
+  STT_STREAM_PROTOCOL_ERROR_CODES,
+  SttStreamEventSchema,
+  SttStreamProtocolError,
+  type SttStreamProtocolErrorCode,
+  type SttStreamTranscript,
+  type SttWordTimestamp,
+} from "@impromptu/contracts/private";
 import { z } from "zod";
 import type { ModelInvocationContext, Schema, UnaryModelAdapter } from "./ports.ts";
 
-export const audioEncodingSchema = z.enum(["pcm-s16le", "webm-opus", "ogg-opus"]);
+export {
+  STT_AUDIO_MIME_TYPE,
+  STT_STREAM_EVENT_KINDS,
+  STT_STREAM_PROTOCOL_ERROR_CODES,
+  SttStreamProtocolError,
+  createSttStreamEventValidator,
+};
+export type { SttStreamProtocolErrorCode, SttStreamTranscript, SttWordTimestamp };
+
+export const audioEncodingSchema = z.literal(STT_AUDIO_MIME_TYPE);
 export type AudioEncoding = z.infer<typeof audioEncodingSchema>;
 
 export const sttTranscriptSchema = z
@@ -30,14 +51,8 @@ export const sttAudioChunkSchema = z
   .strict();
 export type SttAudioChunk = z.infer<typeof sttAudioChunkSchema>;
 
-export const sttStreamEventSchema = z
-  .object({
-    kind: z.enum(["partial", "final"]),
-    sequence: z.number().int().nonnegative(),
-    transcript: sttTranscriptSchema,
-  })
-  .strict();
-export type SttStreamEvent = z.infer<typeof sttStreamEventSchema>;
+export const sttStreamEventSchema = SttStreamEventSchema;
+export type SttStreamEvent = ContractSttStreamEvent;
 
 export interface UnarySttAdapter extends UnaryModelAdapter<SttTranscriptionInput, SttTranscript> {
   readonly descriptor: UnaryModelAdapter<SttTranscriptionInput, SttTranscript>["descriptor"] & {
