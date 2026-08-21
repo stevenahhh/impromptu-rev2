@@ -1,0 +1,288 @@
+{
+  "command": "python3 scripts/verify-five-private-presentation-features.py",
+  "exitCode": 1,
+  "scenarios": [
+    {
+      "name": "positive-korean-text-layer.pdf",
+      "command": "Console upload + fake-device WebM capture + private HTTP recommendation",
+      "exitCode": 1,
+      "verdict": "FAIL",
+      "assertions": [
+        "upload-201",
+        "fake-device-webm-final",
+        "hybrid-rrf-recommend",
+        "opt-in-coaching"
+      ],
+      "detail": "hybrid retrieval did not recommend: {\"outcome\":\"ABSTAIN\",\"reason\":\"DETERMINISTIC_MISMATCH\",\"completedAtMs\":1787341801928,\"latencyMs\":3051}",
+      "stepLatencyMs": {
+        "sign-in": 1363,
+        "upload": 546,
+        "capture-final": 1775,
+        "recommendation": 3177
+      },
+      "diagnostics": {
+        "failedStep": "recommendation",
+        "presentationSessionId": "ps_c10978e72887f411052e0c85e0cdd6da",
+        "deckVersion": "deck_34eac2a55addb409359febc4ec28e911f10c719abd28ce7b427421ab9a985c86",
+        "finalKind": "FINAL",
+        "finalSequence": 1,
+        "transcriptCharacters": 6,
+        "transcriptWordCount": 1,
+        "transcriptDurationMs": 960,
+        "recommendationStatus": 200,
+        "recommendationOutcome": "ABSTAIN",
+        "recommendationReason": "DETERMINISTIC_MISMATCH",
+        "recommendationLatencyMs": 3051,
+        "recommendationEvidenceCount": 0,
+        "recommendationResponseBody": {
+          "outcome": "ABSTAIN",
+          "reason": "DETERMINISTIC_MISMATCH",
+          "completedAtMs": 1787341801928,
+          "latencyMs": 3051
+        }
+      }
+    },
+    {
+      "name": "positive-korean-structural.pptx",
+      "command": "Console upload + fake-device WebM capture + private HTTP recommendation",
+      "exitCode": 1,
+      "verdict": "FAIL",
+      "assertions": [
+        "upload-201",
+        "fake-device-webm-final",
+        "hybrid-rrf-recommend",
+        "opt-in-coaching"
+      ],
+      "detail": "hybrid retrieval did not recommend: {\"outcome\":\"ABSTAIN\",\"reason\":\"DETERMINISTIC_MISMATCH\",\"completedAtMs\":1787341808277,\"latencyMs\":2280}",
+      "stepLatencyMs": {
+        "sign-in": 544,
+        "upload": 1576,
+        "capture-final": 1778,
+        "recommendation": 2410
+      },
+      "diagnostics": {
+        "failedStep": "recommendation",
+        "presentationSessionId": "ps_b8e96708b399b7941b118d64683a0624",
+        "deckVersion": "deck_a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d",
+        "finalKind": "FINAL",
+        "finalSequence": 1,
+        "transcriptCharacters": 7,
+        "transcriptWordCount": 1,
+        "transcriptDurationMs": 960,
+        "recommendationStatus": 200,
+        "recommendationOutcome": "ABSTAIN",
+        "recommendationReason": "DETERMINISTIC_MISMATCH",
+        "recommendationLatencyMs": 2280,
+        "recommendationEvidenceCount": 0,
+        "recommendationResponseBody": {
+          "outcome": "ABSTAIN",
+          "reason": "DETERMINISTIC_MISMATCH",
+          "completedAtMs": 1787341808277,
+          "latencyMs": 2280
+        }
+      }
+    },
+    {
+      "name": "negative-mic-denied-audio-request-zero",
+      "command": "Console denied getUserMedia + request observer",
+      "exitCode": 0,
+      "verdict": "PASS",
+      "assertions": [
+        "audio-request-count=0"
+      ]
+    },
+    {
+      "name": "negative-external-429-internal-only",
+      "command": "bun test services/private-backend/test/recommendation-pipeline.test.ts",
+      "exitCode": 0,
+      "verdict": "PASS",
+      "assertions": [
+        "HTTP_429 retains internal RECOMMEND"
+      ]
+    },
+    {
+      "name": "negative-stage-snapshot-cards-zero",
+      "command": "bun test tests/security/release-security.test.ts",
+      "exitCode": 0,
+      "verdict": "PASS",
+      "assertions": [
+        "snapshot cards=0"
+      ]
+    },
+    {
+      "name": "negative-stage-sse-cards-zero",
+      "command": "bun test services/projection-gateway/test/prepared-evidence.test.ts",
+      "exitCode": 0,
+      "verdict": "PASS",
+      "assertions": [
+        "SSE CARD dropped"
+      ]
+    },
+    {
+      "name": "negative-stage-ws-cards-zero",
+      "command": "bun test apps/stage/src/stage-client.test.ts",
+      "exitCode": 0,
+      "verdict": "PASS",
+      "assertions": [
+        "WS CARD dropped"
+      ]
+    },
+    {
+      "name": "negative-aba-reload-dwell-identical",
+      "command": "bun test services/private-backend/test/session-report-finalizer.test.ts",
+      "exitCode": 0,
+      "verdict": "PASS",
+      "assertions": [
+        "A-B-A report dwell byte-equivalent after reload"
+      ]
+    },
+    {
+      "name": "stt-partial-before-final",
+      "command": "bun test services/private-backend/test/stt-whisper-cpp.test.ts",
+      "exitCode": 0,
+      "verdict": "PASS",
+      "assertions": [
+        "PARTIAL precedes exactly-one FINAL"
+      ]
+    },
+    {
+      "name": "stt-revoke-stops-and-blocks-late-delivery",
+      "command": "bun test services/private-backend/test/audio-ingest-http.test.ts",
+      "exitCode": 0,
+      "verdict": "PASS",
+      "assertions": [
+        "revoke terminal blocks late delivery"
+      ]
+    }
+  ],
+  "positive": "0/2",
+  "negative": "6/6",
+  "stt": "2/2",
+  "models": {
+    "RERANK_MODEL": "deepseek-v4-flash",
+    "LLM_MODEL": "deepseek-v4-flash",
+    "VERIFIER_MODEL": "qwen3.6-plus"
+  },
+  "recommendationStageLatencyMs": [
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 159,
+      "timestampMs": 1787341797254
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 137,
+      "timestampMs": 1787341798891
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 125,
+      "timestampMs": 1787341799003
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1228,
+      "timestampMs": 1787341799404
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1731,
+      "timestampMs": 1787341799908
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 776,
+      "timestampMs": 1787341800224
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1456,
+      "timestampMs": 1787341800904
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1210,
+      "timestampMs": 1787341801109
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 2029,
+      "timestampMs": 1787341801928
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 138,
+      "timestampMs": 1787341804277
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 139,
+      "timestampMs": 1787341806010
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1091,
+      "timestampMs": 1787341806010
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1091,
+      "timestampMs": 1787341806010
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 122,
+      "timestampMs": 1787341806120
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 823,
+      "timestampMs": 1787341807556
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 901,
+      "timestampMs": 1787341807556
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1621,
+      "timestampMs": 1787341808277
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1846,
+      "timestampMs": 1787341808579
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 137,
+      "timestampMs": 1787341809671
+    },
+    {
+      "stage": "verifier",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 1794,
+      "timestampMs": 1787341810373
+    }
+  ]
+}

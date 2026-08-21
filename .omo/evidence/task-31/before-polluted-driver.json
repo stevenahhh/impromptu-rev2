@@ -1,0 +1,280 @@
+{
+  "stateKey": "five-features-acceptance-private",
+  "models": {
+    "RERANK_MODEL": "deepseek-v4-flash",
+    "LLM_MODEL": "deepseek-v4-flash",
+    "VERIFIER_MODEL": "qwen3.6-plus"
+  },
+  "results": [
+    {
+      "run": 1,
+      "status": 200,
+      "outcome": "ABSTAIN",
+      "reason": "DETERMINISTIC_MISMATCH",
+      "pipelineLatencyMs": 3452,
+      "roundTripMs": 3453,
+      "retrievalGapMs": 1032,
+      "stages": [
+        {
+          "stage": "embedding",
+          "outcome": "SUCCESS",
+          "durationMs": 159
+        },
+        {
+          "stage": "llm",
+          "outcome": "SUCCESS",
+          "durationMs": 2234
+        },
+        {
+          "stage": "rerank",
+          "outcome": "SUCCESS",
+          "durationMs": 2258
+        }
+      ]
+    },
+    {
+      "run": 2,
+      "status": 200,
+      "outcome": "ABSTAIN",
+      "reason": "DETERMINISTIC_MISMATCH",
+      "pipelineLatencyMs": 2223,
+      "roundTripMs": 2225,
+      "retrievalGapMs": 620,
+      "stages": [
+        {
+          "stage": "embedding",
+          "outcome": "SUCCESS",
+          "durationMs": 169
+        },
+        {
+          "stage": "llm",
+          "outcome": "SUCCESS",
+          "durationMs": 1228
+        },
+        {
+          "stage": "rerank",
+          "outcome": "SUCCESS",
+          "durationMs": 1433
+        }
+      ]
+    },
+    {
+      "run": 3,
+      "status": 200,
+      "outcome": "ABSTAIN",
+      "reason": "DETERMINISTIC_MISMATCH",
+      "pipelineLatencyMs": 1789,
+      "roundTripMs": 1792,
+      "retrievalGapMs": -1614,
+      "stages": [
+        {
+          "stage": "rerank",
+          "outcome": "SUCCESS",
+          "durationMs": 1433
+        },
+        {
+          "stage": "embedding",
+          "outcome": "SUCCESS",
+          "durationMs": 178
+        },
+        {
+          "stage": "rerank",
+          "outcome": "SUCCESS",
+          "durationMs": 922
+        },
+        {
+          "stage": "llm",
+          "outcome": "SUCCESS",
+          "durationMs": 973
+        }
+      ]
+    },
+    {
+      "run": 4,
+      "status": 200,
+      "outcome": "ABSTAIN",
+      "reason": "DETERMINISTIC_MISMATCH",
+      "pipelineLatencyMs": 2199,
+      "roundTripMs": 2201,
+      "retrievalGapMs": 611,
+      "stages": [
+        {
+          "stage": "embedding",
+          "outcome": "SUCCESS",
+          "durationMs": 177
+        },
+        {
+          "stage": "rerank",
+          "outcome": "SUCCESS",
+          "durationMs": 898
+        },
+        {
+          "stage": "llm",
+          "outcome": "SUCCESS",
+          "durationMs": 1410
+        }
+      ]
+    },
+    {
+      "run": 5,
+      "status": 200,
+      "outcome": "ABSTAIN",
+      "reason": "DETERMINISTIC_MISMATCH",
+      "pipelineLatencyMs": 3787,
+      "roundTripMs": 3789,
+      "retrievalGapMs": 639,
+      "stages": [
+        {
+          "stage": "embedding",
+          "outcome": "SUCCESS",
+          "durationMs": 177
+        },
+        {
+          "stage": "rerank",
+          "outcome": "SUCCESS",
+          "durationMs": 1024
+        },
+        {
+          "stage": "llm",
+          "outcome": "SUCCESS",
+          "durationMs": 2970
+        }
+      ]
+    },
+    {
+      "run": 6,
+      "status": 200,
+      "outcome": "ABSTAIN",
+      "reason": "DETERMINISTIC_MISMATCH",
+      "pipelineLatencyMs": 2147,
+      "roundTripMs": 2150,
+      "retrievalGapMs": 661,
+      "stages": [
+        {
+          "stage": "llm",
+          "outcome": "SUCCESS",
+          "durationMs": 2970
+        },
+        {
+          "stage": "embedding",
+          "outcome": "SUCCESS",
+          "durationMs": 173
+        },
+        {
+          "stage": "rerank",
+          "outcome": "SUCCESS",
+          "durationMs": 902
+        },
+        {
+          "stage": "llm",
+          "outcome": "SUCCESS",
+          "durationMs": 1312
+        }
+      ]
+    },
+    {
+      "run": 7,
+      "status": 200,
+      "outcome": "ABSTAIN",
+      "reason": "DEADLINE_EXCEEDED",
+      "pipelineLatencyMs": 5000,
+      "roundTripMs": 4505,
+      "retrievalGapMs": 635,
+      "stages": [
+        {
+          "stage": "embedding",
+          "outcome": "SUCCESS",
+          "durationMs": 181
+        },
+        {
+          "stage": "rerank",
+          "outcome": "SUCCESS",
+          "durationMs": 1332
+        }
+      ]
+    },
+    {
+      "run": 8,
+      "status": 200,
+      "outcome": "ABSTAIN",
+      "reason": "DEADLINE_EXCEEDED",
+      "pipelineLatencyMs": 5000,
+      "roundTripMs": 4506,
+      "retrievalGapMs": 769,
+      "stages": [
+        {
+          "stage": "llm",
+          "outcome": "FAILED:cancelled",
+          "durationMs": 3692
+        },
+        {
+          "stage": "embedding",
+          "outcome": "SUCCESS",
+          "durationMs": 177
+        },
+        {
+          "stage": "rerank",
+          "outcome": "SUCCESS",
+          "durationMs": 893
+        }
+      ]
+    },
+    {
+      "run": 9,
+      "status": 200,
+      "outcome": "ABSTAIN",
+      "reason": "DEADLINE_EXCEEDED",
+      "pipelineLatencyMs": 5000,
+      "roundTripMs": 4505,
+      "retrievalGapMs": null,
+      "stages": [
+        {
+          "stage": "llm",
+          "outcome": "FAILED:cancelled",
+          "durationMs": 3563
+        },
+        {
+          "stage": "embedding",
+          "outcome": "SUCCESS",
+          "durationMs": 174
+        },
+        {
+          "stage": "llm",
+          "outcome": "SUCCESS",
+          "durationMs": 2107
+        }
+      ]
+    },
+    {
+      "run": 10,
+      "status": 200,
+      "outcome": "ABSTAIN",
+      "reason": "DETERMINISTIC_MISMATCH",
+      "pipelineLatencyMs": 2046,
+      "roundTripMs": 2048,
+      "retrievalGapMs": -3868,
+      "stages": [
+        {
+          "stage": "rerank",
+          "outcome": "FAILED:cancelled",
+          "durationMs": 3690
+        },
+        {
+          "stage": "embedding",
+          "outcome": "SUCCESS",
+          "durationMs": 177
+        },
+        {
+          "stage": "llm",
+          "outcome": "SUCCESS",
+          "durationMs": 1025
+        },
+        {
+          "stage": "rerank",
+          "outcome": "SUCCESS",
+          "durationMs": 1329
+        }
+      ]
+    }
+  ]
+}

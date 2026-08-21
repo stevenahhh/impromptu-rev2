@@ -15,6 +15,7 @@ import socket
 import subprocess
 import sys
 import threading
+import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -132,6 +133,13 @@ def available_port() -> int:
 def main() -> int:
     EVIDENCE.mkdir(parents=True, exist_ok=True)
     private_port, projection_port, console_port, stage_port = (available_port() for _ in range(4))
+    # Coordinator and gateway state live in PostgreSQL keyed by these strings, so each run gets a
+    # unique key: a fixed key restored every previous run's presentations and grew the persisted
+    # snapshot without bound (the same pollution class that broke the WP5 command-latency SLA).
+    # The runner deletes this run's own rows in its finally block.
+    state_nonce = uuid.uuid4().hex[:16]
+    private_state_key = f"five-features-{state_nonce}-private"
+    projection_state_key = f"five-features-{state_nonce}-projection"
     console_origin = f"http://localhost:{console_port}"
     stage_origin = f"http://localhost:{stage_port}"
     private_origin = f"http://127.0.0.1:{private_port}"
@@ -171,11 +179,13 @@ def main() -> int:
             # E2E uses the CI role; private_app lacks prepared_evidence_state privileges.
             "PRIVATE_DATABASE_URL": "postgresql://impromptu_bootstrap@127.0.0.1:5432/impromptu_private",
             "PRIVATE_BACKEND_PORT": str(private_port),
-            "PRIVATE_PREPARED_EVIDENCE_STATE_KEY": "five-features-acceptance-private",
+            "PRIVATE_PREPARED_EVIDENCE_STATE_KEY": private_state_key,
             "PROJECTION_GATEWAY_ORIGIN": projection_origin,
             "PROJECTION_GATEWAY_PORT": str(projection_port),
             "PROJECTION_DATABASE_URL": "postgresql://impromptu_bootstrap@127.0.0.1:5432/impromptu_projection",
-            "PROJECTION_GATEWAY_STATE_KEY": "five-features-acceptance-projection",
+            "PROJECTION_GATEWAY_STATE_KEY": projection_state_key,
+            "FIVE_FEATURES_PRIVATE_STATE_KEY": private_state_key,
+            "FIVE_FEATURES_PROJECTION_STATE_KEY": projection_state_key,
             "PRIVATE_BACKEND_ORIGIN": private_origin,
             "STAGE_ORIGIN": stage_origin,
             "SERVICE_AUTH_TOKEN": "five-features-acceptance-token",
