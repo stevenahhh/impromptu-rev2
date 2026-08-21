@@ -16,6 +16,14 @@ FROM private_app.presentation_sessions \gset
   \quit 1
 \endif
 
+SELECT (count(*) = 0)::integer AS retrieval_missing_context_is_empty
+FROM private_app.deck_retrieval_chunks \gset
+\if :retrieval_missing_context_is_empty
+\else
+  \echo 'deck retrieval rows were visible without a tenant context'
+  \quit 1
+\endif
+
 BEGIN;
 SET LOCAL app.tenant_id = '10000000-0000-4000-8000-000000000001';
 SELECT (
@@ -27,6 +35,19 @@ FROM private_app.presentation_sessions \gset
 \if :tenant_a_isolated
 \else
   \echo 'tenant A did not receive exactly its own session'
+  \quit 1
+\endif
+
+SELECT (
+  count(*) = 1
+  AND bool_and(tenant_id = '10000000-0000-4000-8000-000000000001')
+  AND bool_and(object_id = 'tenant-a-retrieval-chunk')
+  AND bool_and(search_vector @@ plainto_tsquery('simple', 'alpha retrieval'))
+)::integer AS tenant_a_retrieval_isolated
+FROM private_app.deck_retrieval_chunks \gset
+\if :tenant_a_retrieval_isolated
+\else
+  \echo 'tenant A retrieval context exposed another tenant or FTS was unavailable'
   \quit 1
 \endif
 
@@ -55,6 +76,18 @@ FROM private_app.presentation_sessions \gset
 \if :tenant_b_isolated
 \else
   \echo 'tenant B data was missing or modified through tenant A'
+  \quit 1
+\endif
+
+SELECT (
+  count(*) = 1
+  AND bool_and(tenant_id = '20000000-0000-4000-8000-000000000002')
+  AND bool_and(object_id = 'tenant-b-retrieval-chunk')
+)::integer AS tenant_b_retrieval_isolated
+FROM private_app.deck_retrieval_chunks \gset
+\if :tenant_b_retrieval_isolated
+\else
+  \echo 'tenant B retrieval data was missing or modified through tenant A'
   \quit 1
 \endif
 COMMIT;

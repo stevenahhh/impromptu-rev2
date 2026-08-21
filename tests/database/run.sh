@@ -222,6 +222,9 @@ if [[ "$rerun_output" != *"SKIP private/0001_private_foundation.sql"* \
   || "$rerun_output" != *"SKIP private/0003_retention_cascade.sql"* \
   || "$rerun_output" != *"SKIP private/0004_accounts.sql"* \
   || "$rerun_output" != *"SKIP private/0005_prepared_evidence_state.sql"* \
+  || "$rerun_output" != *"SKIP private/0006_deck_retrieval_chunks.sql"* \
+  || "$rerun_output" != *"SKIP private/0007_embedding_dimension.sql"* \
+  || "$rerun_output" != *"SKIP private/0008_deck_retrieval_hybrid.sql"* \
   || "$rerun_output" != *"SKIP projection/0001_projection_foundation.sql"* \
   || "$rerun_output" != *"SKIP projection/0002_publication_inbox.sql"* \
   || "$rerun_output" != *"SKIP projection/0003_dispatcher_only_writes.sql"* \
@@ -257,6 +260,8 @@ run_real_dispatch() {
 PRIVATE_DATABASE_URL="$PRIVATE_DRIVER_URL" \
   PROJECTION_DATABASE_URL="$PROJECTION_DRIVER_URL" \
   bun run "$REPO_ROOT/tests/database/state-store-integration.ts"
+PRIVATE_DATABASE_URL="$PRIVATE_DRIVER_URL" \
+  bun run "$REPO_ROOT/tests/database/deck-retrieval-integration.ts"
 
 run_real_dispatch valid
 
@@ -373,6 +378,11 @@ expect_denied \
   "$PRIVATE_ROLE" "$PRIVATE_DATABASE" \
   "insert a tenant row without tenant context" \
   "INSERT INTO private_app.tenants (tenant_id, display_name) VALUES ('30000000-0000-4000-8000-000000000003', 'No context')" \
+  "violates row-level security policy"
+expect_denied \
+  "$PRIVATE_ROLE" "$PRIVATE_DATABASE" \
+  "insert a tenant B retrieval row while scoped to tenant A" \
+  "BEGIN; SET LOCAL app.tenant_id = '10000000-0000-4000-8000-000000000001'; INSERT INTO private_app.deck_retrieval_chunks (tenant_id, object_id, source_id, source_revision, source_hash, deck_version, manifest_hash, title, anchor, content, embedding, authorization_version) VALUES ('20000000-0000-4000-8000-000000000002', 'cross-tenant-retrieval', 'slide-cross', repeat('a', 64), repeat('b', 64), 'deck-cross', repeat('c', 64), 'Cross tenant', 'slide=1&chunk=1', 'cross tenant retrieval', array_fill(0.1::double precision, ARRAY[768]), 'acl-1'); COMMIT" \
   "violates row-level security policy"
 compose exec --no-TTY postgres sh -eu -c '
   pids=""

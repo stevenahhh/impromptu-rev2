@@ -37,9 +37,15 @@ SELECT pg_temp.assert_true(
 );
 SELECT pg_temp.assert_true(
   (
-    SELECT count(*) = 4
+    SELECT count(*) = 6
     FROM pg_policies
     WHERE schemaname = 'private_app'
+      AND tablename IN (
+        'tenants',
+        'presentation_sessions',
+        'evidence_candidates',
+        'publication_outbox'
+      )
       AND policyname = 'tenant_isolation'
       AND permissive = 'PERMISSIVE'
       AND roles = '{private_app}'
@@ -47,6 +53,32 @@ SELECT pg_temp.assert_true(
       AND with_check LIKE '%app.tenant_id%'
   ),
   'tenant-owned tables must have fail-closed read and write policies'
+);
+SELECT pg_temp.assert_true(
+  (
+    SELECT relrowsecurity AND relforcerowsecurity
+    FROM pg_class AS relation
+    JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+    WHERE namespace.nspname = 'private_app'
+      AND relation.relname = 'deck_retrieval_chunks'
+  ),
+  'deck retrieval chunks must force row-level security'
+);
+SELECT pg_temp.assert_true(
+  EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'private_app'
+      AND tablename = 'deck_retrieval_chunks'
+      AND policyname = 'tenant_isolation'
+      AND permissive = 'PERMISSIVE'
+      AND roles = '{private_app}'
+      AND qual LIKE '%app.tenant_id%'
+      AND qual NOT LIKE '%uuid%'
+      AND with_check LIKE '%app.tenant_id%'
+      AND with_check NOT LIKE '%uuid%'
+  ),
+  'text deck retrieval tenants must use a fail-closed text RLS policy'
 );
 SELECT pg_temp.assert_true(
   has_table_privilege(
@@ -115,7 +147,28 @@ SELECT pg_temp.assert_true(
 );
 SELECT pg_temp.assert_true(
   (
-    SELECT count(*) = 7
+    SELECT is_generated = 'ALWAYS' AND data_type = 'tsvector'
+    FROM information_schema.columns
+    WHERE table_schema = 'private_app'
+      AND table_name = 'deck_retrieval_chunks'
+      AND column_name = 'search_vector'
+  ),
+  'deck retrieval FTS must use a generated tsvector column'
+);
+SELECT pg_temp.assert_true(
+  EXISTS (
+    SELECT 1
+    FROM pg_indexes
+    WHERE schemaname = 'private_app'
+      AND tablename = 'deck_retrieval_chunks'
+      AND indexname = 'deck_retrieval_search_vector_idx'
+      AND indexdef LIKE '%USING gin (search_vector)%'
+  ),
+  'deck retrieval FTS must have a GIN index'
+);
+SELECT pg_temp.assert_true(
+  (
+    SELECT count(*) = 8
     FROM _migrations.applied_migrations
     WHERE migration_name IN (
       '0001_private_foundation.sql',
@@ -124,7 +177,8 @@ SELECT pg_temp.assert_true(
       '0004_accounts.sql',
       '0005_prepared_evidence_state.sql',
       '0006_deck_retrieval_chunks.sql',
-      '0007_embedding_dimension.sql'
+      '0007_embedding_dimension.sql',
+      '0008_deck_retrieval_hybrid.sql'
     )
       AND checksum ~ '^[0-9a-f]{64}$'
   ),

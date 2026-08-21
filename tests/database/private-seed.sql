@@ -84,6 +84,34 @@ VALUES
       "revision":11
     }'::jsonb
   );
+INSERT INTO private_app.deck_retrieval_chunks (
+  tenant_id,
+  object_id,
+  source_id,
+  source_revision,
+  source_hash,
+  deck_version,
+  manifest_hash,
+  title,
+  anchor,
+  content,
+  embedding,
+  authorization_version
+)
+VALUES (
+  '10000000-0000-4000-8000-000000000001',
+  'tenant-a-retrieval-chunk',
+  'slide-a',
+  repeat('a', 64),
+  repeat('b', 64),
+  'deck-tenant-a',
+  repeat('c', 64),
+  'Tenant A retrieval',
+  'slide=1&chunk=1',
+  'alpha retrieval canary',
+  array_fill(0.1::double precision, ARRAY[768]),
+  'acl-1'
+);
 COMMIT;
 
 BEGIN;
@@ -105,5 +133,33 @@ VALUES (
   3,
   'private-decks/tenant-b/deck.pptx',
   'PRIVATE_CANARY_TENANT_B'
+);
+INSERT INTO private_app.deck_retrieval_chunks (
+  tenant_id,
+  object_id,
+  source_id,
+  source_revision,
+  source_hash,
+  deck_version,
+  manifest_hash,
+  title,
+  anchor,
+  content,
+  embedding,
+  authorization_version
+)
+VALUES (
+  '20000000-0000-4000-8000-000000000002',
+  'tenant-b-retrieval-chunk',
+  'slide-b',
+  repeat('d', 64),
+  repeat('e', 64),
+  'deck-tenant-b',
+  repeat('f', 64),
+  'Tenant B retrieval',
+  'slide=1&chunk=1',
+  'beta retrieval canary',
+  array_fill(0.2::double precision, ARRAY[768]),
+  'acl-1'
 );
 COMMIT;
