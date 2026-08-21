@@ -901,7 +901,11 @@ async function runPreparedEvidenceE2EWithWorkspace({
     cardEvents.push(...observedCardEvents);
     const documentText = await page.evaluate(() => document.body.textContent ?? "");
     const publicPayload = `${documentText}\n${JSON.stringify(snapshotBody)}`;
-    publicCorrelationMatches += [...privateCorrelators, sourceHash].filter((value) =>
+    // The uploaded deck hash is not a private correlator here: the published deck identity is
+    // derived from it by contract (`deck_<hash>`, `slide_<hash>`), so this harness pins it in its
+    // own public requests. Only private session, candidate, and source identifiers must stay absent
+    // from the public projection and the audience DOM.
+    publicCorrelationMatches += privateCorrelators.filter((value) =>
       publicPayload.includes(value),
     ).length;
     if (

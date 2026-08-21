@@ -175,4 +175,79 @@ describe("slide-only public Stage", () => {
     expect(await reconcile).toEqual({ reason: "REVISION_GAP" });
     expect(document.querySelector(".stage-slide")).toBeNull();
   });
+
+  test("keeps applied playback when a reconnect snapshot still lags the recorded receipt", async () => {
+    const observers: StageEventObserver[] = [];
+    const appliedCommandIds: string[] = [];
+    const client: StageSessionClient = {
+      async createJoin() {
+        throw new Error("not used");
+      },
+      async claim() {},
+      async snapshot() {
+        // The gateway records a revision only once the Stage receipt round-trips, so a reconnect
+        // inside that window keeps serving the pre-command revision.
+        return snapshot;
+      },
+      async subscribe(observer) {
+        observers.push(observer);
+        return { close() {} };
+      },
+      async recordApplied(event) {
+        appliedCommandIds.push(event.commandId);
+        return {
+          status: "STAGE_APPLIED",
+          commandId: event.commandId,
+          presentationSessionEpoch: event.presentationSessionEpoch,
+          displayBindingEpoch: event.displayBindingEpoch,
+          publicPlaybackRevision: event.publicPlaybackRevision,
+          appliedAtMs: 1,
+        };
+      },
+    };
+    const firstSnapshotApplied = nextStageEvent("impromptu:snapshot-applied");
+    render(
+      <MemoryRouter initialEntries={["/display/display_alpha"]}>
+        <StageRoutes client={client} />
+      </MemoryRouter>,
+    );
+    await act(async () => firstSnapshotApplied);
+    const observer = observers[0];
+    if (observer === undefined) throw new Error("Stage did not subscribe");
+
+    const firstReceipt = nextStageEvent("impromptu:playback-applied");
+    await act(async () =>
+      observer.onPlayback({
+        commandId: "cmd_one",
+        presentationSessionEpoch: "pse_1",
+        displayBindingEpoch: "dbe_1",
+        acceptedControlRevision: "cr_1",
+        publicPlaybackRevision: "pbr_1",
+        occurrence: { publicSlideKey: "slide_two", occurrenceSeq: 2 },
+        blackout: false,
+      }),
+    );
+    expect(await firstReceipt).toMatchObject({ commandId: "cmd_one" });
+
+    const reconnectSnapshotApplied = nextStageEvent("impromptu:snapshot-applied");
+    await act(async () => observer.onClose("NETWORK_ERROR"));
+    expect(await reconnectSnapshotApplied).toMatchObject({ publicPlaybackRevision: "pbr_1" });
+
+    const reconnectObserver = observers[observers.length - 1];
+    if (reconnectObserver === undefined) throw new Error("Stage did not resubscribe");
+    const secondReceipt = nextStageEvent("impromptu:playback-applied");
+    await act(async () =>
+      reconnectObserver.onPlayback({
+        commandId: "cmd_two",
+        presentationSessionEpoch: "pse_1",
+        displayBindingEpoch: "dbe_1",
+        acceptedControlRevision: "cr_2",
+        publicPlaybackRevision: "pbr_2",
+        occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 3 },
+        blackout: false,
+      }),
+    );
+    expect(await secondReceipt).toMatchObject({ commandId: "cmd_two" });
+    expect(appliedCommandIds).toEqual(["cmd_one", "cmd_two"]);
+  });
 });

@@ -246,6 +246,29 @@ function playbackRevisionValue(revision: string): number {
   return Number.isSafeInteger(value) && value >= 0 ? value : -1;
 }
 
+/**
+ * The projection gateway only records a public playback revision once this display's receipt
+ * round-trips, so a snapshot fetched while a receipt is still in flight can lag the revision the
+ * display already applied. Adopting that lagging snapshot would turn the next projected command
+ * into a false revision gap and strand the display, so keep the applied state whenever the fetched
+ * snapshot belongs to the same binding and is behind it.
+ */
+function reconnectedSnapshot(
+  applied: StageSnapshotView | null,
+  fetched: StageSnapshotView,
+): StageSnapshotView {
+  if (applied === null) return fetched;
+  const sameBinding =
+    applied.presentationSessionId === fetched.presentationSessionId &&
+    applied.presentationSessionEpoch === fetched.presentationSessionEpoch &&
+    applied.displayBindingEpoch === fetched.displayBindingEpoch;
+  return sameBinding &&
+    playbackRevisionValue(fetched.publicPlaybackRevision) <
+      playbackRevisionValue(applied.publicPlaybackRevision)
+    ? applied
+    : fetched;
+}
+
 function DisplayPage({ client }: { readonly client: StageSessionClient }) {
   const titleId = useId();
   const fullscreen = useStageFullscreen();
@@ -451,8 +474,9 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
           subscription?.close();
           return;
         }
-        const next = await client.snapshot(pins);
+        const fetched = await client.snapshot(pins);
         if (!active) return;
+        const next = reconnectedSnapshot(latestSnapshot, fetched);
         latestSnapshot = next;
         setSnapshot(next);
         publishStageEvent("impromptu:stage-ready", { requestedMode, observedMode: mode });
