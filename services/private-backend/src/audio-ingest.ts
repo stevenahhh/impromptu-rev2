@@ -10,6 +10,7 @@ export const AUDIO_CAPTURE_COOKIE_NAME = "__Host-capture";
 export const MAX_AUDIO_FRAME_BYTES = 1_048_576;
 
 export type AudioCaptureIdentity = Readonly<{
+  accountId: string;
   actorId: string;
   presentationSessionId: string;
   presentationSessionEpoch: string;
@@ -45,6 +46,7 @@ export type AudioGrantAccessResult =
 export interface AudioIngestService {
   issueGrant(
     accountSessionId: string,
+    accountId: string,
     accountActorId: string,
     request: unknown,
     nowMs: number,
@@ -174,6 +176,7 @@ class DefaultAudioIngestService implements AudioIngestService {
 
   issueGrant(
     accountSessionId: string,
+    accountId: string,
     accountActorId: string,
     request: unknown,
     nowMs: number,
@@ -215,6 +218,7 @@ class DefaultAudioIngestService implements AudioIngestService {
     this.#bindings.set(grant.captureGrantId, {
       accountSessionId,
       identity: {
+        accountId,
         actorId: grant.actorId,
         presentationSessionId: grant.presentationSessionId,
         presentationSessionEpoch: grant.presentationSessionEpoch,

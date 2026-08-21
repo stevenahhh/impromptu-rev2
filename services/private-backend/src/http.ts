@@ -496,6 +496,7 @@ export function createPrivateBackendHandler(
     if (request.method === "POST" && url.pathname === "/v1/audio/grants") {
       const result = dependencies.audio?.issueGrant(
         accountSessionId,
+        account.value.accountId,
         account.value.actorId,
         await requestBody(request),
         dependencies.now(),

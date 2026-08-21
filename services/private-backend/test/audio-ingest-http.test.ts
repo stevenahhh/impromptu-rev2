@@ -25,8 +25,17 @@ function deferred() {
 
 class ConsumingRouter implements StreamingSttRouterBoundary {
   readonly frames: number[] = [];
+  readonly tenantIds: unknown[] = [];
 
-  async *streamStt(chunks: AsyncIterable<{ sequence: number; audio: Uint8Array }>) {
+  async *streamStt(
+    chunks: AsyncIterable<{ sequence: number; audio: Uint8Array }>,
+    context: unknown,
+  ) {
+    this.tenantIds.push(
+      typeof context === "object" && context !== null && "tenantId" in context
+        ? context.tenantId
+        : undefined,
+    );
     for await (const chunk of chunks) {
       this.frames.push(chunk.sequence);
       yield {
@@ -86,7 +95,7 @@ function createSystem(router: StreamingSttRouterBoundary): TestSystem {
   };
   const audio = createAudioIngestService({
     router,
-    contextFor: (identity, signal) => ({ identity, signal }),
+    contextFor: (identity, signal) => ({ tenantId: identity.accountId, signal }),
     createGrantId: () => "capture_http_1",
   });
   return {
@@ -250,6 +259,7 @@ describe("private audio ingest HTTP transport", () => {
     expect((await audioMutation(handler, session, "/v1/audio/stream/stop")).status).toBe(202);
     expect(await readSseEvent(reader)).toEqual({ kind: "TERMINAL", outcome: "COMPLETED" });
     expect(router.frames).toEqual([0]);
+    expect(router.tenantIds).toEqual(["account_http"]);
     expect(
       logEvents.filter((event) => event.path === "/v1/audio/frames" && event.status === 202),
     ).toHaveLength(1);
