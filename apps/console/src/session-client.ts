@@ -113,6 +113,60 @@ export interface PlaybackCommandView {
   readonly acceptedControlRevision: string;
 }
 
+export interface SessionReportView {
+  readonly reportVersion: 1;
+  readonly presentationSessionId: string;
+  readonly ownerAccountId: string;
+  readonly finalizedAtMs: number;
+  readonly totalDurationMs: number;
+  readonly slideVisits: readonly Readonly<{
+    sequence: number;
+    publicSlideKey: string;
+    occurrenceSequence: number;
+    enteredOffsetMs: number;
+    leftOffsetMs: number;
+    dwellMs: number;
+    revisit: boolean;
+  }>[];
+  readonly speech: Readonly<{
+    derivedSummary: string;
+    wordCount: number;
+    speakingDurationMs: number;
+    timingAggregate: Readonly<{
+      finalCount: number;
+      measuredFinalCount: number;
+    }>;
+    coachingAggregate: Readonly<{
+      cueCount: number;
+      latestCurrentWordsPerMinute: number | null;
+      latestPreviousWordsPerMinute: number | null;
+    }>;
+  }>;
+  readonly preparedEvidence: Readonly<{
+    label: "준비된 근거";
+    items: readonly Readonly<{
+      evidenceId: string;
+      sourceId: string;
+      sourceUrl: string | null;
+      provenance: "CURATED_PREAPPROVED" | "LIVE_VERIFIED";
+    }>[];
+  }>;
+}
+
+export type SessionReportReadView =
+  | Readonly<{ status: "FINALIZED"; report: SessionReportView }>
+  | Readonly<{ status: "PENDING" }>;
+
+export class SessionReportClientError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+  ) {
+    super(code);
+    this.name = "SessionReportClientError";
+  }
+}
+
 export interface ConsoleSessionClient {
   signUp(username: string, password: string): Promise<AccountRegistrationView>;
   signIn(username: string, password: string): Promise<AccountSessionView>;
@@ -148,6 +202,11 @@ export interface ConsoleSessionClient {
       baseRevision: string;
     }>,
   ): Promise<PlaybackCommandView>;
+  endPresentationAndAwaitReport?(
+    csrfToken: string,
+    presentationSessionId: string,
+  ): Promise<SessionReportView>;
+  readFinalizedReport?(presentationSessionId: string): Promise<SessionReportReadView>;
 }
 
 export const DECK_UPLOAD_MIME_TYPES = {
@@ -433,6 +492,144 @@ function isPresentationSessionView(value: unknown): value is PresentationSession
   );
 }
 
+function nonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function nullableRate(value: unknown): value is number | null {
+  return value === null || (typeof value === "number" && Number.isFinite(value) && value >= 0);
+}
+
+function sessionReport(value: unknown): SessionReportView | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const report = value as Record<string, unknown>;
+  const slideVisits = report.slideVisits;
+  const speech = report.speech;
+  const preparedEvidence = report.preparedEvidence;
+  if (
+    report.reportVersion !== 1 ||
+    typeof report.presentationSessionId !== "string" ||
+    typeof report.ownerAccountId !== "string" ||
+    !nonNegativeInteger(report.finalizedAtMs) ||
+    !nonNegativeInteger(report.totalDurationMs) ||
+    !Array.isArray(slideVisits) ||
+    typeof speech !== "object" ||
+    speech === null ||
+    Array.isArray(speech) ||
+    typeof preparedEvidence !== "object" ||
+    preparedEvidence === null ||
+    Array.isArray(preparedEvidence)
+  ) {
+    return null;
+  }
+  const parsedVisits = slideVisits.flatMap((entry) => {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return [];
+    const visit = entry as Record<string, unknown>;
+    return nonNegativeInteger(visit.sequence) &&
+      typeof visit.publicSlideKey === "string" &&
+      nonNegativeInteger(visit.occurrenceSequence) &&
+      nonNegativeInteger(visit.enteredOffsetMs) &&
+      nonNegativeInteger(visit.leftOffsetMs) &&
+      nonNegativeInteger(visit.dwellMs) &&
+      typeof visit.revisit === "boolean"
+      ? [
+          {
+            sequence: visit.sequence,
+            publicSlideKey: visit.publicSlideKey,
+            occurrenceSequence: visit.occurrenceSequence,
+            enteredOffsetMs: visit.enteredOffsetMs,
+            leftOffsetMs: visit.leftOffsetMs,
+            dwellMs: visit.dwellMs,
+            revisit: visit.revisit,
+          },
+        ]
+      : [];
+  });
+  if (parsedVisits.length !== slideVisits.length) return null;
+
+  const speechRecord = speech as Record<string, unknown>;
+  const timing = speechRecord.timingAggregate;
+  const coaching = speechRecord.coachingAggregate;
+  if (
+    typeof speechRecord.derivedSummary !== "string" ||
+    !nonNegativeInteger(speechRecord.wordCount) ||
+    !nonNegativeInteger(speechRecord.speakingDurationMs) ||
+    typeof timing !== "object" ||
+    timing === null ||
+    Array.isArray(timing) ||
+    typeof coaching !== "object" ||
+    coaching === null ||
+    Array.isArray(coaching)
+  ) {
+    return null;
+  }
+  const timingRecord = timing as Record<string, unknown>;
+  const coachingRecord = coaching as Record<string, unknown>;
+  if (
+    !nonNegativeInteger(timingRecord.finalCount) ||
+    !nonNegativeInteger(timingRecord.measuredFinalCount) ||
+    !nonNegativeInteger(coachingRecord.cueCount) ||
+    !nullableRate(coachingRecord.latestCurrentWordsPerMinute) ||
+    !nullableRate(coachingRecord.latestPreviousWordsPerMinute)
+  ) {
+    return null;
+  }
+
+  const evidenceRecord = preparedEvidence as Record<string, unknown>;
+  if (evidenceRecord.label !== "준비된 근거" || !Array.isArray(evidenceRecord.items)) return null;
+  const items = evidenceRecord.items.flatMap((entry) => {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return [];
+    const item = entry as Record<string, unknown>;
+    const sourceUrl = item.sourceUrl === null ? null : externalSourceUrl(item.sourceUrl);
+    if (
+      typeof item.evidenceId !== "string" ||
+      typeof item.sourceId !== "string" ||
+      (item.sourceUrl !== null && sourceUrl === null) ||
+      (item.provenance !== "CURATED_PREAPPROVED" && item.provenance !== "LIVE_VERIFIED")
+    ) {
+      return [];
+    }
+    const provenance: "CURATED_PREAPPROVED" | "LIVE_VERIFIED" = item.provenance;
+    return [{ evidenceId: item.evidenceId, sourceId: item.sourceId, sourceUrl, provenance }];
+  });
+  if (items.length !== evidenceRecord.items.length) return null;
+
+  return {
+    reportVersion: 1,
+    presentationSessionId: report.presentationSessionId,
+    ownerAccountId: report.ownerAccountId,
+    finalizedAtMs: report.finalizedAtMs,
+    totalDurationMs: report.totalDurationMs,
+    slideVisits: parsedVisits,
+    speech: {
+      derivedSummary: speechRecord.derivedSummary,
+      wordCount: speechRecord.wordCount,
+      speakingDurationMs: speechRecord.speakingDurationMs,
+      timingAggregate: {
+        finalCount: timingRecord.finalCount,
+        measuredFinalCount: timingRecord.measuredFinalCount,
+      },
+      coachingAggregate: {
+        cueCount: coachingRecord.cueCount,
+        latestCurrentWordsPerMinute: coachingRecord.latestCurrentWordsPerMinute,
+        latestPreviousWordsPerMinute: coachingRecord.latestPreviousWordsPerMinute,
+      },
+    },
+    preparedEvidence: { label: "준비된 근거", items },
+  };
+}
+
+export interface ReportEventSource {
+  addEventListener(type: string, listener: EventListener): void;
+  removeEventListener(type: string, listener: EventListener): void;
+  close(): void;
+}
+
+export interface ConsoleSessionClientOptions {
+  readonly createReportEventSource?: (url: string) => ReportEventSource;
+  readonly reportReadyTimeoutMs?: number;
+}
+
 function createAbortError(): Error {
   return new DOMException("Deck upload was aborted.", "AbortError");
 }
@@ -499,7 +696,14 @@ function decodeBackendError(text: string, status: number): DeckUploadError {
   return new DeckUploadError(code, { status });
 }
 
-export function createConsoleSessionClient(baseUrl = ""): ConsoleDeckUploadClient {
+export function createConsoleSessionClient(
+  baseUrl = "",
+  options: ConsoleSessionClientOptions = {},
+): ConsoleDeckUploadClient {
+  const createReportEventSource =
+    options.createReportEventSource ??
+    ((url: string) => new EventSource(url, { withCredentials: true }));
+  const reportReadyTimeoutMs = options.reportReadyTimeoutMs ?? 10_000;
   const mutationHeaders = (csrfToken?: string) => ({
     "content-type": "application/json",
     ...(csrfToken === undefined ? {} : { "x-csrf-token": csrfToken }),
@@ -652,6 +856,106 @@ export function createConsoleSessionClient(baseUrl = ""): ConsoleDeckUploadClien
         throw new Error("Presentation session could not be created.");
       }
       return body;
+    },
+    async endPresentationAndAwaitReport(csrfToken, presentationSessionId) {
+      const source = createReportEventSource(
+        `${baseUrl}/v1/playback/controller-events?presentationSessionId=${encodeURIComponent(presentationSessionId)}`,
+      );
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      let resolveOpened: () => void = () => {};
+      let rejectOpened: (error: Error) => void = () => {};
+      const opened = new Promise<void>((resolve, reject) => {
+        resolveOpened = resolve;
+        rejectOpened = reject;
+      });
+      let resolveReport: (report: SessionReportView) => void = () => {};
+      const ready = new Promise<SessionReportView>((resolve) => {
+        resolveReport = resolve;
+      });
+      const onOpen: EventListener = () => resolveOpened();
+      const onError: EventListener = () => rejectOpened(new Error("Private report stream failed."));
+      const onReportReady: EventListener = (event) => {
+        const data = "data" in event ? event.data : undefined;
+        if (typeof data !== "string") return;
+        let body: unknown;
+        try {
+          body = JSON.parse(data);
+        } catch {
+          return;
+        }
+        if (typeof body !== "object" || body === null || Array.isArray(body)) return;
+        const envelope = body as Record<string, unknown>;
+        const parsed = sessionReport(envelope.report);
+        if (
+          envelope.kind !== "REPORT_READY" ||
+          envelope.presentationSessionId !== presentationSessionId ||
+          parsed?.presentationSessionId !== presentationSessionId
+        ) {
+          return;
+        }
+        resolveReport(parsed);
+      };
+      source.addEventListener("open", onOpen);
+      source.addEventListener("error", onError);
+      source.addEventListener("REPORT_READY", onReportReady);
+      const bounded = <Value>(promise: Promise<Value>, message: string) =>
+        Promise.race([
+          promise,
+          new Promise<Value>((_resolve, reject) => {
+            timeout = setTimeout(() => reject(new Error(message)), reportReadyTimeoutMs);
+          }),
+        ]);
+      try {
+        await bounded(opened, "Private report stream did not open in time.");
+        if (timeout !== undefined) clearTimeout(timeout);
+        const response = await fetch(
+          `${baseUrl}/v1/presentation-sessions/${encodeURIComponent(presentationSessionId)}/end`,
+          {
+            method: "POST",
+            credentials: "include",
+            headers: mutationHeaders(csrfToken),
+          },
+        );
+        const body = await responseBody(response);
+        if (response.status !== 202) {
+          const code =
+            typeof body === "object" &&
+            body !== null &&
+            typeof Reflect.get(body, "error") === "string"
+              ? (Reflect.get(body, "error") as string)
+              : "presentation_end_failed";
+          throw new SessionReportClientError(response.status, code);
+        }
+        const report = await bounded(ready, "Finalized report signal did not arrive in time.");
+        if (timeout !== undefined) clearTimeout(timeout);
+        return report;
+      } finally {
+        if (timeout !== undefined) clearTimeout(timeout);
+        source.removeEventListener("open", onOpen);
+        source.removeEventListener("error", onError);
+        source.removeEventListener("REPORT_READY", onReportReady);
+        source.close();
+      }
+    },
+    async readFinalizedReport(presentationSessionId) {
+      const response = await fetch(
+        `${baseUrl}/v1/presentation-sessions/${encodeURIComponent(presentationSessionId)}/report`,
+        { credentials: "include" },
+      );
+      const body = await responseBody(response);
+      if (response.status === 202) return { status: "PENDING" };
+      const parsed =
+        typeof body === "object" && body !== null
+          ? sessionReport(Reflect.get(body, "report"))
+          : null;
+      if (response.ok && parsed?.presentationSessionId === presentationSessionId) {
+        return { status: "FINALIZED", report: parsed };
+      }
+      const code =
+        typeof body === "object" && body !== null && typeof Reflect.get(body, "error") === "string"
+          ? (Reflect.get(body, "error") as string)
+          : "report_read_failed";
+      throw new SessionReportClientError(response.status, code);
     },
     uploadDeck(csrfToken, file, options = {}) {
       const contentType = deckUploadContentType(file);

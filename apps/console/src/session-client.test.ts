@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import type { DeckUploadProgress, DeckUploadProgressEvent, DeckUploadXhr } from "./session-client";
+import type {
+  DeckUploadProgress,
+  DeckUploadProgressEvent,
+  DeckUploadXhr,
+  ReportEventSource,
+  SessionReportView,
+} from "./session-client";
 import {
   AccountRegistrationError,
   createConsoleSessionClient,
@@ -9,6 +15,77 @@ import {
 const PPTX_CONTENT_TYPE =
   "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 const PDF_CONTENT_TYPE = "application/pdf";
+
+const finalizedReport: SessionReportView = {
+  reportVersion: 1,
+  presentationSessionId: "ps_report",
+  ownerAccountId: "account_owner",
+  finalizedAtMs: 10_000,
+  totalDurationMs: 1_000,
+  slideVisits: [
+    {
+      sequence: 1,
+      publicSlideKey: "A",
+      occurrenceSequence: 1,
+      enteredOffsetMs: 0,
+      leftOffsetMs: 300,
+      dwellMs: 300,
+      revisit: false,
+    },
+    {
+      sequence: 2,
+      publicSlideKey: "B",
+      occurrenceSequence: 1,
+      enteredOffsetMs: 300,
+      leftOffsetMs: 600,
+      dwellMs: 300,
+      revisit: false,
+    },
+    {
+      sequence: 3,
+      publicSlideKey: "A",
+      occurrenceSequence: 2,
+      enteredOffsetMs: 600,
+      leftOffsetMs: 1_000,
+      dwellMs: 400,
+      revisit: true,
+    },
+  ],
+  speech: {
+    derivedSummary: "1개 최종 발화에서 2개 단어를 집계했습니다.",
+    wordCount: 2,
+    speakingDurationMs: 400,
+    timingAggregate: { finalCount: 1, measuredFinalCount: 1 },
+    coachingAggregate: {
+      cueCount: 1,
+      latestCurrentWordsPerMinute: 120,
+      latestPreviousWordsPerMinute: null,
+    },
+  },
+  preparedEvidence: {
+    label: "준비된 근거",
+    items: [
+      {
+        evidenceId: "evidence-1",
+        sourceId: "source-1",
+        sourceUrl: null,
+        provenance: "CURATED_PREAPPROVED",
+      },
+    ],
+  },
+};
+
+class FakeReportEventSource extends EventTarget implements ReportEventSource {
+  closed = false;
+  close(): void {
+    this.closed = true;
+  }
+  emit(type: string, body?: unknown): void {
+    const event = new Event(type);
+    if (body !== undefined) Object.defineProperty(event, "data", { value: JSON.stringify(body) });
+    this.dispatchEvent(event);
+  }
+}
 
 function deckFile(name = "quarterly-review.pptx", type = PPTX_CONTENT_TYPE): File {
   return new File(["fake deck bytes"], name, { type });
@@ -564,5 +641,113 @@ test("uploadDeck rejects unsupported deck inputs before any network activity", a
     await expect(upload).rejects.toMatchObject({ code: "unsupported_deck_file", status: 0 });
     expect(harness.opened).toHaveLength(0);
     expect(harness.sent).toHaveLength(0);
+  }
+});
+
+test("session end subscribes first and awaits the exact REPORT_READY event without polling", async () => {
+  const originalFetch = globalThis.fetch;
+  const source = new FakeReportEventSource();
+  const requests: string[] = [];
+  let signalEndRequested: () => void = () => {
+    throw new Error("end request signal was not installed");
+  };
+  const endRequested = new Promise<void>((resolve) => {
+    signalEndRequested = resolve;
+  });
+  globalThis.fetch = (async (input, init) => {
+    requests.push(`${init?.method ?? "GET"} ${String(input)}`);
+    signalEndRequested();
+    return new Response(JSON.stringify({ status: "accepted" }), {
+      status: 202,
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+  try {
+    const client = createConsoleSessionClient("https://private.example.test", {
+      createReportEventSource(url) {
+        requests.push(`SSE ${url}`);
+        return source;
+      },
+    });
+    const finalized = client.endPresentationAndAwaitReport?.("csrf-report", "ps_report");
+    if (finalized === undefined) throw new Error("report finalization client is missing");
+    expect(requests).toEqual([
+      "SSE https://private.example.test/v1/playback/controller-events?presentationSessionId=ps_report",
+    ]);
+
+    source.emit("open");
+    await endRequested;
+    source.emit("message", {
+      kind: "REPORT_READY",
+      presentationSessionId: "ps_report",
+      report: finalizedReport,
+    });
+    source.emit("REPORT_READY", {
+      kind: "REPORT_READY",
+      presentationSessionId: "ps_other",
+      report: finalizedReport,
+    });
+    source.emit("REPORT_READY", {
+      kind: "REPORT_READY",
+      presentationSessionId: "ps_report",
+      report: { ...finalizedReport, presentationSessionId: "ps_other" },
+    });
+    source.emit("REPORT_READY", {
+      kind: "REPORT_READY",
+      presentationSessionId: "ps_report",
+      report: {
+        ...finalizedReport,
+        transcript: "TRANSCRIPT_BODY_SENTINEL",
+        silence: "SILENCE_SENTINEL",
+        usedEvidence: "사용한 근거",
+      },
+    });
+
+    const report = await finalized;
+    expect(report).toEqual(finalizedReport);
+    expect(JSON.stringify(report)).not.toContain("TRANSCRIPT_BODY_SENTINEL");
+    expect(JSON.stringify(report)).not.toContain("SILENCE_SENTINEL");
+    expect(JSON.stringify(report)).not.toContain("사용한 근거");
+    expect(requests).toEqual([
+      "SSE https://private.example.test/v1/playback/controller-events?presentationSessionId=ps_report",
+      "POST https://private.example.test/v1/presentation-sessions/ps_report/end",
+    ]);
+    expect(source.closed).toBe(true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("reload GET parses finalized reports and exposes owner denial without report data", async () => {
+  const originalFetch = globalThis.fetch;
+  let owner = true;
+  globalThis.fetch = (async () =>
+    owner
+      ? new Response(
+          JSON.stringify({
+            report: {
+              ...finalizedReport,
+              transcript: "TRANSCRIPT_BODY_SENTINEL",
+              silence: "SILENCE_SENTINEL",
+              usedEvidence: "사용한 근거",
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        )
+      : new Response(JSON.stringify({ error: "report_forbidden" }), {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        })) as unknown as typeof fetch;
+  try {
+    const client = createConsoleSessionClient("https://private.example.test");
+    const result = await client.readFinalizedReport?.("ps_report");
+    expect(result).toEqual({ status: "FINALIZED", report: finalizedReport });
+    owner = false;
+    await expect(client.readFinalizedReport?.("ps_report")).rejects.toMatchObject({
+      status: 403,
+      code: "report_forbidden",
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
   }
 });

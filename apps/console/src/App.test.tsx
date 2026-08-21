@@ -19,6 +19,8 @@ import {
   type ConsoleDeckUploadClient,
   type ConsoleSessionClient,
   type RecommendationOutcome,
+  SessionReportClientError,
+  type SessionReportView,
 } from "./session-client";
 
 afterEach(cleanup);
@@ -79,6 +81,65 @@ function workspaceClient(
     ...overrides,
   };
 }
+
+const finalizedReport: SessionReportView = {
+  reportVersion: 1,
+  presentationSessionId: "ps_report",
+  ownerAccountId: "account_preview",
+  finalizedAtMs: 10_000,
+  totalDurationMs: 1_000,
+  slideVisits: [
+    {
+      sequence: 1,
+      publicSlideKey: "A",
+      occurrenceSequence: 1,
+      enteredOffsetMs: 0,
+      leftOffsetMs: 300,
+      dwellMs: 300,
+      revisit: false,
+    },
+    {
+      sequence: 2,
+      publicSlideKey: "B",
+      occurrenceSequence: 1,
+      enteredOffsetMs: 300,
+      leftOffsetMs: 600,
+      dwellMs: 300,
+      revisit: false,
+    },
+    {
+      sequence: 3,
+      publicSlideKey: "A",
+      occurrenceSequence: 2,
+      enteredOffsetMs: 600,
+      leftOffsetMs: 1_000,
+      dwellMs: 400,
+      revisit: true,
+    },
+  ],
+  speech: {
+    derivedSummary: "1개 최종 발화에서 2개 단어를 집계했습니다.",
+    wordCount: 2,
+    speakingDurationMs: 400,
+    timingAggregate: { finalCount: 1, measuredFinalCount: 1 },
+    coachingAggregate: {
+      cueCount: 1,
+      latestCurrentWordsPerMinute: 120,
+      latestPreviousWordsPerMinute: null,
+    },
+  },
+  preparedEvidence: {
+    label: "준비된 근거",
+    items: [
+      {
+        evidenceId: "evidence-1",
+        sourceId: "source-1",
+        sourceUrl: null,
+        provenance: "CURATED_PREAPPROVED",
+      },
+    ],
+  },
+};
 
 const workspacePresentation: ActivePresentationView = {
   presentationSessionId: "ps_workspace",
@@ -222,6 +283,155 @@ describe("Console route boundary", () => {
 
   test("keeps locale catalogs structurally complete", () => {
     expect(Object.keys(messages("ko")).sort()).toEqual(Object.keys(messages("en")).sort());
+  });
+
+  test("renders the exact finalized report after owner end and routes without a GET", async () => {
+    let readCount = 0;
+    let signalEnded: () => void = () => {
+      throw new Error("end signal was not installed");
+    };
+    const ended = new Promise<void>((resolve) => {
+      signalEnded = resolve;
+    });
+    const client = workspaceClient({
+      async setSlide() {
+        return { acceptedControlRevision: "cr_1" };
+      },
+      async endPresentationAndAwaitReport() {
+        signalEnded();
+        return finalizedReport;
+      },
+      async readFinalizedReport() {
+        readCount += 1;
+        return { status: "FINALIZED", report: finalizedReport };
+      },
+    });
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AuthProvider
+          initialAuthenticated
+          initialDisplayBindingEpoch="dbe_1"
+          initialPresentation={{ ...workspacePresentation, presentationSessionId: "ps_report" }}
+          client={client}
+        >
+          <ConsoleRoutes />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: "발표 시작" }));
+    });
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: "발표 종료" }));
+      await ended;
+    });
+
+    expect(document.querySelector("[data-presentation-report='ready']")).toBeTruthy();
+    expect(readCount).toBe(0);
+    expect(document.querySelectorAll("[data-report-slide-visit]")).toHaveLength(3);
+  });
+
+  test("reload GET reproduces identical A-B-A report DOM and exact dwell totals", async () => {
+    const client = workspaceClient({
+      async readFinalizedReport() {
+        return { status: "FINALIZED", report: finalizedReport };
+      },
+    });
+    const finalizedView = render(
+      <MemoryRouter
+        initialEntries={[{ pathname: "/reports/ps_report", state: { report: finalizedReport } }]}
+      >
+        <AuthProvider initialAuthenticated client={client}>
+          <ConsoleRoutes />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+    const beforeReload = document.querySelector("[data-presentation-report]")?.innerHTML;
+    if (beforeReload === undefined) throw new Error("finalized report DOM is missing");
+    finalizedView.unmount();
+
+    let signalRead: () => void = () => {
+      throw new Error("reload read signal was not installed");
+    };
+    const read = new Promise<void>((resolve) => {
+      signalRead = resolve;
+    });
+    const reloadClient = workspaceClient({
+      async readFinalizedReport() {
+        signalRead();
+        return { status: "FINALIZED", report: finalizedReport };
+      },
+    });
+    render(
+      <MemoryRouter initialEntries={["/reports/ps_report"]}>
+        <AuthProvider initialAuthenticated client={reloadClient}>
+          <ConsoleRoutes />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+    await act(async () => await read);
+
+    const reportElement = document.querySelector("[data-presentation-report]");
+    expect(reportElement?.innerHTML).toBe(beforeReload);
+    const visits = [...document.querySelectorAll("[data-report-slide-visit]")];
+    expect(visits.map((visit) => visit.getAttribute("data-report-slide-key"))).toEqual([
+      "A",
+      "B",
+      "A",
+    ]);
+    expect(visits.map((visit) => visit.getAttribute("data-report-occurrence"))).toEqual([
+      "1",
+      "1",
+      "2",
+    ]);
+    expect(
+      visits.reduce(
+        (total, visit) => total + Number(visit.getAttribute("data-report-dwell-ms")),
+        0,
+      ),
+    ).toBe(1_000);
+    expect(visits.map((visit) => visit.getAttribute("data-report-dwell-ms"))).toEqual([
+      "300",
+      "300",
+      "400",
+    ]);
+    const reportJson = JSON.stringify(finalizedReport);
+    const reportDom = reportElement?.textContent ?? "";
+    for (const sentinel of ["TRANSCRIPT_BODY_SENTINEL", "SILENCE_SENTINEL", "사용한 근거"]) {
+      expect(reportJson).not.toContain(sentinel);
+      expect(reportDom).not.toContain(sentinel);
+    }
+    expect(reportDom).toContain("준비된 근거");
+  });
+
+  test("renders zero report data when the same-tenant non-owner receives 403", async () => {
+    let signalDenied: () => void = () => {
+      throw new Error("denial signal was not installed");
+    };
+    const denied = new Promise<void>((resolve) => {
+      signalDenied = resolve;
+    });
+    const client = workspaceClient({
+      async readFinalizedReport() {
+        signalDenied();
+        throw new SessionReportClientError(403, "report_forbidden");
+      },
+    });
+    render(
+      <MemoryRouter initialEntries={["/reports/ps_report"]}>
+        <AuthProvider initialAuthenticated client={client}>
+          <ConsoleRoutes />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+    await act(async () => await denied);
+
+    expect(document.querySelector("[data-report-status='FORBIDDEN']")).toBeTruthy();
+    expect(document.querySelectorAll("[data-presentation-report]")).toHaveLength(0);
+    expect(document.querySelectorAll("[data-report-slide-visit]")).toHaveLength(0);
+    expect(document.querySelectorAll("[data-report-evidence]")).toHaveLength(0);
+    expect(document.body.textContent).not.toContain("report_forbidden");
   });
 
   test("translates sign-in, navigation, and evidence approval pages without English gaps", () => {

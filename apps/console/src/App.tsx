@@ -19,11 +19,22 @@ import {
   useRef,
   useState,
 } from "react";
-import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation } from "react-router-dom";
+import {
+  Link,
+  Navigate,
+  NavLink,
+  Outlet,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 import { CoachingDisplay } from "./coaching-display";
 import { CockpitAudioCapture } from "./cockpit-audio-capture";
 import { EvidenceCard } from "./evidence-card";
 import { type Locale, messages } from "./i18n";
+import { PresentationReport } from "./presentation-report";
 import {
   AccountRegistrationError,
   type AccountRegistrationFailure,
@@ -36,6 +47,7 @@ import {
   type DisplayJoinView,
   type LiveCandidateSnapshotView,
   type PrivateEvidenceCardView,
+  type SessionReportView,
 } from "./session-client";
 
 declare global {
@@ -1221,9 +1233,11 @@ function PlaybackPanel({
   readonly onIndexChange: (index: number) => void;
 }) {
   const { activePresentation, client, displayBindingEpoch, locale, session } = useAuth();
+  const navigate = useNavigate();
   const text = messages(locale);
   const [controlRevision, setControlRevision] = useState("cr_0");
   const [presentationStarted, setPresentationStarted] = useState(false);
+  const [ending, setEnding] = useState(false);
   const [message, setMessage] = useState("");
   if (activePresentation === null || session === null) return null;
   const slides = [...activePresentation.slides].sort((left, right) => left.ordinal - right.ordinal);
@@ -1254,6 +1268,24 @@ function PlaybackPanel({
     setMessage(text.startedMessage);
   };
 
+  const endPresentation = async () => {
+    if (client.endPresentationAndAwaitReport === undefined) return;
+    setEnding(true);
+    setMessage(text.reportFinalizing);
+    try {
+      const report = await client.endPresentationAndAwaitReport(
+        session.csrfToken,
+        activePresentation.presentationSessionId,
+      );
+      navigate(`/reports/${encodeURIComponent(activePresentation.presentationSessionId)}`, {
+        state: { report },
+      });
+    } catch {
+      setMessage(text.reportFinalizeFailed);
+      setEnding(false);
+    }
+  };
+
   return (
     <Panel className="console-present" title={text.presenterConsole} tone="inset">
       <div className="console-present__controls">
@@ -1271,16 +1303,25 @@ function PlaybackPanel({
         <div className="console-playback-actions">
           <Button
             variant="quiet"
-            disabled={displayBindingEpoch === null || index === 0}
+            disabled={displayBindingEpoch === null || index === 0 || ending}
             onClick={() => void show(index - 1)}
           >
             {text.previousSlide}
           </Button>
           <Button
-            disabled={displayBindingEpoch === null || index >= slides.length - 1}
+            disabled={displayBindingEpoch === null || index >= slides.length - 1 || ending}
             onClick={() => void show(index + 1)}
           >
             {text.nextSlide}
+          </Button>
+          <Button
+            variant="quiet"
+            disabled={
+              !presentationStarted || ending || client.endPresentationAndAwaitReport === undefined
+            }
+            onClick={() => void endPresentation()}
+          >
+            {ending ? text.endingPresentation : text.endPresentation}
           </Button>
         </div>
       </div>
@@ -1288,6 +1329,104 @@ function PlaybackPanel({
         {message || text.connectControls}
       </p>
     </Panel>
+  );
+}
+
+function navigationReport(value: unknown, presentationSessionId: string): SessionReportView | null {
+  const state = record(value);
+  const report = record(state?.report);
+  return report?.reportVersion === 1 && report.presentationSessionId === presentationSessionId
+    ? (report as unknown as SessionReportView)
+    : null;
+}
+
+function PresentationReportPage() {
+  const { client, locale } = useAuth();
+  const text = messages(locale);
+  const location = useLocation();
+  const { presentationSessionId = "" } = useParams();
+  const fromFinalization = navigationReport(location.state, presentationSessionId);
+  const [report, setReport] = useState<SessionReportView | null>(fromFinalization);
+  const [status, setStatus] = useState<"LOADING" | "PENDING" | "FORBIDDEN">(
+    fromFinalization === null ? "LOADING" : "PENDING",
+  );
+
+  useEffect(() => {
+    if (fromFinalization !== null) return;
+    if (presentationSessionId.length === 0 || client.readFinalizedReport === undefined) {
+      setStatus("FORBIDDEN");
+      return;
+    }
+    let active = true;
+    void client
+      .readFinalizedReport(presentationSessionId)
+      .then((result) => {
+        if (!active) return;
+        if (result.status === "FINALIZED") setReport(result.report);
+        else setStatus("PENDING");
+      })
+      .catch(() => {
+        if (active) setStatus("FORBIDDEN");
+      });
+    return () => {
+      active = false;
+    };
+  }, [client, fromFinalization, presentationSessionId]);
+
+  if (report === null) {
+    return (
+      <section className="console-stack ui-reveal" data-report-status={status}>
+        <h1>{text.reportTitle}</h1>
+        <Panel tone="inset">
+          <p className="console-caption" aria-live="polite">
+            {status === "LOADING"
+              ? text.reportLoading
+              : status === "PENDING"
+                ? text.reportPending
+                : text.reportUnavailable}
+          </p>
+        </Panel>
+      </section>
+    );
+  }
+
+  return (
+    <PresentationReport
+      report={report}
+      text={{
+        title: text.reportTitle,
+        lead: text.reportLead,
+        finalized: text.reportFinalized,
+        totalDuration: text.reportTotalDuration,
+        durationUnit: text.reportDurationUnit,
+        slideVisits: text.reportSlideVisits,
+        slide: text.reportSlide,
+        occurrence: text.reportOccurrence,
+        dwell: text.reportDwell,
+        revisit: text.reportRevisit,
+        firstVisit: text.reportFirstVisit,
+        speech: text.reportSpeech,
+        speechSummary: text.reportSpeechSummary,
+        wordCount: text.reportWordCount,
+        speakingDuration: text.reportSpeakingDuration,
+        timingAggregate: text.reportTimingAggregate,
+        finalCount: text.reportFinalCount,
+        measuredFinalCount: text.reportMeasuredFinalCount,
+        coachingAggregate: text.reportCoachingAggregate,
+        cueCount: text.reportCueCount,
+        currentPace: text.reportCurrentPace,
+        previousPace: text.reportPreviousPace,
+        unavailable: text.coachingUnavailable,
+        preparedEvidence: text.preparedEvidence,
+        evidenceEmpty: text.reportEvidenceEmpty,
+        evidenceItem: text.reportEvidenceItem,
+        evidenceSourceUrl: text.evidenceSourceUrl,
+        evidenceProvenance: text.reportEvidenceProvenance,
+        sourceUnavailable: text.sourceUnavailable,
+        curatedEvidence: text.reportCuratedEvidence,
+        liveEvidence: text.reportLiveEvidence,
+      }}
+    />
   );
 }
 
@@ -1303,6 +1442,7 @@ export function ConsoleRoutes({ coResident = false }: { readonly coResident?: bo
           <Route index element={<PresentationWorkspacePage />} />
           <Route path="/session" element={<PresentationWorkspacePage />} />
           <Route path="/live-publication" element={<LivePublicationPage />} />
+          <Route path="/reports/:presentationSessionId" element={<PresentationReportPage />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/sign-in" replace />} />
