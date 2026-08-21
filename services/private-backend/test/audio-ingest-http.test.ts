@@ -6,7 +6,11 @@ import { createAudioIngestService } from "../src/audio-ingest.ts";
 import { parsePrivateBackendConfig } from "../src/config.ts";
 import { createPrivateBackendHandler, type PrivateBackendHandler } from "../src/http.ts";
 import type { JsonLogger } from "../src/observability.ts";
-import { PreparedEvidenceCoordinator } from "../src/prepared-evidence.ts";
+import {
+  createPreparedEvidenceStore,
+  PreparedEvidenceCoordinator,
+  snapshotPreparedEvidenceStore,
+} from "../src/prepared-evidence.ts";
 
 const origin = "https://console.example.test";
 
@@ -59,6 +63,105 @@ class ConsumingRouter implements StreamingSttRouterBoundary {
   }
 }
 
+class FinalRecommendationRouter implements StreamingSttRouterBoundary {
+  readonly finalGate = deferred();
+  readonly duplicateProcessed = deferred();
+  readonly lateGate = deferred();
+  readonly completed = deferred();
+
+  async *streamStt(chunks: AsyncIterable<{ sequence: number; audio: Uint8Array }>) {
+    for await (const _chunk of chunks) break;
+    for (let sequence = 0; sequence < 20; sequence += 1) {
+      yield {
+        kind: "transcript" as const,
+        event:
+          sequence === 0
+            ? {
+                sessionGeneration: 7,
+                sequence,
+                segmentId: "segment-final",
+                kind: "PARTIAL" as const,
+                transcript: {
+                  text: `preview-${sequence}`,
+                  language: "ko-KR",
+                  durationMs: 100,
+                  words: [],
+                },
+              }
+            : {
+                sessionGeneration: 7,
+                sequence,
+                segmentId: "segment-final",
+                kind: "REPLACE" as const,
+                replacesSequence: sequence - 1,
+                transcript: {
+                  text: `preview-${sequence}`,
+                  language: "ko-KR",
+                  durationMs: 100,
+                  words: [],
+                },
+              },
+      };
+    }
+    await this.finalGate.promise;
+    yield {
+      kind: "transcript" as const,
+      event: {
+        sessionGeneration: 7,
+        sequence: 20,
+        segmentId: "segment-final",
+        kind: "FINAL" as const,
+        finalSegmentId: "final-exactly-once",
+        transcript: {
+          text: "FINAL_PRIVATE_SENTINEL",
+          language: "ko-KR",
+          durationMs: 200,
+          words: [{ text: "확정", startMs: 0, endMs: 200 }],
+        },
+      },
+    };
+    yield {
+      kind: "transcript" as const,
+      event: {
+        sessionGeneration: 7,
+        sequence: 21,
+        segmentId: "segment-final",
+        kind: "FINAL" as const,
+        finalSegmentId: "final-exactly-once",
+        transcript: {
+          text: "FINAL_PRIVATE_SENTINEL",
+          language: "ko-KR",
+          durationMs: 200,
+          words: [{ text: "확정", startMs: 0, endMs: 200 }],
+        },
+      },
+    };
+    this.duplicateProcessed.resolve();
+    await this.lateGate.promise;
+    yield {
+      kind: "transcript" as const,
+      event: {
+        sessionGeneration: 7,
+        sequence: 22,
+        segmentId: "segment-late",
+        kind: "FINAL" as const,
+        finalSegmentId: "late-final",
+        transcript: {
+          text: "LATE_PRIVATE_SENTINEL",
+          language: "ko-KR",
+          durationMs: 200,
+          words: [],
+        },
+      },
+    };
+    this.completed.resolve();
+    yield {
+      kind: "complete" as const,
+      result: { ok: false as const, error: { code: "cancelled" } },
+    };
+  }
+}
+
 class BlockedRouter implements StreamingSttRouterBoundary {
   readonly gate = deferred();
   readonly completed = deferred();
@@ -96,6 +199,7 @@ function createSystem(router: StreamingSttRouterBoundary): TestSystem {
   const audio = createAudioIngestService({
     router,
     contextFor: (identity, signal) => ({ tenantId: identity.accountId, signal }),
+    coachingPreviewEnabledFor: () => true,
     createGrantId: () => "capture_http_1",
   });
   return {
@@ -304,6 +408,154 @@ describe("private audio ingest HTTP transport", () => {
     expect(router.invocationCount).toBe(1);
     router.gate.resolve();
     await bounded(router.completed.promise, "timed out waiting for revoked router cleanup");
+  });
+
+  test("invokes recommendations once on FINAL and keeps the result private and ephemeral", async () => {
+    const router = new FinalRecommendationRouter();
+    const store = createPreparedEvidenceStore();
+    const projectionCalls: string[] = [];
+    const coordinator = new PreparedEvidenceCoordinator(
+      {
+        bindDisplay() {
+          projectionCalls.push("bindDisplay");
+          return { outcome: "REJECTED" as const, reason: "unused" };
+        },
+        projectPlayback() {
+          projectionCalls.push("projectPlayback");
+          return false;
+        },
+        recordPlaybackApplied() {
+          projectionCalls.push("recordPlaybackApplied");
+          return false;
+        },
+      },
+      store,
+    );
+    const recommendationInputs: unknown[] = [];
+    const persistedSnapshots: string[] = [];
+    const logEvents: Array<Parameters<JsonLogger["request"]>[0]> = [];
+    const audio = createAudioIngestService({
+      router,
+      contextFor: (identity, signal) => ({ tenantId: identity.accountId, signal }),
+      coachingPreviewEnabledFor: () => true,
+      recommendations: {
+        resolveContext(identity) {
+          expect(identity.presentationSessionId).toBe("ps_http");
+          return { deckVersion: "deck_current", manifestHash: "a".repeat(64) };
+        },
+        async recommend(_accountSessionId, input) {
+          recommendationInputs.push(structuredClone(input));
+          return {
+            outcome: "ABSTAIN",
+            reason: "INSUFFICIENT_EVIDENCE",
+            completedAtMs: 1_001,
+            latencyMs: 1,
+          };
+        },
+      },
+      createGrantId: () => "capture_http_1",
+    });
+    const handler = createPrivateBackendHandler(
+      parsePrivateBackendConfig({ CONSOLE_ORIGIN: origin }),
+      {
+        coordinator,
+        identityVerifier: {
+          async verifyCredentials() {
+            return { accountId: "account_http", actorId: "actor_http" };
+          },
+        },
+        audio,
+        internalAuthToken: "stage-service-credential",
+        now: () => 1_000,
+        persist: async () => {
+          persistedSnapshots.push(JSON.stringify(snapshotPreparedEvidenceStore(store)));
+        },
+        logger: {
+          request(event) {
+            logEvents.push(event);
+          },
+          error() {},
+        },
+      },
+    );
+
+    const stageCredential = await handler(
+      new Request("https://private.example.test/v1/audio/events", {
+        headers: { authorization: "Bearer stage-service-credential" },
+      }),
+    );
+    expect(stageCredential.status).toBe(401);
+
+    const account = await signIn(handler);
+    const persistCountAfterLogin = persistedSnapshots.length;
+    const snapshotBefore = JSON.stringify(snapshotPreparedEvidenceStore(store));
+    const session = await issueGrant(handler, account);
+    const eventsResponse = await handler(browserRequest("/v1/audio/events", session));
+    const reader = eventsResponse.body?.getReader();
+    if (reader === undefined) throw new Error("audio event stream body missing");
+    expect(await readSseEvent(reader)).toEqual({ kind: "READY" });
+    expect((await audioMutation(handler, session, "/v1/audio/stream/start")).status).toBe(202);
+    expect(
+      (
+        await audioMutation(handler, session, "/v1/audio/frames", {
+          headers: {
+            "content-type": "application/octet-stream",
+            "x-audio-sequence": "0",
+            "x-audio-duration-ms": "100",
+          },
+          body: new Uint8Array([1]),
+        })
+      ).status,
+    ).toBe(202);
+
+    for (let index = 0; index < 20; index += 1) {
+      expect(await readSseEvent(reader)).toMatchObject({ kind: "TRANSCRIPT" });
+    }
+    expect(recommendationInputs).toHaveLength(0);
+
+    router.finalGate.resolve();
+    expect(await readSseEvent(reader)).toMatchObject({
+      kind: "TRANSCRIPT",
+      event: { kind: "FINAL", finalSegmentId: "final-exactly-once" },
+    });
+    expect(await readSseEvent(reader)).toEqual({
+      kind: "RECOMMENDATION",
+      presentationSessionId: "ps_http",
+      sessionGeneration: 7,
+      finalSegmentId: "final-exactly-once",
+      recommendation: {
+        outcome: "ABSTAIN",
+        reason: "INSUFFICIENT_EVIDENCE",
+        completedAtMs: 1_001,
+        latencyMs: 1,
+      },
+    });
+    expect(recommendationInputs).toEqual([
+      {
+        query: "FINAL_PRIVATE_SENTINEL",
+        deckVersion: "deck_current",
+        manifestHash: "a".repeat(64),
+        maxResults: 3,
+      },
+    ]);
+
+    await bounded(router.duplicateProcessed.promise, "duplicate FINAL was not processed");
+    expect(recommendationInputs).toHaveLength(1);
+    const revoke = await handler(browserRequest("/v1/audio/grant", session, { method: "DELETE" }));
+    expect(revoke.status).toBe(200);
+    expect(await readSseEvent(reader)).toEqual({ kind: "TERMINAL", outcome: "GRANT_REVOKED" });
+    router.lateGate.resolve();
+    await bounded(router.completed.promise, "late FINAL was not processed");
+    expect(recommendationInputs).toHaveLength(1);
+
+    expect(projectionCalls).toEqual([]);
+    expect(JSON.stringify(snapshotPreparedEvidenceStore(store))).toBe(snapshotBefore);
+    expect(persistedSnapshots).toHaveLength(persistCountAfterLogin);
+    expect(JSON.stringify(logEvents)).not.toContain("FINAL_PRIVATE_SENTINEL");
+    expect(JSON.stringify(snapshotPreparedEvidenceStore(store))).not.toContain(
+      "FINAL_PRIVATE_SENTINEL",
+    );
+    expect(JSON.stringify(persistedSnapshots)).not.toContain("FINAL_PRIVATE_SENTINEL");
   });
 
   test("requires the account actor and exact mutation CSRF before issuing a capture grant", async () => {

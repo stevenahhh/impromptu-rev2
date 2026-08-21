@@ -1,4 +1,10 @@
-import { STT_AUDIO_MIME_TYPE, SttStreamEventSchema } from "@impromptu/contracts/private";
+import {
+  createSttStreamEventValidator,
+  STT_AUDIO_MIME_TYPE,
+  type SttStreamEvent,
+  SttStreamEventSchema,
+} from "@impromptu/contracts/private";
+import type { RecommendationOutcome } from "@impromptu/contracts/retrieval";
 import {
   AudioCaptureCoordinator,
   type AudioStreamTerminal,
@@ -23,7 +29,14 @@ export type AudioGrantRequest = Readonly<{
 
 export type AudioIngestEvent =
   | Readonly<{ kind: "READY" }>
-  | Readonly<{ kind: "TRANSCRIPT"; event: unknown }>
+  | Readonly<{ kind: "TRANSCRIPT"; event: SttStreamEvent }>
+  | Readonly<{
+      kind: "RECOMMENDATION";
+      presentationSessionId: string;
+      sessionGeneration: number;
+      finalSegmentId: string;
+      recommendation: RecommendationOutcome;
+    }>
   | Readonly<{ kind: "TERMINAL"; outcome: AudioStreamTerminal["outcome"] }>;
 
 export type AudioGrantIssueResult =
@@ -86,9 +99,21 @@ export interface AudioIngestService {
   sessionEnded(presentationSessionId: string, nowMs: number): void;
 }
 
+export type AudioRecommendationContext = Readonly<{
+  deckVersion: string;
+  manifestHash: string;
+}>;
+
 export interface AudioIngestServiceOptions {
   readonly router: StreamingSttRouterBoundary;
   readonly contextFor: (identity: AudioCaptureIdentity, signal: AbortSignal) => unknown;
+  readonly recommendations?: Readonly<{
+    resolveContext(
+      identity: AudioCaptureIdentity,
+    ): AudioRecommendationContext | null | Promise<AudioRecommendationContext | null>;
+    recommend(accountSessionId: string, input: unknown): Promise<RecommendationOutcome>;
+  }>;
+  readonly coachingPreviewEnabledFor?: (identity: AudioCaptureIdentity) => boolean;
   readonly adapterId?: string;
   readonly grantTtlMs?: number;
   readonly createGrantId: () => string;
@@ -100,6 +125,7 @@ type GrantBinding = {
   readonly accountSessionId: string;
   readonly identity: AudioCaptureIdentity;
   readonly expiresAtMs: number;
+  readonly validateTranscriptEvent: ReturnType<typeof createSttStreamEventValidator>;
   state: GrantState;
   eventController: ReadableStreamDefaultController<Uint8Array> | undefined;
   eventsOpened: boolean;
@@ -115,7 +141,7 @@ class EventForwardingAudioSttPort {
   constructor(
     private readonly router: StreamingSttRouterBoundary,
     private readonly contextFor: AudioIngestServiceOptions["contextFor"],
-    private readonly publishTranscript: (grantId: string, event: unknown) => void,
+    private readonly publishTranscript: (grantId: string, event: SttStreamEvent) => Promise<void>,
     private readonly adapterId?: string,
   ) {}
 
@@ -148,10 +174,13 @@ class EventForwardingAudioSttPort {
     adapterId?: string,
   ): ReturnType<StreamingSttRouterBoundary["streamStt"]> {
     for await (const item of this.router.streamStt(chunks, context, adapterId)) {
-      if (item.kind === "transcript") {
-        this.publishTranscript(grantId, SttStreamEventSchema.parse(item.event));
+      if (item.kind !== "transcript") {
+        yield item;
+        continue;
       }
+      const processing = this.publishTranscript(grantId, SttStreamEventSchema.parse(item.event));
       yield item;
+      await processing;
     }
   }
 }
@@ -160,12 +189,19 @@ class DefaultAudioIngestService implements AudioIngestService {
   readonly #coordinator: AudioCaptureCoordinator;
   readonly #port: EventForwardingAudioSttPort;
   readonly #bindings = new Map<string, GrantBinding>();
+  readonly #recommendationKeys = new Set<string>();
+  readonly #recommendations: AudioIngestServiceOptions["recommendations"];
+  readonly #coachingPreviewEnabledFor: NonNullable<
+    AudioIngestServiceOptions["coachingPreviewEnabledFor"]
+  >;
 
   constructor(options: AudioIngestServiceOptions) {
+    this.#recommendations = options.recommendations;
+    this.#coachingPreviewEnabledFor = options.coachingPreviewEnabledFor ?? (() => false);
     this.#port = new EventForwardingAudioSttPort(
       options.router,
       options.contextFor,
-      (grantId, event) => this.#publish(grantId, { kind: "TRANSCRIPT", event }),
+      (grantId, event) => this.#acceptTranscript(grantId, event),
       options.adapterId,
     );
     this.#coordinator = new AudioCaptureCoordinator(this.#port, {
@@ -224,6 +260,7 @@ class DefaultAudioIngestService implements AudioIngestService {
         presentationSessionEpoch: grant.presentationSessionEpoch,
       },
       expiresAtMs: grant.expiresAtMs,
+      validateTranscriptEvent: createSttStreamEventValidator(),
       state: "ACTIVE",
       eventController: undefined,
       eventsOpened: false,
@@ -382,6 +419,54 @@ class DefaultAudioIngestService implements AudioIngestService {
       return { outcome: "REJECTED", reason: "STREAM_NOT_ACTIVE" };
     }
     return { outcome: "ALLOWED" };
+  }
+
+  async #acceptTranscript(grantId: string, input: SttStreamEvent): Promise<void> {
+    const binding = this.#bindings.get(grantId);
+    if (binding === undefined || (binding.state !== "STARTED" && binding.state !== "STOPPING")) {
+      return;
+    }
+
+    let event: SttStreamEvent;
+    try {
+      event = binding.validateTranscriptEvent(input);
+    } catch {
+      return;
+    }
+    if (event.kind === "ABORT") return;
+    if (event.kind === "PARTIAL" || event.kind === "REPLACE") {
+      if (this.#coachingPreviewEnabledFor(binding.identity)) {
+        this.#publish(grantId, { kind: "TRANSCRIPT", event });
+      }
+      return;
+    }
+
+    const recommendations = this.#recommendations;
+    if (recommendations === undefined) {
+      this.#publish(grantId, { kind: "TRANSCRIPT", event });
+      return;
+    }
+    const context = await recommendations.resolveContext(binding.identity);
+    const currentState = this.#bindings.get(grantId)?.state;
+    if (context === null || (currentState !== "STARTED" && currentState !== "STOPPING")) return;
+    const key = `${binding.identity.presentationSessionId}\u0000${event.sessionGeneration}\u0000${event.finalSegmentId}`;
+    if (this.#recommendationKeys.has(key)) return;
+    this.#recommendationKeys.add(key);
+
+    this.#publish(grantId, { kind: "TRANSCRIPT", event });
+    const recommendation = await recommendations.recommend(binding.accountSessionId, {
+      query: event.transcript.text,
+      deckVersion: context.deckVersion,
+      manifestHash: context.manifestHash,
+      maxResults: 3,
+    });
+    this.#publish(grantId, {
+      kind: "RECOMMENDATION",
+      presentationSessionId: binding.identity.presentationSessionId,
+      sessionGeneration: event.sessionGeneration,
+      finalSegmentId: event.finalSegmentId,
+      recommendation,
+    });
   }
 
   #publish(grantId: string, event: AudioIngestEvent): void {
