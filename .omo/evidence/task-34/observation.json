@@ -1,0 +1,245 @@
+{
+  "runs": 6,
+  "outcomes": [
+    {
+      "outcome": "RECOMMEND",
+      "recommendation": {
+        "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+        "evidenceIds": [
+          "internal:0d3d6ce789230506476790cce9d3a171a8c415aebea93a2f3f846150c95839d4:a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d"
+        ],
+        "facts": {
+          "numbers": [],
+          "units": [],
+          "dates": [
+            "2026"
+          ],
+          "entities": [
+            "형식 중립 근거 자료"
+          ]
+        }
+      },
+      "evidence": [
+        {
+          "evidenceId": "internal:0d3d6ce789230506476790cce9d3a171a8c415aebea93a2f3f846150c95839d4:a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d",
+          "sourceId": "slide:256",
+          "sourceRevision": "a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d",
+          "sourceHash": "4e89b484f48e34a7e6eeaa576ba11da6f0bff155ccb666bd7614239e2d201f0e",
+          "deckVersion": "deck_a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d",
+          "manifestHash": "157f2e8119667249a8392f5c761ea969d313ae2f59a8c9e3ea1e7eaa3660bd3e",
+          "title": "Slide 1",
+          "content": "형식 중립 근거 자료 2026",
+          "quote": "형식 중립 근거 자료 2026",
+          "anchor": "slide=1&chunk=1",
+          "canonicalUrl": null,
+          "sourceDate": null,
+          "rights": "APPROVED",
+          "containsPii": false,
+          "authorizationVersion": "acl-1"
+        }
+      ],
+      "completedAtMs": 1787346176857,
+      "latencyMs": 4422
+    },
+    {
+      "outcome": "RECOMMEND",
+      "recommendation": {
+        "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+        "evidenceIds": [
+          "internal:0d3d6ce789230506476790cce9d3a171a8c415aebea93a2f3f846150c95839d4:a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d"
+        ],
+        "facts": {
+          "numbers": [],
+          "units": [],
+          "dates": [
+            "2026"
+          ],
+          "entities": [
+            "형식 중립 근거 자료"
+          ]
+        }
+      },
+      "evidence": [
+        {
+          "evidenceId": "internal:0d3d6ce789230506476790cce9d3a171a8c415aebea93a2f3f846150c95839d4:a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d",
+          "sourceId": "slide:256",
+          "sourceRevision": "a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d",
+          "sourceHash": "4e89b484f48e34a7e6eeaa576ba11da6f0bff155ccb666bd7614239e2d201f0e",
+          "deckVersion": "deck_a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d",
+          "manifestHash": "157f2e8119667249a8392f5c761ea969d313ae2f59a8c9e3ea1e7eaa3660bd3e",
+          "title": "Slide 1",
+          "content": "형식 중립 근거 자료 2026",
+          "quote": "형식 중립 근거 자료 2026",
+          "anchor": "slide=1&chunk=1",
+          "canonicalUrl": null,
+          "sourceDate": null,
+          "rights": "APPROVED",
+          "containsPii": false,
+          "authorizationVersion": "acl-1"
+        }
+      ],
+      "completedAtMs": 1787346180237,
+      "latencyMs": 3378
+    },
+    {
+      "outcome": "RECOMMEND",
+      "recommendation": {
+        "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+        "evidenceIds": [
+          "internal:0d3d6ce789230506476790cce9d3a171a8c415aebea93a2f3f846150c95839d4:a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d"
+        ],
+        "facts": {
+          "numbers": [],
+          "units": [],
+          "dates": [
+            "2026"
+          ],
+          "entities": [
+            "형식 중립 근거 자료"
+          ]
+        }
+      },
+      "evidence": [
+        {
+          "evidenceId": "internal:0d3d6ce789230506476790cce9d3a171a8c415aebea93a2f3f846150c95839d4:a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d",
+          "sourceId": "slide:256",
+          "sourceRevision": "a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d",
+          "sourceHash": "4e89b484f48e34a7e6eeaa576ba11da6f0bff155ccb666bd7614239e2d201f0e",
+          "deckVersion": "deck_a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d",
+          "manifestHash": "157f2e8119667249a8392f5c761ea969d313ae2f59a8c9e3ea1e7eaa3660bd3e",
+          "title": "Slide 1",
+          "content": "형식 중립 근거 자료 2026",
+          "quote": "형식 중립 근거 자료 2026",
+          "anchor": "slide=1&chunk=1",
+          "canonicalUrl": null,
+          "sourceDate": null,
+          "rights": "APPROVED",
+          "containsPii": false,
+          "authorizationVersion": "acl-1"
+        }
+      ],
+      "completedAtMs": 1787346183925,
+      "latencyMs": 3687
+    },
+    {
+      "outcome": "RECOMMEND",
+      "recommendation": {
+        "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+        "evidenceIds": [
+          "internal:0d3d6ce789230506476790cce9d3a171a8c415aebea93a2f3f846150c95839d4:a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d"
+        ],
+        "facts": {
+          "numbers": [],
+          "units": [],
+          "dates": [
+            "2026"
+          ],
+          "entities": [
+            "형식 중립 근거 자료"
+          ]
+        }
+      },
+      "evidence": [
+        {
+          "evidenceId": "internal:0d3d6ce789230506476790cce9d3a171a8c415aebea93a2f3f846150c95839d4:a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d",
+          "sourceId": "slide:256",
+          "sourceRevision": "a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d",
+          "sourceHash": "4e89b484f48e34a7e6eeaa576ba11da6f0bff155ccb666bd7614239e2d201f0e",
+          "deckVersion": "deck_a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d",
+          "manifestHash": "157f2e8119667249a8392f5c761ea969d313ae2f59a8c9e3ea1e7eaa3660bd3e",
+          "title": "Slide 1",
+          "content": "형식 중립 근거 자료 2026",
+          "quote": "형식 중립 근거 자료 2026",
+          "anchor": "slide=1&chunk=1",
+          "canonicalUrl": null,
+          "sourceDate": null,
+          "rights": "APPROVED",
+          "containsPii": false,
+          "authorizationVersion": "acl-1"
+        }
+      ],
+      "completedAtMs": 1787346187403,
+      "latencyMs": 3477
+    },
+    {
+      "outcome": "RECOMMEND",
+      "recommendation": {
+        "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+        "evidenceIds": [
+          "internal:0d3d6ce789230506476790cce9d3a171a8c415aebea93a2f3f846150c95839d4:a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d"
+        ],
+        "facts": {
+          "numbers": [],
+          "units": [],
+          "dates": [
+            "2026"
+          ],
+          "entities": [
+            "형식 중립 근거 자료"
+          ]
+        }
+      },
+      "evidence": [
+        {
+          "evidenceId": "internal:0d3d6ce789230506476790cce9d3a171a8c415aebea93a2f3f846150c95839d4:a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d",
+          "sourceId": "slide:256",
+          "sourceRevision": "a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d",
+          "sourceHash": "4e89b484f48e34a7e6eeaa576ba11da6f0bff155ccb666bd7614239e2d201f0e",
+          "deckVersion": "deck_a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d",
+          "manifestHash": "157f2e8119667249a8392f5c761ea969d313ae2f59a8c9e3ea1e7eaa3660bd3e",
+          "title": "Slide 1",
+          "content": "형식 중립 근거 자료 2026",
+          "quote": "형식 중립 근거 자료 2026",
+          "anchor": "slide=1&chunk=1",
+          "canonicalUrl": null,
+          "sourceDate": null,
+          "rights": "APPROVED",
+          "containsPii": false,
+          "authorizationVersion": "acl-1"
+        }
+      ],
+      "completedAtMs": 1787346191294,
+      "latencyMs": 3889
+    },
+    {
+      "outcome": "RECOMMEND",
+      "recommendation": {
+        "claim": "2026년 형식 중립 근거 자료가 존재합니다.",
+        "evidenceIds": [
+          "internal:0d3d6ce789230506476790cce9d3a171a8c415aebea93a2f3f846150c95839d4:a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d"
+        ],
+        "facts": {
+          "numbers": [],
+          "units": [],
+          "dates": [
+            "2026"
+          ],
+          "entities": [
+            "형식 중립 근거 자료"
+          ]
+        }
+      },
+      "evidence": [
+        {
+          "evidenceId": "internal:0d3d6ce789230506476790cce9d3a171a8c415aebea93a2f3f846150c95839d4:a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d",
+          "sourceId": "slide:256",
+          "sourceRevision": "a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d",
+          "sourceHash": "4e89b484f48e34a7e6eeaa576ba11da6f0bff155ccb666bd7614239e2d201f0e",
+          "deckVersion": "deck_a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d",
+          "manifestHash": "157f2e8119667249a8392f5c761ea969d313ae2f59a8c9e3ea1e7eaa3660bd3e",
+          "title": "Slide 1",
+          "content": "형식 중립 근거 자료 2026",
+          "quote": "형식 중립 근거 자료 2026",
+          "anchor": "slide=1&chunk=1",
+          "canonicalUrl": null,
+          "sourceDate": null,
+          "rights": "APPROVED",
+          "containsPii": false,
+          "authorizationVersion": "acl-1"
+        }
+      ],
+      "completedAtMs": 1787346195494,
+      "latencyMs": 4198
+    }
+  ]
+}
