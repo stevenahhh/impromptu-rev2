@@ -22,7 +22,7 @@ SELECT pg_temp.assert_true(
 );
 SELECT pg_temp.assert_true(
   (
-    SELECT count(*) = 4 AND bool_and(relrowsecurity) AND bool_and(relforcerowsecurity)
+    SELECT count(*) = 6 AND bool_and(relrowsecurity) AND bool_and(relforcerowsecurity)
     FROM pg_class AS relation
     JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
     WHERE namespace.nspname = 'private_app'
@@ -30,7 +30,9 @@ SELECT pg_temp.assert_true(
         'tenants',
         'presentation_sessions',
         'evidence_candidates',
-        'publication_outbox'
+        'publication_outbox',
+        'slide_visits',
+        'session_report_state'
       )
   ),
   'every tenant-owned private table must force row-level security'
@@ -44,7 +46,9 @@ SELECT pg_temp.assert_true(
         'tenants',
         'presentation_sessions',
         'evidence_candidates',
-        'publication_outbox'
+        'publication_outbox',
+        'slide_visits',
+        'session_report_state'
       )
       AND policyname = 'tenant_isolation'
       AND permissive = 'PERMISSIVE'
@@ -168,7 +172,7 @@ SELECT pg_temp.assert_true(
 );
 SELECT pg_temp.assert_true(
   (
-    SELECT count(*) = 8
+    SELECT count(*) = 9
     FROM _migrations.applied_migrations
     WHERE migration_name IN (
       '0001_private_foundation.sql',
@@ -178,11 +182,45 @@ SELECT pg_temp.assert_true(
       '0005_prepared_evidence_state.sql',
       '0006_deck_retrieval_chunks.sql',
       '0007_embedding_dimension.sql',
-      '0008_deck_retrieval_hybrid.sql'
+      '0008_deck_retrieval_hybrid.sql',
+      '0009_session_reports.sql'
     )
       AND checksum ~ '^[0-9a-f]{64}$'
   ),
   'private migrations must be recorded with checksums'
+);
+
+SELECT pg_temp.assert_true(
+  has_table_privilege('private_app', 'private_app.slide_visits', 'SELECT,INSERT')
+    AND NOT has_table_privilege('private_app', 'private_app.slide_visits', 'UPDATE,DELETE')
+    AND has_table_privilege('private_app', 'private_app.session_report_state', 'SELECT,INSERT,UPDATE')
+    AND NOT has_table_privilege('private_app', 'private_app.session_report_state', 'DELETE'),
+  'report tables must permit append-only visits and CAS-only state updates'
+);
+SELECT pg_temp.assert_true(
+  NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'private_app'
+      AND table_name = 'session_report_state'
+      AND column_name IN ('transcript', 'raw_audio', 'partial')
+  ),
+  'report state must not persist transcript, raw audio, or partial columns'
+);
+SELECT pg_temp.assert_true(
+  EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conrelid = 'private_app.slide_visits'::regclass
+      AND pg_get_constraintdef(oid) LIKE '%ON DELETE CASCADE%'
+  )
+    AND EXISTS (
+      SELECT 1
+      FROM pg_constraint
+      WHERE conrelid = 'private_app.session_report_state'::regclass
+        AND pg_get_constraintdef(oid) LIKE '%ON DELETE CASCADE%'
+    ),
+  'report rows must cascade with their presentation session'
 );
 
 SELECT 'private catalog and RLS assertions passed' AS result;

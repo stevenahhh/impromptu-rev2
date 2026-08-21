@@ -225,6 +225,7 @@ if [[ "$rerun_output" != *"SKIP private/0001_private_foundation.sql"* \
   || "$rerun_output" != *"SKIP private/0006_deck_retrieval_chunks.sql"* \
   || "$rerun_output" != *"SKIP private/0007_embedding_dimension.sql"* \
   || "$rerun_output" != *"SKIP private/0008_deck_retrieval_hybrid.sql"* \
+  || "$rerun_output" != *"SKIP private/0009_session_reports.sql"* \
   || "$rerun_output" != *"SKIP projection/0001_projection_foundation.sql"* \
   || "$rerun_output" != *"SKIP projection/0002_publication_inbox.sql"* \
   || "$rerun_output" != *"SKIP projection/0003_dispatcher_only_writes.sql"* \
@@ -260,6 +261,8 @@ run_real_dispatch() {
 PRIVATE_DATABASE_URL="$PRIVATE_DRIVER_URL" \
   PROJECTION_DATABASE_URL="$PROJECTION_DRIVER_URL" \
   bun run "$REPO_ROOT/tests/database/state-store-integration.ts"
+PRIVATE_DATABASE_URL="$PRIVATE_DRIVER_URL" \
+  bun run "$REPO_ROOT/tests/database/session-report-store-integration.ts"
 PRIVATE_DATABASE_URL="$PRIVATE_DRIVER_URL" \
   bun run "$REPO_ROOT/tests/database/deck-retrieval-integration.ts"
 
