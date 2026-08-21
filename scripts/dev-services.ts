@@ -21,6 +21,11 @@ export const developmentServices = [
       CONTROLLER_PASSWORD: "demo-2026-password",
       DECK_ARTIFACT_ROOT: "/tmp",
       DECK_STAGING_ROOT: "/tmp",
+      FFMPEG_BINARY_PATH: process.env.FFMPEG_BINARY_PATH ?? "/opt/homebrew/bin/ffmpeg",
+      WHISPER_CPP_BINARY_PATH:
+        process.env.WHISPER_CPP_BINARY_PATH ?? "/opt/homebrew/bin/whisper-cli",
+      WHISPER_CPP_MODEL_PATH:
+        process.env.WHISPER_CPP_MODEL_PATH ?? "/Users/gahn/.cache/whisper.cpp/ggml-small-q5_1.bin",
       CHAT_MODEL_API_KEY: process.env.OPENCODE_ZEN_API_KEY ?? "local-chat-model-key-required",
       CHAT_MODEL_BASE_URL: "https://opencode.ai/zen/go/v1",
       EMBEDDING_MODEL_API_KEY: "local-embedding-token",

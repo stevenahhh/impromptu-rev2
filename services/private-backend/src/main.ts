@@ -16,24 +16,38 @@ import { z } from "zod";
 import { createAccountDirectory } from "./account-directory.ts";
 import { createPostgresAccountSessionStore } from "./account-session-store-postgres.ts";
 import { createPostgresAccountStore } from "./account-store-postgres.ts";
+import { createAudioIngestService } from "./audio-ingest.ts";
 import { parsePrivateBackendConfig } from "./config.ts";
 import { createDeckRenderSubprocess } from "./deck-render-subprocess.ts";
 import { createDeckUploadService } from "./deck-upload-service.ts";
 import { createDeckUploadWorker } from "./deck-upload-worker.ts";
 import { createPrivateBackendHandler } from "./http.ts";
 import { registerOpenAiCompatibleAdapters } from "./model-adapters/openai-compatible.ts";
+import {
+  registerWhisperCppStreamingStt,
+  verifyWhisperCppInstallation,
+  WHISPER_CPP_ADAPTER_ID,
+  WhisperCppAdapterIsolate,
+} from "./model-adapters/stt-whisper-cpp.ts";
 import { createJsonLogger, createMetricsRegistry } from "./observability.ts";
 import { PreparedEvidenceCoordinator } from "./prepared-evidence.ts";
 import { createPostgresPreparedEvidencePersistence } from "./prepared-evidence-store-postgres.ts";
 import { ProjectionHttpPort } from "./projection-http-port.ts";
 import { createTokenBucketRateLimiter } from "./rate-limit.ts";
+import { createSessionReportReadRouteHandler } from "./report/http.ts";
+import { createPostgresSessionReportRepository } from "./report/postgres-session-report-repository.ts";
 import {
   NodePinnedHttpsTransport,
   NodePublicDnsResolver,
   SafeExternalEvidenceFetcher,
 } from "./retrieval/external-fetch.ts";
+import {
+  externalSearchCredentialsFromEnvironment,
+  KeylessFirstExternalSearchBoundary,
+} from "./retrieval/external-search.ts";
 import { InternalRetrievalService } from "./retrieval/internal-retrieval.ts";
 import { PostgresDeckRetrievalStore } from "./retrieval/postgres-deck-retrieval.ts";
+import { createTenantScopedPostgresRepository } from "./retrieval/tenant-scoped-postgres-repository.ts";
 import { PrivateRecommendationPipeline } from "./verifier/recommendation-pipeline.ts";
 
 function required(name: string): string {
@@ -153,6 +167,13 @@ const chatModel = {
   apiPrefix: apiPrefix(chatModelBaseUrl),
   model: required("LLM_MODEL"),
 };
+const whisperPaths = {
+  ffmpegPath: required("FFMPEG_BINARY_PATH"),
+  whisperBinaryPath: required("WHISPER_CPP_BINARY_PATH"),
+  modelPath: required("WHISPER_CPP_MODEL_PATH"),
+};
+await verifyWhisperCppInstallation(whisperPaths);
+registerWhisperCppStreamingStt(modelRegistry, whisperPaths);
 const modelAdapterBindings = registerOpenAiCompatibleAdapters(modelRegistry, {
   embedding: {
     origin: embeddingModelBaseUrl.origin,
@@ -182,7 +203,7 @@ const modelBudget = {
 };
 const modelRouter = new ServerModelRouter({
   registry: modelRegistry,
-  adapterIsolate: new NodePermissionAdapterIsolate(),
+  adapterIsolate: new WhisperCppAdapterIsolate(new NodePermissionAdapterIsolate()),
   policyVersionAuthority: new StaticPolicyVersionAuthority("model-policy-v1"),
   quotaPolicy: { async assertWithinQuota() {} },
   budget: modelBudget,
@@ -205,8 +226,9 @@ const modelRouter = new ServerModelRouter({
   providerTransport: new FetchProviderEgressTransport(),
 });
 const logger = createJsonLogger();
+const retrievalRepository = createTenantScopedPostgresRepository(privateSql);
 const retrievalStore = new PostgresDeckRetrievalStore({
-  sql: privateSql,
+  repository: retrievalRepository,
   artifactRoot: deckArtifactRoot,
   access: {
     async authorize(principal, request) {
@@ -281,6 +303,21 @@ const externalFetcher = new SafeExternalEvidenceFetcher({
   dns: new NodePublicDnsResolver(),
   transport: new NodePinnedHttpsTransport(),
 });
+const externalSearch = new KeylessFirstExternalSearchBoundary({
+  ...externalSearchCredentialsFromEnvironment(Bun.env),
+  diagnostics: {
+    observe(diagnostic) {
+      logger.request({
+        requestId: `external-search:${crypto.randomUUID()}`,
+        method: "SEARCH",
+        path: `/internal/external-search/${diagnostic.provider}`,
+        status: 204,
+        durationMs: 0,
+        outcome: diagnostic.failure,
+      });
+    },
+  },
+});
 const bootstrapAccount = await accountDirectory.register(
   { username: bootstrapUsername, password: bootstrapPassword },
   Date.now(),
@@ -304,6 +341,7 @@ const recommendations = new PrivateRecommendationPipeline({
     },
   },
   internal: internalRetrieval,
+  externalSearch,
   externalFetch: externalFetcher,
   stageObserver: {
     observe(event) {
@@ -326,6 +364,36 @@ coordinator = new PreparedEvidenceCoordinator(projection, store, {
     async authorize(candidate) {
       return await recommendations.authorizeCandidateForPublication(candidate);
     },
+  },
+});
+const audio = createAudioIngestService({
+  router: modelRouter,
+  adapterId: WHISPER_CPP_ADAPTER_ID,
+  createGrantId: () => `capture_${crypto.randomUUID()}`,
+  contextFor(identity, signal) {
+    const startedAtMs = Date.now();
+    const requestId = `audio-stt:${crypto.randomUUID()}`;
+    return createTrustedModelContext({
+      tenantId: identity.accountId,
+      principalId: identity.actorId,
+      requestId,
+      traceId: `${requestId}:${identity.presentationSessionId}`,
+      policyVersion: "model-policy-v1",
+      deadlineAtMs: startedAtMs + 60_000,
+      signal,
+    });
+  },
+});
+const sessionReports = createPostgresSessionReportRepository(privateSql);
+const sessionReportRead = createSessionReportReadRouteHandler(sessionReports, {
+  async resolve({ accountId: requestedAccountId, presentationSessionId }) {
+    const presentation = store.presentations.get(presentationSessionId);
+    if (presentation?.lifecycle.ownerAccountId !== requestedAccountId) return null;
+    return {
+      tenantId: requestedAccountId,
+      presentationSessionId,
+      ownerSubject: requestedAccountId,
+    };
   },
 });
 const metrics = createMetricsRegistry("private_backend");
@@ -351,6 +419,8 @@ const server = Bun.serve({
     accountRegistrar: accountDirectory,
     now: Date.now,
     recommendations,
+    audio,
+    sessionReportRead,
     persist: persistence.persist,
     uploads: deckUploadService,
     logger,

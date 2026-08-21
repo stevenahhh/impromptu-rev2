@@ -63,7 +63,16 @@ function system(requirement = false) {
   registry.registerDeterministicFakeStreamingStt(
     createScriptedSttAdapter({
       transcript,
-      events: [{ kind: "final", sequence: 0, transcript }],
+      events: [
+        {
+          kind: "FINAL",
+          sessionGeneration: 1,
+          sequence: 0,
+          segmentId: "security-segment-0",
+          finalSegmentId: "security-final-0",
+          transcript: { ...transcript, words: [] },
+        },
+      ],
       ...(requirement
         ? {
             requirement: {

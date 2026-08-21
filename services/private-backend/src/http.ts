@@ -16,6 +16,7 @@ import { createPreparedDeckArtifacts } from "./prepared-deck-upload.ts";
 import type { PreparedEvidenceCoordinator } from "./prepared-evidence.ts";
 import { clientIpKey, hashRateLimitKey, type RateLimiter } from "./rate-limit.ts";
 import { renderedDeckArtifacts } from "./rendered-deck-artifacts.ts";
+import type { SessionReportReadRouteHandler } from "./report/http.ts";
 
 export type PrivateBackendHandler = (request: Request) => Response | Promise<Response>;
 
@@ -84,6 +85,7 @@ export interface PrivateBackendHttpDependencies {
   readonly recommendations?: {
     recommend(accountSessionId: string, input: unknown): Promise<RecommendationOutcome>;
   };
+  readonly sessionReportRead?: SessionReportReadRouteHandler;
   readonly persist?: () => Promise<void>;
   readonly uploads?: DeckUploadService;
   readonly logger?: JsonLogger;
@@ -488,6 +490,9 @@ export function createPrivateBackendHandler(
         return json({ error: "csrf_rejected" }, 403, origin);
       }
     }
+
+    const reportResponse = await dependencies.sessionReportRead?.(request, account.value.accountId);
+    if (reportResponse !== undefined && reportResponse !== null) return reportResponse;
 
     if (url.pathname.startsWith("/v1/audio/") && dependencies.audio === undefined) {
       return json({ error: "audio_ingest_unavailable" }, 503, origin);
