@@ -1,12 +1,17 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { SQL } from "bun";
 
 type ServiceProcess = ReturnType<typeof Bun.spawn<"ignore", "pipe", "pipe">>;
 
+// Coordinator and gateway state live in PostgreSQL keyed by these strings, so each run gets a
+// unique key: a fixed key would restore previous runs' state and grow the rows without bound.
+const runNonce = globalThis.crypto.randomUUID().replaceAll("-", "").slice(0, 16);
+const privateStateKey = `impromptu-r2-runtime-${runNonce}-private`;
+const projectionStateKey = `impromptu-r2-runtime-${runNonce}-projection`;
+
 const processes: ServiceProcess[] = [];
-const privateSnapshotPath = join(import.meta.dir, ".runtime-private-snapshot.json");
-const projectionDatabasePath = join(import.meta.dir, ".runtime-projection-database.json");
 const deckStagingRoot = join(import.meta.dir, ".runtime-deck-staging");
 const deckArtifactRoot = join(import.meta.dir, ".runtime-deck-artifacts");
 
@@ -43,9 +48,46 @@ afterEach(async () => {
     process.kill();
     await process.exited;
   }
-  rmSync(privateSnapshotPath, { force: true });
-  rmSync(projectionDatabasePath, { force: true });
+  await deleteRuntimeStateRows();
 });
+
+/**
+ * Removes this run's coordinator and gateway state rows so repeated runs cannot accumulate
+ * abandoned snapshots in the shared test databases. Best effort: a failed cleanup must not mask
+ * the test result, and the row is keyed uniquely per run so it can never leak into another run.
+ */
+async function deleteRuntimeStateRows(): Promise<void> {
+  const targets: readonly { readonly url: string; readonly key: string; readonly table: string }[] =
+    [
+      {
+        url: globalThis.process.env.PRIVATE_DATABASE_URL ?? "",
+        key: privateStateKey,
+        table: "private_app.prepared_evidence_state",
+      },
+      {
+        url: globalThis.process.env.PROJECTION_DATABASE_URL ?? "",
+        key: projectionStateKey,
+        table: "public_projection.gateway_state",
+      },
+    ];
+  for (const target of targets) {
+    if (target.url.length === 0) continue;
+    try {
+      const sql = new SQL(target.url);
+      try {
+        if (target.table === "private_app.prepared_evidence_state") {
+          await sql`DELETE FROM private_app.prepared_evidence_state WHERE state_key = ${target.key}`;
+        } else {
+          await sql`DELETE FROM public_projection.gateway_state WHERE state_key = ${target.key}`;
+        }
+      } finally {
+        await sql.close({ timeout: 1 }).catch(() => undefined);
+      }
+    } catch {
+      // Leave the row; it is unreachable for other runs because the key is unique per run.
+    }
+  }
+}
 
 async function waitForOutput(
   stream: ReadableStream<Uint8Array>,
@@ -109,14 +151,12 @@ function browserHeaders(origin: string, csrfToken?: string, cookie?: string): He
 
 describe("runnable WP3 service composition", () => {
   test("service mains compose dependencies for every WP3 route", async () => {
-    rmSync(privateSnapshotPath, { force: true });
-    rmSync(projectionDatabasePath, { force: true });
     await startService(
       "services/projection-gateway/src/main.ts",
       {
         PROJECTION_GATEWAY_HOST: "127.0.0.1",
         PROJECTION_GATEWAY_PORT: "44102",
-        PROJECTION_GATEWAY_STATE_KEY: projectionDatabasePath,
+        PROJECTION_GATEWAY_STATE_KEY: projectionStateKey,
         PRIVATE_BACKEND_ORIGIN: "http://127.0.0.1:44101",
         SERVICE_AUTH_TOKEN: serviceToken,
         STAGE_ORIGIN: stageOrigin,
@@ -141,7 +181,7 @@ describe("runnable WP3 service composition", () => {
         VERIFIER_MODEL: "verifier-test",
         PRIVATE_BACKEND_HOST: "127.0.0.1",
         PRIVATE_BACKEND_PORT: "44101",
-        PRIVATE_PREPARED_EVIDENCE_STATE_KEY: privateSnapshotPath,
+        PRIVATE_PREPARED_EVIDENCE_STATE_KEY: privateStateKey,
         PROJECTION_GATEWAY_ORIGIN: "http://127.0.0.1:44102",
         SERVICE_AUTH_TOKEN: serviceToken,
         DECK_STAGING_ROOT: deckStagingRoot,
