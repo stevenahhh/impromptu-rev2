@@ -6,9 +6,14 @@ afterAll(() => GlobalRegistrator.unregister());
 
 const { act, cleanup, render, within } = await import("@testing-library/react");
 const { MemoryRouter } = await import("react-router-dom");
-const { StageRoutes } = await import("./App");
+const { RECONCILE_RECOVERY_LIMIT, StageRoutes } = await import("./App");
 
-import type { StageEventObserver, StageSessionClient, StageSnapshotView } from "./stage-client";
+import type {
+  StageEventObserver,
+  StagePlaybackEvent,
+  StageSessionClient,
+  StageSnapshotView,
+} from "./stage-client";
 
 function deferred<Value>() {
   let resolve: ((value: Value) => void) | null = null;
@@ -70,6 +75,23 @@ const snapshot: StageSnapshotView = {
   blackout: false,
   occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 1 },
 };
+
+function playbackEvent(
+  commandId: string,
+  publicPlaybackRevision: string,
+  occurrenceSeq: number,
+  publicSlideKey: string,
+): StagePlaybackEvent {
+  return {
+    commandId,
+    presentationSessionEpoch: "pse_1",
+    displayBindingEpoch: "dbe_1",
+    acceptedControlRevision: "cr_1",
+    publicPlaybackRevision,
+    occurrence: { publicSlideKey, occurrenceSeq },
+    blackout: false,
+  };
+}
 
 function stageClient(
   observerSignal: ReturnType<typeof deferred<StageEventObserver>>,
@@ -161,6 +183,7 @@ describe("slide-only public Stage", () => {
     expect(within(document.body).getByRole("img", { name: "Slide two" })).toBeTruthy();
 
     const reconcile = nextStageEvent("impromptu:reconcile-required");
+    const reconciledSnapshot = nextStageEvent("impromptu:snapshot-applied");
     await act(async () =>
       observer.onPlayback({
         commandId: "cmd_gap",
@@ -173,7 +196,9 @@ describe("slide-only public Stage", () => {
       }),
     );
     expect(await reconcile).toEqual({ reason: "REVISION_GAP" });
-    expect(document.querySelector(".stage-slide")).toBeNull();
+    // The gapped command is never applied directly; recovery re-fetches the authoritative
+    // snapshot, which still sits at the pre-gap revision.
+    expect(await reconciledSnapshot).toMatchObject({ publicPlaybackRevision: "pbr_0" });
   });
 
   test("keeps applied playback when a reconnect snapshot still lags the recorded receipt", async () => {
@@ -249,5 +274,127 @@ describe("slide-only public Stage", () => {
     );
     expect(await secondReceipt).toMatchObject({ commandId: "cmd_two" });
     expect(appliedCommandIds).toEqual(["cmd_one", "cmd_two"]);
+  });
+
+  test("recovers automatically after a revision gap by re-fetching the authoritative snapshot", async () => {
+    const observers: StageEventObserver[] = [];
+    const recoveredSnapshot: StageSnapshotView = {
+      ...snapshot,
+      publicPlaybackRevision: "pbr_3",
+      occurrence: { publicSlideKey: "slide_two", occurrenceSeq: 4 },
+    };
+    let snapshotFetches = 0;
+    const client: StageSessionClient = {
+      async createJoin() {
+        throw new Error("not used");
+      },
+      async claim() {},
+      async snapshot() {
+        snapshotFetches += 1;
+        return snapshotFetches === 1 ? snapshot : recoveredSnapshot;
+      },
+      async subscribe(observer) {
+        observers.push(observer);
+        return { close() {} };
+      },
+      async recordApplied() {
+        return { status: "STAGE_APPLIED" };
+      },
+    };
+    const initialSnapshotApplied = nextStageEvent("impromptu:snapshot-applied");
+    render(
+      <MemoryRouter initialEntries={["/display/display_alpha"]}>
+        <StageRoutes client={client} />
+      </MemoryRouter>,
+    );
+    await act(async () => initialSnapshotApplied);
+    const observer = observers[0];
+    if (observer === undefined) throw new Error("Stage did not subscribe");
+
+    const visible = nextStageEvent("impromptu:visible-playback");
+    await act(async () => observer.onPlayback(playbackEvent("cmd_one", "pbr_1", 2, "slide_two")));
+    expect(await visible).toMatchObject({ commandId: "cmd_one" });
+
+    const reconcile = nextStageEvent("impromptu:reconcile-required");
+    const recovered = nextStageEvent("impromptu:snapshot-applied");
+    await act(async () => observer.onPlayback(playbackEvent("cmd_gap", "pbr_3", 3, "slide_one")));
+    expect(await reconcile).toEqual({ reason: "REVISION_GAP" });
+    expect(await recovered).toMatchObject({ publicPlaybackRevision: "pbr_3" });
+    expect(snapshotFetches).toBe(2);
+
+    const display = document.querySelector(".stage-display");
+    expect(display?.getAttribute("data-audience-readiness")).toBe("READY");
+    expect(within(document.body).getByRole("img", { name: "Slide two" })).toBeTruthy();
+
+    const resumed = nextStageEvent("impromptu:visible-playback");
+    await act(async () => observer.onPlayback(playbackEvent("cmd_four", "pbr_4", 5, "slide_one")));
+    expect(await resumed).toMatchObject({ commandId: "cmd_four" });
+    expect(within(document.body).getByRole("img", { name: "Slide one" })).toBeTruthy();
+  });
+
+  test("bounds automatic recovery refetches when the snapshot never becomes usable", async () => {
+    const observers: StageEventObserver[] = [];
+    const pendingRefetches: ReturnType<typeof deferred<StageSnapshotView>>[] = [];
+    let initialFetchDone = false;
+    const client: StageSessionClient = {
+      async createJoin() {
+        throw new Error("not used");
+      },
+      async claim() {},
+      async snapshot() {
+        if (!initialFetchDone) {
+          initialFetchDone = true;
+          return snapshot;
+        }
+        const pending = deferred<StageSnapshotView>();
+        pendingRefetches.push(pending);
+        return pending.promise;
+      },
+      async subscribe(observer) {
+        observers.push(observer);
+        return { close() {} };
+      },
+      async recordApplied() {
+        return { status: "STAGE_APPLIED" };
+      },
+    };
+    const initialSnapshotApplied = nextStageEvent("impromptu:snapshot-applied");
+    render(
+      <MemoryRouter initialEntries={["/display/display_alpha"]}>
+        <StageRoutes client={client} />
+      </MemoryRouter>,
+    );
+    await act(async () => initialSnapshotApplied);
+    const observer = observers[0];
+    if (observer === undefined) throw new Error("Stage did not subscribe");
+
+    const visible = nextStageEvent("impromptu:visible-playback");
+    await act(async () => observer.onPlayback(playbackEvent("cmd_one", "pbr_1", 2, "slide_two")));
+    expect(await visible).toMatchObject({ commandId: "cmd_one" });
+
+    for (let attempt = 0; attempt < RECONCILE_RECOVERY_LIMIT; attempt += 1) {
+      const reconcile = nextStageEvent("impromptu:reconcile-required");
+      await act(async () =>
+        observer.onPlayback(playbackEvent(`cmd_gap_${attempt}`, "pbr_5", 9, "slide_one")),
+      );
+      expect(await reconcile).toEqual({ reason: "REVISION_GAP" });
+      const pending = pendingRefetches[attempt];
+      if (pending === undefined) throw new Error(`Recovery refetch ${attempt} did not run`);
+      const recoveredApplied = nextStageEvent("impromptu:snapshot-applied");
+      pending.resolve(snapshot);
+      expect(await recoveredApplied).toMatchObject({ publicPlaybackRevision: "pbr_0" });
+    }
+    expect(pendingRefetches.length).toBe(RECONCILE_RECOVERY_LIMIT);
+
+    // The limit is reached: a further gap must publish reconcile-required without refetching.
+    const finalReconcile = nextStageEvent("impromptu:reconcile-required");
+    await act(async () =>
+      observer.onPlayback(playbackEvent("cmd_gap_final", "pbr_5", 9, "slide_one")),
+    );
+    expect(await finalReconcile).toEqual({ reason: "REVISION_GAP" });
+    expect(pendingRefetches.length).toBe(RECONCILE_RECOVERY_LIMIT);
+    expect(document.querySelector(".stage-display")?.getAttribute("data-audience-readiness")).toBe(
+      "RECOVERING",
+    );
   });
 });

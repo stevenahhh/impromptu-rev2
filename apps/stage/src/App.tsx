@@ -26,6 +26,13 @@ import {
 
 const STAGE_PUBLIC_API_ORIGIN = import.meta.env.STAGE_PUBLIC_API_ORIGIN ?? "";
 
+/**
+ * Upper bound on automatic snapshot refetches after `impromptu:reconcile-required`. The counter
+ * resets only when a contiguous playback command applies again, so a gateway that keeps serving
+ * unusable states cannot turn recovery into an endless refetch loop.
+ */
+export const RECONCILE_RECOVERY_LIMIT = 3;
+
 function publishStageEvent(name: string, detail: unknown): void {
   window.dispatchEvent(new CustomEvent(name, { detail }));
 }
@@ -394,6 +401,35 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
     let sseSubscription: StageSubscription | null = null;
     let latestSnapshot: StageSnapshotView | null = null;
     let realtimeReconnectAttempts = 0;
+    let reconcileRecoveryAttempts = 0;
+
+    /**
+     * A revision gap means this display missed causally ordered commands, so the only safe
+     * recovery is to re-fetch the authoritative snapshot instead of guessing. The refetch is
+     * event-driven — fired by the reconcile transition itself, never a timer — and bounded:
+     * the attempt counter resets only when a contiguous command applies again, so repeated
+     * failures or unusable snapshots cannot become an infinite refetch loop.
+     */
+    const recoverFromReconcile = async (): Promise<void> => {
+      if (!active || reconcileRecoveryAttempts >= RECONCILE_RECOVERY_LIMIT) return;
+      reconcileRecoveryAttempts += 1;
+      try {
+        const fetched = await client.snapshot();
+        if (!active) return;
+        const next = reconnectedSnapshot(latestSnapshot, fetched);
+        latestSnapshot = next;
+        setSnapshot(next);
+        publishStageEvent("impromptu:reconcile-recovered", {
+          publicPlaybackRevision: next.publicPlaybackRevision,
+        });
+        publishStageEvent("impromptu:snapshot-applied", {
+          stateHash: next.stateHash,
+          publicPlaybackRevision: next.publicPlaybackRevision,
+        });
+      } catch {
+        // Stay RECOVERING; the attempt counter above bounds repeated failures.
+      }
+    };
 
     const connect = async (pins?: StageSnapshotView): Promise<void> => {
       try {
@@ -409,6 +445,7 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
               setSnapshot(null);
               latestSnapshot = null;
               publishStageEvent("impromptu:reconcile-required", { reason: "EPOCH_CHANGED" });
+              void recoverFromReconcile();
               return;
             }
             const currentRevision = playbackRevisionValue(current.publicPlaybackRevision);
@@ -422,6 +459,7 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
               };
               latestSnapshot = next;
               setSnapshot(next);
+              reconcileRecoveryAttempts = 0;
               publishStageEvent("impromptu:visible-playback", {
                 commandId: event.commandId,
                 occurrence: event.occurrence,
@@ -430,6 +468,7 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
               setSnapshot(null);
               latestSnapshot = null;
               publishStageEvent("impromptu:reconcile-required", { reason: "REVISION_GAP" });
+              void recoverFromReconcile();
               return;
             }
             const recordOverHttp = () =>
@@ -495,6 +534,7 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
           setSnapshot(null);
           latestSnapshot = null;
           publishStageEvent("impromptu:reconcile-required", { reason: "PIN_MISMATCH" });
+          void recoverFromReconcile();
         }
       }
     };
