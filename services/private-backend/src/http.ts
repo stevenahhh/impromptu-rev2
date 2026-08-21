@@ -2,6 +2,11 @@ import type { PrivateDeckContext } from "@impromptu/contracts/private";
 import type { PublishedDeckArtifact } from "@impromptu/contracts/public";
 import type { RecommendationOutcome } from "@impromptu/contracts/retrieval";
 import type { AccountDirectory } from "./account-directory.ts";
+import {
+  AUDIO_CAPTURE_COOKIE_NAME,
+  type AudioIngestService,
+  MAX_AUDIO_FRAME_BYTES,
+} from "./audio-ingest.ts";
 import type { ExactOrigin, PrivateBackendConfig } from "./config.ts";
 import { type ParsedDeckMultipart, parseDeckUploadMultipart } from "./deck-upload-multipart.ts";
 import { DeckUploadRejectedError } from "./deck-upload-service.ts";
@@ -71,6 +76,7 @@ export interface DeckUploadService {
 export interface PrivateBackendHttpDependencies {
   readonly coordinator: PreparedEvidenceCoordinator;
   readonly identityVerifier: AccountIdentityVerifier;
+  readonly audio?: AudioIngestService;
   /** Optional so deployments can explicitly leave public account creation disabled. */
   readonly accountRegistrar?: Pick<AccountDirectory, "register">;
   readonly internalAuthToken: string;
@@ -153,7 +159,10 @@ function browserOriginHeaders(request: Request, allowedOrigin: ExactOrigin): Hea
   headers.set("access-control-allow-origin", allowedOrigin);
   headers.set("access-control-allow-credentials", "true");
   headers.set("access-control-allow-methods", "GET, POST, DELETE");
-  headers.set("access-control-allow-headers", "content-type, x-csrf-token");
+  headers.set(
+    "access-control-allow-headers",
+    "content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token",
+  );
   headers.set("vary", "Origin");
   return headers;
 }
@@ -167,15 +176,26 @@ function accountCookieAttributes(allowedOrigin: ExactOrigin): string {
   return `Path=/; HttpOnly${secure}; SameSite=Strict`;
 }
 
-function accountCookie(request: Request, allowedOrigin: ExactOrigin): string | null {
+function namedCookie(request: Request, expectedName: string): string | null {
   const cookie = request.headers.get("cookie");
   if (cookie === null) return null;
-  const expectedName = accountCookieName(allowedOrigin);
   for (const part of cookie.split(";")) {
     const [name, ...value] = part.trim().split("=");
     if (name === expectedName) return value.join("=") || null;
   }
   return null;
+}
+
+function accountCookie(request: Request, allowedOrigin: ExactOrigin): string | null {
+  return namedCookie(request, accountCookieName(allowedOrigin));
+}
+
+function captureCookie(request: Request): string | null {
+  return namedCookie(request, AUDIO_CAPTURE_COOKIE_NAME);
+}
+
+function captureCookieAttributes(): string {
+  return "Path=/; HttpOnly; Secure; SameSite=Strict";
 }
 
 function mutationAllowed(request: Request, allowedOrigin: ExactOrigin): boolean {
@@ -195,6 +215,57 @@ async function requestBody(request: Request): Promise<unknown> {
   } catch {
     return null;
   }
+}
+
+type AudioFrameBody =
+  | Readonly<{ outcome: "READ"; bytes: Uint8Array }>
+  | Readonly<{ outcome: "REJECTED"; reason: "EMPTY_FRAME" | "FRAME_TOO_LARGE" }>;
+
+async function readAudioFrame(request: Request): Promise<AudioFrameBody> {
+  const declaredLength = request.headers.get("content-length");
+  if (declaredLength !== null) {
+    if (!/^\d+$/.test(declaredLength)) return { outcome: "REJECTED", reason: "FRAME_TOO_LARGE" };
+    const parsedLength = Number(declaredLength);
+    if (!Number.isSafeInteger(parsedLength) || parsedLength > MAX_AUDIO_FRAME_BYTES) {
+      return { outcome: "REJECTED", reason: "FRAME_TOO_LARGE" };
+    }
+  }
+  if (request.body === null) return { outcome: "REJECTED", reason: "EMPTY_FRAME" };
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+  while (true) {
+    const item = await reader.read();
+    if (item.done) break;
+    byteLength += item.value.byteLength;
+    if (byteLength > MAX_AUDIO_FRAME_BYTES) {
+      await reader.cancel("audio frame exceeds memory boundary");
+      return { outcome: "REJECTED", reason: "FRAME_TOO_LARGE" };
+    }
+    chunks.push(item.value);
+  }
+  if (byteLength === 0) return { outcome: "REJECTED", reason: "EMPTY_FRAME" };
+  const bytes = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { outcome: "READ", bytes };
+}
+
+function boundedAudioHeader(request: Request, name: string, maximum: number): number | null {
+  const value = request.headers.get(name);
+  if (value === null || !/^(?:0|[1-9]\d*)$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed <= maximum ? parsed : null;
+}
+
+function audioRejection(reason: string, headers: Headers): Response {
+  const status =
+    reason === "CAPTURE_GRANT_REQUIRED" ? 401 : reason === "GRANT_SESSION_MISMATCH" ? 403 : 409;
+  return json({ error: reason }, status, headers);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -418,6 +489,130 @@ export function createPrivateBackendHandler(
       }
     }
 
+    if (url.pathname.startsWith("/v1/audio/") && dependencies.audio === undefined) {
+      return json({ error: "audio_ingest_unavailable" }, 503, origin);
+    }
+
+    if (request.method === "POST" && url.pathname === "/v1/audio/grants") {
+      const result = dependencies.audio?.issueGrant(
+        accountSessionId,
+        account.value.actorId,
+        await requestBody(request),
+        dependencies.now(),
+      );
+      if (result === undefined) return json({ error: "audio_ingest_unavailable" }, 503, origin);
+      if (result.outcome === "REJECTED") {
+        return json(
+          { error: result.reason },
+          result.reason === "ACTOR_MISMATCH" ? 403 : 400,
+          origin,
+        );
+      }
+      origin.append(
+        "set-cookie",
+        `${AUDIO_CAPTURE_COOKIE_NAME}=${result.grantId}; ${captureCookieAttributes()}; Max-Age=${Math.max(0, Math.floor((result.expiresAtMs - dependencies.now()) / 1_000))}`,
+      );
+      return json(
+        { mimeType: "audio/webm;codecs=opus", expiresAtMs: result.expiresAtMs },
+        201,
+        origin,
+      );
+    }
+
+    if (request.method === "GET" && url.pathname === "/v1/audio/events") {
+      const grantId = captureCookie(request);
+      if (grantId === null) return json({ error: "capture_grant_required" }, 401, origin);
+      const opened = dependencies.audio?.openEvents(accountSessionId, grantId, dependencies.now());
+      if (opened === undefined) return json({ error: "audio_ingest_unavailable" }, 503, origin);
+      if (opened.outcome === "REJECTED") return audioRejection(opened.reason, origin);
+      origin.set("content-type", "text/event-stream; charset=utf-8");
+      origin.set("cache-control", "no-store");
+      origin.set("x-accel-buffering", "no");
+      return new Response(opened.stream, { status: 200, headers: origin });
+    }
+
+    if (request.method === "POST" && url.pathname === "/v1/audio/stream/start") {
+      const grantId = captureCookie(request);
+      if (grantId === null) return json({ error: "capture_grant_required" }, 401, origin);
+      const started = dependencies.audio?.startStream(
+        accountSessionId,
+        grantId,
+        dependencies.now(),
+      );
+      if (started === undefined) return json({ error: "audio_ingest_unavailable" }, 503, origin);
+      return started.outcome === "STARTED"
+        ? json({ status: "started" }, 202, origin)
+        : audioRejection(started.reason, origin);
+    }
+
+    if (request.method === "POST" && url.pathname === "/v1/audio/frames") {
+      const grantId = captureCookie(request);
+      if (grantId === null) return json({ error: "capture_grant_required" }, 401, origin);
+      const authorized = dependencies.audio?.authorizeFrame(
+        accountSessionId,
+        grantId,
+        dependencies.now(),
+      );
+      if (authorized === undefined) return json({ error: "audio_ingest_unavailable" }, 503, origin);
+      if (authorized.outcome === "REJECTED") return audioRejection(authorized.reason, origin);
+      if (request.headers.get("content-type")?.toLowerCase() !== "application/octet-stream") {
+        return json({ error: "unsupported_content_type" }, 415, origin);
+      }
+      const sequence = boundedAudioHeader(request, "x-audio-sequence", Number.MAX_SAFE_INTEGER);
+      const durationMs = boundedAudioHeader(request, "x-audio-duration-ms", 30_000);
+      if (sequence === null || durationMs === null) {
+        return json({ error: "invalid_audio_frame_headers" }, 400, origin);
+      }
+      const frame = await readAudioFrame(request);
+      if (frame.outcome === "REJECTED") {
+        return json(
+          { error: frame.reason },
+          frame.reason === "FRAME_TOO_LARGE" ? 413 : 400,
+          origin,
+        );
+      }
+      const accepted = dependencies.audio?.pushFrame(
+        accountSessionId,
+        grantId,
+        sequence,
+        frame.bytes,
+        durationMs,
+        dependencies.now(),
+      );
+      if (accepted === undefined) return json({ error: "audio_ingest_unavailable" }, 503, origin);
+      return accepted.outcome === "ACCEPTED"
+        ? json({ status: "accepted" }, 202, origin)
+        : audioRejection(accepted.reason, origin);
+    }
+
+    if (request.method === "POST" && url.pathname === "/v1/audio/stream/stop") {
+      const grantId = captureCookie(request);
+      if (grantId === null) return json({ error: "capture_grant_required" }, 401, origin);
+      const stopped = dependencies.audio?.stopStream(accountSessionId, grantId, dependencies.now());
+      if (stopped === undefined) return json({ error: "audio_ingest_unavailable" }, 503, origin);
+      return stopped.outcome === "STOPPED"
+        ? json({ status: "stopped" }, 202, origin)
+        : audioRejection(stopped.reason, origin);
+    }
+
+    if (request.method === "DELETE" && url.pathname === "/v1/audio/grant") {
+      const grantId = captureCookie(request);
+      if (grantId === null) return json({ error: "capture_grant_required" }, 401, origin);
+      const revoked = dependencies.audio?.revokeGrant(
+        accountSessionId,
+        grantId,
+        dependencies.now(),
+      );
+      origin.append(
+        "set-cookie",
+        `${AUDIO_CAPTURE_COOKIE_NAME}=; ${captureCookieAttributes()}; Max-Age=0`,
+      );
+      if (revoked === undefined) return json({ error: "audio_ingest_unavailable" }, 503, origin);
+      return revoked.outcome === "REVOKED"
+        ? json({ status: "revoked" }, 200, origin)
+        : audioRejection(revoked.reason, origin);
+    }
+
     if (
       request.method === "POST" &&
       (url.pathname === "/v1/publications/approve" || url.pathname === "/v1/publications/terminate")
@@ -466,6 +661,11 @@ export function createPrivateBackendHandler(
       );
     }
     if (request.method === "DELETE" && url.pathname === "/v1/account-session") {
+      dependencies.audio?.accountLoggedOut(
+        accountSessionId,
+        account.value.actorId,
+        dependencies.now(),
+      );
       const result = await dependencies.coordinator.revokeAccountSession(
         accountSessionId,
         dependencies.now(),
@@ -474,6 +674,10 @@ export function createPrivateBackendHandler(
       const cookieName = accountCookieName(config.allowedOrigin);
       const cookieAttributes = accountCookieAttributes(config.allowedOrigin);
       origin.append("set-cookie", `${cookieName}=; ${cookieAttributes}; Max-Age=0`);
+      origin.append(
+        "set-cookie",
+        `${AUDIO_CAPTURE_COOKIE_NAME}=; ${captureCookieAttributes()}; Max-Age=0`,
+      );
       return json(
         result.outcome === "APPLIED" ? { status: "revoked" } : { error: result.reason },
         result.outcome === "APPLIED" ? 200 : 401,
