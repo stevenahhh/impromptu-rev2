@@ -42,10 +42,7 @@
   ],
   "generator": {
     "command": "uv run scripts/generate-format-neutral-deck-fixtures.py",
-    "dependencies": [
-      "PyMuPDF==1.28.2",
-      "python-pptx==1.0.2"
-    ],
+    "dependencies": ["PyMuPDF==1.28.2", "python-pptx==1.0.2"],
     "path": "scripts/generate-format-neutral-deck-fixtures.py",
     "requiresPython": ">=3.14,<3.15"
   },

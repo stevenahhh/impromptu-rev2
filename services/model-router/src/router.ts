@@ -42,6 +42,7 @@ import {
   type SecretStore,
 } from "./security.ts";
 import {
+  createSttStreamEventValidator,
   type SttAudioChunk,
   type SttStreamEvent,
   type SttTranscript,
@@ -413,7 +414,6 @@ export class ServerModelRouter {
     let lease: RevocableTransportLease | undefined;
     let iterator: AsyncIterator<SttStreamEvent> | undefined;
     let innerDone = false;
-    const transcriptEvents: SttStreamEvent[] = [];
     let terminalResult: ModelResult<SttTranscript> | undefined;
     try {
       lease = await this.#prepareDispatch(
@@ -443,6 +443,7 @@ export class ServerModelRouter {
       }
       iterator = stream[Symbol.asyncIterator]();
       const activeIterator = iterator;
+      const validateSttEvent = createSttStreamEventValidator();
       let finalTranscript: SttTranscript | undefined;
       while (true) {
         const next = await scope.race(() => activeIterator.next());
@@ -453,7 +454,9 @@ export class ServerModelRouter {
         }
         let event: SttStreamEvent;
         try {
-          event = sttStreamEventSchema.parse(adapter.eventSchema.parse(next.value));
+          event = validateSttEvent(
+            sttStreamEventSchema.parse(adapter.eventSchema.parse(next.value)),
+          );
         } catch {
           throw new ModelRouterError(
             "provider_error",
@@ -461,8 +464,11 @@ export class ServerModelRouter {
             false,
           );
         }
-        if (event.kind === "final") finalTranscript = event.transcript;
-        transcriptEvents.push(event);
+        if (event.kind === "FINAL") {
+          const { durationMs, language, text } = event.transcript;
+          finalTranscript = sttTranscriptSchema.parse({ durationMs, language, text });
+        }
+        yield { kind: "transcript", event };
       }
       if (finalTranscript === undefined) {
         throw new ModelRouterError(
@@ -515,9 +521,6 @@ export class ServerModelRouter {
     }
 
     const validatedTerminal = this.#validatedSttResult(terminalResult, context, startedAtMs);
-    if (validatedTerminal.ok) {
-      for (const event of transcriptEvents) yield { kind: "transcript", event };
-    }
     yield { kind: "complete", result: validatedTerminal };
   }
 

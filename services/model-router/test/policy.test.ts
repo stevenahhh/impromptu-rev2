@@ -402,7 +402,7 @@ describe("dispatch policy gates", () => {
       expect(gates.reconciliations).toHaveLength(1);
     }
   });
-  test("buffers streaming success until budget reconciliation succeeds", async () => {
+  test("yields streaming events before budget reconciliation", async () => {
     const time = new ManualTime();
     const gates = new RecordingPolicyGates();
     gates.reconcileError = new Error("accounting unavailable");
@@ -431,7 +431,7 @@ describe("dispatch policy gates", () => {
     }
     const completions = routed.filter((item) => item.kind === "complete");
 
-    expect(routed.filter((item) => item.kind === "transcript")).toEqual([]);
+    expect(routed.filter((item) => item.kind === "transcript")).toHaveLength(1);
     expect(completions).toHaveLength(1);
     expect(completions[0]?.result.ok).toBe(false);
     if (completions[0] !== undefined && !completions[0].result.ok) {

@@ -796,7 +796,7 @@ describe("server model router", () => {
     expect(returnCount).toBe(1);
   });
 
-  test("keeps the reconciled terminal stable once transcript publication begins", async () => {
+  test("yields a transcript before cancellation reconciles the terminal", async () => {
     const time = new ManualTime();
     const cancellation = new AbortController();
     const registry = new ModelRoutingRegistry();
@@ -830,11 +830,13 @@ describe("server model router", () => {
 
     expect((await stream.next()).value?.kind).toBe("transcript");
     cancellation.abort();
-    expect((await stream.next()).value?.kind).toBe("transcript");
     const completion = (await stream.next()).value;
 
     expect(completion?.kind).toBe("complete");
-    if (completion?.kind === "complete") expect(completion.result.ok).toBe(true);
+    if (completion?.kind === "complete") {
+      expect(completion.result.ok).toBe(false);
+      if (!completion.result.ok) expect(completion.result.error.code).toBe("cancelled");
+    }
     expect((await stream.next()).done).toBe(true);
   });
 });
