@@ -45,6 +45,144 @@
           "max": 1908
         }
       }
+    },
+    {
+      "label": "run4-post-blindspot-diag",
+      "positive": "0/2",
+      "negative": "6/6",
+      "stt": "2/2",
+      "positiveAbstainReasons": [
+        "DETERMINISTIC_MISMATCH",
+        "DEADLINE_EXCEEDED"
+      ],
+      "recommendationLatencyMs": [
+        1985,
+        5000
+      ],
+      "retrievalCandidateCounts": [
+        2,
+        2
+      ],
+      "deterministicMismatches": [
+        {
+          "category": "DATE",
+          "value": "2026",
+          "timestampMs": 1787344912191
+        },
+        {
+          "category": "DATE",
+          "value": "2026",
+          "timestampMs": 1787344913524
+        },
+        {
+          "category": "DATE",
+          "value": "2026",
+          "timestampMs": 1787344913524
+        },
+        {
+          "category": "DATE",
+          "value": "2026",
+          "timestampMs": 1787344917306
+        },
+        {
+          "category": "DATE",
+          "value": "2026",
+          "timestampMs": 1787344919047
+        }
+      ],
+      "stageLatencySummaryMs": {
+        "deterministic": {
+          "n": 5,
+          "min": 0,
+          "median": 0,
+          "max": 0
+        },
+        "embedding": {
+          "n": 7,
+          "min": 119,
+          "median": 132,
+          "max": 151
+        },
+        "llm": {
+          "n": 6,
+          "min": 811,
+          "median": 1208,
+          "max": 1410
+        },
+        "rerank": {
+          "n": 6,
+          "min": 743,
+          "median": 1079,
+          "max": 3947
+        }
+      }
+    },
+    {
+      "label": "run5-post-blindspot-diag",
+      "positive": "0/2",
+      "negative": "6/6",
+      "stt": "2/2",
+      "positiveAbstainReasons": [
+        "DETERMINISTIC_MISMATCH",
+        "DEADLINE_EXCEEDED"
+      ],
+      "recommendationLatencyMs": [
+        3063,
+        5000
+      ],
+      "retrievalCandidateCounts": [
+        2,
+        2
+      ],
+      "deterministicMismatches": [
+        {
+          "category": "DATE",
+          "value": "2026",
+          "timestampMs": 1787344955618
+        },
+        {
+          "category": "DATE",
+          "value": "2026",
+          "timestampMs": 1787344957556
+        },
+        {
+          "category": "DATE",
+          "value": "2026",
+          "timestampMs": 1787344962780
+        }
+      ],
+      "stageLatencySummaryMs": {
+        "deterministic": {
+          "n": 3,
+          "min": 0,
+          "median": 0,
+          "max": 0
+        },
+        "embedding": {
+          "n": 7,
+          "min": 118,
+          "median": 136,
+          "max": 157
+        },
+        "llm": {
+          "n": 6,
+          "min": 843,
+          "median": 1838,
+          "max": 3803
+        },
+        "rerank": {
+          "n": 6,
+          "min": 717,
+          "median": 1141,
+          "max": 1692
+        },
+        "verifier": {
+          "n": 2,
+          "min": 1375,
+          "median": 1452,
+          "max": 1529
+        }
+      }
     }
   ],
   "models": {
@@ -75,5 +213,7 @@
     "negative 6/6 and stt 2/2: no regression (mic-denied zero audio requests, external 429 internal-only, Stage snapshot/SSE/WS cards=0 x3, A-B-A reload dwell identical, PARTIAL-before-FINAL, revoke-blocks-late-delivery)",
     "OCR excluded from pass/fail per decision (separate track)"
   ],
-  "artifact": ".omo/evidence/task-25/core5-e2e.json"
+  "artifact": ".omo/evidence/task-25/core5-e2e.json",
+  "core5Green": false,
+  "core5GreenBasis": "Two consecutive full-suite runs (run4/run5) both show positive 0/2: korean-text-layer.pdf abstains DETERMINISTIC_MISMATCH (category DATE, value \"2026\") and korean-structural.pptx abstains DEADLINE_EXCEEDED at the 4,500ms abort guard with 2 internal candidates; negative 6/6 and STT 2/2 pass in every run."
 }

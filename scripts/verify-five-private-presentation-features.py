@@ -110,6 +110,36 @@ def recommendation_stages(lines: list[str]) -> list[dict[str, object]]:
     return stages
 
 
+def deterministic_mismatches(lines: list[str]) -> list[dict[str, object]]:
+    """Extracts the deterministic-gate rejections with their exact category and value token.
+
+    The pipeline emits one structured line per rejected fact as
+    path=/internal/recommendation/deterministic with outcome "CATEGORY:value", so a
+    DETERMINISTIC_MISMATCH abstain can be attributed without guessing from prose.
+    """
+    mismatches: list[dict[str, object]] = []
+    for line in lines:
+        stripped = line.strip()
+        if "/internal/recommendation/deterministic" not in stripped:
+            continue
+        try:
+            event = json.loads(stripped)
+        except json.JSONDecodeError:
+            continue
+        if event.get("path") != "/internal/recommendation/deterministic":
+            continue
+        outcome = event.get("outcome")
+        category, _, value = str(outcome).partition(":")
+        mismatches.append(
+            {
+                "category": category or None,
+                "value": value or None,
+                "timestampMs": event.get("timestampMs"),
+            }
+        )
+    return mismatches
+
+
 def recommendation_requests(lines: list[str]) -> list[dict[str, object]]:
     """Extracts the top-level /v1/recommendations outcomes with their wall-clock latency."""
     requests: list[dict[str, object]] = []
@@ -264,6 +294,7 @@ def main() -> int:
             result["recommendationStageLatencyMs"] = recommendation_stages(private_lines)
             result["stageLatencySummaryMs"] = stage_summary(result["recommendationStageLatencyMs"])
             result["recommendationRequests"] = recommendation_requests(private_lines)
+            result["deterministicMismatches"] = deterministic_mismatches(private_lines)
             RESULT.write_text(f"{json.dumps(result, indent=2, ensure_ascii=False)}\n", encoding="utf-8")
         return runner.returncode
     finally:
