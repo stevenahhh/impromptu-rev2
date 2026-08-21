@@ -21,6 +21,8 @@ import type { TenantScopedPostgresRepository } from "./tenant-scoped-postgres-re
 
 const AUTHORIZATION_VERSION = "acl-1";
 const MAX_CHUNK_CHARACTERS = 2_000;
+const MAX_RETRIEVER_CANDIDATES = 20;
+export const RRF_K = 60;
 
 type RetrievalRow = Readonly<{
   tenant_id: string;
@@ -38,6 +40,17 @@ type RetrievalRow = Readonly<{
 }>;
 
 type RetrievalRowWithoutEmbedding = Omit<RetrievalRow, "embedding">;
+type LexicalRetrievalRow = RetrievalRow & Readonly<{ lexical_score: number }>;
+
+export type HybridRetrievalDiagnostic = Readonly<{
+  retriever: "LEXICAL" | "DENSE";
+  failure: "FTS_EXECUTION_FAILED" | "EMBEDDING_FAILED";
+  errorType: string;
+}>;
+
+export interface HybridRetrievalDiagnosticObserver {
+  observe(diagnostic: HybridRetrievalDiagnostic): void;
+}
 
 export interface DeckEmbeddingPort {
   embed(text: string, principal: RetrievalPrincipal): Promise<readonly number[]>;
@@ -82,6 +95,7 @@ export class PostgresDeckRetrievalStore
   readonly #embedding: DeckEmbeddingPort;
   readonly #access: DeckAccessAuthority;
   readonly #logger: DeckIndexLogger | undefined;
+  readonly #retrievalDiagnostics: HybridRetrievalDiagnosticObserver | undefined;
 
   constructor(options: {
     readonly sql?: Sql;
@@ -90,6 +104,7 @@ export class PostgresDeckRetrievalStore
     readonly embedding: DeckEmbeddingPort;
     readonly access: DeckAccessAuthority;
     readonly logger?: DeckIndexLogger;
+    readonly retrievalDiagnostics?: HybridRetrievalDiagnosticObserver;
   }) {
     if (options.repository !== undefined) {
       this.#repository = options.repository;
@@ -104,6 +119,7 @@ export class PostgresDeckRetrievalStore
     this.#embedding = options.embedding;
     this.#access = options.access;
     this.#logger = options.logger;
+    this.#retrievalDiagnostics = options.retrievalDiagnostics;
   }
 
   async prepare(principal: RetrievalPrincipal, request: RetrievalRequest): Promise<void> {
@@ -307,13 +323,18 @@ export class PostgresDeckRetrievalStore
 
   async prefilter(principal: RetrievalPrincipal, request: RetrievalRequest) {
     if (!(await this.#access.authorize(principal, request))) {
-      return { version: AUTHORIZATION_VERSION, current: true, authorizedObjectIds: [] };
+      return {
+        version: AUTHORIZATION_VERSION,
+        current: true,
+        authorizedObjectIds: [],
+        sourceRevisions: {},
+      };
     }
     const rows = await this.#repository.transaction(
       principal.tenantId,
       async (sql) =>
-        sql<readonly { object_id: string }[]>`
-        SELECT object_id
+        sql<readonly { object_id: string; source_revision: string }[]>`
+        SELECT object_id, source_revision
         FROM private_app.deck_retrieval_chunks
         WHERE tenant_id = ${principal.tenantId}
           AND deck_version = ${request.deckVersion}
@@ -321,10 +342,17 @@ export class PostgresDeckRetrievalStore
           AND authorization_version = ${AUTHORIZATION_VERSION}
       `,
     );
+    const sourceRevisions = Object.fromEntries(
+      rows.map((row) => [row.object_id, row.source_revision] as const),
+    );
+    const revisionsAreCurrent = rows.every(
+      (row) => request.deckVersion === `deck_${row.source_revision}`,
+    );
     return {
       version: AUTHORIZATION_VERSION,
-      current: true,
-      authorizedObjectIds: rows.map((row) => row.object_id),
+      current: revisionsAreCurrent,
+      authorizedObjectIds: revisionsAreCurrent ? rows.map((row) => row.object_id) : [],
+      sourceRevisions: revisionsAreCurrent ? sourceRevisions : {},
     };
   }
 
@@ -347,7 +375,10 @@ export class PostgresDeckRetrievalStore
     readonly authorizedObjectIds: readonly string[];
     readonly limit: number;
   }): Promise<readonly AnnCandidate[]> {
-    if (input.authorizedObjectIds.length === 0 || input.queryVector.length === 0) return [];
+    if (input.authorizedObjectIds.length === 0) return [];
+    const authorizedIds = [...new Set(input.authorizedObjectIds)].sort();
+
+    // This common RLS read must succeed before either retriever is allowed to contribute.
     const rows = await this.#repository.transaction(
       input.tenantId,
       async (sql) =>
@@ -355,28 +386,76 @@ export class PostgresDeckRetrievalStore
         SELECT *
         FROM private_app.deck_retrieval_chunks
         WHERE tenant_id = ${input.tenantId}
-          AND object_id IN ${sql(input.authorizedObjectIds)}
+          AND object_id IN ${sql(authorizedIds)}
       `,
     );
-    return rows
-      .flatMap((row) => {
-        const score = cosineSimilarity(input.queryVector, row.embedding);
-        return score === null
-          ? []
-          : [
-              {
-                tenantId: row.tenant_id,
-                objectId: row.object_id,
-                score,
-                indexedSourceHash: row.source_hash,
-                indexedDeckVersion: row.deck_version,
-                indexedManifestHash: row.manifest_hash,
-                indexedAuthorizationVersion: row.authorization_version,
-              },
-            ];
-      })
-      .sort((left, right) => right.score - left.score)
-      .slice(0, input.limit);
+    if (
+      rows.length !== authorizedIds.length ||
+      rows.some((row) => row.tenant_id !== input.tenantId || !authorizedIds.includes(row.object_id))
+    ) {
+      throw new Error("Authorized retrieval revision set changed before candidate generation");
+    }
+
+    let lexicalRows: readonly LexicalRetrievalRow[] = [];
+    try {
+      lexicalRows = await this.#repository.transaction(
+        input.tenantId,
+        async (sql) =>
+          sql<readonly LexicalRetrievalRow[]>`
+          WITH lexical AS (
+            SELECT *,
+              ts_rank_cd(search_vector, plainto_tsquery('simple', ${input.query})) AS lexical_score
+            FROM private_app.deck_retrieval_chunks
+            WHERE tenant_id = ${input.tenantId}
+              AND object_id IN ${sql(authorizedIds)}
+          )
+          SELECT * FROM lexical
+          WHERE lexical_score > 0
+          ORDER BY lexical_score DESC, object_id ASC
+          LIMIT ${MAX_RETRIEVER_CANDIDATES}
+        `,
+      );
+    } catch (error) {
+      this.#retrievalDiagnostics?.observe({
+        retriever: "LEXICAL",
+        failure: "FTS_EXECUTION_FAILED",
+        errorType: error instanceof Error ? error.name : "UnknownError",
+      });
+    }
+
+    const lexical = [...lexicalRows]
+      .filter((row) => authorizedIds.includes(row.object_id))
+      .sort(
+        (left, right) =>
+          right.lexical_score - left.lexical_score || left.object_id.localeCompare(right.object_id),
+      )
+      .slice(0, MAX_RETRIEVER_CANDIDATES);
+
+    let dense: readonly RetrievalRow[] = [];
+    if (
+      input.queryVector.length === 0 ||
+      input.queryVector.some((value) => !Number.isFinite(value))
+    ) {
+      this.#retrievalDiagnostics?.observe({
+        retriever: "DENSE",
+        failure: "EMBEDDING_FAILED",
+        errorType: "InvalidQueryEmbedding",
+      });
+    } else {
+      dense = rows
+        .flatMap((row) => {
+          const score = cosineSimilarity(input.queryVector, row.embedding);
+          return score === null ? [] : [{ row, score }];
+        })
+        .sort(
+          (left, right) =>
+            right.score - left.score || left.row.object_id.localeCompare(right.row.object_id),
+        )
+        .slice(0, MAX_RETRIEVER_CANDIDATES)
+        .map(({ row }) => row);
+    }
+
+    return reciprocalRankFusion(lexical, dense).slice(0, input.limit);
   }
 
   async readMetadata(tenantId: string, objectId: string): Promise<RetrievalObjectMetadata | null> {
@@ -448,6 +527,59 @@ function chunkText(text: string): readonly string[] {
     if (chunk.length > 0) chunks.push(chunk);
   }
   return chunks;
+}
+
+function reciprocalRankFusion(
+  lexical: readonly RetrievalRow[],
+  dense: readonly RetrievalRow[],
+): readonly AnnCandidate[] {
+  const fused = new Map<
+    string,
+    { row: RetrievalRow; score: number; seenRetrievers: Set<"LEXICAL" | "DENSE"> }
+  >();
+  const addRanked = (rows: readonly RetrievalRow[], retriever: "LEXICAL" | "DENSE") => {
+    const seenKeys = new Set<string>();
+    for (const [offset, row] of rows.entries()) {
+      const key = retrievalDedupeKey(row);
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+      const existing = fused.get(key);
+      if (existing === undefined) {
+        fused.set(key, {
+          row,
+          score: 1 / (RRF_K + offset + 1),
+          seenRetrievers: new Set([retriever]),
+        });
+      } else if (!existing.seenRetrievers.has(retriever)) {
+        existing.score += 1 / (RRF_K + offset + 1);
+        existing.seenRetrievers.add(retriever);
+        if (row.object_id.localeCompare(existing.row.object_id) < 0) existing.row = row;
+      }
+    }
+  };
+  addRanked(lexical, "LEXICAL");
+  addRanked(dense, "DENSE");
+
+  return [...fused.values()]
+    .map(({ row, score }) => ({
+      tenantId: row.tenant_id,
+      objectId: row.object_id,
+      score,
+      indexedSourceRevision: row.source_revision,
+      indexedSourceHash: row.source_hash,
+      indexedDeckVersion: row.deck_version,
+      indexedManifestHash: row.manifest_hash,
+      indexedAuthorizationVersion: row.authorization_version,
+    }))
+    .sort((left, right) => right.score - left.score || left.objectId.localeCompare(right.objectId));
+}
+
+function retrievalDedupeKey(row: RetrievalRow): string {
+  const chunkIndex = new URLSearchParams(row.anchor).get("chunk") ?? row.anchor;
+  // source_id is the manifest's stable identity for the slide represented by slide_key.
+  return [row.tenant_id, row.deck_version, row.source_revision, row.source_id, chunkIndex].join(
+    "\0",
+  );
 }
 
 function cosineSimilarity(left: readonly number[], right: readonly number[]): number | null {

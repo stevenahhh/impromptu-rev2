@@ -20,6 +20,8 @@ export interface AuthorizationSnapshot {
   readonly version: string;
   readonly current: boolean;
   readonly authorizedObjectIds: readonly string[];
+  /** Source revisions observed in the same ACL/RLS prefilter as the authorized object ids. */
+  readonly sourceRevisions: Readonly<Record<string, string>>;
 }
 
 export interface RetrievalAuthorizationPolicy {
@@ -39,6 +41,7 @@ export interface AnnCandidate {
   readonly tenantId: string;
   readonly objectId: string;
   readonly score: number;
+  readonly indexedSourceRevision?: string;
   readonly indexedSourceHash: string;
   readonly indexedDeckVersion: string;
   readonly indexedManifestHash: string;
@@ -125,7 +128,31 @@ export class InternalRetrievalService {
         return [];
       }
       const allowed = new Set(snapshot.authorizedObjectIds);
-      if (allowed.size === 0) return [];
+      if (allowed.size === 0 || allowed.size !== snapshot.authorizedObjectIds.length) return [];
+
+      // Resolve and validate the complete authorized revision set before either retriever runs.
+      // The cached metadata is reused below so this gate is performed exactly once.
+      const authorizedObjects = new Map<string, RetrievalObjectMetadata>();
+      for (const objectId of [...allowed].sort()) {
+        const object = await this.#objects.readMetadata(principal.tenantId, objectId);
+        const snapshotRevision = snapshot.sourceRevisions[objectId];
+        if (
+          object === null ||
+          object.tenantId !== principal.tenantId ||
+          object.objectId !== objectId ||
+          object.deckVersion !== request.data.deckVersion ||
+          object.manifestHash !== request.data.manifestHash ||
+          snapshotRevision === undefined ||
+          object.sourceRevision !== snapshotRevision ||
+          object.rights !== "APPROVED" ||
+          object.containsPii ||
+          !(await this.#policy.authorizeObject(principal, object, snapshot.version))
+        ) {
+          return [];
+        }
+        authorizedObjects.set(objectId, object);
+      }
+
       const candidates = await this.#ann.search({
         tenantId: principal.tenantId,
         query: request.data.query,
@@ -144,17 +171,12 @@ export class InternalRetrievalService {
           candidate.indexedManifestHash !== request.data.manifestHash
         )
           continue;
-        const object = await this.#objects.readMetadata(principal.tenantId, candidate.objectId);
+        const object = authorizedObjects.get(candidate.objectId);
         if (
-          object === null ||
-          object.tenantId !== principal.tenantId ||
-          object.objectId !== candidate.objectId ||
+          object === undefined ||
           object.sourceHash !== candidate.indexedSourceHash ||
-          object.deckVersion !== request.data.deckVersion ||
-          object.manifestHash !== request.data.manifestHash ||
-          object.rights !== "APPROVED" ||
-          object.containsPii ||
-          !(await this.#policy.authorizeObject(principal, object, snapshot.version))
+          (candidate.indexedSourceRevision !== undefined &&
+            object.sourceRevision !== candidate.indexedSourceRevision)
         )
           continue;
         authorized.push(

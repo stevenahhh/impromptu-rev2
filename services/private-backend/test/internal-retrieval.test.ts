@@ -43,9 +43,14 @@ function fixture() {
     policy: {
       async prefilter(principal) {
         if (principal.groupIds[0] !== "finance" || !allowed) {
-          return { version: "acl-v1", current, authorizedObjectIds: [] };
+          return { version: "acl-v1", current, authorizedObjectIds: [], sourceRevisions: {} };
         }
-        return { version: "acl-v1", current, authorizedObjectIds: ["object-1"] };
+        return {
+          version: "acl-v1",
+          current,
+          authorizedObjectIds: ["object-1"],
+          sourceRevisions: { "object-1": "revision-1" },
+        };
       },
       async authorizeObject(principal, object, version) {
         return allowed && current && principal.tenantId === object.tenantId && version === "acl-v1";
@@ -145,6 +150,18 @@ describe("ACL-first internal retrieval", () => {
     stale.stalePolicy();
     expect(await stale.service.retrieve("session-a", request)).toEqual([]);
     expect(stale.annCalls).toEqual([]);
+  });
+
+  test("fails closed before retrieval for cross-tenant metadata or a stale source revision", async () => {
+    const crossTenant = fixture();
+    crossTenant.updateMetadata({ tenantId: "tenant-b" });
+    expect(await crossTenant.service.retrieve("session-a", request)).toEqual([]);
+    expect(crossTenant.annCalls).toEqual([]);
+
+    const staleRevision = fixture();
+    staleRevision.updateMetadata({ sourceRevision: "revision-2" });
+    expect(await staleRevision.service.retrieve("session-a", request)).toEqual([]);
+    expect(staleRevision.annCalls).toEqual([]);
   });
 
   test("denies ACL revocation between retrieval and materialization or publication", async () => {

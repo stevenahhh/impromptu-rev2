@@ -16,10 +16,27 @@ afterEach(() => {
 function fakeSql() {
   const rows: Record<string, unknown>[] = [];
   const queries: string[] = [];
+  let failFts = false;
   const sql = (first: unknown, ...values: unknown[]) => {
     if (!Array.isArray(first) || !Object.hasOwn(first, "raw")) return first;
     const query = (first as unknown as TemplateStringsArray).join("?").replace(/\s+/g, " ").trim();
     queries.push(query);
+    if (query.startsWith("WITH lexical AS")) {
+      if (failFts) throw new Error("injected FTS failure");
+      const search = String(values[0]).toLocaleLowerCase();
+      const tenantId = values[1];
+      const ids = values[2] as readonly string[];
+      return Promise.resolve(
+        rows
+          .filter(
+            (row) =>
+              row.tenant_id === tenantId &&
+              ids.includes(String(row.object_id)) &&
+              String(row.content).toLocaleLowerCase().includes(search),
+          )
+          .map((row) => ({ ...row, lexical_score: 1 })),
+      );
+    }
     if (query.startsWith("INSERT INTO private_app.deck_retrieval_chunks")) {
       rows.push({
         tenant_id: values[0],
@@ -67,7 +84,17 @@ function fakeSql() {
     throw new Error(`Unexpected SQL: ${query}`);
   };
   Object.assign(sql, { array: (value: unknown) => value });
-  return { sql: sql as unknown as Sql, rows, queries };
+  return {
+    sql: sql as unknown as Sql,
+    rows,
+    queries,
+    failFts: () => {
+      failFts = true;
+    },
+    recoverFts: () => {
+      failFts = false;
+    },
+  };
 }
 
 describe("PostgreSQL deck corpus retrieval", () => {
@@ -213,7 +240,7 @@ describe("PostgreSQL deck corpus retrieval", () => {
       }),
     ]);
     expect(candidates).toHaveLength(1);
-    expect(candidates[0]?.score).toBe(1);
+    expect(candidates[0]?.score).toBeCloseTo(2 / 61);
     expect(metadata).toMatchObject({
       deckVersion: request.deckVersion,
       manifestHash,
@@ -221,6 +248,92 @@ describe("PostgreSQL deck corpus retrieval", () => {
       containsPii: false,
     });
     expect(content).toBe("Actual revenue & margin 올리고. 연결하고. PPTX/PDF");
+  });
+
+  test("fuses deterministic Korean lexical and semantic candidates and degrades one side", async () => {
+    const database = fakeSql();
+    const diagnostics: Record<string, unknown>[] = [];
+    const common = {
+      tenant_id: "tenant-hybrid",
+      source_revision: "f".repeat(64),
+      deck_version: `deck_${"f".repeat(64)}`,
+      manifest_hash: "e".repeat(64),
+      authorization_version: "acl-1",
+      title: "Hybrid fixture",
+    };
+    const exact = {
+      ...common,
+      object_id: "object-exact",
+      source_id: "slide-exact",
+      source_hash: "a".repeat(64),
+      anchor: "slide=1&chunk=1",
+      content: "정확용어 영업이익률",
+      embedding: [0, 1],
+    };
+    const duplicateExact = {
+      ...exact,
+      object_id: "object-exact-copy",
+      source_hash: "c".repeat(64),
+    };
+    const semantic = {
+      ...common,
+      object_id: "object-semantic",
+      source_id: "slide-semantic",
+      source_hash: "b".repeat(64),
+      anchor: "slide=2&chunk=1",
+      content: "매출에서 비용을 제외한 비율",
+      embedding: [1, 0],
+    };
+    database.rows.push(semantic, duplicateExact, exact);
+    const store = new PostgresDeckRetrievalStore({
+      sql: database.sql,
+      artifactRoot: "/unused",
+      access: {
+        async authorize() {
+          return true;
+        },
+      },
+      embedding: {
+        async embed() {
+          return [1, 0];
+        },
+      },
+      retrievalDiagnostics: {
+        observe(diagnostic) {
+          diagnostics.push(diagnostic);
+        },
+      },
+    });
+    const search = (queryVector: readonly number[]) =>
+      store.search({
+        tenantId: common.tenant_id,
+        query: "영업이익률",
+        queryVector,
+        authorizedObjectIds: [exact.object_id, semantic.object_id, duplicateExact.object_id],
+        limit: 20,
+      });
+
+    const first = await search([1, 0]);
+    database.rows.reverse();
+    const reordered = await search([1, 0]);
+    expect(reordered).toEqual(first);
+    expect(new Set(first.map((candidate) => candidate.objectId))).toEqual(
+      new Set(["object-exact", "object-semantic"]),
+    );
+
+    database.failFts();
+    const denseOnly = await search([1, 0]);
+    expect(denseOnly.map((candidate) => candidate.objectId)).toEqual([
+      "object-semantic",
+      "object-exact",
+    ]);
+    database.recoverFts();
+    const lexicalOnly = await search([]);
+    expect(lexicalOnly.map((candidate) => candidate.objectId)).toEqual(["object-exact"]);
+    expect(diagnostics).toEqual([
+      { retriever: "LEXICAL", failure: "FTS_EXECUTION_FAILED", errorType: "Error" },
+      { retriever: "DENSE", failure: "EMBEDDING_FAILED", errorType: "InvalidQueryEmbedding" },
+    ]);
   });
 
   test("does not scan or expose a deck that the current tenant does not own", async () => {

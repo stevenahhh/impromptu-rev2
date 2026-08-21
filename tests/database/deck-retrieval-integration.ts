@@ -150,7 +150,7 @@ try {
   const oldObjectId = initialRows[0]?.object_id;
   if (oldObjectId === undefined) throw new Error("initial retrieval object id was missing");
 
-  const replacementText = `${"replacement ".repeat(200)}tail`;
+  const replacementText = `정확용어 영업이익률 ${"replacement ".repeat(200)}매출에서 비용을 제외한 비율`;
   await writeFile(
     join(artifactDir, "ingestion.json"),
     JSON.stringify(ingestionManifest(replacementText)),
@@ -201,6 +201,69 @@ try {
     replacedRows.some((row) => row.object_id === oldObjectId || row.source_revision !== deckHash)
   ) {
     throw new Error("successful replacement did not atomically install every new retrieval row");
+  }
+
+  const authorization = await store.prefilter(principal, request);
+  const queryVector = Array.from({ length: 768 }, () => 0.25);
+  const ranked = await store.search({
+    tenantId,
+    query: "영업이익률",
+    queryVector,
+    authorizedObjectIds: authorization.authorizedObjectIds,
+    limit: 20,
+  });
+  const reordered = await store.search({
+    tenantId,
+    query: "영업이익률",
+    queryVector,
+    authorizedObjectIds: [...authorization.authorizedObjectIds].reverse(),
+    limit: 20,
+  });
+  if (JSON.stringify(ranked) !== JSON.stringify(reordered) || ranked.length !== 2) {
+    throw new Error("hybrid RRF was not deterministic across authorized-id input order");
+  }
+  const topSet = await Promise.all(
+    ranked.map((candidate) => store.readContent(tenantId, candidate.objectId)),
+  );
+  if (
+    !topSet.some((value) => value?.includes("영업이익률")) ||
+    !topSet.some((value) => value?.includes("매출에서 비용을 제외한 비율"))
+  ) {
+    throw new Error("Korean exact term and semantic paraphrase were not both in the top set");
+  }
+
+  const tenantBRows = await repository.transaction(
+    "tenant-b",
+    async (transactionSql) => transactionSql<readonly { object_id: string }[]>`
+      SELECT object_id FROM private_app.deck_retrieval_chunks
+      WHERE object_id IN ${transactionSql(authorization.authorizedObjectIds)}
+    `,
+  );
+  if (tenantBRows.length !== 0) throw new Error("tenant B observed tenant A retrieval rows");
+  let crossTenantSearchFailedClosed = false;
+  try {
+    await store.search({
+      tenantId: "tenant-b",
+      query: "영업이익률",
+      queryVector,
+      authorizedObjectIds: authorization.authorizedObjectIds,
+      limit: 20,
+    });
+  } catch {
+    crossTenantSearchFailedClosed = true;
+  }
+  if (!crossTenantSearchFailedClosed) throw new Error("cross-tenant retrieval did not fail closed");
+
+  await repository.transaction(tenantId, async (transactionSql) => {
+    await transactionSql`
+      UPDATE private_app.deck_retrieval_chunks
+      SET source_revision = ${"stale-revision"}
+      WHERE tenant_id = ${tenantId} AND deck_version = ${request.deckVersion}
+    `;
+  });
+  const staleAuthorization = await store.prefilter(principal, request);
+  if (staleAuthorization.current || staleAuthorization.authorizedObjectIds.length !== 0) {
+    throw new Error("stale source revision did not fail closed");
   }
 
   const missingContext = await sql<readonly { count: number }[]>`

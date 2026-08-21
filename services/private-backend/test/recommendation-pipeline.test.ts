@@ -55,7 +55,12 @@ function pipelineFixture(options: RouterOptions = {}) {
     },
     policy: {
       async prefilter() {
-        return { version: "acl-v1", current: true, authorizedObjectIds: ["object-1"] };
+        return {
+          version: "acl-v1",
+          current: true,
+          authorizedObjectIds: ["object-1"],
+          sourceRevisions: { "object-1": "r1" },
+        };
       },
       async authorizeObject() {
         return authorized;
