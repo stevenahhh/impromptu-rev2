@@ -37,17 +37,32 @@ ENV NODE_ENV=production \
     UV_PROJECT_ENVIRONMENT=/opt/ingestion-venv \
     UV_NO_SYNC=1 \
     INGESTION_PROJECT_PATH=/app/services/ingestion \
-    SOFFICE_PATH=/usr/bin/soffice
+    SOFFICE_PATH=/usr/bin/soffice \
+    TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
 
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
       ca-certificates \
       fonts-dejavu-core \
       libreoffice-impress \
+      tesseract-ocr \
       tini \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 app \
     && useradd --uid 10001 --gid app --create-home --shell /usr/sbin/nologin app
+
+# tessdata_fast commit 87416418657359cb625c412a48b6e1d6d41c29bd.
+# BuildKit verifies the pinned hashes before these files enter the runtime image.
+ADD --checksum=sha256:6b85e11d9bbf07863b97b3523b1b112844c43e713df8b66418a081fd1060b3b2 \
+  https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/87416418657359cb625c412a48b6e1d6d41c29bd/kor.traineddata \
+  /usr/share/tesseract-ocr/5/tessdata/kor.traineddata
+ADD --checksum=sha256:7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2 \
+  https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/87416418657359cb625c412a48b6e1d6d41c29bd/eng.traineddata \
+  /usr/share/tesseract-ocr/5/tessdata/eng.traineddata
+RUN test "$(wc -c < /usr/share/tesseract-ocr/5/tessdata/kor.traineddata)" = 1677415 \
+    && test "$(wc -c < /usr/share/tesseract-ocr/5/tessdata/eng.traineddata)" = 4113088 \
+    && chmod 0644 /usr/share/tesseract-ocr/5/tessdata/kor.traineddata \
+      /usr/share/tesseract-ocr/5/tessdata/eng.traineddata
 
 COPY --from=bun-runtime /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=bun-runtime /usr/local/bin/bunx /usr/local/bin/bunx

@@ -55,8 +55,9 @@ def sample_pdf(tmp_path: Path) -> Path:
     first.insert_text((72, 72), "Evidence 2026")
     first.insert_image(pymupdf.Rect(100, 100, 110, 110), stream=_PNG)
 
-    scanned = document.new_page(width=720, height=405)
-    scanned.insert_image(pymupdf.Rect(0, 0, 720, 405), stream=_PNG)
+    second = document.new_page(width=720, height=405)
+    second.insert_text((72, 72), "Structural fallback")
+    second.insert_image(pymupdf.Rect(0, 0, 10, 10), stream=_PNG)
     document.save(path)
     document.close()
     return path

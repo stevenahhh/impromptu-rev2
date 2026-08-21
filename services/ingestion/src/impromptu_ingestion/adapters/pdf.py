@@ -25,6 +25,7 @@ from impromptu_ingestion.contracts import (
     TextElement,
     ValidatedInput,
 )
+from impromptu_ingestion.ocr import OcrPage, extract_ocr_text
 
 _PDF_TRAILER_BYTES = 65_536
 _PDF_WORKER_RESPONSE = TypeAdapter[PdfWorkerSuccess | PdfWorkerFailure](
@@ -55,14 +56,7 @@ class _PdfTextPage(TypedDict):
     blocks: list[_PdfBlock]
 
 
-class _PdfRect(Protocol):
-    width: float
-    height: float
-
-
-class _PdfPage(Protocol):
-    rect: _PdfRect
-
+class _PdfPage(OcrPage, Protocol):
     def get_text(self, option: str, *, sort: bool) -> object: ...
 
 
@@ -142,8 +136,10 @@ def _image_element(block: _PdfBlock, block_index: int) -> ImageElement | None:
     )
 
 
-def _page_manifest(page: pymupdf.Page, index: int, source_sha256: str) -> _PageExtraction:
-    typed_page = cast(_PdfPage, page)
+def _page_manifest(
+    page: pymupdf.Page, index: int, source_sha256: str, timeout_seconds: float
+) -> _PageExtraction:
+    typed_page = cast(_PdfPage, cast(object, page))
     structure = cast(_PdfTextPage, typed_page.get_text("dict", sort=True))
     elements: list[StructuralElement] = []
     resource_bytes = 0
@@ -167,10 +163,13 @@ def _page_manifest(page: pymupdf.Page, index: int, source_sha256: str) -> _PageE
 
     warnings: list[ExtractionWarning] = []
     if has_image and not has_text:
+        ocr_elements = extract_ocr_text(typed_page, timeout_seconds=timeout_seconds)
+        elements.extend(ocr_elements)
+        resource_bytes += sum(len(element.text.encode("utf-8")) for element in ocr_elements)
         warnings.append(
             ExtractionWarning(
-                code="scanned_page_requires_ocr",
-                message="page has images but no extractable text; OCR/VLM was not performed",
+                code="ocr_applied",
+                message="local Tesseract OCR was applied to this raster-only page",
             )
         )
     elif not elements:
@@ -252,10 +251,12 @@ def extract_pdf_in_process(source: ValidatedInput) -> DeckManifest:
     _validate_strict_trailer(content)
 
     tools = cast(_MuPdfTools, pymupdf.TOOLS)
-    tools.mupdf_warnings(reset=1)
+    _ = tools.mupdf_warnings(reset=1)
     document: _PdfDocument | None = None
     try:
-        document = cast(_PdfDocument, pymupdf.open(stream=content, filetype="pdf"))
+        document = cast(
+            _PdfDocument, cast(object, pymupdf.open(stream=content, filetype="pdf"))
+        )
         _raise_if_mupdf_warned(tools)
         if document.needs_pass:
             raise StructuralExtractionError(
@@ -271,7 +272,12 @@ def extract_pdf_in_process(source: ValidatedInput) -> DeckManifest:
         resource_bytes = 0
         image_pixels = 0
         for offset in range(document.page_count):
-            extracted = _page_manifest(document.load_page(offset), offset + 1, source.source_sha256)
+            extracted = _page_manifest(
+                document.load_page(offset),
+                offset + 1,
+                source.source_sha256,
+                limits.operation_timeout_seconds,
+            )
             manifests.append(extracted.manifest)
             element_count += extracted.element_count
             resource_bytes += extracted.resource_bytes
@@ -296,7 +302,7 @@ def extract_pdf_in_process(source: ValidatedInput) -> DeckManifest:
         deck_id=deck_id(source.source_sha256),
         source_sha256=source.source_sha256,
         source_kind=InputKind.PDF,
-        adapter_version="pymupdf-structural-v2",
+        adapter_version="pymupdf-structural-ocr-v3",
         slides=tuple(manifests),
         render_boundary=RenderBoundary.structural_only(),
     )
@@ -340,7 +346,7 @@ class PdfStructuralAdapter(StructuralAdapter):
     """Extract PDF structure in an isolated process with strict limits and timeout."""
 
     kind = InputKind.PDF
-    adapter_version = "pymupdf-structural-v2"
+    adapter_version = "pymupdf-structural-ocr-v3"
 
     def extract(self, source: ValidatedInput) -> DeckManifest:
         self._require_kind(source)

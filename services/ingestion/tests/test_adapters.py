@@ -14,11 +14,13 @@ from impromptu_ingestion.adapters import (
     RenderingUnsupportedError,
     StructuralExtractionError,
 )
+from impromptu_ingestion.adapters.pdf import extract_pdf_in_process
 from impromptu_ingestion.canonical import canonical_manifest_bytes, manifest_sha256
 from impromptu_ingestion.contracts import (
     IngestionJob,
     IngestionLimits,
     InputKind,
+    TextElement,
     ValidatedInput,
 )
 from impromptu_ingestion.validation import stage_input
@@ -95,9 +97,7 @@ def test_pptx_manifest_and_identity_are_repeatable(sample_pptx: Path) -> None:
     assert first.slides[0].slide_key.startswith("slide_")
 
 
-def test_pdf_extracts_positioned_text_and_images_and_marks_scanned_pages(
-    sample_pdf: Path,
-) -> None:
+def test_pdf_extracts_positioned_text_and_images(sample_pdf: Path) -> None:
     with _staged(sample_pdf) as source:
         manifest = PdfStructuralAdapter().extract(source)
 
@@ -105,10 +105,8 @@ def test_pdf_extracts_positioned_text_and_images_and_marks_scanned_pages(
     assert len(manifest.slides) == 2
     assert any(element.kind == "text" for element in manifest.slides[0].elements)
     assert any(element.kind == "image" for element in manifest.slides[0].elements)
-    assert {warning.code for warning in manifest.slides[1].warnings} == {
-        "scanned_page_requires_ocr"
-    }
-    assert all(element.kind != "text" for element in manifest.slides[1].elements)
+    assert any(element.kind == "text" for element in manifest.slides[1].elements)
+    assert manifest.slides[1].warnings == ()
 
 
 def test_frozen_pdf_and_pptx_share_korean_structural_sentinel() -> None:
@@ -139,16 +137,38 @@ def test_frozen_pdf_and_pptx_share_korean_structural_sentinel() -> None:
     assert forbidden not in "".join(texts_by_kind["pptx"])
 
 
-def test_frozen_scanned_pdf_reproduces_ocr_warning() -> None:
+def test_frozen_scanned_pdf_uses_ocr_only_for_the_raster_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     registry = _fixture_registry()
     fixture = next(item for item in registry["fixtures"] if item["kind"] == "scanned-pdf")
-    with _staged(_REPOSITORY_ROOT / fixture["path"]) as source:
-        manifest = PdfStructuralAdapter().extract(source)
+    sentinel = registry["sentinels"]["ocr"]
+    calls: list[int] = []
 
-    assert all(element.kind != "text" for element in manifest.slides[0].elements)
-    assert {warning.code for warning in manifest.slides[0].warnings} == {
-        "scanned_page_requires_ocr"
-    }
+    def extracted(page: object, *, timeout_seconds: float) -> tuple[TextElement, ...]:
+        calls.append(round(timeout_seconds))
+        return (
+            TextElement(
+                element_id="ocr:text:1",
+                text=sentinel,
+                x=72,
+                y=72,
+                width=300,
+                height=30,
+            ),
+        )
+
+    monkeypatch.setattr("impromptu_ingestion.adapters.pdf.extract_ocr_text", extracted)
+    with _staged(_REPOSITORY_ROOT / fixture["path"]) as source:
+        manifest = extract_pdf_in_process(source)
+
+    assert calls == [30]
+    assert [
+        element.text
+        for element in manifest.slides[0].elements
+        if element.kind == "text"
+    ] == [sentinel]
+    assert {warning.code for warning in manifest.slides[0].warnings} == {"ocr_applied"}
 
 
 def test_fixture_hash_registry_accepts_frozen_binaries() -> None:
