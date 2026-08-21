@@ -110,6 +110,49 @@ def recommendation_stages(lines: list[str]) -> list[dict[str, object]]:
     return stages
 
 
+def recommendation_requests(lines: list[str]) -> list[dict[str, object]]:
+    """Extracts the top-level /v1/recommendations outcomes with their wall-clock latency."""
+    requests: list[dict[str, object]] = []
+    for line in lines:
+        stripped = line.strip()
+        if '"path":"/v1/recommendations"' not in stripped and '"path": "/v1/recommendations"' not in stripped:
+            continue
+        try:
+            event = json.loads(stripped)
+        except json.JSONDecodeError:
+            continue
+        if event.get("path") != "/v1/recommendations":
+            continue
+        requests.append(
+            {
+                "outcome": event.get("outcome"),
+                "durationMs": event.get("durationMs"),
+                "timestampMs": event.get("timestampMs"),
+            }
+        )
+    return requests
+
+
+def stage_summary(stages: list[dict[str, object]]) -> dict[str, dict[str, object]]:
+    """Summarizes per-stage model latency so budget overruns are attributable without eyeballing."""
+    summary: dict[str, dict[str, object]] = {}
+    by_stage: dict[str, list[int]] = {}
+    for stage in stages:
+        duration = stage.get("durationMs")
+        name = str(stage.get("stage"))
+        if isinstance(duration, (int, float)):
+            by_stage.setdefault(name, []).append(int(duration))
+    for name in sorted(by_stage):
+        values = sorted(by_stage[name])
+        summary[name] = {
+            "n": len(values),
+            "min": values[0],
+            "median": values[len(values) // 2] if len(values) % 2 else (values[len(values) // 2 - 1] + values[len(values) // 2]) // 2,
+            "max": values[-1],
+        }
+    return summary
+
+
 def stop(process: subprocess.Popen[str]) -> None:
     if process.poll() is not None:
         return
@@ -219,6 +262,8 @@ def main() -> int:
             result = json.loads(RESULT.read_text(encoding="utf-8"))
             result["models"] = models
             result["recommendationStageLatencyMs"] = recommendation_stages(private_lines)
+            result["stageLatencySummaryMs"] = stage_summary(result["recommendationStageLatencyMs"])
+            result["recommendationRequests"] = recommendation_requests(private_lines)
             RESULT.write_text(f"{json.dumps(result, indent=2, ensure_ascii=False)}\n", encoding="utf-8")
         return runner.returncode
     finally:

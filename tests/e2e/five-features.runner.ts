@@ -178,6 +178,29 @@ async function recommendation(
   };
 }
 
+/**
+ * Read-only failure diagnostic: counts the internal retrieval candidates indexed for this exact
+ * upload. Runs as the CI role, which bypasses tenant RLS, so the count reflects real index state
+ * instead of an empty RLS-scoped view. Never affects pass/fail.
+ */
+async function retrievalCandidateCount(receipt: Upload): Promise<number | null> {
+  const url = process.env.PRIVATE_DATABASE_URL;
+  if (url === undefined || url.length === 0) return null;
+  try {
+    const sql = new SQL(url);
+    try {
+      const rows =
+        await sql`SELECT count(*)::int AS count FROM private_app.deck_retrieval_chunks WHERE deck_version = ${receipt.deckVersion} AND manifest_hash = ${receipt.manifestHash}`;
+      const first = rows[0] as { count?: unknown } | undefined;
+      return typeof first?.count === "number" ? first.count : null;
+    } finally {
+      await sql.close({ timeout: 1 }).catch(() => undefined);
+    }
+  } catch {
+    return null;
+  }
+}
+
 /** Counts only machine values; transcript text itself is never recorded. */
 function transcriptMetrics(final: Record<string, unknown>): Record<string, unknown> {
   const payload = record(final.event, "FINAL payload");
@@ -235,8 +258,26 @@ async function runPositive(context: BrowserContext, fixture: string): Promise<Sc
     diagnostics.recommendationResponseBody = result.body;
     if (result.status !== 200) fail(`recommendation returned ${result.status}`);
     const outcome = string(result.body.outcome, "recommendation outcome");
-    if (outcome !== "RECOMMEND")
+    if (outcome !== "RECOMMEND") {
+      // Diagnostic assertions only: name the exact abstain class and its evidence so the failure
+      // report distinguishes a structural budget overrun from a gate rejection of model output.
+      const reason = typeof result.body.reason === "string" ? result.body.reason : "unknown";
+      const latencyMs = typeof result.body.latencyMs === "number" ? result.body.latencyMs : null;
+      diagnostics.retrievalCandidateCount = await retrievalCandidateCount(receipt);
+      if (reason === "DEADLINE_EXCEEDED") {
+        // 5_000ms terminal budget minus the 500ms guard is where the pipeline aborts itself.
+        diagnostics.abstainBudget = { abortGuardMs: 4_500, latencyMs };
+        fail(
+          `hybrid retrieval abstained DEADLINE_EXCEEDED at ${String(latencyMs)}ms (abort guard 4,500ms) with ${String(diagnostics.retrievalCandidateCount)} internal candidates: ${JSON.stringify(result.body)}`,
+        );
+      }
+      if (reason === "DETERMINISTIC_MISMATCH") {
+        fail(
+          `deterministic evidence gate rejected model output (${String(diagnostics.retrievalCandidateCount)} internal candidates, latency ${String(latencyMs)}ms): ${JSON.stringify(result.body)}`,
+        );
+      }
       fail(`hybrid retrieval did not recommend: ${JSON.stringify(result.body)}`);
+    }
     await measure("opt-in-coaching", async () => {
       const coaching = page.locator('[data-coaching-state="active"]');
       await page.getByRole("checkbox", { name: /coaching/i }).check();

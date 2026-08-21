@@ -3,33 +3,48 @@
   "command": "python3 scripts/verify-five-private-presentation-features.py",
   "runs": [
     {
-      "label": "run1",
+      "label": "run3-diagnostics",
       "positive": "0/2",
       "negative": "6/6",
       "stt": "2/2",
-      "positiveAbstainReasons": ["DETERMINISTIC_MISMATCH", "DEADLINE_EXCEEDED"],
-      "recommendationLatencyMs": [3969, 5000],
-      "stageLatencyMs": {
-        "embedding": { "n": 7, "min": 117, "median": 132, "max": 1020 },
-        "rerank": { "n": 6, "min": 772, "median": 1310, "max": 3436 },
-        "llm": { "n": 6, "min": 1119, "median": 2678, "max": 3691 },
-        "verifier": { "n": 0 }
+      "positiveAbstainReasons": [
+        "DETERMINISTIC_MISMATCH",
+        "DETERMINISTIC_MISMATCH"
+      ],
+      "recommendationLatencyMs": [
+        2640,
+        2236
+      ],
+      "retrievalCandidateCounts": [
+        2,
+        2
+      ],
+      "stageLatencySummaryMs": {
+        "embedding": {
+          "n": 7,
+          "min": 123,
+          "median": 131,
+          "max": 716
+        },
+        "rerank": {
+          "n": 6,
+          "min": 810,
+          "median": 1147,
+          "max": 1912
+        },
+        "llm": {
+          "n": 6,
+          "min": 1096,
+          "median": 1475,
+          "max": 1809
+        },
+        "verifier": {
+          "n": 1,
+          "min": 1908,
+          "median": 1908,
+          "max": 1908
+        }
       }
-    },
-    {
-      "label": "run2",
-      "positive": "0/2",
-      "negative": "6/6",
-      "stt": "2/2",
-      "positiveAbstainReasons": ["DEADLINE_EXCEEDED", "DEADLINE_EXCEEDED"],
-      "recommendationLatencyMs": [5000, 5000],
-      "stageLatencyMs": {
-        "embedding": { "n": 7, "min": 116, "median": 140, "max": 183 },
-        "rerank": { "n": 6, "min": 818, "median": 2324, "max": 3751 },
-        "llm": { "n": 6, "min": 1229, "median": 3441, "max": 3900 },
-        "verifier": { "n": 1, "min": 1364, "median": 1364, "max": 1364 }
-      },
-      "artifact": ".omo/evidence/task-25/core5-e2e.json"
     }
   ],
   "models": {
@@ -38,18 +53,27 @@
     "VERIFIER_MODEL": "qwen3.6-plus"
   },
   "suiteChanges": [
-    "runner: per-step wall-clock latency and failure-point diagnostics (status, outcome, reason, latencyMs, evidence count, full response body, FINAL transcript counts) on positive scenarios",
-    "script: model slots read from shipped .env.example instead of a drifted copy",
-    "script: E2E database role switched to impromptu_bootstrap (CI parity)",
-    "script: every service stdout drained continuously into .omo/evidence/task-25/<service>.log and per-stage model latency merged into the result JSON"
+    "runner: on non-RECOMMEND, classify the abstain against the 4,500ms abort guard (DEADLINE_EXCEEDED) vs a gate rejection (DETERMINISTIC_MISMATCH) in the failure detail",
+    "runner: new read-only diagnostic retrievalCandidateCount - deck_retrieval_chunks rows for the exact deckVersion+manifestHash under the CI role (bypasses tenant RLS), so 'no candidates' is ruled out at the failure point",
+    "script: top-level /v1/recommendations request outcomes with wall-clock latency captured as recommendationRequests",
+    "script: per-stage min/median/max summary captured as stageLatencySummaryMs"
   ],
-  "notChanged": ["thresholds", "fixtures", "expected values", "scenario set", "product source"],
+  "notChanged": [
+    "thresholds",
+    "fixtures",
+    "expected values",
+    "scenario set",
+    "product source",
+    "deterministic evidence gate"
+  ],
   "CORE5_GREEN": false,
   "rationale": [
-    "positive 0/2 in both runs: the deck upload, fake-device WebM capture and whisper FINAL steps complete, but /v1/recommendations returns ABSTAIN before the coaching step is reached",
-    "failure point is the model phase, not retrieval: run1 pdf abstained DETERMINISTIC_MISMATCH at 3,969ms with rerank+llm SUCCESS and no verifier call; the remaining three positive attempts hit the 5,000ms terminal budget",
-    "budget arithmetic: median rerank 1.3-2.3s and median llm 2.7-3.4s alone consume the 4,500ms abort guard, so DEADLINE_EXCEEDED is structural under the current provider latency",
-    "negative 6/6 and stt 2/2 in both runs: no regression",
-    "OCR is excluded from this suite's pass/fail (separate track, OCR_GREEN=false)"
-  ]
+    "positive 0/2: upload 201, fake-device WebM capture and whisper FINAL all reached every run; both failures are at POST /v1/recommendations returning HTTP 200 ABSTAIN",
+    "both abstains this run are DETERMINISTIC_MISMATCH at 2,640ms and 2,236ms - all model stages SUCCESS and well inside the 4,500ms abort guard (rerank median 1,147ms + llm median 1,475ms), so no DEADLINE_EXCEEDED occurred this run",
+    "new diagnostic confirms retrieval is not the cause: 2 internal candidates indexed for each failing upload (retrievalCandidateCount=2); the LLM invents facts unsupported by those candidates and the deterministic evidence gate correctly rejects them",
+    "the gate is behaving correctly by design and was not touched; no configuration meeting both RECOMMEND and the 5s budget exists in the full provider catalog (task-32 bakeoff)",
+    "negative 6/6 and stt 2/2: no regression (mic-denied zero audio requests, external 429 internal-only, Stage snapshot/SSE/WS cards=0 x3, A-B-A reload dwell identical, PARTIAL-before-FINAL, revoke-blocks-late-delivery)",
+    "OCR excluded from pass/fail per decision (separate track)"
+  ],
+  "artifact": ".omo/evidence/task-25/core5-e2e.json"
 }
