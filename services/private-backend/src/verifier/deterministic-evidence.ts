@@ -64,11 +64,7 @@ export function reconcileEvidence(
   const foldedClaim = fold(recommendation.claim);
   const foldedEvidence = fold(evidenceText);
   for (const entity of asserted.entities) {
-    if (
-      !foldedClaim.includes(entity) ||
-      !foldedEvidence.includes(entity) ||
-      !evidenceFacts.entities.some((candidate) => containsEntity(candidate, entity))
-    ) {
+    if (!foldedClaim.includes(entity) || !containsTokenRun(foldedEvidence, entity)) {
       return { outcome: "MISMATCH", category: "ENTITY", value: entity };
     }
   }
@@ -82,9 +78,14 @@ export function extractFacts(text: string): EvidenceFactSet {
     ),
   );
   const dates = unique(
-    [...text.matchAll(/\b(?:\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/.]\d{1,2}[/.]\d{4})\b/g)].map((match) =>
-      normalizeDate(match[0]),
-    ),
+    [
+      ...text.matchAll(/\b(?:\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/.]\d{1,2}[/.]\d{4})\b/g),
+      // Bare years are already captured by the number pattern; classify them as dates too so a
+      // year that exists in the source is not rejected merely because the model labeled it
+      // DATE instead of NUMBER. Restricted to plausible years so 4-digit quantities (e.g. 1200)
+      // stay numbers. Existence is still enforced: the token must occur verbatim.
+      ...text.matchAll(/(?<![\p{L}\p{N}])(?:19|20)\d{2}(?![\p{L}\p{N}])/gu),
+    ].map((match) => normalizeDate(match[0])),
   );
   const units = unique(
     [
@@ -139,8 +140,24 @@ function fold(value: string): string {
   return value.normalize("NFKC").toLocaleLowerCase("en-US").replace(/\s+/g, " ").trim();
 }
 
-function containsEntity(candidate: string, entity: string): boolean {
-  return ` ${candidate} `.includes(` ${entity} `);
+function stripEdgePunctuation(token: string): string {
+  return token.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+}
+
+/** Whether the entity occurs as consecutive whitespace-delimited tokens. The uppercase-initial
+ * extractor never yields Korean candidates, so declared entities are judged by verbatim token
+ * existence; whole-token matching still prevents hits inside a longer unrelated word. */
+function containsTokenRun(haystack: string, entity: string): boolean {
+  const haystackTokens = haystack.split(/\s+/).map(stripEdgePunctuation);
+  const needleTokens = entity.split(/\s+/).map(stripEdgePunctuation).filter(Boolean);
+  if (needleTokens.length === 0 || needleTokens.length > haystackTokens.length) return false;
+  outer: for (let start = 0; start <= haystackTokens.length - needleTokens.length; start += 1) {
+    for (let offset = 0; offset < needleTokens.length; offset += 1) {
+      if (haystackTokens[start + offset] !== needleTokens[offset]) continue outer;
+    }
+    return true;
+  }
+  return false;
 }
 
 function unique(values: readonly string[]): string[] {
