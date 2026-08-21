@@ -1,7 +1,10 @@
 import hashlib
+import json
+import shutil
 import subprocess
 from contextlib import AbstractContextManager
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -19,6 +22,21 @@ from impromptu_ingestion.contracts import (
     ValidatedInput,
 )
 from impromptu_ingestion.validation import stage_input
+
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+_FROZEN_FIXTURE_ROOT = _REPOSITORY_ROOT / "tests" / "fixtures" / "format-neutral-decks"
+_FROZEN_FIXTURE_REGISTRY = _FROZEN_FIXTURE_ROOT / "fixture-manifest.json"
+
+
+def _fixture_registry() -> dict[str, Any]:
+    return json.loads(_FROZEN_FIXTURE_REGISTRY.read_text(encoding="utf-8"))
+
+
+def _validate_fixture_hashes(registry: dict[str, Any], repository_root: Path) -> None:
+    for fixture in registry["fixtures"]:
+        path = repository_root / fixture["path"]
+        actual = hashlib.sha256(path.read_bytes()).hexdigest()
+        assert actual == fixture["sha256"], f"SHA-256 mismatch for {fixture['path']}"
 
 
 def _staged(
@@ -91,6 +109,73 @@ def test_pdf_extracts_positioned_text_and_images_and_marks_scanned_pages(
         "scanned_page_requires_ocr"
     }
     assert all(element.kind != "text" for element in manifest.slides[1].elements)
+
+
+def test_frozen_pdf_and_pptx_share_korean_structural_sentinel() -> None:
+    registry = _fixture_registry()
+    sentinel = registry["sentinels"]["structural"]
+    forbidden = registry["sentinels"]["forbiddenPptxText"]
+    fixture_by_kind = {fixture["kind"]: fixture for fixture in registry["fixtures"]}
+
+    texts_by_kind: dict[str, tuple[str, ...]] = {}
+    for kind, adapter in (
+        ("pptx", PptxStructuralAdapter()),
+        ("text-layer-pdf", PdfStructuralAdapter()),
+    ):
+        path = _REPOSITORY_ROOT / fixture_by_kind[kind]["path"]
+        with _staged(path) as source:
+            manifest = adapter.extract(source)
+        texts_by_kind[kind] = tuple(
+            element.text
+            for slide in manifest.slides
+            for element in slide.elements
+            if element.kind == "text"
+        )
+
+    assert texts_by_kind == {
+        "pptx": (sentinel,),
+        "text-layer-pdf": (sentinel,),
+    }
+    assert forbidden not in "".join(texts_by_kind["pptx"])
+
+
+def test_frozen_scanned_pdf_reproduces_ocr_warning() -> None:
+    registry = _fixture_registry()
+    fixture = next(item for item in registry["fixtures"] if item["kind"] == "scanned-pdf")
+    with _staged(_REPOSITORY_ROOT / fixture["path"]) as source:
+        manifest = PdfStructuralAdapter().extract(source)
+
+    assert all(element.kind != "text" for element in manifest.slides[0].elements)
+    assert {warning.code for warning in manifest.slides[0].warnings} == {
+        "scanned_page_requires_ocr"
+    }
+
+
+def test_fixture_hash_registry_accepts_frozen_binaries() -> None:
+    _validate_fixture_hashes(_fixture_registry(), _REPOSITORY_ROOT)
+
+
+def test_fixture_hash_registry_rejects_mutated_binary(tmp_path: Path) -> None:
+    registry = _fixture_registry()
+    copied_root = tmp_path / "repository"
+    copied_fixtures = copied_root / _FROZEN_FIXTURE_ROOT.relative_to(_REPOSITORY_ROOT)
+    shutil.copytree(_FROZEN_FIXTURE_ROOT, copied_fixtures)
+    mutated = copied_root / registry["fixtures"][0]["path"]
+    mutated.write_bytes(mutated.read_bytes() + b"fixture mutation")
+
+    with pytest.raises(AssertionError, match="SHA-256 mismatch"):
+        _validate_fixture_hashes(registry, copied_root)
+
+
+def test_fixture_registry_reserves_only_private_0008_and_0009() -> None:
+    reservations = _fixture_registry()["migrationReservations"]
+    assert reservations == {
+        "private": [
+            {"filename": "0008_deck_retrieval_hybrid.sql", "owner": "retrieval"},
+            {"filename": "0009_session_reports.sql", "owner": "report"},
+        ],
+        "projection": {"latest": "0005_gateway_state.sql", "newMigrationAllowed": False},
+    }
 
 
 @pytest.mark.parametrize("adapter", [PptxStructuralAdapter(), PdfStructuralAdapter()])

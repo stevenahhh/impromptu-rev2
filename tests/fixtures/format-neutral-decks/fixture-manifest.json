@@ -1,0 +1,75 @@
+{
+  "fixtures": [
+    {
+      "expectedSemantics": "DeckManifest contains the structural sentinel as one TextElement",
+      "id": "korean-structural-pptx",
+      "kind": "pptx",
+      "path": "tests/fixtures/format-neutral-decks/korean-structural.pptx",
+      "provenance": {
+        "generatedBy": "scripts/generate-format-neutral-deck-fixtures.py",
+        "origin": "repository-generated synthetic fixture",
+        "sourceMethod": "python-pptx blank slide with one native Korean text shape; ZIP metadata normalized",
+        "thirdPartySourceMaterial": false
+      },
+      "sha256": "a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d"
+    },
+    {
+      "expectedSemantics": "DeckManifest contains the same structural sentinel as the PPTX fixture",
+      "id": "korean-text-layer-pdf",
+      "kind": "text-layer-pdf",
+      "path": "tests/fixtures/format-neutral-decks/korean-text-layer.pdf",
+      "provenance": {
+        "generatedBy": "scripts/generate-format-neutral-deck-fixtures.py",
+        "origin": "repository-generated synthetic fixture",
+        "sourceMethod": "PyMuPDF page with native Korean PDF text using the built-in Korea CJK font",
+        "thirdPartySourceMaterial": false
+      },
+      "sha256": "34eac2a55addb409359febc4ec28e911f10c719abd28ce7b427421ab9a985c86"
+    },
+    {
+      "expectedSemantics": "DeckManifest has no TextElement and warns scanned_page_requires_ocr; OCR target is the OCR sentinel",
+      "id": "korean-scanned-pdf",
+      "kind": "scanned-pdf",
+      "path": "tests/fixtures/format-neutral-decks/korean-scanned.pdf",
+      "provenance": {
+        "generatedBy": "scripts/generate-format-neutral-deck-fixtures.py",
+        "origin": "repository-generated synthetic fixture",
+        "sourceMethod": "2x rasterization of the synthetic Korean page embedded as the PDF page's only image",
+        "thirdPartySourceMaterial": false
+      },
+      "sha256": "de579a639a3c77b9387714a517bcf5b9515d09e1473c6036a6c3d45ee0484906"
+    }
+  ],
+  "generator": {
+    "command": "uv run scripts/generate-format-neutral-deck-fixtures.py",
+    "dependencies": [
+      "PyMuPDF==1.28.2",
+      "python-pptx==1.0.2"
+    ],
+    "path": "scripts/generate-format-neutral-deck-fixtures.py",
+    "requiresPython": ">=3.14,<3.15"
+  },
+  "migrationReservations": {
+    "private": [
+      {
+        "filename": "0008_deck_retrieval_hybrid.sql",
+        "owner": "retrieval"
+      },
+      {
+        "filename": "0009_session_reports.sql",
+        "owner": "report"
+      }
+    ],
+    "projection": {
+      "latest": "0005_gateway_state.sql",
+      "newMigrationAllowed": false
+    }
+  },
+  "registryId": "impromptu-format-neutral-korean-decks-v1",
+  "schemaVersion": 1,
+  "sentinels": {
+    "forbiddenPptxText": "<date/time>",
+    "ocr": "형식 중립 근거 자료 2026",
+    "structural": "형식 중립 근거 자료 2026"
+  }
+}
