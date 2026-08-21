@@ -1,0 +1,40 @@
+{
+  "concurrency": 1,
+  "exactSentinelPages": 10,
+  "expectedSentinel": "형식 중립 근거 자료 2026",
+  "fixture": "/Users/gahn/Projects/impromptu-rev2/tests/fixtures/format-neutral-decks/korean-scanned.pdf",
+  "hardware": { "machine": "arm64", "processor": "arm", "system": "Darwin" },
+  "inContainerUsage": {
+    "maxRssBytes": 153058541568,
+    "sysSeconds": 0.182798,
+    "userSeconds": 1.561346,
+    "wallSeconds": 1.817261
+  },
+  "ocrAppliedPages": 10,
+  "pageCount": 10,
+  "recognizedTexts": [
+    "형식 중립 근거 자료 2026",
+    "형식 중립 근거 자료 2026",
+    "형식 중립 근거 자료 2026",
+    "형식 중립 근거 자료 2026",
+    "형식 중립 근거 자료 2026",
+    "형식 중립 근거 자료 2026",
+    "형식 중립 근거 자료 2026",
+    "형식 중립 근거 자료 2026",
+    "형식 중립 근거 자료 2026",
+    "형식 중립 근거 자료 2026"
+  ],
+  "schemaVersion": 1,
+  "warningCodesByPage": [
+    ["ocr_applied"],
+    ["ocr_applied"],
+    ["ocr_applied"],
+    ["ocr_applied"],
+    ["ocr_applied"],
+    ["ocr_applied"],
+    ["ocr_applied"],
+    ["ocr_applied"],
+    ["ocr_applied"],
+    ["ocr_applied"]
+  ]
+}

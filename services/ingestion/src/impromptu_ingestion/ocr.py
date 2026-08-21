@@ -18,6 +18,9 @@ from impromptu_ingestion.contracts import TextElement
 
 _OCR_DPI = 200
 _MAX_OCR_EDGE = 4_096
+# PSM 6 (one uniform text block) restores the spaced-glyph Korean slide title
+# exactly; sparse-text modes (PSM 11/12) fragment spaced words into separate
+# line keys and corrupt the reconstructed line.
 _TESSERACT_COMMAND = (
     "tesseract",
     "stdin",
@@ -27,7 +30,7 @@ _TESSERACT_COMMAND = (
     "--oem",
     "1",
     "--psm",
-    "11",
+    "6",
     "tsv",
 )
 _MODEL_SPECS = {

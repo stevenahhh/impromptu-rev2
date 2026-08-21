@@ -86,7 +86,7 @@ def test_ocr_runs_exact_bounded_tesseract_tsv_command_and_maps_line_bbox(
                 "--oem",
                 "1",
                 "--psm",
-                "11",
+                "6",
                 "tsv",
             ],
             {

@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "fixture": "/Users/gahn/Projects/impromptu-rev2/tests/fixtures/format-neutral-decks/korean-scanned.pdf",
+  "upload": {
+    "outcome": "RENDERED",
+    "artifactId": "dcfeeca10273744d22a2c1921fe137a538bf3e14725a331a87a0890c307e7c65",
+    "warningCodes": ["ocr_applied"]
+  },
+  "ocr": {
+    "expectedSentinel": "형식 중립 근거 자료 2026",
+    "textElements": [
+      {
+        "element_id": "ocr:text:1",
+        "x": 74.16,
+        "y": 167.4,
+        "width": 432,
+        "height": 25.56,
+        "kind": "text",
+        "text": "형식 중립 근거 자료 2026"
+      }
+    ],
+    "recognizedChunk": "형식 중립 근거 자료 2026",
+    "exactSentinel": true
+  },
+  "indexing": {
+    "dbChunkCount": 1,
+    "rows": [
+      {
+        "anchor": "slide=1&chunk=1",
+        "content": "형식 중립 근거 자료 2026",
+        "object_id": "b98d4aabf75b3b5b6106b7b5b2330adc1c00a45d5e5eaaaebabd46f73f2966f0",
+        "lexical_match": true
+      }
+    ]
+  },
+  "hybridQuery": {
+    "query": "형식 중립 근거 자료 2026",
+    "resultCount": 1,
+    "results": [
+      {
+        "anchor": "slide=1&chunk=1",
+        "objectId": "b98d4aabf75b3b5b6106b7b5b2330adc1c00a45d5e5eaaaebabd46f73f2966f0",
+        "sourceId": "page:1",
+        "title": "Slide 1"
+      }
+    ],
+    "expectedSlideChunkReturned": true,
+    "lexicalMatch": true,
+    "denseVectorDimension": 768
+  }
+}
