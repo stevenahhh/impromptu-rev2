@@ -1,0 +1,19 @@
+{
+  "profile": "venue-like-real-network-exact-event",
+  "transport": "private-http+projection-wss+snapshot-http",
+  "commandCount": 500,
+  "reconnectCount": 50,
+  "commandToStageAppliedP95Ms": 47.954,
+  "reconnectToSnapshotP95Ms": 0.444,
+  "observedVisibleEffects": 499,
+  "duplicateVisibleEffects": 0,
+  "staleEpochAcceptances": 0,
+  "staleCardResurrections": 0,
+  "liveLeaseMs": 0,
+  "silentPartitionExposureMs": 0,
+  "cardPublishStatus": 410,
+  "cardPublishRejection": "stage_cards_disabled",
+  "stageCardFrames": 0,
+  "stageCardsAfterPartition": 0,
+  "partitionRecoveryMs": 0.345
+}

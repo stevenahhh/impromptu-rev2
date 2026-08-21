@@ -1,0 +1,965 @@
+{
+  "commandCount": 150,
+  "client": {
+    "totalMs": {
+      "n": 150,
+      "mean": 10.13,
+      "p50": 10.28,
+      "p95": 16.6,
+      "max": 18.66
+    },
+    "postToCommandMs": {
+      "n": 150,
+      "mean": 1.19,
+      "p50": 1.16,
+      "p95": 1.4,
+      "max": 7.1
+    },
+    "appliedToReceiptMs": {
+      "n": 150,
+      "mean": 8.94,
+      "p50": 9.14,
+      "p95": 15.42,
+      "max": 17.56
+    },
+    "postToResponseMs": {
+      "n": 150,
+      "mean": 10.13,
+      "p50": 10.28,
+      "p95": 16.6,
+      "max": 18.66
+    }
+  },
+  "server": {
+    "private POST /v1/playback/slide-set": {
+      "n": 150,
+      "mean": 5.84,
+      "p50": 6,
+      "p95": 9,
+      "max": 11
+    },
+    "gateway POST /internal/playback": {
+      "n": 150,
+      "mean": 0.56,
+      "p50": 1,
+      "p95": 1,
+      "max": 1
+    },
+    "private POST /internal/stage-applied": {
+      "n": 150,
+      "mean": 8.78,
+      "p50": 9,
+      "p95": 15,
+      "max": 18
+    },
+    "gateway POST /internal/playback-applied": {
+      "n": 150,
+      "mean": 0.78,
+      "p50": 1,
+      "p95": 1,
+      "max": 2
+    }
+  },
+  "rawSamples": [
+    {
+      "totalMs": 4.44033300000001,
+      "postToCommandMs": 1.6454579999999623,
+      "appliedToReceiptMs": 2.793875000000014,
+      "postToResponseMs": 4.44033300000001
+    },
+    {
+      "totalMs": 3.952957999999967,
+      "postToCommandMs": 1.2053750000000036,
+      "appliedToReceiptMs": 2.7469579999999496,
+      "postToResponseMs": 3.952957999999967
+    },
+    {
+      "totalMs": 9.640999999999963,
+      "postToCommandMs": 7.103666999999973,
+      "appliedToReceiptMs": 2.536625000000015,
+      "postToResponseMs": 9.640999999999963
+    },
+    {
+      "totalMs": 3.7024580000000356,
+      "postToCommandMs": 1.2609170000000063,
+      "appliedToReceiptMs": 2.4409580000000233,
+      "postToResponseMs": 3.7024580000000356
+    },
+    {
+      "totalMs": 3.910624999999982,
+      "postToCommandMs": 1.323541999999975,
+      "appliedToReceiptMs": 2.586541000000011,
+      "postToResponseMs": 3.910624999999982
+    },
+    {
+      "totalMs": 4.400249999999971,
+      "postToCommandMs": 1.171624999999949,
+      "appliedToReceiptMs": 3.228041000000019,
+      "postToResponseMs": 4.400249999999971
+    },
+    {
+      "totalMs": 4.035582999999974,
+      "postToCommandMs": 1.216415999999981,
+      "appliedToReceiptMs": 2.818125000000009,
+      "postToResponseMs": 4.035582999999974
+    },
+    {
+      "totalMs": 3.9153330000000324,
+      "postToCommandMs": 1.1658750000000282,
+      "appliedToReceiptMs": 2.74841600000002,
+      "postToResponseMs": 3.9153330000000324
+    },
+    {
+      "totalMs": 4.108167000000037,
+      "postToCommandMs": 1.1065000000000396,
+      "appliedToReceiptMs": 3.0006669999999644,
+      "postToResponseMs": 4.108167000000037
+    },
+    {
+      "totalMs": 4.110208999999998,
+      "postToCommandMs": 1.0880839999999807,
+      "appliedToReceiptMs": 3.0213750000000346,
+      "postToResponseMs": 4.110208999999998
+    },
+    {
+      "totalMs": 4.487124999999992,
+      "postToCommandMs": 1.057042000000024,
+      "appliedToReceiptMs": 3.429417000000001,
+      "postToResponseMs": 4.487124999999992
+    },
+    {
+      "totalMs": 4.218542000000014,
+      "postToCommandMs": 1.039625000000001,
+      "appliedToReceiptMs": 3.178291999999999,
+      "postToResponseMs": 4.218542000000014
+    },
+    {
+      "totalMs": 4.097417000000007,
+      "postToCommandMs": 1.0299170000000117,
+      "appliedToReceiptMs": 3.0670829999999683,
+      "postToResponseMs": 4.097417000000007
+    },
+    {
+      "totalMs": 4.414666000000011,
+      "postToCommandMs": 1.0705829999999992,
+      "appliedToReceiptMs": 3.343666999999982,
+      "postToResponseMs": 4.414666000000011
+    },
+    {
+      "totalMs": 4.402250000000038,
+      "postToCommandMs": 1.0263340000000198,
+      "appliedToReceiptMs": 3.3753750000000196,
+      "postToResponseMs": 4.402250000000038
+    },
+    {
+      "totalMs": 5.059000000000026,
+      "postToCommandMs": 1.073582999999985,
+      "appliedToReceiptMs": 3.9845830000000433,
+      "postToResponseMs": 5.059000000000026
+    },
+    {
+      "totalMs": 4.850291999999968,
+      "postToCommandMs": 1.0873750000000086,
+      "appliedToReceiptMs": 3.762124999999969,
+      "postToResponseMs": 4.850291999999968
+    },
+    {
+      "totalMs": 5.258833999999979,
+      "postToCommandMs": 1.1200840000000198,
+      "appliedToReceiptMs": 4.138207999999963,
+      "postToResponseMs": 5.258833999999979
+    },
+    {
+      "totalMs": 4.902333999999996,
+      "postToCommandMs": 1.032291999999984,
+      "appliedToReceiptMs": 3.869374999999991,
+      "postToResponseMs": 4.902333999999996
+    },
+    {
+      "totalMs": 4.804916999999989,
+      "postToCommandMs": 1.016666999999984,
+      "appliedToReceiptMs": 3.787540999999976,
+      "postToResponseMs": 4.804916999999989
+    },
+    {
+      "totalMs": 5.251458000000014,
+      "postToCommandMs": 1.0387080000000424,
+      "appliedToReceiptMs": 4.212166999999965,
+      "postToResponseMs": 5.251458000000014
+    },
+    {
+      "totalMs": 5.173624999999959,
+      "postToCommandMs": 1.0978749999999877,
+      "appliedToReceiptMs": 4.075041999999996,
+      "postToResponseMs": 5.173624999999959
+    },
+    {
+      "totalMs": 5.269541000000004,
+      "postToCommandMs": 1.0434999999999945,
+      "appliedToReceiptMs": 4.225583000000029,
+      "postToResponseMs": 5.269541000000004
+    },
+    {
+      "totalMs": 5.370416000000034,
+      "postToCommandMs": 1.079999999999984,
+      "appliedToReceiptMs": 4.290083000000038,
+      "postToResponseMs": 5.370416000000034
+    },
+    {
+      "totalMs": 5.547415999999998,
+      "postToCommandMs": 1.0786659999999983,
+      "appliedToReceiptMs": 4.468458999999996,
+      "postToResponseMs": 5.547415999999998
+    },
+    {
+      "totalMs": 5.405208000000016,
+      "postToCommandMs": 1.0564170000000104,
+      "appliedToReceiptMs": 4.348415999999986,
+      "postToResponseMs": 5.405208000000016
+    },
+    {
+      "totalMs": 5.470000000000027,
+      "postToCommandMs": 1.0757500000000277,
+      "appliedToReceiptMs": 4.39387499999998,
+      "postToResponseMs": 5.470000000000027
+    },
+    {
+      "totalMs": 5.432999999999993,
+      "postToCommandMs": 1.0207919999999717,
+      "appliedToReceiptMs": 4.411708000000033,
+      "postToResponseMs": 5.432999999999993
+    },
+    {
+      "totalMs": 5.505541999999991,
+      "postToCommandMs": 0.9873749999999859,
+      "appliedToReceiptMs": 4.517583000000002,
+      "postToResponseMs": 5.505541999999991
+    },
+    {
+      "totalMs": 5.164625000000001,
+      "postToCommandMs": 0.9257080000000428,
+      "appliedToReceiptMs": 4.238584000000003,
+      "postToResponseMs": 5.164625000000001
+    },
+    {
+      "totalMs": 5.674959000000001,
+      "postToCommandMs": 1.0090840000000298,
+      "appliedToReceiptMs": 4.6653329999999755,
+      "postToResponseMs": 5.674959000000001
+    },
+    {
+      "totalMs": 6.771166999999991,
+      "postToCommandMs": 0.9809589999999844,
+      "appliedToReceiptMs": 5.789249999999981,
+      "postToResponseMs": 6.771166999999991
+    },
+    {
+      "totalMs": 6.210749999999962,
+      "postToCommandMs": 1.3166249999999877,
+      "appliedToReceiptMs": 4.893416000000002,
+      "postToResponseMs": 6.210749999999962
+    },
+    {
+      "totalMs": 6.294040999999993,
+      "postToCommandMs": 1.0175409999999943,
+      "appliedToReceiptMs": 5.275875000000042,
+      "postToResponseMs": 6.294040999999993
+    },
+    {
+      "totalMs": 5.738959000000023,
+      "postToCommandMs": 0.9888339999999971,
+      "appliedToReceiptMs": 4.749541000000022,
+      "postToResponseMs": 5.738959000000023
+    },
+    {
+      "totalMs": 6.000624999999957,
+      "postToCommandMs": 1.0102909999999952,
+      "appliedToReceiptMs": 4.989583999999979,
+      "postToResponseMs": 6.000624999999957
+    },
+    {
+      "totalMs": 6.220958000000053,
+      "postToCommandMs": 1.0194160000000352,
+      "appliedToReceiptMs": 5.200333999999998,
+      "postToResponseMs": 6.220958000000053
+    },
+    {
+      "totalMs": 5.939958000000047,
+      "postToCommandMs": 1.0128750000000082,
+      "appliedToReceiptMs": 4.926791999999978,
+      "postToResponseMs": 5.939958000000047
+    },
+    {
+      "totalMs": 6.715583999999922,
+      "postToCommandMs": 1.0089169999999967,
+      "appliedToReceiptMs": 5.70595800000001,
+      "postToResponseMs": 6.715583999999922
+    },
+    {
+      "totalMs": 6.109750000000076,
+      "postToCommandMs": 1.031959000000029,
+      "appliedToReceiptMs": 5.077415999999971,
+      "postToResponseMs": 6.109750000000076
+    },
+    {
+      "totalMs": 6.812249999999949,
+      "postToCommandMs": 0.9759169999999813,
+      "appliedToReceiptMs": 5.835416000000009,
+      "postToResponseMs": 6.812249999999949
+    },
+    {
+      "totalMs": 6.722667000000001,
+      "postToCommandMs": 1.0645000000000664,
+      "appliedToReceiptMs": 5.657249999999976,
+      "postToResponseMs": 6.722667000000001
+    },
+    {
+      "totalMs": 6.28554100000008,
+      "postToCommandMs": 1.0582500000000437,
+      "appliedToReceiptMs": 5.226415999999972,
+      "postToResponseMs": 6.28554100000008
+    },
+    {
+      "totalMs": 6.505457999999976,
+      "postToCommandMs": 0.9963330000000497,
+      "appliedToReceiptMs": 5.508583999999928,
+      "postToResponseMs": 6.505457999999976
+    },
+    {
+      "totalMs": 6.596875000000068,
+      "postToCommandMs": 0.9681250000001,
+      "appliedToReceiptMs": 5.628082999999947,
+      "postToResponseMs": 6.596875000000068
+    },
+    {
+      "totalMs": 6.699125000000095,
+      "postToCommandMs": 0.9993750000001,
+      "appliedToReceiptMs": 5.698667,
+      "postToResponseMs": 6.699125000000095
+    },
+    {
+      "totalMs": 6.918583000000012,
+      "postToCommandMs": 1.002540999999951,
+      "appliedToReceiptMs": 5.915124999999989,
+      "postToResponseMs": 6.918583000000012
+    },
+    {
+      "totalMs": 6.701709000000051,
+      "postToCommandMs": 1.0057920000000422,
+      "appliedToReceiptMs": 5.694875000000025,
+      "postToResponseMs": 6.701709000000051
+    },
+    {
+      "totalMs": 8.578415999999947,
+      "postToCommandMs": 0.9463329999999814,
+      "appliedToReceiptMs": 7.63129200000003,
+      "postToResponseMs": 8.578415999999947
+    },
+    {
+      "totalMs": 7.000374999999963,
+      "postToCommandMs": 1.0732080000000224,
+      "appliedToReceiptMs": 5.926458999999909,
+      "postToResponseMs": 7.000374999999963
+    },
+    {
+      "totalMs": 6.914875000000052,
+      "postToCommandMs": 1.001333000000045,
+      "appliedToReceiptMs": 5.91274999999996,
+      "postToResponseMs": 6.914875000000052
+    },
+    {
+      "totalMs": 7.411999999999921,
+      "postToCommandMs": 1.0021249999999782,
+      "appliedToReceiptMs": 6.409332999999947,
+      "postToResponseMs": 7.411999999999921
+    },
+    {
+      "totalMs": 7.428541999999993,
+      "postToCommandMs": 1.02312500000005,
+      "appliedToReceiptMs": 6.404709000000025,
+      "postToResponseMs": 7.428541999999993
+    },
+    {
+      "totalMs": 7.195083999999952,
+      "postToCommandMs": 0.9572089999999207,
+      "appliedToReceiptMs": 6.237500000000068,
+      "postToResponseMs": 7.195083999999952
+    },
+    {
+      "totalMs": 7.1997499999999945,
+      "postToCommandMs": 0.9475410000000011,
+      "appliedToReceiptMs": 6.251416999999947,
+      "postToResponseMs": 7.1997499999999945
+    },
+    {
+      "totalMs": 7.67837499999996,
+      "postToCommandMs": 1.0779169999999567,
+      "appliedToReceiptMs": 6.599707999999964,
+      "postToResponseMs": 7.67837499999996
+    },
+    {
+      "totalMs": 7.44074999999998,
+      "postToCommandMs": 1.0087089999999534,
+      "appliedToReceiptMs": 6.4314580000000205,
+      "postToResponseMs": 7.44074999999998
+    },
+    {
+      "totalMs": 7.6949169999999185,
+      "postToCommandMs": 0.9472089999999298,
+      "appliedToReceiptMs": 6.747250000000008,
+      "postToResponseMs": 7.6949169999999185
+    },
+    {
+      "totalMs": 7.562582999999904,
+      "postToCommandMs": 0.9452499999999873,
+      "appliedToReceiptMs": 6.616832999999929,
+      "postToResponseMs": 7.562582999999904
+    },
+    {
+      "totalMs": 7.687833000000069,
+      "postToCommandMs": 0.9289580000000797,
+      "appliedToReceiptMs": 6.758417000000009,
+      "postToResponseMs": 7.687833000000069
+    },
+    {
+      "totalMs": 8.015416999999957,
+      "postToCommandMs": 0.9799170000000004,
+      "appliedToReceiptMs": 7.035041999999976,
+      "postToResponseMs": 8.015416999999957
+    },
+    {
+      "totalMs": 10.201375000000098,
+      "postToCommandMs": 0.9095829999999978,
+      "appliedToReceiptMs": 9.291167000000087,
+      "postToResponseMs": 10.201375000000098
+    },
+    {
+      "totalMs": 7.67025000000001,
+      "postToCommandMs": 0.9822500000000218,
+      "appliedToReceiptMs": 6.6873749999999745,
+      "postToResponseMs": 7.67025000000001
+    },
+    {
+      "totalMs": 7.977792000000022,
+      "postToCommandMs": 0.9814589999999725,
+      "appliedToReceiptMs": 6.995791000000054,
+      "postToResponseMs": 7.977792000000022
+    },
+    {
+      "totalMs": 7.816417000000001,
+      "postToCommandMs": 0.9393330000000333,
+      "appliedToReceiptMs": 6.87662499999999,
+      "postToResponseMs": 7.816417000000001
+    },
+    {
+      "totalMs": 8.74270899999999,
+      "postToCommandMs": 0.9822500000000218,
+      "appliedToReceiptMs": 7.758791999999971,
+      "postToResponseMs": 8.74270899999999
+    },
+    {
+      "totalMs": 9.208582999999976,
+      "postToCommandMs": 1.2457920000000513,
+      "appliedToReceiptMs": 7.96129099999996,
+      "postToResponseMs": 9.208582999999976
+    },
+    {
+      "totalMs": 9.691500000000019,
+      "postToCommandMs": 1.2920409999999265,
+      "appliedToReceiptMs": 8.397709000000077,
+      "postToResponseMs": 9.691500000000019
+    },
+    {
+      "totalMs": 9.191083000000049,
+      "postToCommandMs": 1.1520000000000437,
+      "appliedToReceiptMs": 8.037415999999894,
+      "postToResponseMs": 9.191083000000049
+    },
+    {
+      "totalMs": 9.84779100000003,
+      "postToCommandMs": 1.1681250000000318,
+      "appliedToReceiptMs": 8.678166000000033,
+      "postToResponseMs": 9.84779100000003
+    },
+    {
+      "totalMs": 9.784207999999921,
+      "postToCommandMs": 1.1046249999999418,
+      "appliedToReceiptMs": 8.677999999999997,
+      "postToResponseMs": 9.784207999999921
+    },
+    {
+      "totalMs": 10.812332999999967,
+      "postToCommandMs": 1.1977080000000342,
+      "appliedToReceiptMs": 9.613666999999964,
+      "postToResponseMs": 10.812332999999967
+    },
+    {
+      "totalMs": 9.739958000000001,
+      "postToCommandMs": 1.1462910000000193,
+      "appliedToReceiptMs": 8.591874999999959,
+      "postToResponseMs": 9.739958000000001
+    },
+    {
+      "totalMs": 10.978208999999993,
+      "postToCommandMs": 1.2547089999999343,
+      "appliedToReceiptMs": 9.722082999999998,
+      "postToResponseMs": 10.978208999999993
+    },
+    {
+      "totalMs": 10.317291999999952,
+      "postToCommandMs": 1.3590419999999312,
+      "appliedToReceiptMs": 8.956875000000082,
+      "postToResponseMs": 10.317291999999952
+    },
+    {
+      "totalMs": 9.850374999999985,
+      "postToCommandMs": 1.2621250000000828,
+      "appliedToReceiptMs": 8.586332999999968,
+      "postToResponseMs": 9.850374999999985
+    },
+    {
+      "totalMs": 10.485416999999984,
+      "postToCommandMs": 1.1485000000000127,
+      "appliedToReceiptMs": 9.335083999999938,
+      "postToResponseMs": 10.485416999999984
+    },
+    {
+      "totalMs": 10.127917000000025,
+      "postToCommandMs": 1.2345000000000255,
+      "appliedToReceiptMs": 8.89149999999995,
+      "postToResponseMs": 10.127917000000025
+    },
+    {
+      "totalMs": 9.839917000000014,
+      "postToCommandMs": 1.1216249999999945,
+      "appliedToReceiptMs": 8.716958999999974,
+      "postToResponseMs": 9.839917000000014
+    },
+    {
+      "totalMs": 10.28408300000001,
+      "postToCommandMs": 1.1397500000000491,
+      "appliedToReceiptMs": 9.142499999999927,
+      "postToResponseMs": 10.28408300000001
+    },
+    {
+      "totalMs": 11.006416999999942,
+      "postToCommandMs": 1.0658329999999978,
+      "appliedToReceiptMs": 9.93954199999996,
+      "postToResponseMs": 11.006416999999942
+    },
+    {
+      "totalMs": 10.750958000000082,
+      "postToCommandMs": 1.2642920000000686,
+      "appliedToReceiptMs": 9.485083000000031,
+      "postToResponseMs": 10.750958000000082
+    },
+    {
+      "totalMs": 10.32974999999999,
+      "postToCommandMs": 1.1698750000000473,
+      "appliedToReceiptMs": 9.157958000000008,
+      "postToResponseMs": 10.32974999999999
+    },
+    {
+      "totalMs": 10.956125000000043,
+      "postToCommandMs": 1.1024580000000697,
+      "appliedToReceiptMs": 9.852249999999913,
+      "postToResponseMs": 10.956125000000043
+    },
+    {
+      "totalMs": 10.87416600000006,
+      "postToCommandMs": 1.2577079999999796,
+      "appliedToReceiptMs": 9.615292000000068,
+      "postToResponseMs": 10.87416600000006
+    },
+    {
+      "totalMs": 10.635041999999999,
+      "postToCommandMs": 1.2179579999999532,
+      "appliedToReceiptMs": 9.41558400000008,
+      "postToResponseMs": 10.635041999999999
+    },
+    {
+      "totalMs": 11.218208000000004,
+      "postToCommandMs": 1.1068750000000591,
+      "appliedToReceiptMs": 10.10983299999998,
+      "postToResponseMs": 11.218208000000004
+    },
+    {
+      "totalMs": 11.043374999999969,
+      "postToCommandMs": 1.2200409999999238,
+      "appliedToReceiptMs": 9.82204200000001,
+      "postToResponseMs": 11.043374999999969
+    },
+    {
+      "totalMs": 10.595208999999954,
+      "postToCommandMs": 1.1649589999999534,
+      "appliedToReceiptMs": 9.428332999999952,
+      "postToResponseMs": 10.595208999999954
+    },
+    {
+      "totalMs": 13.964791999999989,
+      "postToCommandMs": 1.078708000000006,
+      "appliedToReceiptMs": 12.884500000000003,
+      "postToResponseMs": 13.964791999999989
+    },
+    {
+      "totalMs": 11.602874999999926,
+      "postToCommandMs": 1.3467089999999189,
+      "appliedToReceiptMs": 10.254500000000007,
+      "postToResponseMs": 11.602874999999926
+    },
+    {
+      "totalMs": 11.059833000000026,
+      "postToCommandMs": 1.1435410000000275,
+      "appliedToReceiptMs": 9.914416999999958,
+      "postToResponseMs": 11.059833000000026
+    },
+    {
+      "totalMs": 11.62250000000006,
+      "postToCommandMs": 1.1757080000000997,
+      "appliedToReceiptMs": 10.444832999999903,
+      "postToResponseMs": 11.62250000000006
+    },
+    {
+      "totalMs": 11.333124999999882,
+      "postToCommandMs": 1.247041999999965,
+      "appliedToReceiptMs": 10.08445800000004,
+      "postToResponseMs": 11.333124999999882
+    },
+    {
+      "totalMs": 11.806249999999864,
+      "postToCommandMs": 1.180791999999883,
+      "appliedToReceiptMs": 10.623957999999902,
+      "postToResponseMs": 11.806249999999864
+    },
+    {
+      "totalMs": 11.673499999999876,
+      "postToCommandMs": 1.2779169999998885,
+      "appliedToReceiptMs": 10.394250000000056,
+      "postToResponseMs": 11.673499999999876
+    },
+    {
+      "totalMs": 11.730166999999938,
+      "postToCommandMs": 1.2046669999999722,
+      "appliedToReceiptMs": 10.524374999999964,
+      "postToResponseMs": 11.730166999999938
+    },
+    {
+      "totalMs": 14.246000000000095,
+      "postToCommandMs": 1.1722500000000764,
+      "appliedToReceiptMs": 13.07208300000002,
+      "postToResponseMs": 14.246000000000095
+    },
+    {
+      "totalMs": 12.080375000000004,
+      "postToCommandMs": 1.5049999999998818,
+      "appliedToReceiptMs": 10.573583999999983,
+      "postToResponseMs": 12.080375000000004
+    },
+    {
+      "totalMs": 12.008291999999983,
+      "postToCommandMs": 1.172708000000057,
+      "appliedToReceiptMs": 10.83458399999995,
+      "postToResponseMs": 12.008291999999983
+    },
+    {
+      "totalMs": 12.895125000000007,
+      "postToCommandMs": 1.1856250000000728,
+      "appliedToReceiptMs": 11.707542000000103,
+      "postToResponseMs": 12.895125000000007
+    },
+    {
+      "totalMs": 11.899415999999974,
+      "postToCommandMs": 1.272958000000017,
+      "appliedToReceiptMs": 10.624957999999879,
+      "postToResponseMs": 11.899415999999974
+    },
+    {
+      "totalMs": 12.526124999999865,
+      "postToCommandMs": 1.1380420000000413,
+      "appliedToReceiptMs": 11.386790999999903,
+      "postToResponseMs": 12.526124999999865
+    },
+    {
+      "totalMs": 12.400249999999915,
+      "postToCommandMs": 1.2339580000000296,
+      "appliedToReceiptMs": 11.164667000000009,
+      "postToResponseMs": 12.400249999999915
+    },
+    {
+      "totalMs": 14.709667000000081,
+      "postToCommandMs": 1.15625,
+      "appliedToReceiptMs": 13.55212500000016,
+      "postToResponseMs": 14.709667000000081
+    },
+    {
+      "totalMs": 12.403375000000096,
+      "postToCommandMs": 1.156458000000157,
+      "appliedToReceiptMs": 11.245332999999846,
+      "postToResponseMs": 12.403375000000096
+    },
+    {
+      "totalMs": 13.212582999999995,
+      "postToCommandMs": 1.1572499999999764,
+      "appliedToReceiptMs": 12.053625000000011,
+      "postToResponseMs": 13.212582999999995
+    },
+    {
+      "totalMs": 12.560583000000179,
+      "postToCommandMs": 1.2188330000001315,
+      "appliedToReceiptMs": 11.340582999999924,
+      "postToResponseMs": 12.560583000000179
+    },
+    {
+      "totalMs": 12.964124999999967,
+      "postToCommandMs": 1.1233340000001135,
+      "appliedToReceiptMs": 11.839040999999952,
+      "postToResponseMs": 12.964124999999967
+    },
+    {
+      "totalMs": 12.113292000000001,
+      "postToCommandMs": 1.1508750000000418,
+      "appliedToReceiptMs": 10.961458999999877,
+      "postToResponseMs": 12.113292000000001
+    },
+    {
+      "totalMs": 13.342583999999988,
+      "postToCommandMs": 1.0852090000000771,
+      "appliedToReceiptMs": 12.25608299999999,
+      "postToResponseMs": 13.342583999999988
+    },
+    {
+      "totalMs": 15.656958000000031,
+      "postToCommandMs": 1.305166999999983,
+      "appliedToReceiptMs": 14.35004099999992,
+      "postToResponseMs": 15.656958000000031
+    },
+    {
+      "totalMs": 13.288292000000183,
+      "postToCommandMs": 1.244334000000208,
+      "appliedToReceiptMs": 12.042249999999967,
+      "postToResponseMs": 13.288292000000183
+    },
+    {
+      "totalMs": 12.946875000000091,
+      "postToCommandMs": 1.1665000000000418,
+      "appliedToReceiptMs": 11.77841599999988,
+      "postToResponseMs": 12.946875000000091
+    },
+    {
+      "totalMs": 13.682250000000067,
+      "postToCommandMs": 1.1776250000000346,
+      "appliedToReceiptMs": 12.503167000000076,
+      "postToResponseMs": 13.682250000000067
+    },
+    {
+      "totalMs": 13.931499999999915,
+      "postToCommandMs": 1.1200839999999062,
+      "appliedToReceiptMs": 12.809500000000071,
+      "postToResponseMs": 13.931499999999915
+    },
+    {
+      "totalMs": 13.88758299999995,
+      "postToCommandMs": 1.31574999999998,
+      "appliedToReceiptMs": 12.570500000000038,
+      "postToResponseMs": 13.88758299999995
+    },
+    {
+      "totalMs": 13.263625000000047,
+      "postToCommandMs": 1.2171670000000177,
+      "appliedToReceiptMs": 12.044499999999971,
+      "postToResponseMs": 13.263625000000047
+    },
+    {
+      "totalMs": 16.58316600000012,
+      "postToCommandMs": 1.16274999999996,
+      "appliedToReceiptMs": 15.418708000000152,
+      "postToResponseMs": 16.58316600000012
+    },
+    {
+      "totalMs": 14.628708999999844,
+      "postToCommandMs": 1.2478750000000218,
+      "appliedToReceiptMs": 13.37908399999992,
+      "postToResponseMs": 14.628708999999844
+    },
+    {
+      "totalMs": 14.29445799999985,
+      "postToCommandMs": 1.27475000000004,
+      "appliedToReceiptMs": 13.017916000000014,
+      "postToResponseMs": 14.29445799999985
+    },
+    {
+      "totalMs": 14.125916999999845,
+      "postToCommandMs": 1.3600839999999152,
+      "appliedToReceiptMs": 12.763707999999951,
+      "postToResponseMs": 14.125916999999845
+    },
+    {
+      "totalMs": 14.150292000000036,
+      "postToCommandMs": 1.156624999999849,
+      "appliedToReceiptMs": 12.99200000000019,
+      "postToResponseMs": 14.150292000000036
+    },
+    {
+      "totalMs": 14.78537499999993,
+      "postToCommandMs": 1.3857499999999163,
+      "appliedToReceiptMs": 13.397625000000062,
+      "postToResponseMs": 14.78537499999993
+    },
+    {
+      "totalMs": 17.682666000000154,
+      "postToCommandMs": 1.4015830000000733,
+      "appliedToReceiptMs": 16.278792000000067,
+      "postToResponseMs": 17.682666000000154
+    },
+    {
+      "totalMs": 15.083791999999903,
+      "postToCommandMs": 1.4074169999998958,
+      "appliedToReceiptMs": 13.674416999999949,
+      "postToResponseMs": 15.083791999999903
+    },
+    {
+      "totalMs": 14.729166999999961,
+      "postToCommandMs": 1.2415419999999813,
+      "appliedToReceiptMs": 13.485541000000012,
+      "postToResponseMs": 14.729166999999961
+    },
+    {
+      "totalMs": 15.076416999999992,
+      "postToCommandMs": 1.3317500000000564,
+      "appliedToReceiptMs": 13.742999999999938,
+      "postToResponseMs": 15.076416999999992
+    },
+    {
+      "totalMs": 14.154792000000043,
+      "postToCommandMs": 1.1714589999999134,
+      "appliedToReceiptMs": 12.981874999999945,
+      "postToResponseMs": 14.154792000000043
+    },
+    {
+      "totalMs": 15.255959000000075,
+      "postToCommandMs": 1.1570420000000468,
+      "appliedToReceiptMs": 14.097250000000031,
+      "postToResponseMs": 15.255959000000075
+    },
+    {
+      "totalMs": 17.965374999999995,
+      "postToCommandMs": 1.3910419999999704,
+      "appliedToReceiptMs": 16.572625000000016,
+      "postToResponseMs": 17.965374999999995
+    },
+    {
+      "totalMs": 15.799833000000035,
+      "postToCommandMs": 1.4370420000000195,
+      "appliedToReceiptMs": 14.361083000000008,
+      "postToResponseMs": 15.799833000000035
+    },
+    {
+      "totalMs": 15.476582999999891,
+      "postToCommandMs": 1.521250000000009,
+      "appliedToReceiptMs": 13.953541000000087,
+      "postToResponseMs": 15.476582999999891
+    },
+    {
+      "totalMs": 14.409791999999925,
+      "postToCommandMs": 1.1675419999999122,
+      "appliedToReceiptMs": 13.241042000000107,
+      "postToResponseMs": 14.409791999999925
+    },
+    {
+      "totalMs": 15.54120799999987,
+      "postToCommandMs": 1.3642919999999776,
+      "appliedToReceiptMs": 14.174999999999955,
+      "postToResponseMs": 15.54120799999987
+    },
+    {
+      "totalMs": 17.533750000000055,
+      "postToCommandMs": 1.1916250000001583,
+      "appliedToReceiptMs": 16.340332999999873,
+      "postToResponseMs": 17.533750000000055
+    },
+    {
+      "totalMs": 15.948916999999938,
+      "postToCommandMs": 1.3576669999999922,
+      "appliedToReceiptMs": 14.589958000000024,
+      "postToResponseMs": 15.948916999999938
+    },
+    {
+      "totalMs": 16.378749999999854,
+      "postToCommandMs": 1.1818329999998696,
+      "appliedToReceiptMs": 15.195084000000179,
+      "postToResponseMs": 16.378749999999854
+    },
+    {
+      "totalMs": 16.46179099999995,
+      "postToCommandMs": 1.3954579999999623,
+      "appliedToReceiptMs": 15.065041999999949,
+      "postToResponseMs": 16.46179099999995
+    },
+    {
+      "totalMs": 15.931625000000167,
+      "postToCommandMs": 1.1882500000001528,
+      "appliedToReceiptMs": 14.741708000000017,
+      "postToResponseMs": 15.931625000000167
+    },
+    {
+      "totalMs": 17.11483300000009,
+      "postToCommandMs": 1.282416000000012,
+      "appliedToReceiptMs": 15.830875000000106,
+      "postToResponseMs": 17.11483300000009
+    },
+    {
+      "totalMs": 16.278542000000016,
+      "postToCommandMs": 1.2469999999998436,
+      "appliedToReceiptMs": 15.029708000000028,
+      "postToResponseMs": 16.278542000000016
+    },
+    {
+      "totalMs": 16.264208000000053,
+      "postToCommandMs": 1.5938330000001315,
+      "appliedToReceiptMs": 14.668499999999995,
+      "postToResponseMs": 16.264208000000053
+    },
+    {
+      "totalMs": 15.697583000000122,
+      "postToCommandMs": 1.1702080000000024,
+      "appliedToReceiptMs": 14.525875000000042,
+      "postToResponseMs": 15.697583000000122
+    },
+    {
+      "totalMs": 16.588292000000138,
+      "postToCommandMs": 1.225458000000117,
+      "appliedToReceiptMs": 15.361333999999943,
+      "postToResponseMs": 16.588292000000138
+    },
+    {
+      "totalMs": 18.662207999999964,
+      "postToCommandMs": 1.1042079999999714,
+      "appliedToReceiptMs": 17.55641700000001,
+      "postToResponseMs": 18.662207999999964
+    },
+    {
+      "totalMs": 16.59858300000019,
+      "postToCommandMs": 1.3306660000000647,
+      "appliedToReceiptMs": 15.266209000000117,
+      "postToResponseMs": 16.59858300000019
+    },
+    {
+      "totalMs": 16.896833000000015,
+      "postToCommandMs": 1.2265830000001188,
+      "appliedToReceiptMs": 15.668666999999914,
+      "postToResponseMs": 16.896833000000015
+    },
+    {
+      "totalMs": 16.584333000000015,
+      "postToCommandMs": 1.2782079999999496,
+      "appliedToReceiptMs": 15.304959000000053,
+      "postToResponseMs": 16.584333000000015
+    },
+    {
+      "totalMs": 17.31750000000011,
+      "postToCommandMs": 1.190708000000086,
+      "appliedToReceiptMs": 16.125125000000025,
+      "postToResponseMs": 17.31750000000011
+    }
+  ]
+}

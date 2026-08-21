@@ -1,8 +1,7 @@
 import { type ChildProcessByStdio, spawn } from "node:child_process";
 import { once } from "node:events";
-import { rmSync } from "node:fs";
-import { join } from "node:path";
 import type { Readable } from "node:stream";
+import { SQL } from "bun";
 import { type HarnessDeckWorkspace, withHarnessDeckWorkspace } from "./harness-deck-workspace.ts";
 
 export interface RealtimeSoakEvidence {
@@ -217,20 +216,21 @@ export function runRealtimeSoak(): Promise<RealtimeSoakEvidence> {
 }
 
 async function runRealtimeSoakWithWorkspace({
-  temporaryRoot,
   deckStagingRoot,
   deckArtifactRoot,
 }: HarnessDeckWorkspace): Promise<RealtimeSoakEvidence> {
   const processes: ServiceProcess[] = [];
-  const privateSnapshotPath = join(temporaryRoot, "impromptu-r2-wp5-private.json");
-  const projectionDatabasePath = join(temporaryRoot, "impromptu-r2-wp5-projection.json");
-  rmSync(privateSnapshotPath, { force: true });
-  rmSync(projectionDatabasePath, { force: true });
+  // Coordinator and gateway state live in PostgreSQL keyed by these strings, so each run gets a
+  // unique key: a fixed key would restore every previous run's presentations and grow the
+  // per-command persistence snapshot (and therefore the measured command latency) without bound.
+  const runNonce = crypto.randomUUID().replaceAll("-", "").slice(0, 16);
+  const privateStateKey = `impromptu-r2-wp5-${runNonce}-private`;
+  const projectionStateKey = `impromptu-r2-wp5-${runNonce}-projection`;
   const projectionEnvironment = {
     PRIVATE_BACKEND_ORIGIN: privateOrigin,
     PROJECTION_GATEWAY_HOST: "127.0.0.1",
     PROJECTION_GATEWAY_PORT: "44302",
-    PROJECTION_GATEWAY_STATE_KEY: projectionDatabasePath,
+    PROJECTION_GATEWAY_STATE_KEY: projectionStateKey,
     PROJECTION_CONNECTION_RATE_LIMIT_CAPACITY: "10000",
     PROJECTION_CONNECTION_RATE_LIMIT_REFILL_PER_SECOND: "10000",
     PROJECTION_PUBLIC_RATE_LIMIT_CAPACITY: "10000",
@@ -254,7 +254,7 @@ async function runRealtimeSoakWithWorkspace({
     VERIFIER_MODEL: "verifier-test",
     PRIVATE_BACKEND_HOST: "127.0.0.1",
     PRIVATE_BACKEND_PORT: "44301",
-    PRIVATE_PREPARED_EVIDENCE_STATE_KEY: privateSnapshotPath,
+    PRIVATE_PREPARED_EVIDENCE_STATE_KEY: privateStateKey,
     PROJECTION_GATEWAY_ORIGIN: projectionOrigin,
     SERVICE_AUTH_TOKEN: serviceToken,
     DECK_STAGING_ROOT: deckStagingRoot,
@@ -646,7 +646,47 @@ async function runRealtimeSoakWithWorkspace({
   } finally {
     await activeSocket?.close().catch(() => undefined);
     for (const process of processes.toReversed()) await stopProcess(process);
-    rmSync(privateSnapshotPath, { force: true });
-    rmSync(projectionDatabasePath, { force: true });
+    await deleteSoakStateRows(privateStateKey, projectionStateKey);
+  }
+}
+
+/**
+ * Removes this run's coordinator and gateway state rows so repeated runs cannot accumulate
+ * abandoned snapshots in the shared test databases. Best effort: a failed cleanup must not mask
+ * the soak result, but the row is keyed uniquely per run so it can never leak into another run.
+ */
+async function deleteSoakStateRows(
+  privateStateKey: string,
+  projectionStateKey: string,
+): Promise<void> {
+  const targets: readonly { readonly url: string; readonly key: string; readonly table: string }[] =
+    [
+      {
+        url: globalThis.process.env.PRIVATE_DATABASE_URL ?? "",
+        key: privateStateKey,
+        table: "private_app.prepared_evidence_state",
+      },
+      {
+        url: globalThis.process.env.PROJECTION_DATABASE_URL ?? "",
+        key: projectionStateKey,
+        table: "public_projection.gateway_state",
+      },
+    ];
+  for (const target of targets) {
+    if (target.url.length === 0) continue;
+    try {
+      const sql = new SQL(target.url);
+      try {
+        if (target.table === "private_app.prepared_evidence_state") {
+          await sql`DELETE FROM private_app.prepared_evidence_state WHERE state_key = ${target.key}`;
+        } else {
+          await sql`DELETE FROM public_projection.gateway_state WHERE state_key = ${target.key}`;
+        }
+      } finally {
+        await sql.close({ timeout: 1 }).catch(() => undefined);
+      }
+    } catch {
+      // Leave the row; it is unreachable for other runs because the key is unique per run.
+    }
   }
 }
