@@ -64,13 +64,13 @@ describe("WP3 prepared evidence real-browser E2E", () => {
       "network-channel-subscribed",
       "slide-set-accepted",
       "stage-applied",
-      "candidate-approved",
-      "published-card-visible",
-      "ordered-retract-tombstone",
-      "ordered-expiry-tombstone",
-      "live-publication-chrome-retract-measured",
+      "candidate-curated",
+      "publication-approve-refused",
+      "publication-terminate-refused",
+      "live-card-publish-refused",
+      "stage-card-free",
       "both-mains-restarted",
-      "restart-tombstones-restored",
+      "restart-card-free-snapshot",
       "restart-prefix-applied",
       "controller-takeover",
       "old-controller-superseded",
@@ -83,15 +83,11 @@ describe("WP3 prepared evidence real-browser E2E", () => {
       "cmd_after_takeover",
     ]);
     expect(parsed.appliedCommandPrefix).toEqual(parsed.acceptedCommandPrefix);
-    expect(parsed.cardEventCount).toBe(80);
+    // Stage is slide-only: no card event ever reaches the browser and no card or tombstone state
+    // survives in the public projection, while the private authority still refuses fail-closed.
+    expect(parsed.cardEventCount).toBe(0);
     expect(parsed.reconnectActiveCardCount).toBe(0);
-    expect(parsed.reconnectTombstoneStatuses).toHaveLength(40);
-    expect(
-      parsed.reconnectTombstoneStatuses.filter((status) => status === "RETRACTED"),
-    ).toHaveLength(39);
-    expect(parsed.reconnectTombstoneStatuses.filter((status) => status === "EXPIRED")).toHaveLength(
-      1,
-    );
+    expect(parsed.reconnectTombstoneStatuses).toHaveLength(0);
     expect(parsed.livePublicationRetractSamples).toBe(20);
     expect(parsed.livePublicationRetractP95Ms).toBeLessThanOrEqual(500);
     expect(parsed.browserStorageEntries).toBe(0);

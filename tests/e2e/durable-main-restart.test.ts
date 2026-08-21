@@ -112,6 +112,7 @@ async function expectRejectedStartup(
   entrypoint: string,
   environment: Record<string, string>,
   expectedErrorType: string,
+  tamperCase: string,
 ): Promise<void> {
   const process = Bun.spawn<"ignore", "pipe", "pipe">({
     cmd: ["bun", "run", entrypoint],
@@ -127,7 +128,7 @@ async function expectRejectedStartup(
       new Promise<never>((_resolve, reject) => {
         AbortSignal.timeout(5_000).addEventListener(
           "abort",
-          () => reject(new Error(`${entrypoint} did not reject its snapshot`)),
+          () => reject(new Error(`${entrypoint} did not reject its snapshot: ${tamperCase}`)),
           { once: true },
         );
       }),
@@ -358,7 +359,28 @@ describe("durable service-main restore boundary", () => {
       body: JSON.stringify(join),
     });
     expect(claimAfterProjectionRestart.status).toBe(201);
-    expect((await claimAfterProjectionRestart.json()).binding.displayBindingEpoch).toBe("dbe_1");
+    const displayCookie = claimAfterProjectionRestart.headers.get("set-cookie")?.split(";", 1)[0];
+    if (displayCookie === undefined) throw new Error("display session cookie missing");
+    const restoredSession = await claimAfterProjectionRestart.json();
+    expect(restoredSession.binding.displayBindingEpoch).toBe("dbe_1");
+
+    // Slide-only contract: the restored public projection carries slides and playback state only,
+    // and never resurrects a card even though a curated candidate exists on the private side.
+    const stageSnapshot = await fetch(
+      `${projectionOrigin}/v1/snapshot?${new URLSearchParams({
+        role: "PUBLIC_STAGE",
+        presentationSessionEpoch: restoredSession.binding.presentationSessionEpoch,
+        displayBindingEpoch: restoredSession.binding.displayBindingEpoch,
+        deckVersion: artifacts.publicDeck.deckVersion,
+        manifestHash: artifacts.publicDeck.manifestHash,
+      })}`,
+      { headers: { origin: stageOrigin, cookie: displayCookie } },
+    );
+    expect(stageSnapshot.status).toBe(200);
+    const stageSnapshotBody = await stageSnapshot.json();
+    expect(stageSnapshotBody.cards).toEqual([]);
+    expect(stageSnapshotBody.tombstones).toEqual([]);
+    expect(stageSnapshotBody.deck.slides.length).toBeGreaterThan(0);
 
     await stop(privateBackend);
     await stop(projection);
@@ -376,19 +398,23 @@ describe("durable service-main restore boundary", () => {
       "services/projection-gateway/src/main.ts",
       projectionEnvironment,
       "ProjectionGatewaySnapshotError",
+      "unsafe occurrence sequence",
     );
 
-    const strippedTerminalHistory = structuredClone(projectionBaseline) as {
-      projections: Array<{ tombstones: unknown[] }>;
+    // Card and tombstone history no longer exists in the public projection, so the surviving
+    // slide-only integrity claim is that a restored occurrence must still name a deck slide.
+    const forgedOccurrenceSlide = structuredClone(projectionBaseline) as {
+      projections: Array<{ occurrence: { publicSlideKey: string } }>;
     };
-    const strippedProjection = strippedTerminalHistory.projections[0];
-    if (strippedProjection === undefined) throw new Error("projection snapshot fixture missing");
-    strippedProjection.tombstones = [];
-    await writeProjectionSnapshot(strippedTerminalHistory);
+    const forgedProjection = forgedOccurrenceSlide.projections[0];
+    if (forgedProjection === undefined) throw new Error("projection snapshot fixture missing");
+    forgedProjection.occurrence.publicSlideKey = "slide_not_in_deck";
+    await writeProjectionSnapshot(forgedOccurrenceSlide);
     await expectRejectedStartup(
       "services/projection-gateway/src/main.ts",
       projectionEnvironment,
       "ProjectionGatewaySnapshotError",
+      "occurrence slide outside the deck",
     );
 
     await writeProjectionSnapshot(projectionBaseline);
@@ -405,6 +431,7 @@ describe("durable service-main restore boundary", () => {
       "services/private-backend/src/main.ts",
       privateEnvironment,
       "PreparedEvidenceSnapshotError",
+      "forged candidate content hash",
     );
 
     await writePrivateSnapshot(privateBaseline);
@@ -421,6 +448,7 @@ describe("durable service-main restore boundary", () => {
       "services/private-backend/src/main.ts",
       privateEnvironment,
       "PreparedEvidenceSnapshotError",
+      "forged candidate version",
     );
   });
 });

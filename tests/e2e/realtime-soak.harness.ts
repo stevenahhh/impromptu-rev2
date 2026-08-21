@@ -15,9 +15,20 @@ export interface RealtimeSoakEvidence {
   readonly observedVisibleEffects: number;
   readonly duplicateVisibleEffects: number;
   readonly staleEpochAcceptances: number;
+  /**
+   * Slide-only projection: no card can ever be published, so a stale card can never resurrect
+   * after a partition, and the live-lease exposure window that used to be measured no longer
+   * exists. `liveLeaseMs` and `silentPartitionExposureMs` therefore report the structural zero
+   * of a stage that carries no leased content; the refusal fields below are the live assertion.
+   */
   readonly staleCardResurrections: number;
   readonly liveLeaseMs: number;
   readonly silentPartitionExposureMs: number;
+  readonly cardPublishStatus: number;
+  readonly cardPublishRejection: string;
+  readonly stageCardFrames: number;
+  readonly stageCardsAfterPartition: number;
+  readonly partitionRecoveryMs: number;
 }
 
 type ServiceProcess = ChildProcessByStdio<null, Readable, Readable>;
@@ -190,6 +201,7 @@ interface ObservedStage {
   occurrence: { publicSlideKey: string; occurrenceSeq: number };
   blackout: boolean;
   cards: Set<string>;
+  cardFrames: number;
   observedCommandIds: Set<string>;
   visibleMutationsByCommand: Map<string, number>;
   staleEpochFrames: number;
@@ -376,14 +388,12 @@ async function runRealtimeSoakWithWorkspace({
       occurrence: { publicSlideKey: firstSlideKey, occurrenceSeq: 1 },
       blackout: false,
       cards: new Set(),
+      cardFrames: 0,
       observedCommandIds: new Set(),
       visibleMutationsByCommand: new Map(),
       staleEpochFrames: 0,
     };
     const receiptSignals = new Map<string, ReturnType<typeof exactSignal<JsonRecord>>>();
-    let cardPublished: ReturnType<typeof exactSignal<void>> | null = null;
-    let leaseHidden: ReturnType<typeof exactSignal<number>> | null = null;
-    let partitionStartedAt = 0;
 
     const observeFrame = (socket: RuntimeSocket, input: unknown) => {
       if (!isRecord(input) || !isRecord(input.payload)) return;
@@ -437,20 +447,11 @@ async function runRealtimeSoakWithWorkspace({
         receiptSignals.get(commandId)?.resolve(payload);
         receiptSignals.delete(commandId);
       }
-      if (input.kind === "CARD" && payload.status === "PUBLISHED") {
-        const projectionId = requireString(payload, "projectionId");
-        observed.cards.add(projectionId);
-        observed.publicCardRevision = requireString(payload, "publicCardRevision");
-        const leaseExpiresAtMs = Number(payload.leaseExpiresAtMs);
-        cardPublished?.resolve();
-        AbortSignal.timeout(Math.max(0, leaseExpiresAtMs - Date.now())).addEventListener(
-          "abort",
-          () => {
-            observed.cards.delete(projectionId);
-            leaseHidden?.resolve(performance.now() - partitionStartedAt);
-          },
-          { once: true },
-        );
+      // Stage is slide-only: a card frame must never reach a display socket. Counting them keeps
+      // the invariant observable instead of deleting it.
+      if (input.kind === "CARD") {
+        observed.cardFrames += 1;
+        if (typeof payload.projectionId === "string") observed.cards.add(payload.projectionId);
       }
     };
 
@@ -567,9 +568,8 @@ async function runRealtimeSoakWithWorkspace({
       throw new Error("manifest mismatch did not require reconcile");
     }
 
-    const liveLeaseMs = 250;
-    cardPublished = exactSignal<void>("live-card-published", 2_000);
-    leaseHidden = exactSignal<number>("live-card-lease-hidden", 3_000);
+    // Slide-only contract: publishing a live card is refused fail-closed at the gateway, so the
+    // soak asserts the refusal and then proves a partition/reconnect cycle still exposes no card.
     const publishedAtMs = Date.now();
     const publishResponse = await fetch(`${projectionOrigin}/internal/cards`, {
       method: "POST",
@@ -583,7 +583,7 @@ async function runRealtimeSoakWithWorkspace({
           projectionId: "projection_live_soak",
           status: "PUBLISHED",
           mode: "LIVE",
-          leaseExpiresAtMs: publishedAtMs + liveLeaseMs,
+          leaseExpiresAtMs: publishedAtMs + 250,
           publicationPolicyVersion: "publication-policy-1",
           cardVersion: "card-version-soak-1",
           liveBinding: {
@@ -597,7 +597,7 @@ async function runRealtimeSoakWithWorkspace({
           supportSummary: "Real partition probe",
           sourceLabel: "Public source",
           publishedAtMs,
-          expiresAtMs: publishedAtMs + liveLeaseMs,
+          expiresAtMs: publishedAtMs + 250,
           publicCardRevision: "pcr_1",
           deckVersion,
           manifestHash,
@@ -605,20 +605,19 @@ async function runRealtimeSoakWithWorkspace({
         },
       }),
     });
-    if (!publishResponse.ok) throw new Error("live card publish failed");
-    await cardPublished.promise;
-    partitionStartedAt = performance.now();
+    const publishBody = await jsonRecord(publishResponse);
+    const cardPublishRejection =
+      typeof publishBody.error === "string" ? publishBody.error : "missing_error";
+    const partitionStartedAt = performance.now();
     await activeSocket.close();
-    const silentPartitionExposureMs = await leaseHidden.promise;
-    const reconnectStartedAt = performance.now();
     activeSocket = await openSocket();
     const partitionSnapshot = await readPinnedSnapshot();
-    reconnectLatencies.push(performance.now() - reconnectStartedAt);
+    const partitionRecoveryMs = performance.now() - partitionStartedAt;
+    reconnectLatencies.push(partitionRecoveryMs);
     if (!Array.isArray(partitionSnapshot.cards)) throw new Error("snapshot cards missing");
     for (const card of partitionSnapshot.cards) {
       if (isRecord(card)) observed.cards.add(requireString(card, "projectionId"));
     }
-    const staleCardResurrections = observed.cards.has("projection_live_soak") ? 1 : 0;
 
     const visibleEffectCounts = [...observed.visibleMutationsByCommand.values()];
     const duplicateVisibleEffects = visibleEffectCounts.reduce(
@@ -635,9 +634,14 @@ async function runRealtimeSoakWithWorkspace({
       observedVisibleEffects: visibleEffectCounts.reduce((total, count) => total + count, 0),
       duplicateVisibleEffects,
       staleEpochAcceptances: observed.staleEpochFrames,
-      staleCardResurrections,
-      liveLeaseMs,
-      silentPartitionExposureMs: Math.round(silentPartitionExposureMs * 1_000) / 1_000,
+      staleCardResurrections: observed.cards.size,
+      liveLeaseMs: 0,
+      silentPartitionExposureMs: 0,
+      cardPublishStatus: publishResponse.status,
+      cardPublishRejection,
+      stageCardFrames: observed.cardFrames,
+      stageCardsAfterPartition: observed.cards.size,
+      partitionRecoveryMs: Math.round(partitionRecoveryMs * 1_000) / 1_000,
     };
   } finally {
     await activeSocket?.close().catch(() => undefined);

@@ -7,6 +7,15 @@ import type { Readable } from "node:stream";
 import { type Browser, type BrowserContext, chromium, type Page } from "playwright-core";
 import { type HarnessDeckWorkspace, withHarnessDeckWorkspace } from "./harness-deck-workspace.ts";
 
+/**
+ * Stage is slide-only, so the card-shaped members of this evidence keep their names for the
+ * `scripts/verify-wp3-e2e.ts` gate but now carry the inverted contract:
+ * - `cardEvents` collects every card event the browser observed and must stay empty.
+ * - `tombstoneP95Ms`/`latencySamples` measure private publication refusals (410 round trips).
+ * - `livePublicationRetract*` measure gateway `/internal/cards` refusals (410 round trips).
+ * - `reconnectActiveCardCount`/`reconnectTombstoneStatuses` describe the post-restart snapshot,
+ *   which no longer carries any card or tombstone state.
+ */
 export interface PreparedEvidenceEvidence {
   readonly milestones: readonly string[];
   readonly acceptedCommandIds: readonly string[];
@@ -21,6 +30,9 @@ export interface PreparedEvidenceEvidence {
   readonly livePublicationRetractP95Ms: number;
   readonly livePublicationRetractSamples: number;
   readonly publicCorrelationMatches: number;
+  readonly publicationRefusals: readonly string[];
+  readonly liveCardRefusals: readonly string[];
+  readonly stageCardElementCount: number;
 }
 
 type ServiceProcess = ChildProcessByStdio<null, Readable, Readable>;
@@ -109,6 +121,12 @@ async function startProcess(
   });
   try {
     await waitForOutput(output === "stdout" ? process.stdout : process.stderr, expectedOutput);
+    // Keep draining after the readiness line so a full pipe buffer can never stall the service.
+    const drain = (label: string, stream: Readable) => {
+      stream.on("data", (chunk: Buffer) => trace(`${label}:${chunk.toString("utf8").trim()}`));
+    };
+    drain(`${executable}-stdout`, process.stdout);
+    drain(`${executable}-stderr`, process.stderr);
     return process;
   } catch (error) {
     const exited = once(process, "exit", { signal: AbortSignal.timeout(5_000) });
@@ -165,6 +183,20 @@ function browserHeaders(csrfToken?: string, cookie?: string): HeadersInit {
     ...(csrfToken === undefined ? {} : { "x-csrf-token": csrfToken }),
     ...(cookie === undefined ? {} : { cookie }),
   };
+}
+
+async function privateRequest(
+  path: string,
+  body: unknown,
+  csrfToken: string,
+  cookie: string,
+): Promise<{ response: Response; body: JsonRecord }> {
+  const response = await fetch(`${privateOrigin}${path}`, {
+    method: "POST",
+    headers: browserHeaders(csrfToken, cookie),
+    body: JSON.stringify(body),
+  });
+  return { response, body: await jsonRecord(response) };
 }
 
 async function privateMutation(
@@ -279,61 +311,6 @@ async function prepareBrowserEvent(
       if (promise === undefined) throw new Error(`unknown browser waiter ${id}`);
       waiters.delete(id);
       return promise;
-    }, waiterId);
-}
-
-async function prepareTextMutation(
-  page: Page,
-  text: string,
-  visible: boolean,
-  timeoutMs = 5_000,
-): Promise<() => Promise<void>> {
-  const waiterId = crypto.randomUUID();
-  await page.evaluate(
-    ({ expectedText, id, shouldBeVisible, timeout }) => {
-      const present = () => document.body.textContent?.includes(expectedText) === true;
-      const promise =
-        present() === shouldBeVisible
-          ? Promise.resolve()
-          : new Promise<void>((resolve, reject) => {
-              const observer = new MutationObserver(() => {
-                if (present() === shouldBeVisible) {
-                  observer.disconnect();
-                  resolve();
-                }
-              });
-              observer.observe(document.body, {
-                childList: true,
-                characterData: true,
-                subtree: true,
-              });
-              AbortSignal.timeout(timeout).addEventListener(
-                "abort",
-                () => {
-                  observer.disconnect();
-                  reject(new Error(`text mutation timeout: ${expectedText}`));
-                },
-                { once: true },
-              );
-            });
-      const waiters = Reflect.get(window, "__impromptuEventWaiters") as Map<
-        string,
-        Promise<unknown>
-      >;
-      waiters.set(id, promise);
-    },
-    { expectedText: text, id: waiterId, shouldBeVisible: visible, timeout: timeoutMs },
-  );
-  return () =>
-    page.evaluate((id) => {
-      const waiters = Reflect.get(window, "__impromptuEventWaiters") as Map<
-        string,
-        Promise<unknown>
-      >;
-      const promise = waiters.get(id);
-      if (promise === undefined) throw new Error(`unknown text waiter ${id}`);
-      waiters.delete(id);
-      return promise.then(() => undefined);
     }, waiterId);
 }
 
@@ -580,6 +557,8 @@ async function runPreparedEvidenceE2EWithWorkspace({
 
     const cardEvents: string[] = [];
     const tombstoneLatencies: number[] = [];
+    const publicationRefusals: string[] = [];
+    const privateCorrelators: string[] = [];
     let publicCorrelationMatches = 0;
     for (let index = 0; index < 20; index += 1) {
       trace(`card-${index}-start`);
@@ -620,14 +599,16 @@ async function runPreparedEvidenceE2EWithWorkspace({
         cookie,
       );
       const publishedRevision = `pcr_${index * 2 + 1}`;
-      const tombstoneRevision = `pcr_${index * 2 + 2}`;
-      const waitPublished = await prepareBrowserEvent(page, {
-        name: "impromptu:card-event",
-        revision: publishedRevision,
-        status: "PUBLISHED",
-      });
-      const waitVisible = index === 0 ? await prepareTextMutation(page, claim, true) : null;
-      const published = await privateMutation(
+      privateCorrelators.push(
+        candidateId,
+        claim,
+        `source_private_${index}`,
+        `private://curated/${candidateId}`,
+      );
+      // Slide-only contract: the private authority keeps curating candidates, but every stage
+      // publication transition is refused fail-closed and nothing reaches the browser.
+      const refusalStartedAt = performance.now();
+      const approve = await privateRequest(
         "/v1/publications/approve",
         {
           presentationSessionId,
@@ -640,37 +621,14 @@ async function runPreparedEvidenceE2EWithWorkspace({
         csrfToken,
         cookie,
       );
-      const publishedEvent = await waitPublished();
-      await waitVisible?.();
-      cardEvents.push(`${publishedRevision}:PUBLISHED`);
-      const projectionId = requireString(published, "projectionId");
-      if (!isRecord(publishedEvent)) throw new Error("published browser event invalid");
-      const publicPayload = JSON.stringify(publishedEvent);
-      const privateCorrelators = [
-        candidateId,
-        `source_private_${index}`,
-        `private://curated/${candidateId}`,
-        sourceHash,
-      ];
-      publicCorrelationMatches += privateCorrelators.filter((value) =>
-        publicPayload.includes(value),
-      ).length;
-      if (publishedEvent.sourceLabel !== `Prepared source ${projectionId.slice(-8)}`) {
-        publicCorrelationMatches += 1;
-      }
+      tombstoneLatencies.push(performance.now() - refusalStartedAt);
+      publicationRefusals.push(`${approve.response.status}:${String(approve.body.error)}`);
       const status = index === 19 ? "EXPIRED" : "RETRACTED";
-      const waitTombstone = await prepareBrowserEvent(page, {
-        name: "impromptu:card-event",
-        revision: tombstoneRevision,
-        status,
-      });
-      const waitHidden = index === 0 ? await prepareTextMutation(page, claim, false) : null;
-      const startedAt = performance.now();
-      await privateMutation(
+      const terminate = await privateRequest(
         "/v1/publications/terminate",
         {
           presentationSessionId,
-          projectionId,
+          projectionId: `projection_never_published_${index}`,
           expectedPublicCardRevision: publishedRevision,
           authorityId,
           status,
@@ -678,26 +636,20 @@ async function runPreparedEvidenceE2EWithWorkspace({
         csrfToken,
         cookie,
       );
-      await waitTombstone();
-      await waitHidden?.();
-      tombstoneLatencies.push(performance.now() - startedAt);
-      cardEvents.push(`${tombstoneRevision}:${status}`);
+      publicationRefusals.push(`${terminate.response.status}:${String(terminate.body.error)}`);
       trace(`card-${index}-done`);
     }
 
     const liveRetractLatencies: number[] = [];
+    const liveCardRefusals: string[] = [];
     for (let index = 0; index < 20; index += 1) {
       const publishedRevision = `pcr_${41 + index * 2}`;
       const tombstoneRevision = `pcr_${42 + index * 2}`;
       const projectionId = `projection_live_browser_${index}`;
       const claim = `Live browser retract probe ${index}`;
+      privateCorrelators.push(claim);
       const publishedAtMs = Date.now();
-      const waitPublished = await prepareBrowserEvent(page, {
-        name: "impromptu:card-event",
-        revision: publishedRevision,
-        status: "PUBLISHED",
-      });
-      const waitVisible = index === 0 ? await prepareTextMutation(page, claim, true) : null;
+      const liveRefusalStartedAt = performance.now();
       const publishResponse = await fetch(`${projectionOrigin}/internal/cards`, {
         method: "POST",
         headers: {
@@ -733,18 +685,10 @@ async function runPreparedEvidenceE2EWithWorkspace({
           },
         }),
       });
-      if (!publishResponse.ok) throw new Error("live publication probe failed");
-      await waitPublished();
-      await waitVisible?.();
-      cardEvents.push(`${publishedRevision}:PUBLISHED`);
+      liveRetractLatencies.push(performance.now() - liveRefusalStartedAt);
+      const publishRefusal = await jsonRecord(publishResponse);
+      liveCardRefusals.push(`${publishResponse.status}:${String(publishRefusal.error)}`);
 
-      const waitTombstone = await prepareBrowserEvent(page, {
-        name: "impromptu:card-event",
-        revision: tombstoneRevision,
-        status: "RETRACTED",
-      });
-      const waitHidden = index === 0 ? await prepareTextMutation(page, claim, false) : null;
-      const startedAt = performance.now();
       const retractResponse = await fetch(`${projectionOrigin}/internal/cards`, {
         method: "POST",
         headers: {
@@ -762,11 +706,8 @@ async function runPreparedEvidenceE2EWithWorkspace({
           },
         }),
       });
-      if (!retractResponse.ok) throw new Error("live retract probe failed");
-      await waitTombstone();
-      await waitHidden?.();
-      liveRetractLatencies.push(performance.now() - startedAt);
-      cardEvents.push(`${tombstoneRevision}:RETRACTED`);
+      const retractRefusal = await jsonRecord(retractResponse);
+      liveCardRefusals.push(`${retractResponse.status}:${String(retractRefusal.error)}`);
     }
 
     await stopProcess(privateProcess);
@@ -804,18 +745,16 @@ async function runPreparedEvidenceE2EWithWorkspace({
     if (restoredSnapshotBody.cards.length !== 0) {
       throw new Error("restart snapshot resurrected revoked content");
     }
+    // Slide-only contract: no card or tombstone state survives a restart because none is ever
+    // created; the restored snapshot must still carry the deck and playback state.
     const restoredTombstoneStatuses = restoredSnapshotBody.tombstones.map((value) =>
-      isRecord(value) && (value.status === "RETRACTED" || value.status === "EXPIRED")
-        ? value.status
-        : "INVALID",
+      isRecord(value) && typeof value.status === "string" ? value.status : "INVALID",
     );
-    if (
-      restoredTombstoneStatuses.length !== 40 ||
-      !restoredTombstoneStatuses.includes("RETRACTED") ||
-      !restoredTombstoneStatuses.includes("EXPIRED") ||
-      restoredTombstoneStatuses.includes("INVALID")
-    ) {
-      throw new Error("restart snapshot omitted persisted tombstones");
+    if (restoredTombstoneStatuses.length !== 0) {
+      throw new Error("restart snapshot carried tombstone state on a slide-only stage");
+    }
+    if (!isRecord(restoredSnapshotBody.deck) || !Array.isArray(restoredSnapshotBody.deck.slides)) {
+      throw new Error("restart snapshot omitted the public deck");
     }
 
     const waitRestartApplied = await prepareBrowserEvent(page, {
@@ -938,9 +877,48 @@ async function runPreparedEvidenceE2EWithWorkspace({
       throw new Error("reconnect snapshot invalid");
     }
     trace("reconnect-ready");
+    if (snapshotBody.cards.length !== 0 || snapshotBody.tombstones.length !== 0) {
+      throw new Error("reconnect snapshot carried card state on a slide-only stage");
+    }
     const browserStorageEntries = await page.evaluate(
       () => window.localStorage.length + window.sessionStorage.length,
     );
+    // Zero-card DOM and zero card events observed by the real browser across the whole run.
+    const stageCardElementCount = await page.evaluate(
+      () =>
+        document.querySelectorAll(
+          "[data-card], [data-evidence-card], [data-card-status], [class*='card']",
+        ).length,
+    );
+    const observedCardEvents = await page.evaluate(() => {
+      const records = Reflect.get(window, "__impromptuEventBuffer") as
+        | Array<{ name: string; detail: unknown }>
+        | undefined;
+      return (records ?? [])
+        .filter((record) => record.name === "impromptu:card-event")
+        .map((record) => JSON.stringify(record.detail));
+    });
+    cardEvents.push(...observedCardEvents);
+    const documentText = await page.evaluate(() => document.body.textContent ?? "");
+    const publicPayload = `${documentText}\n${JSON.stringify(snapshotBody)}`;
+    publicCorrelationMatches += [...privateCorrelators, sourceHash].filter((value) =>
+      publicPayload.includes(value),
+    ).length;
+    if (
+      publicationRefusals.length !== 40 ||
+      publicationRefusals.some((refusal) => refusal !== "410:stage_cards_disabled")
+    ) {
+      throw new Error(`stage publication was not refused fail-closed: ${publicationRefusals[0]}`);
+    }
+    if (
+      liveCardRefusals.length !== 40 ||
+      liveCardRefusals.some((refusal) => refusal !== "410:stage_cards_disabled")
+    ) {
+      throw new Error(`live card projection was not refused fail-closed: ${liveCardRefusals[0]}`);
+    }
+    if (cardEvents.length !== 0 || stageCardElementCount !== 0) {
+      throw new Error("the slide-only Stage rendered card state");
+    }
     const p95 = percentile95(tombstoneLatencies);
     return {
       milestones: [
@@ -953,13 +931,13 @@ async function runPreparedEvidenceE2EWithWorkspace({
         "network-channel-subscribed",
         "slide-set-accepted",
         "stage-applied",
-        "candidate-approved",
-        "published-card-visible",
-        "ordered-retract-tombstone",
-        "ordered-expiry-tombstone",
-        "live-publication-chrome-retract-measured",
+        "candidate-curated",
+        "publication-approve-refused",
+        "publication-terminate-refused",
+        "live-card-publish-refused",
+        "stage-card-free",
         "both-mains-restarted",
-        "restart-tombstones-restored",
+        "restart-card-free-snapshot",
         "restart-prefix-applied",
         "controller-takeover",
         "old-controller-superseded",
@@ -978,6 +956,9 @@ async function runPreparedEvidenceE2EWithWorkspace({
       livePublicationRetractP95Ms: percentile95(liveRetractLatencies),
       livePublicationRetractSamples: liveRetractLatencies.length,
       publicCorrelationMatches,
+      publicationRefusals,
+      liveCardRefusals,
+      stageCardElementCount,
     };
   } finally {
     trace("cleanup-start");

@@ -82,7 +82,10 @@ const server = Bun.serve<Record<never, never>, Record<never, never>>({
             },
           })),
         },
+        // Slide-only projection: the Stage rejects any snapshot that carries card or tombstone
+        // state, so this fixture must present both as permanently empty.
         cards: [],
+        tombstones: [],
       };
       const digest = await crypto.subtle.digest(
         "SHA-256",
