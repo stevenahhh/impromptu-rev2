@@ -68,7 +68,7 @@ claim it does not make:
 - **Completion is held open**, deferred to the September hardening pass. It becomes assertable
   only when `CORE5_GREEN`, `OCR_GREEN`, `COACHING_WORD_TIMING_GREEN`, and `STAGE_ZERO_CARDS` are
   each independently true (see plan "Owner-input gates" and final receipt section) — `OCR_GREEN`
-  is `false` today (below), so that bar is not yet met.
+  is now `true` (below), but `CORE5_GREEN` is still `false`, so that bar is not yet met.
 - **The 48-hour constraint is lifted.** Work on core-5, OCR, coaching, and the report is not cut
   off at the 48-hour mark to force a same-day completion claim; it continues under normal
   engineering cadence into the September hardening pass.
@@ -107,14 +107,24 @@ OCR is tracked as its own status and cost line, separate from `CORE5_GREEN`; an 
 not change the core-5 latency/functional results above, and it is why overall completion remains
 held open under `include-hardening`.
 
-- **`OCR_GREEN = false`.** Current measurement (`.omo/evidence/task-26/`): the pinned Tesseract
-  path restores the fixture sentinel `형식 중립 근거 자료 2026` as `형식 ron —| 근거 자료 2026`
-  (`exactSentinel: false`) — garbled, not an exact restoration.
-- No thermal or performance warning was recorded during the OCR run (`pmset`: "No thermal warning
-  level has been recorded" / "No performance warning level has been recorded"); the shortfall is
-  recognition accuracy, not device throttling.
+- **`OCR_GREEN = true`.** Current measurement (`.omo/evidence/task-26/ocr-resource-psm6.json`):
+  the pinned Tesseract path restores the fixture sentinel exactly on all 10 pages
+  (`exactSentinelPages: 10`). The earlier garbling (`형식 ron —| 근거 자료 2026`) was not an image
+  quality problem — PSM 11 (sparse text) split the wide-letter-spaced Korean title across lines;
+  switching to PSM 6 (uniform block) in `services/ingestion/ocr.py` resolved it. The PSM 11
+  baseline is retained at `.omo/evidence/task-26/psm11-baseline-resource.json`
+  (`exactSentinelPages: 0`). Vertical probe exits 0 with a single DB chunk, anchor
+  `slide=1&chunk=1`, lexical match true, and live upload returns 201.
+- No thermal or performance warning was recorded before or after the OCR run (`pmset`: "No thermal
+  warning level has been recorded" / "No performance warning level has been recorded").
 - Four OCR failure paths are confirmed mapped to `422 OCR_UNAVAILABLE`: missing Tesseract binary,
   missing pinned `kor` model, non-zero Tesseract exit, and empty TSV output. Encrypted PDFs are a
   separate, distinct rejection (`encrypted_document`), not counted among the four.
-- Cost: pinned Tesseract models total 5,790,503 bytes (`eng` 4,113,088 + `kor` 1,677,415), and
-  rasterizing a scanned page for OCR adds 17,805,650 bytes of image data per the measured fixture.
+- Four OCR failure paths are confirmed mapped to `422 OCR_UNAVAILABLE` (unchanged): missing Tesseract binary, missing pinned
+  `kor` model, non-zero Tesseract exit, and empty TSV output all return `422 OCR_UNAVAILABLE`;
+  encrypted PDFs stay a separate, distinct rejection (`encrypted_document`).
+- Cost: pinned Tesseract models total 5,790,503 bytes (`eng` 4,113,088 + `kor` 1,677,415); the
+  PSM 6 run used 1.82s wall and 149,471,232 bytes max RSS versus the PSM 11 baseline's
+  219,332,608 bytes; rasterizing a scanned page for OCR adds 17,805,650 bytes of image data per
+  the measured fixture.
+
