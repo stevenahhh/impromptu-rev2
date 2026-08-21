@@ -224,6 +224,95 @@ test("Console recommendation client calls the authenticated private HTTP route",
   }
 });
 
+test("recommend maps only closed private provenance and drops unsafe external URLs", async () => {
+  const originalFetch = globalThis.fetch;
+  const providerSnippet = "SEARCH_SNIPPET_SENTINEL";
+  Object.defineProperty(globalThis, "fetch", {
+    configurable: true,
+    value: async () =>
+      new Response(
+        JSON.stringify({
+          outcome: "RECOMMEND",
+          recommendation: {
+            claim: "Revenue increased.",
+            evidenceIds: ["external:safe", "internal:safe"],
+            facts: { numbers: [], units: [], dates: [], entities: [] },
+          },
+          evidence: [
+            {
+              evidenceId: `external:${"a".repeat(64)}`,
+              sourceId: "external-search:duckduckgo-html",
+              title: "Origin report title",
+              quote: "Origin report body",
+              canonicalUrl: "https://origin.example/report",
+              sourceDate: "2025-03-04T00:00:00.000Z",
+              rights: "UNKNOWN",
+              providerSnippet,
+            },
+            {
+              evidenceId: `external:${"b".repeat(64)}`,
+              sourceId: "external-search:duckduckgo-html",
+              title: "Unsafe origin",
+              quote: "Unsafe body",
+              canonicalUrl: "http://127.0.0.1/private",
+              sourceDate: null,
+              rights: "UNKNOWN",
+              providerSnippet,
+            },
+            {
+              evidenceId: "internal:object-1:revision-1",
+              sourceId: "internal-deck",
+              title: "Internal source",
+              quote: "Internal body",
+              canonicalUrl: null,
+              sourceDate: null,
+              rights: "APPROVED",
+              providerSnippet,
+            },
+          ],
+          completedAtMs: 100,
+          latencyMs: 20,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+  });
+  try {
+    const result = await createConsoleSessionClient("https://private.example.test").recommend(
+      "csrf-token",
+      {
+        query: "revenue",
+        deckVersion: "deck_v1",
+        manifestHash: "a".repeat(64),
+        maxResults: 3,
+      },
+    );
+    expect(result.outcome).toBe("RECOMMEND");
+    if (result.outcome !== "RECOMMEND") throw new Error("expected recommendation");
+    expect(result.evidence).toEqual([
+      {
+        kind: "EXTERNAL",
+        evidenceId: `external:${"a".repeat(64)}`,
+        title: "Origin report title",
+        sourceUrl: "https://origin.example/report",
+        sourceDate: "2025-03-04T00:00:00.000Z",
+        rights: "UNKNOWN",
+      },
+      {
+        kind: "INTERNAL",
+        evidenceId: "internal:object-1:revision-1",
+        title: "Internal source",
+        sourceUrl: null,
+        sourceDate: null,
+        rights: "APPROVED",
+      },
+    ]);
+    expect(JSON.stringify(result)).not.toContain(providerSnippet);
+    expect(result.evidence).toHaveLength(2);
+  } finally {
+    Object.defineProperty(globalThis, "fetch", { configurable: true, value: originalFetch });
+  }
+});
+
 test("createConsoleSessionClient exposes a typed uploadDeck method", () => {
   const client = createConsoleSessionClient();
   expect(typeof client.uploadDeck).toBe("function");

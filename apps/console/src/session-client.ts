@@ -5,19 +5,33 @@ export interface RecommendationRequest {
   readonly maxResults: number;
 }
 
-export interface RecommendationEvidenceView {
+interface EvidenceCardProvenance {
   readonly evidenceId: string;
-  readonly sourceId: string;
   readonly title: string;
-  readonly quote: string;
-  readonly canonicalUrl: string | null;
+  readonly sourceUrl: string | null;
+  readonly sourceDate: string | null;
 }
+
+export type PrivateEvidenceCardView =
+  | Readonly<
+      EvidenceCardProvenance & {
+        kind: "INTERNAL";
+        rights: "APPROVED";
+      }
+    >
+  | Readonly<
+      EvidenceCardProvenance & {
+        kind: "EXTERNAL";
+        sourceUrl: string;
+        rights: "UNKNOWN";
+      }
+    >;
 
 export type RecommendationOutcome =
   | Readonly<{
       outcome: "RECOMMEND";
       recommendation: Readonly<{ claim: string }>;
-      evidence: readonly RecommendationEvidenceView[];
+      evidence: readonly PrivateEvidenceCardView[];
       completedAtMs: number;
       latencyMs: number;
     }>
@@ -280,39 +294,97 @@ function stringField(value: unknown, field: string): string | null {
   return typeof candidate === "string" ? candidate : null;
 }
 
-function isRecommendationEvidenceView(value: unknown): value is RecommendationEvidenceView {
-  if (typeof value !== "object" || value === null) return false;
+function externalSourceUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" &&
+      url.username === "" &&
+      url.password === "" &&
+      url.port === ""
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function optionalUrl(value: unknown): string | null | undefined {
+  if (value === null) return null;
+  if (typeof value !== "string") return undefined;
+  try {
+    return new URL(value).toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function privateEvidenceCard(value: unknown): PrivateEvidenceCardView | null {
+  if (typeof value !== "object" || value === null) return null;
   const evidenceId = Reflect.get(value, "evidenceId");
   const sourceId = Reflect.get(value, "sourceId");
   const title = Reflect.get(value, "title");
-  const quote = Reflect.get(value, "quote");
   const canonicalUrl = Reflect.get(value, "canonicalUrl");
-  return (
-    typeof evidenceId === "string" &&
-    typeof sourceId === "string" &&
-    typeof title === "string" &&
-    typeof quote === "string" &&
-    (typeof canonicalUrl === "string" || canonicalUrl === null)
-  );
+  const sourceDate = Reflect.get(value, "sourceDate");
+  const rights = Reflect.get(value, "rights");
+  if (
+    typeof evidenceId !== "string" ||
+    typeof sourceId !== "string" ||
+    typeof title !== "string" ||
+    title.length === 0 ||
+    (typeof sourceDate !== "string" && sourceDate !== null)
+  ) {
+    return null;
+  }
+  if (rights === "APPROVED") {
+    const sourceUrl = optionalUrl(canonicalUrl);
+    return sourceUrl === undefined
+      ? null
+      : { kind: "INTERNAL", evidenceId, title, sourceUrl, sourceDate, rights };
+  }
+  if (
+    rights === "UNKNOWN" &&
+    evidenceId.startsWith("external:") &&
+    sourceId.startsWith("external-search:")
+  ) {
+    const sourceUrl = externalSourceUrl(canonicalUrl);
+    return sourceUrl === null
+      ? null
+      : { kind: "EXTERNAL", evidenceId, title, sourceUrl, sourceDate, rights };
+  }
+  return null;
 }
 
-function isRecommendationOutcome(value: unknown): value is RecommendationOutcome {
-  if (typeof value !== "object" || value === null) return false;
+function recommendationOutcome(value: unknown): RecommendationOutcome | null {
+  if (typeof value !== "object" || value === null) return null;
   const outcome = Reflect.get(value, "outcome");
   const completedAtMs = Reflect.get(value, "completedAtMs");
   const latencyMs = Reflect.get(value, "latencyMs");
-  if (typeof completedAtMs !== "number" || typeof latencyMs !== "number") return false;
-  if (outcome === "ABSTAIN") return typeof Reflect.get(value, "reason") === "string";
-  if (outcome !== "RECOMMEND") return false;
+  if (typeof completedAtMs !== "number" || typeof latencyMs !== "number") return null;
+  if (outcome === "ABSTAIN") {
+    const reason = Reflect.get(value, "reason");
+    return typeof reason === "string" ? { outcome, reason, completedAtMs, latencyMs } : null;
+  }
+  if (outcome !== "RECOMMEND") return null;
   const recommendation = Reflect.get(value, "recommendation");
   const evidence = Reflect.get(value, "evidence");
-  return (
-    typeof recommendation === "object" &&
-    recommendation !== null &&
-    typeof Reflect.get(recommendation, "claim") === "string" &&
-    Array.isArray(evidence) &&
-    evidence.every(isRecommendationEvidenceView)
-  );
+  const claim =
+    typeof recommendation === "object" && recommendation !== null
+      ? Reflect.get(recommendation, "claim")
+      : null;
+  if (typeof claim !== "string" || !Array.isArray(evidence)) {
+    return null;
+  }
+  const cards = evidence
+    .map(privateEvidenceCard)
+    .filter((card): card is PrivateEvidenceCardView => card !== null);
+  return {
+    outcome,
+    recommendation: { claim },
+    evidence: cards,
+    completedAtMs,
+    latencyMs,
+  };
 }
 
 function isLiveCandidateSnapshot(value: unknown): value is LiveCandidateSnapshotView {
@@ -485,10 +557,11 @@ export function createConsoleSessionClient(baseUrl = ""): ConsoleDeckUploadClien
         ...(signal === undefined ? {} : { signal }),
       });
       const body = await responseBody(response);
-      if (!response.ok || !isRecommendationOutcome(body)) {
+      const outcome = recommendationOutcome(body);
+      if (!response.ok || outcome === null) {
         throw new Error("Recommendation request failed.");
       }
-      return body;
+      return outcome;
     },
     async readLiveCandidates(presentationSessionId) {
       const response = await fetch(

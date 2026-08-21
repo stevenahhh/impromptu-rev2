@@ -388,11 +388,12 @@ describe("Console route boundary", () => {
       recommendation: { claim: "Revenue increased year over year." },
       evidence: [
         {
-          evidenceId: "evidence_results",
-          sourceId: "annual-report",
-          title: "Annual report",
-          quote: "Revenue increased by 12%.",
-          canonicalUrl: "https://example.test/annual-report",
+          kind: "EXTERNAL",
+          evidenceId: `external:${"b".repeat(64)}`,
+          title: "Origin annual report",
+          sourceUrl: "https://example.test/annual-report",
+          sourceDate: "2025-03-04T00:00:00.000Z",
+          rights: "UNKNOWN",
         },
       ],
       completedAtMs: 100,
@@ -405,9 +406,13 @@ describe("Console route boundary", () => {
 
     const cards = document.querySelectorAll("[data-evidence-card]");
     expect(cards).toHaveLength(1);
-    expect(cards[0]?.textContent).toContain("Annual report");
+    expect(cards[0]?.textContent).toContain("Origin annual report");
     expect(cards[0]?.textContent).toContain("Revenue increased year over year.");
     expect(cards[0]?.textContent).toContain("https://example.test/annual-report");
+    expect(cards[0]?.textContent).toContain("기준일");
+    expect(cards[0]?.textContent).toContain("2025-03-04");
+    expect(cards[0]?.textContent).toContain("권리 미확인(UNKNOWN)");
+    expect(cards[0]?.textContent).not.toContain("SEARCH_SNIPPET_SENTINEL");
     expect(document.querySelector("[data-evidence-status='PREPARING']")).toBeTruthy();
 
     view.unmount();
@@ -418,6 +423,58 @@ describe("Console route boundary", () => {
       await openingRecommendation;
     });
     expect(document.querySelectorAll("[data-evidence-card]")).toHaveLength(0);
+  });
+
+  test("keeps an approved internal card when external fetch produces no safe card", async () => {
+    let signalRecommended: () => void = () => {
+      throw new Error("recommendation signal was not installed");
+    };
+    const recommended = new Promise<void>((resolve) => {
+      signalRecommended = resolve;
+    });
+    const firstSlide = workspacePresentation.slides[0];
+    if (firstSlide === undefined) throw new Error("workspace fixture requires one slide");
+    const presentation = {
+      ...workspacePresentation,
+      manifestHash: "a".repeat(64),
+      slides: [firstSlide],
+    };
+    const client = workspaceClient({
+      async recommend() {
+        signalRecommended();
+        return {
+          outcome: "RECOMMEND",
+          recommendation: { claim: "Internal evidence remains available." },
+          evidence: [
+            {
+              kind: "INTERNAL",
+              evidenceId: "internal:object-1:revision-1",
+              title: "Internal source",
+              sourceUrl: null,
+              sourceDate: null,
+              rights: "APPROVED",
+            },
+          ],
+          completedAtMs: 100,
+          latencyMs: 20,
+        };
+      },
+    });
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AuthProvider initialAuthenticated initialPresentation={presentation} client={client}>
+          <ConsoleRoutes />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    await act(async () => await recommended);
+    const cards = document.querySelectorAll("[data-evidence-card]");
+    expect(cards).toHaveLength(1);
+    expect(cards[0]?.getAttribute("data-evidence-kind")).toBe("INTERNAL");
+    expect(cards[0]?.textContent).toContain("내부 근거 · 승인됨(APPROVED)");
+    expect(cards[0]?.textContent).toContain("출처 정보 없음");
+    expect(document.querySelector("[data-evidence-kind='EXTERNAL']")).toBeNull();
   });
 
   test("offers display choices and starts from one primary action", async () => {

@@ -22,6 +22,7 @@ import {
 import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { CoachingDisplay } from "./coaching-display";
 import { CockpitAudioCapture } from "./cockpit-audio-capture";
+import { EvidenceCard } from "./evidence-card";
 import { type Locale, messages } from "./i18n";
 import {
   AccountRegistrationError,
@@ -34,6 +35,7 @@ import {
   type DeckUploadView,
   type DisplayJoinView,
   type LiveCandidateSnapshotView,
+  type PrivateEvidenceCardView,
 } from "./session-client";
 
 declare global {
@@ -1004,13 +1006,11 @@ function SlidePreview({ index }: { readonly index: number }) {
   );
 }
 
-interface PreparedEvidenceCard {
-  readonly id: string;
-  readonly title: string;
-  readonly summary: string;
-  readonly source: string;
-  readonly sourceUrl: string | null;
-}
+type PreparedEvidenceCard = PrivateEvidenceCardView &
+  Readonly<{
+    id: string;
+    summary: string;
+  }>;
 
 function EvidencePreparationPanel() {
   const { activePresentation, client, locale, session } = useAuth();
@@ -1055,11 +1055,9 @@ function EvidencePreparationPanel() {
           );
           if (!active || result.outcome !== "RECOMMEND") return;
           const cards = result.evidence.map((evidence) => ({
+            ...evidence,
             id: `${slide.publicSlideKey}:${evidence.evidenceId}`,
-            title: evidence.title,
             summary: result.recommendation.claim,
-            source: evidence.canonicalUrl ?? text.sourceUnavailable,
-            sourceUrl: evidence.canonicalUrl,
           }));
           setPreparedEvidence((current) => [...current, ...cards]);
         } catch {
@@ -1073,7 +1071,7 @@ function EvidencePreparationPanel() {
       active = false;
       controller.abort();
     };
-  }, [activePresentation, client, session, text.sourceUnavailable]);
+  }, [activePresentation, client, session]);
 
   const status = pendingCount > 0 ? "PREPARING" : preparedEvidence.length > 0 ? "READY" : "EMPTY";
   return (
@@ -1083,27 +1081,19 @@ function EvidencePreparationPanel() {
           <ul className="console-evidence-list">
             {preparedEvidence.map((evidence) => (
               <li key={evidence.id}>
-                <article className="console-evidence-card" data-evidence-card={evidence.id}>
-                  <h3>{evidence.title}</h3>
-                  <dl>
-                    <div>
-                      <dt>{text.evidenceSummary}</dt>
-                      <dd>{evidence.summary}</dd>
-                    </div>
-                    <div>
-                      <dt>{text.evidenceSource}</dt>
-                      <dd>
-                        {evidence.sourceUrl === null ? (
-                          evidence.source
-                        ) : (
-                          <a href={evidence.sourceUrl} rel="noreferrer" target="_blank">
-                            {evidence.source}
-                          </a>
-                        )}
-                      </dd>
-                    </div>
-                  </dl>
-                </article>
+                <EvidenceCard
+                  card={evidence}
+                  text={{
+                    summary: text.evidenceSummary,
+                    sourceUrl: text.evidenceSourceUrl,
+                    sourceDate: text.evidenceSourceDate,
+                    rights: text.evidenceRights,
+                    sourceUnavailable: text.sourceUnavailable,
+                    dateUnavailable: text.evidenceDateUnavailable,
+                    internalApproved: text.evidenceInternalApproved,
+                    externalUnknown: text.evidenceExternalUnknown,
+                  }}
+                />
               </li>
             ))}
           </ul>
