@@ -17,6 +17,7 @@ import {
 } from "@impromptu/model-router";
 import { z } from "zod";
 import type { SafeExternalEvidenceFetcher, SearchCandidate } from "../retrieval/external-fetch.ts";
+import type { ExternalSearchBoundary } from "../retrieval/external-search.ts";
 import type {
   AuthorizedEvidenceReference,
   InternalRetrievalService,
@@ -24,6 +25,7 @@ import type {
 import { reconcileEvidence } from "./deterministic-evidence.ts";
 
 const TERMINAL_DEADLINE_GUARD_MS = 500;
+const EXTERNAL_BRANCH_DEADLINE_MS = 1_800;
 const MAX_MODEL_EVIDENCE = 2;
 const MAX_MODEL_CONTENT_CHARACTERS = 700;
 
@@ -44,9 +46,7 @@ export interface RecommendationContextAuthority {
   resolve(accountSessionId: string): Promise<RecommendationPrincipalContext | null>;
 }
 
-export interface ExternalSearchBoundary {
-  search(query: string, signal: AbortSignal): Promise<readonly SearchCandidate[]>;
-}
+export type { ExternalSearchBoundary } from "../retrieval/external-search.ts";
 
 export type RecommendationModelStageEvent = Readonly<{
   stage: "embedding" | "rerank" | "llm" | "verifier";
@@ -64,7 +64,7 @@ export class PrivateRecommendationPipeline {
   readonly #contexts: RecommendationContextAuthority;
   readonly #internal: InternalRetrievalService;
   readonly #externalSearch: ExternalSearchBoundary | undefined;
-  readonly #externalFetch: SafeExternalEvidenceFetcher | undefined;
+  readonly #externalFetch: Pick<SafeExternalEvidenceFetcher, "fetchCandidate"> | undefined;
   readonly #now: () => number;
   readonly #scheduler: DeadlineScheduler;
   readonly #stageObserver: RecommendationStageObserver | undefined;
@@ -76,7 +76,7 @@ export class PrivateRecommendationPipeline {
     readonly contexts: RecommendationContextAuthority;
     readonly internal: InternalRetrievalService;
     readonly externalSearch?: ExternalSearchBoundary;
-    readonly externalFetch?: SafeExternalEvidenceFetcher;
+    readonly externalFetch?: Pick<SafeExternalEvidenceFetcher, "fetchCandidate">;
     readonly now?: () => number;
     readonly scheduler?: DeadlineScheduler;
     readonly stageObserver?: RecommendationStageObserver;
@@ -184,27 +184,7 @@ export class PrivateRecommendationPipeline {
         referenceByEvidenceId.set(materialized.evidence.evidenceId, reference);
       }
     }
-    if (
-      this.#externalSearch !== undefined &&
-      this.#externalFetch !== undefined &&
-      !signal.aborted
-    ) {
-      let candidates: readonly SearchCandidate[] = [];
-      try {
-        candidates = await this.#externalSearch.search(request.data.query, signal);
-      } catch {
-        candidates = [];
-      }
-      for (const candidate of candidates.slice(0, request.data.maxResults)) {
-        const fetched = await this.#externalFetch.fetchCandidate(candidate, {
-          deckVersion: request.data.deckVersion,
-          manifestHash: request.data.manifestHash,
-          deadlineAtMs,
-          signal,
-        });
-        if (fetched.outcome === "FETCHED") evidence.push(fetched.evidence);
-      }
-    }
+    evidence.push(...(await this.#retrieveExternal(request.data, deadlineAtMs, signal)));
     if (signal.aborted) return abstain("DEADLINE_EXCEEDED", startedAtMs, deadlineAtMs);
     if (evidence.length === 0) return abstain("INSUFFICIENT_EVIDENCE", startedAtMs, this.#now());
 
@@ -322,6 +302,70 @@ export class PrivateRecommendationPipeline {
       completedAtMs,
       latencyMs: completedAtMs - startedAtMs,
     });
+  }
+
+  async #retrieveExternal(
+    request: z.infer<typeof RetrievalRequestSchema>,
+    parentDeadlineAtMs: number,
+    parentSignal: AbortSignal,
+  ): Promise<RetrievedEvidence[]> {
+    if (
+      this.#externalSearch === undefined ||
+      this.#externalFetch === undefined ||
+      parentSignal.aborted
+    ) {
+      return [];
+    }
+    const externalSearch = this.#externalSearch;
+    const externalFetch = this.#externalFetch;
+    const controller = new AbortController();
+    const deadlineAtMs = Math.min(parentDeadlineAtMs, this.#now() + EXTERNAL_BRANCH_DEADLINE_MS);
+    let resolveDeadline: (evidence: RetrievedEvidence[]) => void = () => undefined;
+    const deadline = new Promise<RetrievedEvidence[]>((resolve) => {
+      resolveDeadline = resolve;
+    });
+    const expire = () => {
+      controller.abort("external search deadline exceeded");
+      resolveDeadline([]);
+    };
+    const abortFromParent = () => {
+      controller.abort(parentSignal.reason);
+      resolveDeadline([]);
+    };
+    parentSignal.addEventListener("abort", abortFromParent, { once: true });
+    const removeDeadline = this.#scheduler.schedule(deadlineAtMs, expire);
+    if (parentSignal.aborted) abortFromParent();
+    const external = (async (): Promise<RetrievedEvidence[]> => {
+      let candidates: readonly SearchCandidate[];
+      try {
+        candidates = await externalSearch.search(request.query, controller.signal);
+      } catch {
+        return [];
+      }
+      const evidence: RetrievedEvidence[] = [];
+      for (const candidate of candidates.slice(0, request.maxResults)) {
+        if (controller.signal.aborted) return evidence;
+        try {
+          const fetched = await externalFetch.fetchCandidate(candidate, {
+            deckVersion: request.deckVersion,
+            manifestHash: request.manifestHash,
+            deadlineAtMs,
+            signal: controller.signal,
+          });
+          if (fetched.outcome === "FETCHED") evidence.push(fetched.evidence);
+        } catch {
+          // A provider or origin failure is an internal-only degradation path.
+        }
+      }
+      return evidence;
+    })();
+    try {
+      return await Promise.race([external, deadline]);
+    } finally {
+      removeDeadline();
+      parentSignal.removeEventListener("abort", abortFromParent);
+      controller.abort("external search complete");
+    }
   }
 
   async #model<Output>(

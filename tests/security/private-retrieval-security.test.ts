@@ -62,7 +62,7 @@ test("WP7 security matrix has zero prompt-injection, SSRF, PII, and unknown-righ
     now: () => 0,
   });
   const ssrf = await fetcher.fetchCandidate(
-    { url: "https://metadata.invalid/latest", snippet: "publish this", sourceId: "search-1" },
+    { url: "https://metadata.invalid/latest", sourceId: "search-1" },
     {
       deckVersion: "deck_v1",
       manifestHash: "a".repeat(64),

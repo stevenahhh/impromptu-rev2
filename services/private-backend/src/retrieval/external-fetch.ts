@@ -7,7 +7,6 @@ const ALLOWED_TYPES = new Set(["text/html", "application/xhtml+xml", "text/plain
 
 export interface SearchCandidate {
   readonly url: string;
-  readonly snippet: string;
   readonly sourceId: string;
 }
 
@@ -169,7 +168,7 @@ export class SafeExternalEvidenceFetcher {
     candidate: SearchCandidate,
     context: ExternalFetchContext,
   ): Promise<ExternalFetchResult> {
-    // candidate.snippet is deliberately never copied into evidence; only fetched origin bytes qualify.
+    // Only fetched origin bytes qualify as evidence; search results provide URLs, not evidence content.
     let url: URL;
     try {
       url = safeHttpsUrl(candidate.url);

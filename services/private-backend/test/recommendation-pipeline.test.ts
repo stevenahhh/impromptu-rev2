@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { RetrievedEvidenceSchema } from "@impromptu/contracts/retrieval";
 import type { ModelCapability, ModelResult } from "@impromptu/model-router";
-import { isTrustedModelContext } from "@impromptu/model-router";
+import { type DeadlineScheduler, isTrustedModelContext } from "@impromptu/model-router";
+import type { SafeExternalEvidenceFetcher } from "../src/retrieval/external-fetch.ts";
+import type { ExternalSearchBoundary } from "../src/retrieval/external-search.ts";
 import {
   InternalRetrievalService,
   type RetrievalObjectMetadata,
@@ -20,6 +22,9 @@ interface RouterOptions {
   readonly failCapability?: ModelCapability;
   readonly onVerifier?: () => void;
   readonly stageLatencyMs?: number;
+  readonly externalSearch?: ExternalSearchBoundary;
+  readonly externalFetch?: Pick<SafeExternalEvidenceFetcher, "fetchCandidate">;
+  readonly scheduler?: DeadlineScheduler;
 }
 
 function pipelineFixture(options: RouterOptions = {}) {
@@ -153,7 +158,9 @@ function pipelineFixture(options: RouterOptions = {}) {
     },
     internal,
     now: () => now,
-    scheduler: { schedule: () => () => undefined },
+    scheduler: options.scheduler ?? { schedule: () => () => undefined },
+    ...(options.externalSearch === undefined ? {} : { externalSearch: options.externalSearch }),
+    ...(options.externalFetch === undefined ? {} : { externalFetch: options.externalFetch }),
     stageObserver: {
       observe(event) {
         stageEvents.push(event);
@@ -337,6 +344,77 @@ describe("private recommendation verifier", () => {
     expect(await flow.pipeline.authorizeEvidenceForPublication(evidence)).toBe(true);
     flow.revoke();
     expect(await flow.pipeline.authorizeEvidenceForPublication(evidence)).toBe(false);
+  });
+
+  test("keeps internal evidence unchanged for every provider degradation", async () => {
+    const baseline = await pipelineFixture().pipeline.recommend("session-a", request);
+    for (const failure of ["timeout", "403", "429", "zero-results", "parse-error"] as const) {
+      let fetchCalls = 0;
+      const search: ExternalSearchBoundary = {
+        async search() {
+          if (failure === "zero-results") return [];
+          throw new Error(failure);
+        },
+      };
+      const result = await pipelineFixture({
+        externalSearch: search,
+        externalFetch: {
+          async fetchCandidate() {
+            fetchCalls += 1;
+            throw new Error("search failure must not fetch an origin");
+          },
+        },
+      }).pipeline.recommend("session-a", request);
+      expect(result).toEqual(baseline);
+      expect(fetchCalls).toBe(0);
+    }
+  });
+
+  test("shares one 1,800ms external deadline signal across search and fetch", async () => {
+    const deadlines: Array<{ atMs: number; run: () => void }> = [];
+    let fetchStartedResolve: () => void = () => undefined;
+    const fetchStarted = new Promise<void>((resolve) => {
+      fetchStartedResolve = resolve;
+    });
+    let searchSignal: AbortSignal | undefined;
+    let fetchSignal: AbortSignal | undefined;
+    const flow = pipelineFixture({
+      scheduler: {
+        schedule(atMs, run) {
+          deadlines.push({ atMs, run });
+          return () => undefined;
+        },
+      },
+      externalSearch: {
+        async search(_query, signal) {
+          searchSignal = signal;
+          return [{ url: "https://evidence.example/article", sourceId: "external-search:test" }];
+        },
+      },
+      externalFetch: {
+        async fetchCandidate(_candidate, context) {
+          fetchSignal = context.signal;
+          fetchStartedResolve();
+          return await new Promise<never>((_resolve, reject) => {
+            context.signal.addEventListener("abort", () => reject(context.signal.reason), {
+              once: true,
+            });
+          });
+        },
+      },
+    });
+    const recommendation = flow.pipeline.recommend("session-a", request);
+    await fetchStarted;
+    expect(deadlines.map((deadline) => deadline.atMs)).toEqual([4_500, 2_600]);
+    const externalDeadline = deadlines[1];
+    if (externalDeadline === undefined) throw new Error("expected external deadline");
+    externalDeadline.run();
+    expect((await recommendation).outcome).toBe("RECOMMEND");
+    if (searchSignal === undefined || fetchSignal === undefined) {
+      throw new Error("expected search and fetch signals");
+    }
+    expect(searchSignal).toBe(fetchSignal);
+    expect(searchSignal.aborted).toBe(true);
   });
 
   test("terminally abstains at five seconds without timing-based test waits", async () => {
