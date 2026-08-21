@@ -2,6 +2,8 @@ import {
   AudioCaptureConsentSchema,
   type CaptureGrant,
   CaptureGrantSchema,
+  type SttStreamEvent,
+  SttStreamEventSchema,
 } from "@impromptu/contracts/private";
 
 export interface ServerAudioSttPort {
@@ -42,6 +44,7 @@ export class RouterBackedAudioSttPort implements ServerAudioSttPort {
     readonly router: StreamingSttRouterBoundary,
     readonly contextFor: (signal: AbortSignal) => unknown,
     readonly adapterId?: string,
+    readonly onTranscriptEvent: (event: SttStreamEvent) => void | Promise<void> = () => undefined,
   ) {}
 
   async transcribe(chunks: AsyncIterable<Uint8Array>, signal: AbortSignal) {
@@ -51,7 +54,10 @@ export class RouterBackedAudioSttPort implements ServerAudioSttPort {
       this.contextFor(signal),
       this.adapterId,
     )) {
-      if (item.kind !== "complete") continue;
+      if (item.kind === "transcript") {
+        await this.onTranscriptEvent(SttStreamEventSchema.parse(item.event));
+        continue;
+      }
       if (item.result.ok) return item.result.output;
       throw new AudioSttPortError(item.result.error.code);
     }

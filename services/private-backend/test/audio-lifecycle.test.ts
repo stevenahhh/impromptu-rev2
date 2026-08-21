@@ -63,18 +63,42 @@ function capture(port = new FakeSttPort()) {
 }
 
 describe("model-router audio streaming port", () => {
-  test("sequences chunks through the server boundary and preserves typed failure", async () => {
+  test("forwards canonical transcript events before preserving a typed terminal failure", async () => {
     const seen: number[] = [];
+    const transcriptEvents: string[] = [];
     const boundary = {
       async *streamStt(chunks: AsyncIterable<{ sequence: number; audio: Uint8Array }>) {
         for await (const chunk of chunks) seen.push(chunk.sequence);
+        yield {
+          kind: "transcript" as const,
+          event: {
+            kind: "FINAL",
+            sessionGeneration: 1,
+            sequence: 0,
+            segmentId: "segment-1",
+            finalSegmentId: "final-1",
+            transcript: {
+              text: "확정",
+              language: "ko",
+              durationMs: 20,
+              words: [{ text: "확정", startMs: 0, endMs: 20 }],
+            },
+          },
+        };
         yield {
           kind: "complete" as const,
           result: { ok: false as const, error: { code: "policy_denied" } },
         };
       },
     };
-    const port = new RouterBackedAudioSttPort(boundary, (signal) => ({ signal }));
+    const port = new RouterBackedAudioSttPort(
+      boundary,
+      (signal) => ({ signal }),
+      undefined,
+      (event) => {
+        transcriptEvents.push(event.kind);
+      },
+    );
     async function* chunks() {
       yield new Uint8Array([1]);
       yield new Uint8Array([2]);
@@ -88,6 +112,7 @@ describe("model-router audio streaming port", () => {
       expect((caught as AudioSttPortError).code).toBe("policy_denied");
     }
     expect(seen).toEqual([0, 1]);
+    expect(transcriptEvents).toEqual(["FINAL"]);
   });
 });
 
