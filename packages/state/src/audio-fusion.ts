@@ -60,7 +60,7 @@ export type TranscriptFusionResult =
       outcome: "AMBIGUOUS";
       reason:
         | ClockFailureReason
-        | "SILENCE"
+        | "MEASUREMENT_UNAVAILABLE"
         | "SLIDE_BOUNDARY_CROSSED"
         | "SLIDE_WINDOW_INVALID"
         | "TRANSCRIPT_INVALID"
@@ -180,7 +180,7 @@ export function fuseTranscriptToSlide(
   }
   const windows = parsedWindows.flatMap((window) => (window.success ? [window.data] : []));
   if (transcript.text.trim().length === 0 || transcript.words.length === 0) {
-    return ambiguous("SILENCE");
+    return ambiguous("MEASUREMENT_UNAVAILABLE");
   }
   if (
     transcript.words.some(

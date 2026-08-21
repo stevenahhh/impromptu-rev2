@@ -163,14 +163,14 @@ describe("slide occurrence STT fusion", () => {
     );
   });
 
-  test("abstains deterministically for silence, boundary overlap, and late words", () => {
+  test("abstains deterministically for unavailable words, boundary overlap, and late words", () => {
     expect(
       fuseTranscriptToSlide(transcript({ text: "", words: [] }), slides, {
         clockAuthority: authority,
       }),
     ).toEqual({
       outcome: "AMBIGUOUS",
-      reason: "SILENCE",
+      reason: "MEASUREMENT_UNAVAILABLE",
     });
     expect(
       fuseTranscriptToSlide(
