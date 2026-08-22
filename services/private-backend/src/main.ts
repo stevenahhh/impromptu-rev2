@@ -389,6 +389,16 @@ const recommendations = new PrivateRecommendationPipeline({
           event.errorCode === undefined ? event.outcome : `${event.outcome}:${event.errorCode}`,
       });
     },
+    observeHedge(event) {
+      logger.request({
+        requestId: `recommendation-hedge:${crypto.randomUUID()}`,
+        method: "HEDGE",
+        path: `/internal/recommendation/${event.stage}`,
+        status: 200,
+        durationMs: 0,
+        outcome: event.outcome,
+      });
+    },
     observeReconciliation(event) {
       logger.request({
         requestId: `recommendation-reconcile:${crypto.randomUUID()}`,

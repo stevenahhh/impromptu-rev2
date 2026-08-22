@@ -28,6 +28,14 @@ const TERMINAL_DEADLINE_GUARD_MS = 500;
 const EXTERNAL_BRANCH_DEADLINE_MS = 1_800;
 const MAX_MODEL_EVIDENCE = 2;
 const MAX_MODEL_CONTENT_CHARACTERS = 700;
+/**
+ * Slot hedging budget, derived from the 20-run provider profile in `.omo/evidence/task-36`.
+ * The verifier runs serially after the pair and took 1,609ms at p50, so that is the room the
+ * pair must leave behind. rerank took 1,024ms and llm 1,479ms at p50, which is how long a
+ * duplicate needs in order to be worth starting at all.
+ */
+const HEDGE_VERIFIER_RESERVE_MS = 1_609;
+const HEDGE_TYPICAL_CALL_MS = { rerank: 1_024, llm: 1_479 } as const;
 
 const embeddingOutputSchema = z
   .object({ vector: z.array(z.number().finite()).min(1).max(8_192) })
@@ -61,9 +69,15 @@ export type RecommendationReconciliationEvent = Readonly<{
   value: string;
 }>;
 
+export type RecommendationHedgeEvent = Readonly<{
+  stage: "rerank" | "llm";
+  outcome: "STARTED" | "PRIMARY_WON" | "HEDGE_WON" | "BOTH_FAILED";
+}>;
+
 export interface RecommendationStageObserver {
   observe(event: RecommendationModelStageEvent): void;
   observeReconciliation?(event: RecommendationReconciliationEvent): void;
+  observeHedge?(event: RecommendationHedgeEvent): void;
 }
 
 export class PrivateRecommendationPipeline {
@@ -223,14 +237,29 @@ export class PrivateRecommendationPipeline {
     const generationData = rerankData.slice(0, 1);
     // Both slots inspect the same ACL-approved candidates. Their outputs are intersected before
     // deterministic reconciliation, so running them concurrently does not weaken evidence gates.
+    //
+    // Every deadline abort in the 20-run provider profile was a run where one of these two slots
+    // ran long enough to leave no room for the serial verifier, and the two never ran long in the
+    // same run. One duplicate call therefore addresses exactly the observed failure. The trigger
+    // is derived from the remaining budget instead of a fixed delay: a duplicate is only worth
+    // starting while a typical call still fits before the verifier needs its slot, so once that
+    // moment has passed the slot runs unduplicated.
+    const pairStartedAtMs = this.#now();
+    const pairBudgetMs =
+      deadlineAtMs - TERMINAL_DEADLINE_GUARD_MS - pairStartedAtMs - HEDGE_VERIFIER_RESERVE_MS;
+    const hedgeAtMs = (slot: "rerank" | "llm"): number | null => {
+      const offset = pairBudgetMs - HEDGE_TYPICAL_CALL_MS[slot];
+      return offset <= 0 ? null : pairStartedAtMs + offset;
+    };
     const [reranked, structured] = await Promise.all([
-      this.#model(
+      this.#hedgedModel(
         "rerank",
         { task: "RERANK_EVIDENCE", query: request.data.query, untrustedData: rerankData },
         rerankOutputSchema,
         trustedContext,
+        hedgeAtMs("rerank"),
       ),
-      this.#model(
+      this.#hedgedModel(
         "llm",
         {
           task: "CREATE_STRUCTURED_RECOMMENDATION",
@@ -245,6 +274,7 @@ export class PrivateRecommendationPipeline {
         },
         StructuredRecommendationSchema,
         trustedContext,
+        hedgeAtMs("llm"),
       ),
     ]);
     if (!reranked.ok) return abstain(modelReason(reranked.errorCode), startedAtMs, this.#now());
@@ -397,6 +427,67 @@ export class PrivateRecommendationPipeline {
       parentSignal.removeEventListener("abort", abortFromParent);
       controller.abort("external search complete");
     }
+  }
+
+  /**
+   * Runs one model slot with at most ONE duplicate in flight, inside the caller's existing
+   * deadline and against the same model, schema and trusted context. The duplicate starts only
+   * while the primary is still pending at `hedgeAtMs`, so a slot that settles at its usual
+   * latency never doubles provider load. This is not a retry: a primary that settles with an
+   * error is reported as-is and never causes a new call to be started.
+   */
+  async #hedgedModel<Output>(
+    capability: "rerank" | "llm",
+    input: unknown,
+    schema: z.ZodType<Output>,
+    context: ReturnType<typeof createTrustedModelContext>,
+    hedgeAtMs: number | null,
+  ): Promise<
+    Readonly<{ ok: true; output: Output }> | Readonly<{ ok: false; errorCode: ModelErrorCode }>
+  > {
+    const primary = this.#model(capability, input, schema, context);
+    if (hedgeAtMs === null) return await primary;
+
+    let removeTrigger: () => void = () => undefined;
+    const triggered = new Promise<"HEDGE">((resolve) => {
+      removeTrigger = this.#scheduler.schedule(hedgeAtMs, () => resolve("HEDGE"));
+    });
+    const primaryArm = primary.then((result) => ({ from: "PRIMARY" as const, result }));
+    // Marks the arm handled so a losing rejection is never reported as unhandled; the awaited
+    // reference below still surfaces a genuine throw exactly as it did before hedging existed.
+    void primaryArm.catch(() => undefined);
+    let first: Awaited<typeof primaryArm> | "HEDGE";
+    try {
+      first = await Promise.race([primaryArm, triggered]);
+    } finally {
+      removeTrigger();
+    }
+    if (first !== "HEDGE") return first.result;
+
+    this.#stageObserver?.observeHedge?.({ stage: capability, outcome: "STARTED" });
+    const hedgeArm = this.#model(capability, input, schema, context).then((result) => ({
+      from: "HEDGE" as const,
+      result,
+    }));
+    void hedgeArm.catch(() => undefined);
+    const settled = await Promise.race([primaryArm, hedgeArm]);
+    if (settled.result.ok) {
+      this.#stageObserver?.observeHedge?.({
+        stage: capability,
+        outcome: settled.from === "HEDGE" ? "HEDGE_WON" : "PRIMARY_WON",
+      });
+      return settled.result;
+    }
+    const other = await (settled.from === "PRIMARY" ? hedgeArm : primaryArm);
+    this.#stageObserver?.observeHedge?.({
+      stage: capability,
+      outcome: other.result.ok
+        ? other.from === "HEDGE"
+          ? "HEDGE_WON"
+          : "PRIMARY_WON"
+        : "BOTH_FAILED",
+    });
+    return other.result.ok ? other.result : settled.result;
   }
 
   async #model<Output>(
