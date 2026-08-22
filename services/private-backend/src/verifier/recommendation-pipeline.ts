@@ -38,14 +38,14 @@ const MAX_MODEL_CONTENT_CHARACTERS = 700;
  * be worth starting at all.
  */
 const HEDGE_VERIFIER_RESERVE_MS = 1_934;
-const HEDGE_TYPICAL_CALL_MS = { rerank: 967, llm: 1_284 } as const;
+const HEDGE_TYPICAL_CALL_MS = { rerank: 967, llm: 1_284, verifier: 1_644 } as const;
 /**
  * The fastest durations either slot was observed to return in. Deferring a duplicate to a point
  * earlier than this can never avoid starting one - no call settles that early - so the delay
  * would only shorten the duplicate's runway. Both hedged profiles recorded llm duplicates on
  * every single run, which is exactly that situation.
  */
-const HEDGE_FAST_PATH_MS = { rerank: 750, llm: 1_000 } as const;
+const HEDGE_FAST_PATH_MS = { rerank: 750, llm: 1_000, verifier: 1_200 } as const;
 
 const embeddingOutputSchema = z
   .object({ vector: z.array(z.number().finite()).min(1).max(8_192) })
@@ -80,7 +80,7 @@ export type RecommendationReconciliationEvent = Readonly<{
 }>;
 
 export type RecommendationHedgeEvent = Readonly<{
-  stage: "rerank" | "llm";
+  stage: "rerank" | "llm" | "verifier";
   outcome: "STARTED" | "PRIMARY_WON" | "HEDGE_WON" | "BOTH_FAILED";
 }>;
 
@@ -257,15 +257,19 @@ export class PrivateRecommendationPipeline {
     const pairStartedAtMs = this.#now();
     const pairBudgetMs =
       deadlineAtMs - TERMINAL_DEADLINE_GUARD_MS - pairStartedAtMs - HEDGE_VERIFIER_RESERVE_MS;
-    const hedgeAtMs = (slot: "rerank" | "llm"): number | null => {
-      const offset = pairBudgetMs - HEDGE_TYPICAL_CALL_MS[slot];
+    const hedgeAtMs = (
+      slot: "rerank" | "llm" | "verifier",
+      startedAtMs: number,
+      budgetMs: number,
+    ): number | null => {
+      const offset = budgetMs - HEDGE_TYPICAL_CALL_MS[slot];
       // Not even one typical call fits, so a duplicate cannot finish either: run the slot alone.
       if (offset <= 0) return null;
       // Waiting past the point where no call has ever settled cannot avoid the duplicate, so the
       // delay would only cost the duplicate runway it needs. Such a slot starts its duplicate at
       // once; a slot whose delay genuinely avoids duplicates keeps waiting.
       const deferrable = offset >= HEDGE_FAST_PATH_MS[slot];
-      return pairStartedAtMs + (deferrable ? offset : 0);
+      return startedAtMs + (deferrable ? offset : 0);
     };
     const [reranked, structured] = await Promise.all([
       this.#hedgedModel(
@@ -273,7 +277,7 @@ export class PrivateRecommendationPipeline {
         { task: "RERANK_EVIDENCE", query: request.data.query, untrustedData: rerankData },
         rerankOutputSchema,
         trustedContext,
-        hedgeAtMs("rerank"),
+        hedgeAtMs("rerank", pairStartedAtMs, pairBudgetMs),
       ),
       this.#hedgedModel(
         "llm",
@@ -290,7 +294,7 @@ export class PrivateRecommendationPipeline {
         },
         StructuredRecommendationSchema,
         trustedContext,
-        hedgeAtMs("llm"),
+        hedgeAtMs("llm", pairStartedAtMs, pairBudgetMs),
       ),
     ]);
     if (!reranked.ok) return abstain(modelReason(reranked.errorCode), startedAtMs, this.#now());
@@ -325,7 +329,11 @@ export class PrivateRecommendationPipeline {
       .filter((item): item is RetrievedEvidence => item !== undefined);
     if (selected.length === 0) return abstain("INSUFFICIENT_EVIDENCE", startedAtMs, this.#now());
 
-    const verified = await this.#model(
+    // The verifier is the last serial stage, so whatever budget the pair left is all it has.
+    // Three runs in the cohort probe had it cancelled mid-flight, which is the same isolated slow
+    // call the other two slots already guard against.
+    const verifierStartedAtMs = this.#now();
+    const verified = await this.#hedgedModel(
       "verifier",
       {
         task: "VERIFY_RECOMMENDATION",
@@ -335,6 +343,11 @@ export class PrivateRecommendationPipeline {
       },
       VerifierModelOutputSchema,
       trustedContext,
+      hedgeAtMs(
+        "verifier",
+        verifierStartedAtMs,
+        deadlineAtMs - TERMINAL_DEADLINE_GUARD_MS - verifierStartedAtMs,
+      ),
     );
     if (!verified.ok) return abstain(modelReason(verified.errorCode), startedAtMs, this.#now());
     if (verified.output.verdict !== "SUPPORTED") {
@@ -453,7 +466,7 @@ export class PrivateRecommendationPipeline {
    * error is reported as-is and never causes a new call to be started.
    */
   async #hedgedModel<Output>(
-    capability: "rerank" | "llm",
+    capability: "rerank" | "llm" | "verifier",
     input: unknown,
     schema: z.ZodType<Output>,
     context: ReturnType<typeof createTrustedModelContext>,

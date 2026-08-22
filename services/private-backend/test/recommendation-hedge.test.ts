@@ -10,15 +10,25 @@ import { PrivateRecommendationPipeline } from "../src/verifier/recommendation-pi
  * fires itself, and the only timers present are bounded failure deadlines.
  */
 
+const hex = (seed: string) => seed.repeat(64).slice(0, 64);
+
+/** Shaped exactly as RetrievedEvidenceSchema demands so a successful run survives outcome parsing. */
 const evidence = {
   evidenceId: "internal:object-1:r1",
-  title: "Annual report",
-  anchor: "page=4",
-  content: "Revenue was 42 million USD in 2025.",
   sourceId: "source-1",
   sourceRevision: "r1",
+  sourceHash: hex("a"),
+  deckVersion: `deck_${hex("b")}`,
+  manifestHash: hex("c"),
+  title: "Annual report",
+  content: "Revenue was 42 million USD in 2025.",
+  quote: "Revenue was 42 million USD in 2025.",
+  anchor: "page=4",
+  canonicalUrl: null,
+  sourceDate: null,
   rights: "APPROVED",
-  origin: "INTERNAL",
+  containsPii: false,
+  authorizationVersion: "acl-v1",
 };
 
 const request = {
@@ -162,5 +172,103 @@ describe("recommendation slot hedging", () => {
     await flow.pipeline.recommend("session-a", request);
     expect(flow.calls.filter((capability) => capability === "llm").length).toBe(1);
     expect(flow.calls.filter((capability) => capability === "rerank").length).toBe(1);
+  });
+});
+
+/** A pipeline whose verifier slot stays pending until the test releases it. */
+function verifierFixture() {
+  const calls: ModelCapability[] = [];
+  const scheduled: Array<{ atMs: number; run: () => void }> = [];
+  const verifierFirstInvoked = deferred<void>();
+  const verifierSecondInvoked = deferred<void>();
+  const verifierRelease = deferred<void>();
+  let verifierInvocations = 0;
+
+  const router = {
+    async invoke(untrusted: unknown): Promise<ModelResult<unknown>> {
+      const modelRequest = untrusted as { capability: ModelCapability };
+      calls.push(modelRequest.capability);
+      if (modelRequest.capability === "verifier") {
+        verifierInvocations += 1;
+        if (verifierInvocations === 1) verifierFirstInvoked.resolve();
+        if (verifierInvocations === 2) verifierSecondInvoked.resolve();
+        await verifierRelease.promise;
+      }
+      const output =
+        modelRequest.capability === "embedding"
+          ? { vector: [0.5] }
+          : modelRequest.capability === "rerank"
+            ? { orderedEvidenceIds: ["e1"] }
+            : modelRequest.capability === "llm"
+              ? {
+                  claim: "Revenue was 42 million USD in 2025.",
+                  evidenceIds: ["e1"],
+                  facts: { numbers: [], units: [], dates: [], entities: [] },
+                }
+              : { verdict: "SUPPORTED", rationaleCode: "ok" };
+      return {
+        ok: true,
+        output,
+        metadata: metadataFor(modelRequest.capability),
+      } as unknown as ModelResult<unknown>;
+    },
+  };
+
+  const internal = {
+    async retrieve() {
+      return [{ objectId: "object-1" }];
+    },
+    async materialize() {
+      return { outcome: "MATERIALIZED", evidence };
+    },
+    async authorizeForPublication() {
+      return true;
+    },
+  } as unknown as InternalRetrievalService;
+
+  const pipeline = new PrivateRecommendationPipeline({
+    router,
+    contexts: {
+      async resolve() {
+        return { tenantId: "tenant-a", principalId: "actor-a", policyVersion: "model-policy-v1" };
+      },
+    },
+    internal,
+    now: () => 0,
+    scheduler: {
+      schedule(atMs: number, run: () => void) {
+        scheduled.push({ atMs, run });
+        return () => undefined;
+      },
+    },
+  });
+
+  return {
+    pipeline,
+    calls,
+    scheduled,
+    verifierFirstInvoked,
+    verifierSecondInvoked,
+    verifierRelease,
+  };
+}
+
+describe("verifier slot hedging", () => {
+  test("starts exactly one duplicate verifier call once its hedge trigger fires", async () => {
+    const flow = verifierFixture();
+    const outcome = flow.pipeline.recommend("session-a", request);
+    await bounded(flow.verifierFirstInvoked.promise, "verifier primary invocation");
+
+    const triggers = flow.scheduled.filter((entry) => entry.atMs !== DEADLINE_CALLBACK_AT_MS);
+    expect(triggers.length).toBeGreaterThan(0);
+    for (const trigger of triggers) trigger.run();
+
+    await bounded(flow.verifierSecondInvoked.promise, "verifier hedge invocation");
+    expect(flow.calls.filter((capability) => capability === "verifier").length).toBe(2);
+
+    flow.verifierRelease.resolve();
+    await outcome;
+    for (const trigger of triggers) trigger.run();
+    expect(flow.calls.filter((capability) => capability === "verifier").length).toBe(2);
   });
 });
