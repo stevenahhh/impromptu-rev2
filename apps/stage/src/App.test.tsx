@@ -7,6 +7,7 @@ afterAll(() => GlobalRegistrator.unregister());
 const { act, cleanup, fireEvent, render, within } = await import("@testing-library/react");
 const { MemoryRouter } = await import("react-router-dom");
 const { RECONCILE_RECOVERY_LIMIT, StageRoutes } = await import("./App");
+const copy = (await import("./locales/ko.json")).default;
 
 import type {
   StageEventObserver,
@@ -477,6 +478,40 @@ describe("console-led pairing", () => {
     } finally {
       removeOpener();
     }
+  });
+
+  test("shows placement guidance while waiting and hides it once slides are presented", async () => {
+    const observerSignal = deferred<StageEventObserver>();
+    const approved = { value: false };
+    const client: StageSessionClient = {
+      ...landingClient(approved),
+      async snapshot() {
+        return snapshot;
+      },
+      async subscribe(observer) {
+        observerSignal.resolve(observer);
+        return { close() {} };
+      },
+    };
+    const snapshotApplied = nextStageEvent("impromptu:snapshot-applied");
+    await renderLanding(client);
+
+    // While the window is still waiting to be bound, the viewer must be told to move this
+    // window onto the audience display themselves.
+    const hint = document.querySelector(".stage-placement-hint");
+    expect(hint).toBeInstanceOf(HTMLElement);
+    expect(hint?.textContent).toBe(copy.placementGuidance);
+
+    approved.value = true;
+    const continueButton = document.querySelector<HTMLButtonElement>("[data-display-claim]");
+    await act(async () => {
+      fireEvent.click(continueButton as HTMLButtonElement);
+    });
+    await act(async () => snapshotApplied);
+
+    // Once presentation slides are shown, the guidance must be gone.
+    expect(within(document.body).getByRole("img", { name: "Slide one" })).toBeTruthy();
+    expect(document.querySelector(".stage-placement-hint")).toBeNull();
   });
 
   test("keeps the presenter approval gate and the manual code fallback without an opener", async () => {

@@ -3,6 +3,7 @@
   "audienceSafeLabel": "청중 전용 안전 화면",
   "audienceScreen": "청중 화면",
   "waitingApproval": "발표자 승인을 기다리는 중입니다.",
+  "placementGuidance": "이 창을 청중용 화면으로 이동한 후 브라우저의 전체 화면 기능을 사용하세요.",
   "joinFailed": "청중 화면 연결을 시작하지 못했습니다.",
   "approvalFailed": "청중 화면 승인을 확인하지 못했습니다.",
   "cleanScreenTitle": "청중을 위한 깨끗한 화면",

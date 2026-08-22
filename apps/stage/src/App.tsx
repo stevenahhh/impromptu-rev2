@@ -169,6 +169,7 @@ function LandingPage({ client }: { readonly client: StageSessionClient }) {
       <section className="stage-welcome ui-reveal" aria-labelledby={titleId}>
         <h1 id={titleId}>{copy.cleanScreenTitle}</h1>
         <p className="stage-lead">{copy.cleanScreenLead}</p>
+        <p className="stage-placement-hint">{copy.placementGuidance}</p>
         {openedByConsole ? (
           <Panel className="stage-join" tone="inset">
             <p className="stage-waiting" aria-live="polite">
