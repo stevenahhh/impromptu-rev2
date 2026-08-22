@@ -29,13 +29,16 @@ const EXTERNAL_BRANCH_DEADLINE_MS = 1_800;
 const MAX_MODEL_EVIDENCE = 2;
 const MAX_MODEL_CONTENT_CHARACTERS = 700;
 /**
- * Slot hedging budget, derived from the 20-run provider profile in `.omo/evidence/task-36`.
- * The verifier runs serially after the pair and took 1,609ms at p50, so that is the room the
- * pair must leave behind. rerank took 1,024ms and llm 1,479ms at p50, which is how long a
- * duplicate needs in order to be worth starting at all.
+ * Slot hedging budget, derived from the hedged 20-run provider profile in
+ * `.omo/evidence/task-37`. The verifier runs serially after the pair, so the pair must leave
+ * behind enough room for the verifier tail rather than its median: reserving the p50 leaves the
+ * verifier short on half of all runs, which is exactly the abort the reserve exists to prevent.
+ * The reserve is therefore the measured verifier p90 (1,934ms). The per-slot figures are the
+ * measured p50 of each slot, because that is how long a duplicate typically needs in order to
+ * be worth starting at all.
  */
-const HEDGE_VERIFIER_RESERVE_MS = 1_609;
-const HEDGE_TYPICAL_CALL_MS = { rerank: 1_024, llm: 1_479 } as const;
+const HEDGE_VERIFIER_RESERVE_MS = 1_934;
+const HEDGE_TYPICAL_CALL_MS = { rerank: 967, llm: 1_284 } as const;
 
 const embeddingOutputSchema = z
   .object({ vector: z.array(z.number().finite()).min(1).max(8_192) })
