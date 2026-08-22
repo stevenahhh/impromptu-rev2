@@ -710,13 +710,10 @@ describe("Console route boundary", () => {
 
     switchToEnglish();
     expect(
-      within(document.body).getByRole("button", { name: "Open audience screen" }),
+      within(document.body).getByRole("button", { name: "Open audience screen first" }),
     ).toBeTruthy();
     expect(
       within(document.body).getByRole("button", { name: "Copy audience screen link" }),
-    ).toBeTruthy();
-    expect(
-      within(document.body).getByRole("button", { name: "Use external display" }),
     ).toBeTruthy();
     const start = within(document.body).getByRole("button", { name: "Start presentation" });
     expect(start).toBeTruthy();
@@ -1297,7 +1294,10 @@ describe("Console-led audience screen pairing", () => {
     };
   }
 
-  function renderWorkspace(client: ConsoleSessionClient) {
+  function renderWorkspace(
+    client: ConsoleSessionClient,
+    slides: ActivePresentationView["slides"] = [],
+  ) {
     return render(
       <MemoryRouter initialEntries={["/session"]}>
         <AuthProvider
@@ -1306,7 +1306,7 @@ describe("Console-led audience screen pairing", () => {
             presentationSessionId: "ps_active",
             presentationSessionEpoch: "pse_1",
             deckVersion: "deck_active",
-            slides: [],
+            slides,
           }}
           client={client}
         >
@@ -1328,7 +1328,7 @@ describe("Console-led audience screen pairing", () => {
 
     try {
       await act(async () => {
-        fireEvent.click(within(document.body).getByRole("button", { name: "청중 화면 열기" }));
+        fireEvent.click(within(document.body).getByRole("button", { name: "청중 화면 미리 열기" }));
       });
       expect(openedUrls).toEqual([`${stageOrigin}/?deck=deck_active`]);
 
@@ -1380,5 +1380,155 @@ describe("Console-led audience screen pairing", () => {
     expect(document.querySelector("[data-stage-pairing]")?.getAttribute("data-stage-pairing")).toBe(
       "DETECTED",
     );
+  });
+
+  test("binds the screen it opened without asking the presenter to confirm twice", async () => {
+    const approvals: string[] = [];
+    const opened = {} as Window;
+    const originalOpen = window.open;
+    window.open = (() => opened) as typeof window.open;
+    renderWorkspace(pairingClient(approvals));
+
+    try {
+      await act(async () => {
+        fireEvent.click(within(document.body).getByRole("button", { name: "청중 화면 미리 열기" }));
+      });
+      // The join arrives from the very window this panel opened, so opening it already was the
+      // presenter's explicit action and no second confirmation is asked for.
+      await act(async () => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            origin: stageOrigin,
+            data: { kind: "impromptu:display-join", join: handshakeJoin("deck_active") },
+            source: opened,
+          }),
+        );
+      });
+      await act(async () => {});
+      expect(approvals).toEqual(["ps_active:display_room:join_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]);
+      expect(
+        document
+          .querySelector("[data-audience-screen-panel]")
+          ?.getAttribute("data-audience-screen-panel"),
+      ).toBe("CONNECTED");
+    } finally {
+      window.open = originalOpen;
+    }
+  });
+
+  test("offers exactly one control that opens the audience screen", async () => {
+    const opens: string[] = [];
+    const originalOpen = window.open;
+    window.open = ((url?: string | URL) => {
+      opens.push(String(url));
+      return {} as Window;
+    }) as typeof window.open;
+    renderWorkspace(pairingClient([]));
+
+    try {
+      const buttons = [...document.querySelectorAll(".console-stage-actions button")];
+      for (const button of buttons) {
+        await act(async () => {
+          fireEvent.click(button);
+        });
+      }
+      // A second button wired to the same handler only makes the panel look like it offers a
+      // choice it does not have.
+      expect(opens).toHaveLength(1);
+    } finally {
+      window.open = originalOpen;
+    }
+  });
+
+  const oneSlide: ActivePresentationView["slides"] = [
+    { publicSlideKey: "slide_one", ordinal: 1, accessibilityLabel: "Opening slide" },
+  ];
+
+  function recordingClient(approvals: string[], slideCommands: string[]): ConsoleSessionClient {
+    return {
+      ...pairingClient(approvals),
+      async setSlide(_csrfToken, input) {
+        slideCommands.push(input.publicSlideKey);
+        return { acceptedControlRevision: "cr_1" };
+      },
+    };
+  }
+
+  test("starts the presentation from one action when no screen is connected yet", async () => {
+    const approvals: string[] = [];
+    const slideCommands: string[] = [];
+    const opened = {} as Window;
+    const originalOpen = window.open;
+    window.open = (() => opened) as typeof window.open;
+    renderWorkspace(recordingClient(approvals, slideCommands), oneSlide);
+
+    try {
+      const start = within(document.body).getByRole("button", { name: "발표 시작" });
+      // Nothing is paired yet: the single action has to open the screen, bind it, and publish.
+      expect(start.hasAttribute("disabled")).toBe(false);
+      await act(async () => {
+        fireEvent.click(start);
+      });
+      await act(async () => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            origin: stageOrigin,
+            data: { kind: "impromptu:display-join", join: handshakeJoin("deck_active") },
+            source: opened,
+          }),
+        );
+      });
+
+      expect(approvals).toEqual(["ps_active:display_room:join_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]);
+      expect(slideCommands).toEqual(["slide_one"]);
+      expect(document.querySelector("[data-presentation-state='PRESENTING']")).toBeTruthy();
+    } finally {
+      window.open = originalOpen;
+    }
+  });
+
+  test("explains a blocked audience screen instead of starting the presentation", async () => {
+    const slideCommands: string[] = [];
+    const originalOpen = window.open;
+    window.open = (() => null) as typeof window.open;
+    renderWorkspace(recordingClient([], slideCommands), oneSlide);
+
+    try {
+      await act(async () => {
+        fireEvent.click(within(document.body).getByRole("button", { name: "발표 시작" }));
+      });
+
+      expect(slideCommands).toEqual([]);
+      expect(document.body.textContent).toContain("브라우저가 청중 화면을 열지 못했습니다.");
+      expect(within(document.body).getByRole("button", { name: "다시 시도" })).toBeTruthy();
+      expect(document.querySelector("[data-presentation-state='READY']")).toBeTruthy();
+    } finally {
+      window.open = originalOpen;
+    }
+  });
+
+  test("keeps the connection fallbacks folded away until a join needs a decision", async () => {
+    renderWorkspace(pairingClient([]), oneSlide);
+
+    const collapsed = document.querySelector(".console-advanced-connect");
+    expect(collapsed).toBeInstanceOf(HTMLDetailsElement);
+    expect((collapsed as HTMLDetailsElement).open).toBe(false);
+    // The manual code path lives in there rather than on the happy path.
+    expect(within(collapsed as HTMLElement).getByText("청중 화면 연결 코드")).toBeTruthy();
+
+    // A join from a window this Console did not open cannot bind itself, so it has to surface.
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          origin: stageOrigin,
+          data: { kind: "impromptu:display-join", join: handshakeJoin("deck_active") },
+        }),
+      );
+    });
+
+    expect((document.querySelector(".console-advanced-connect") as HTMLDetailsElement).open).toBe(
+      true,
+    );
+    expect(document.querySelector("[data-stage-pairing='DETECTED']")).not.toBeNull();
   });
 });

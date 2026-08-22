@@ -91,16 +91,23 @@ describe("deck upload from the authenticated Session page", () => {
     const harness = createUploadClient();
     renderSession(harness.client);
 
-    const uploadButton = document.querySelector("[data-deck-upload-submit]") as HTMLButtonElement;
-    expect(uploadButton.hasAttribute("disabled")).toBe(true);
+    // Choosing a deck is the whole action now, so the control the harnesses click is the
+    // picker itself and the input is what closes while an upload is in flight.
+    const uploadControl = document.querySelector("[data-deck-upload-submit]");
+    expect(uploadControl).not.toBeNull();
+    expect((document.querySelector("[data-deck-file-input]") as HTMLInputElement).disabled).toBe(
+      false,
+    );
 
     const { deck } = selectDeckFile();
 
     expect(document.querySelector("[data-upload-status='UPLOADING']")).not.toBeNull();
-    expect(uploadButton.hasAttribute("disabled")).toBe(true);
     expect((document.querySelector("[data-deck-file-input]") as HTMLInputElement).disabled).toBe(
       true,
     );
+    // selectDeckFile already clicked the picker after setting files, the way the Playwright
+    // harnesses drive it; that click must never re-send the same deck.
+    fireEvent.click(uploadControl as HTMLElement);
     expect(harness.uploads).toHaveLength(1);
     expect(harness.uploads[0]?.csrfToken).toBe("preview-csrf");
     expect(harness.uploads[0]?.file).toBe(deck);
@@ -136,7 +143,7 @@ describe("deck upload from the authenticated Session page", () => {
     expect(errorText?.textContent).not.toContain("deck_upload_rejected");
     expect(errorText?.textContent?.length).toBeGreaterThan(0);
     if (!(errorText instanceof HTMLElement)) throw new Error("deck upload error missing");
-    expect(errorText.className).toContain("console-caption--error");
+    expect(errorText.className).toContain("console-status-line--attention");
     expect(document.querySelector("[data-upload-status='SUCCESS']")).toBeNull();
     expect(document.querySelector("[data-stage-open]")).toBeNull();
   });

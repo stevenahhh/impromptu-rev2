@@ -30,6 +30,11 @@ import {
   useNavigate,
   useParams,
 } from "react-router-dom";
+import {
+  type AudienceScreenController,
+  type AudienceScreenStatus,
+  useAudienceScreen,
+} from "./audience-screen";
 import { CoachingDisplay } from "./coaching-display";
 import { CockpitAudioCapture } from "./cockpit-audio-capture";
 import { EvidenceCard } from "./evidence-card";
@@ -43,7 +48,6 @@ import {
   type ConsoleDeckUploadClient,
   type ConsoleSessionClient,
   createConsoleSessionClient,
-  type DeckUploadView,
   type DisplayJoinView,
   type LiveCandidateSnapshotView,
   type PrivateEvidenceCardView,
@@ -130,6 +134,7 @@ interface AuthState {
   setActivePresentation: (presentation: ActivePresentationView | null) => void;
   displayBindingEpoch: string | null;
   setDisplayBindingEpoch: (epoch: string) => void;
+  joinTimeoutMs: number | undefined;
   locale: Locale;
   setLocale: (locale: Locale) => void;
   signUp: (username: string, password: string) => Promise<SignUpOutcome>;
@@ -145,6 +150,7 @@ export interface AuthProviderProps {
   client?: ConsoleSessionClient;
   initialPresentation?: ActivePresentationView;
   initialDisplayBindingEpoch?: string;
+  joinTimeoutMs?: number;
 }
 
 export function AuthProvider({
@@ -153,6 +159,7 @@ export function AuthProvider({
   client,
   initialPresentation,
   initialDisplayBindingEpoch,
+  joinTimeoutMs,
 }: AuthProviderProps) {
   // The production client is already the typed deck-upload client; injected test
   // clients are narrower and never reach the upload panel.
@@ -192,6 +199,7 @@ export function AuthProvider({
       setActivePresentation,
       displayBindingEpoch,
       setDisplayBindingEpoch,
+      joinTimeoutMs,
       locale,
       setLocale,
       async signUp(username: string, password: string): Promise<SignUpOutcome> {
@@ -232,7 +240,16 @@ export function AuthProvider({
         }
       },
     }),
-    [activePresentation, displayBindingEpoch, error, locale, pending, session, sessionClient],
+    [
+      activePresentation,
+      displayBindingEpoch,
+      error,
+      joinTimeoutMs,
+      locale,
+      pending,
+      session,
+      sessionClient,
+    ],
   );
 
   return <AuthContext value={value}>{children}</AuthContext>;
@@ -672,30 +689,20 @@ function SessionUploadPanel({
   const [file, setFile] = useState<File | null>(null);
   const [phase, setPhase] = useState<"IDLE" | "UPLOADING" | "SUCCESS" | "ERROR">("IDLE");
   const [message, setMessage] = useState("");
-  const [view, setView] = useState<DeckUploadView | null>(null);
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
-
-  const selectFile = (selected: File | null) => {
-    setFile(selected);
-    setView(null);
-    setPhase("IDLE");
-    setMessage("");
-  };
-
-  const upload = async () => {
-    if (file === null) return;
-    await uploadFile(file);
-  };
+  // The picker label carries [data-deck-upload-submit] for the Playwright harnesses, so a
+  // stray click on it after the input already has files must never re-send the same deck.
+  const uploadInFlight = useRef(false);
 
   const uploadFile = async (selected: File) => {
+    if (uploadInFlight.current) return;
+    uploadInFlight.current = true;
     setFile(selected);
-    setView(null);
     setPhase("UPLOADING");
     setMessage(text.uploading);
     try {
       const next = await client.uploadDeck(csrfToken, selected);
-      setView(next);
       setActivePresentation({
         presentationSessionId: next.presentationSessionId,
         presentationSessionEpoch: next.presentationSessionEpoch,
@@ -707,6 +714,8 @@ function SessionUploadPanel({
     } catch {
       setPhase("ERROR");
       setMessage(text.uploadFailed);
+    } finally {
+      uploadInFlight.current = false;
     }
   };
 
@@ -741,40 +750,30 @@ function SessionUploadPanel({
       >
         <h2>{text.uploadTitle}</h2>
         <p>{text.uploadLead}</p>
-        <label className="ui-button ui-button--quiet console-file-button">
-          <span>{text.chooseFile}</span>
+        <label className="ui-button ui-button--quiet console-file-button" data-deck-upload-submit>
+          <span>{phase === "UPLOADING" ? text.uploading : text.chooseFile}</span>
           <input
             accept=".pptx,.pdf"
             data-deck-file-input
             disabled={phase === "UPLOADING"}
             type="file"
-            onChange={(event) => selectFile(event.currentTarget.files?.[0] ?? null)}
+            onChange={(event) => {
+              const selected = event.currentTarget.files?.[0];
+              if (selected !== undefined) void uploadFile(selected);
+            }}
           />
         </label>
         {file === null ? null : <p className="console-selected-file">{file.name}</p>}
-        <Button
-          data-deck-upload-submit
-          disabled={file === null || phase === "UPLOADING"}
-          onClick={() => void upload()}
-        >
-          {phase === "UPLOADING" ? text.uploading : text.upload}
-        </Button>
       </section>
-      {phase === "SUCCESS" && view !== null ? (
-        <div className="console-upload-ready" aria-live="polite" data-upload-status="SUCCESS">
-          <p className="ui-eyebrow">{text.deckAccepted}</p>
-          <p className="console-upload-heading">{text.presentationReady}</p>
-          <p className="console-caption">{text.toolsReady}</p>
-        </div>
-      ) : (
-        <p
-          className={`console-caption${phase === "ERROR" ? " console-caption--error" : ""}`}
-          aria-live="polite"
-          data-upload-status={phase}
-        >
-          {message || text.uploadSelect}
-        </p>
-      )}
+      <p
+        className={`console-status-line${phase === "ERROR" ? " console-status-line--attention" : ""}`}
+        aria-live="polite"
+        data-upload-status={phase}
+      >
+        {phase === "SUCCESS"
+          ? `${text.deckAccepted} ${text.presentationReady}`
+          : message || text.uploadSelect}
+      </p>
     </Panel>
   );
 }
@@ -827,9 +826,32 @@ function publicSlides(value: unknown): ActivePresentationView["slides"] {
 
 function PresentationWorkspacePage() {
   const titleId = useId();
-  const { activePresentation, client, locale, session, setActivePresentation } = useAuth();
+  const {
+    activePresentation,
+    client,
+    joinTimeoutMs,
+    locale,
+    session,
+    setActivePresentation,
+    setDisplayBindingEpoch,
+  } = useAuth();
   const text = messages(locale);
   const [activeIndex, setActiveIndex] = useState(0);
+  // Pairing lives here because the primary action and the connection options are two views of
+  // the same handshake: the presenter should never have to drive them separately.
+  const audience = useAudienceScreen({
+    stageOrigin: new URL(STAGE_ORIGIN).origin,
+    stageUrl: activePresentation === null ? "" : stageUrl(activePresentation.deckVersion),
+    deckVersion: activePresentation?.deckVersion ?? "",
+    async approveJoin(join) {
+      if (session === null || activePresentation === null || client.approveDisplay === undefined) {
+        throw new Error("audience approval is unavailable in this session");
+      }
+      return await client.approveDisplay(session.csrfToken, activePresentation, join);
+    },
+    onBound: setDisplayBindingEpoch,
+    ...(joinTimeoutMs === undefined ? {} : { joinTimeoutMs }),
+  });
   const [coachingState, setCoachingState] = useState(createCoachingState);
   const [wordTimingCapable, setWordTimingCapable] = useState(false);
   const coachingSessionOffsetMs = useRef(0);
@@ -909,7 +931,7 @@ function PresentationWorkspacePage() {
         <div className="console-cockpit">
           <div className="console-cockpit__center">
             <SlidePreview index={activeIndex} />
-            <PlaybackPanel index={activeIndex} onIndexChange={setActiveIndex} />
+            <PlaybackPanel audience={audience} index={activeIndex} onIndexChange={setActiveIndex} />
           </div>
           <div className="console-cockpit__side">
             <CockpitAudioCapture
@@ -941,7 +963,7 @@ function PresentationWorkspacePage() {
               key={`${activePresentation.presentationSessionId}:${activePresentation.deckVersion}:${activePresentation.manifestHash ?? ""}`}
             />
             <SlideWorkspace activeIndex={activeIndex} onSelect={setActiveIndex} />
-            <AudienceScreenPanel />
+            <AudienceScreenPanel audience={audience} />
           </div>
         </div>
       )}
@@ -1140,81 +1162,23 @@ function decodeDisplayJoin(value: string): DisplayJoinView | null {
   }
 }
 
-/** Closed shape for the join a freshly opened audience screen reports back to this window. */
-function handshakeDisplayJoin(value: unknown): DisplayJoinView | null {
-  const envelope = record(value);
-  const join = record(envelope?.join);
-  if (envelope?.kind !== "impromptu:display-join" || join === null) return null;
-  const { displayJoinId, displayId, displayFingerprint, deckVersion, expiresAtMs } = join;
-  return typeof displayJoinId === "string" &&
-    typeof displayId === "string" &&
-    typeof displayFingerprint === "string" &&
-    typeof deckVersion === "string" &&
-    typeof expiresAtMs === "number"
-    ? { displayJoinId, displayId, displayFingerprint, deckVersion, expiresAtMs }
-    : null;
-}
-
 /**
- * The Console owns audience-screen setup: it opens the screen (carrying the session's deck
- * version), receives that window's join request over postMessage, and approves with one
- * explicit action. The manual connection code stays as the fallback for another device or a
- * blocked popup. Approval itself is never implied — it always requires this panel's button.
+ * The rarely-needed connection paths. A screen the Console itself opened binds through the
+ * primary action, because opening it was already the presenter's gesture and its handshake is
+ * matched on source as well as origin. Everything in here serves the cases that gesture cannot
+ * cover: a second device, a blocked popup, or a join reported by a window this Console did not
+ * open - which never binds without the explicit approval below.
  */
-function AudienceScreenPanel() {
-  const {
-    activePresentation,
-    client,
-    displayBindingEpoch,
-    locale,
-    session,
-    setDisplayBindingEpoch,
-  } = useAuth();
+function AudienceScreenPanel({ audience }: { readonly audience: AudienceScreenController }) {
+  const { activePresentation, displayBindingEpoch, locale } = useAuth();
   const text = messages(locale);
-  const [handshake, setHandshake] = useState<DisplayJoinView | null>(null);
   const [connectionCode, setConnectionCode] = useState("");
-  const [openBlocked, setOpenBlocked] = useState(false);
-  const [message, setMessage] = useState("");
-
-  useEffect(() => {
-    if (activePresentation === null) return;
-    const stageOrigin = new URL(STAGE_ORIGIN).origin;
-    const onMessage = (event: MessageEvent) => {
-      if (event.origin !== stageOrigin) return;
-      const join = handshakeDisplayJoin(event.data);
-      if (join !== null) setHandshake(join);
-    };
-    window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
-  }, [activePresentation]);
-
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   if (activePresentation === null) return null;
 
-  const openStage = () => {
-    setOpenBlocked(false);
-    const child = window.open(stageUrl(activePresentation.deckVersion), "impromptu-stage", "popup");
-    if (child === null) setOpenBlocked(true);
-  };
-
-  const approve = async (join: DisplayJoinView | null) => {
-    if (
-      join === null ||
-      session === null ||
-      client.approveDisplay === undefined ||
-      join.deckVersion !== activePresentation.deckVersion
-    ) {
-      setMessage(join === null ? text.invalidCode : text.wrongPresentation);
-      return;
-    }
-    try {
-      const binding = await client.approveDisplay(session.csrfToken, activePresentation, join);
-      setDisplayBindingEpoch(binding.displayBindingEpoch);
-      setHandshake(null);
-      setMessage(text.screenApproved);
-    } catch {
-      setMessage(text.approvalFailed);
-    }
-  };
+  // A join this Console did not open has nowhere else to surface, so it opens the disclosure
+  // rather than waiting silently behind it.
+  const expanded = advancedOpen || audience.pendingJoin !== null;
 
   return (
     <Panel
@@ -1223,79 +1187,89 @@ function AudienceScreenPanel() {
       tone="inset"
       data-audience-screen-panel={displayBindingEpoch === null ? "PENDING" : "CONNECTED"}
     >
-      <div className="console-stage-actions">
-        <Button data-stage-open onClick={openStage}>
-          {text.openStage}
-        </Button>
-        <Button
-          variant="quiet"
-          onClick={() =>
-            void navigator.clipboard?.writeText(stageUrl(activePresentation.deckVersion))
-          }
-        >
-          {text.copyStage}
-        </Button>
-        <Button variant="quiet" onClick={openStage}>
-          {text.externalDisplay}
-        </Button>
-      </div>
-      {displayBindingEpoch === null ? (
-        <>
-          {openBlocked ? (
-            <p className="console-caption console-caption--error" role="alert">
-              {text.stageOpenBlocked}
-            </p>
-          ) : null}
-          <div
-            className="console-stage-pairing"
-            data-stage-pairing={handshake === null ? "WAITING" : "DETECTED"}
-            data-join-display-id={handshake?.displayId}
+      {displayBindingEpoch === null ? null : <Badge tone="success">{text.audienceConnected}</Badge>}
+      <details
+        className="console-advanced-connect"
+        open={expanded}
+        onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
+      >
+        <summary>{text.advancedConnect}</summary>
+        <div className="console-stage-actions">
+          <Button data-stage-open onClick={() => void audience.openAndBind()}>
+            {text.openStagePreview}
+          </Button>
+          <Button
+            variant="quiet"
+            onClick={() =>
+              void navigator.clipboard?.writeText(stageUrl(activePresentation.deckVersion))
+            }
           >
-            {handshake === null ? (
-              <p className="console-caption">{text.stageHandshakeWaiting}</p>
-            ) : (
-              <>
-                <p>{text.stagePairPending}</p>
-                <Button data-display-approve onClick={() => void approve(handshake)}>
-                  {text.approveHandshake}
-                </Button>
-              </>
-            )}
-          </div>
-          <details className="console-stage-manual">
-            <summary>{text.manualPairing}</summary>
-            <p className="console-caption">{text.connectLead}</p>
-            <label className="console-field">
-              <span>{text.connectionCode}</span>
-              <input
-                value={connectionCode}
-                onChange={(event) => setConnectionCode(event.currentTarget.value)}
-              />
-            </label>
-            <Button
-              disabled={connectionCode.length === 0}
-              onClick={() => void approve(decodeDisplayJoin(connectionCode))}
-            >
-              {text.approveDisplay}
-            </Button>
-          </details>
-        </>
-      ) : (
-        <Badge tone="success">{text.audienceConnected}</Badge>
-      )}
-      {displayBindingEpoch === null && message.length > 0 ? (
-        <p className="console-caption" aria-live="polite">
-          {message}
-        </p>
-      ) : null}
+            {text.copyStage}
+          </Button>
+        </div>
+        <div
+          className="console-stage-pairing"
+          data-stage-pairing={audience.pendingJoin === null ? "WAITING" : "DETECTED"}
+          data-join-display-id={audience.pendingJoin?.displayId}
+        >
+          {audience.pendingJoin === null ? (
+            <p className="console-caption">{text.stageHandshakeWaiting}</p>
+          ) : (
+            <>
+              <p>{text.stagePairPending}</p>
+              <Button
+                data-display-approve
+                onClick={() => void audience.approve(audience.pendingJoin)}
+              >
+                {text.approveHandshake}
+              </Button>
+            </>
+          )}
+        </div>
+        <p className="console-caption">{text.connectLead}</p>
+        <label className="console-field">
+          <span>{text.connectionCode}</span>
+          <input
+            value={connectionCode}
+            onChange={(event) => setConnectionCode(event.currentTarget.value)}
+          />
+        </label>
+        <Button
+          disabled={connectionCode.length === 0}
+          onClick={() => void audience.approve(decodeDisplayJoin(connectionCode))}
+        >
+          {text.approveDisplay}
+        </Button>
+      </details>
     </Panel>
   );
 }
 
+/** Plain-language recovery copy for the pairing states a presenter can actually land on. */
+function audienceRecovery(
+  status: AudienceScreenStatus,
+  text: ReturnType<typeof messages>,
+): { readonly message: string; readonly retry: string } | null {
+  switch (status) {
+    case "POPUP_BLOCKED":
+      return { message: text.audiencePopupBlocked, retry: text.audienceRetry };
+    case "JOIN_TIMEOUT":
+      return { message: text.audienceJoinTimeout, retry: text.audienceReopen };
+    case "BIND_FAILED":
+      return { message: text.audienceBindFailed, retry: text.audienceRetry };
+    case "DISCONNECTED":
+      return { message: text.audienceDisconnected, retry: text.audienceReopen };
+    default:
+      return null;
+  }
+}
+
 function PlaybackPanel({
+  audience,
   index,
   onIndexChange,
 }: {
+  readonly audience: AudienceScreenController;
   readonly index: number;
   readonly onIndexChange: (index: number) => void;
 }) {
@@ -1304,35 +1278,55 @@ function PlaybackPanel({
   const text = messages(locale);
   const [controlRevision, setControlRevision] = useState("cr_0");
   const [presentationStarted, setPresentationStarted] = useState(false);
+  const [starting, setStarting] = useState(false);
   const [ending, setEnding] = useState(false);
   const [message, setMessage] = useState("");
   if (activePresentation === null || session === null) return null;
   const slides = [...activePresentation.slides].sort((left, right) => left.ordinal - right.ordinal);
+  const recovery = audienceRecovery(audience.status, text);
 
-  const show = async (nextIndex: number) => {
+  // The binding can be passed in because a screen bound during this very click has not
+  // reached context state yet.
+  const show = async (nextIndex: number, binding?: string): Promise<boolean> => {
     const slide = slides[nextIndex];
-    if (slide === undefined || displayBindingEpoch === null || client.setSlide === undefined)
-      return;
+    const epoch = binding ?? displayBindingEpoch;
+    if (slide === undefined || epoch === null || client.setSlide === undefined) return false;
     try {
       const receipt = await client.setSlide(session.csrfToken, {
         presentationSessionId: activePresentation.presentationSessionId,
         publicSlideKey: slide.publicSlideKey,
-        displayBindingEpoch,
+        displayBindingEpoch: epoch,
         baseRevision: controlRevision,
       });
       onIndexChange(nextIndex);
       setControlRevision(receipt.acceptedControlRevision);
       setMessage(text.slideChanged);
+      return true;
     } catch {
       setMessage(text.slideFailed);
+      return false;
     }
   };
 
   const startPresentation = async () => {
-    if (displayBindingEpoch === null || slides.length === 0) return;
-    await show(0);
-    setPresentationStarted(true);
-    setMessage(text.startedMessage);
+    if (slides.length === 0 || starting) return;
+    setStarting(true);
+    try {
+      let epoch = displayBindingEpoch;
+      if (epoch === null) {
+        // openAndBind calls window.open as its first statement, so it has to be reached inside
+        // this click for the browser to honour the popup.
+        const outcome = await audience.openAndBind();
+        if (outcome.kind !== "CONNECTED") return;
+        epoch = outcome.displayBindingEpoch;
+      }
+      if (await show(0, epoch)) {
+        setPresentationStarted(true);
+        setMessage(text.startedMessage);
+      }
+    } finally {
+      setStarting(false);
+    }
   };
 
   const endPresentation = async () => {
@@ -1357,15 +1351,40 @@ function PlaybackPanel({
     <Panel className="console-present" title={text.presenterConsole} tone="inset">
       <div className="console-present__controls">
         <div
-          className="console-present__start"
+          className="console-primary-action"
           data-presentation-state={presentationStarted ? "PRESENTING" : "READY"}
         >
           <Button
-            disabled={displayBindingEpoch === null || slides.length === 0}
+            disabled={slides.length === 0 || starting}
             onClick={() => void startPresentation()}
           >
-            {presentationStarted ? text.started : text.startPresentation}
+            {presentationStarted
+              ? text.started
+              : starting
+                ? text.startingPresentation
+                : text.startPresentation}
           </Button>
+          <p className="console-caption">
+            {displayBindingEpoch === null ? text.audienceOpensBeside : text.audienceConnected}
+          </p>
+          {recovery === null ? null : (
+            <output className="console-status-line console-status-line--attention">
+              <span>{recovery.message}</span>
+              <Button variant="quiet" onClick={() => void startPresentation()}>
+                {recovery.retry}
+              </Button>
+              {audience.status === "POPUP_BLOCKED" ? (
+                <Button
+                  variant="quiet"
+                  onClick={() =>
+                    void navigator.clipboard?.writeText(stageUrl(activePresentation.deckVersion))
+                  }
+                >
+                  {text.copyStage}
+                </Button>
+              ) : null}
+            </output>
+          )}
         </div>
         <div className="console-playback-actions">
           <Button
