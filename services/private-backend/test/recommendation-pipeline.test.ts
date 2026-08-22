@@ -411,7 +411,7 @@ describe("private recommendation verifier", () => {
     const recommendation = flow.pipeline.recommend("session-a", request);
     await fetchStarted;
     // The external branch starts beside embedding, so its single 1,800ms window opens at t=0.
-    expect(deadlines.map((deadline) => deadline.atMs)).toEqual([4_500, 1_800]);
+    expect(deadlines.map((deadline) => deadline.atMs)).toEqual([4_900, 1_800]);
     const externalDeadline = deadlines[1];
     if (externalDeadline === undefined) throw new Error("expected external deadline");
     externalDeadline.run();
@@ -423,7 +423,7 @@ describe("private recommendation verifier", () => {
     expect(searchSignal.aborted).toBe(true);
   });
 
-  test("terminally abstains at five seconds without timing-based test waits", async () => {
+  test("terminally abstains at its budget without timing-based test waits", async () => {
     let fireDeadline: () => void = () => undefined;
     let invokedResolve: () => void = () => undefined;
     const invoked = new Promise<void>((resolve) => {
@@ -457,8 +457,8 @@ describe("private recommendation verifier", () => {
     expect(await terminal).toEqual({
       outcome: "ABSTAIN",
       reason: "DEADLINE_EXCEEDED",
-      completedAtMs: 5_000,
-      latencyMs: 5_000,
+      completedAtMs: 5_400,
+      latencyMs: 5_400,
     });
   });
 });

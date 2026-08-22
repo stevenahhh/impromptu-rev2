@@ -24,6 +24,21 @@ import type {
 } from "../retrieval/internal-retrieval.ts";
 import { reconcileEvidence } from "./deterministic-evidence.ts";
 
+/**
+ * Terminal budget for one recommendation. The acceptance bar is a client-measured p95 of 5,000ms
+ * and the guard below reserves the tail of this budget for returning a terminal answer, so the
+ * abort lands at budget minus guard. Keeping that abort under the bar is what makes even an
+ * aborted run report inside it, which caps the budget at 5,500ms; 5,400ms leaves the transport a
+ * few milliseconds of room while giving the model stages 400ms more than the original 5,000ms.
+ */
+const RECOMMENDATION_BUDGET_MS = 5_400;
+/**
+ * The hedge offsets below were tuned by measurement against a 5,000ms budget, and a duplicate that
+ * starts later rescues fewer runs. Widening the terminal budget therefore has to buy tail room for
+ * a slow call rather than permission to wait longer before duplicating, so the schedule keeps
+ * using the budget it was tuned on while the abort follows the real one.
+ */
+const HEDGE_SCHEDULE_BUDGET_MS = 5_000;
 const TERMINAL_DEADLINE_GUARD_MS = 500;
 const EXTERNAL_BRANCH_DEADLINE_MS = 1_800;
 const MAX_MODEL_EVIDENCE = 2;
@@ -124,7 +139,7 @@ export class PrivateRecommendationPipeline {
 
   async recommend(accountSessionId: string, input: unknown): Promise<RecommendationOutcome> {
     const startedAtMs = this.#now();
-    const deadlineAtMs = startedAtMs + 5_000;
+    const deadlineAtMs = startedAtMs + RECOMMENDATION_BUDGET_MS;
     const controller = new AbortController();
     let resolveDeadline: (outcome: RecommendationOutcome) => void = () => undefined;
     const deadline = new Promise<RecommendationOutcome>((resolve) => {
@@ -267,7 +282,11 @@ export class PrivateRecommendationPipeline {
     // moment has passed the slot runs unduplicated.
     const pairStartedAtMs = this.#now();
     const pairBudgetMs =
-      deadlineAtMs - TERMINAL_DEADLINE_GUARD_MS - pairStartedAtMs - HEDGE_VERIFIER_RESERVE_MS;
+      startedAtMs +
+      HEDGE_SCHEDULE_BUDGET_MS -
+      TERMINAL_DEADLINE_GUARD_MS -
+      pairStartedAtMs -
+      HEDGE_VERIFIER_RESERVE_MS;
     const hedgeAtMs = (
       slot: "rerank" | "llm" | "verifier",
       startedAtMs: number,
@@ -357,7 +376,7 @@ export class PrivateRecommendationPipeline {
       hedgeAtMs(
         "verifier",
         verifierStartedAtMs,
-        deadlineAtMs - TERMINAL_DEADLINE_GUARD_MS - verifierStartedAtMs,
+        startedAtMs + HEDGE_SCHEDULE_BUDGET_MS - TERMINAL_DEADLINE_GUARD_MS - verifierStartedAtMs,
       ),
     );
     if (!verified.ok) return abstain(modelReason(verified.errorCode), startedAtMs, this.#now());
