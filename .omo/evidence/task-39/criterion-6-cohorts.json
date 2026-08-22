@@ -1,0 +1,101 @@
+{
+  "task": "task-39-criterion-6-two-cohorts-after-hedging",
+  "commit": "46cdd169b5716048f6d4c485d07e94270717416f",
+  "requirement": "Plan line 355-356: both 10-run cohorts must reach 10/10 success with p95 <= 5,000ms, raw samples, command and commit SHA recorded. The failure fixtures listed there include ABSTAIN, so an ABSTAIN counts as a failed run.",
+  "cohortA": {
+    "label": "confirmed-final-to-console-recommendation",
+    "command": "python3 .omo/evidence/task-27/bench/measure_final_to_console.py",
+    "description": "grant -> SSE -> frames -> stop with the real local whisper.cpp adapter, FINAL auto-dispatches /v1/recommendations and the result arrives as a RECOMMENDATION SSE event.",
+    "runs": 10,
+    "httpSuccessCount": 10,
+    "recommendCount": 8,
+    "p50Ms": 3360.1,
+    "p95Ms": 3623.3,
+    "maxMs": 3623.3,
+    "outcomes": {
+      "RECOMMEND": 8,
+      "ABSTAIN": 2
+    },
+    "abstainDetail": [
+      {
+        "index": 7,
+        "reason": "CONFLICTING_EVIDENCE",
+        "latencyMs": 3623.35
+      },
+      {
+        "index": 10,
+        "reason": "DETERMINISTIC_MISMATCH",
+        "latencyMs": 1944.65
+      }
+    ],
+    "verdict": "p95 PASS (3,623 <= 5,000). 10/10 FAIL (8/10).",
+    "gapCause": "Both abstains finished far inside the 4,500ms abort, so neither was a latency failure. This cohort's query is the whisper transcript, which differs per run, and on some transcripts the llm asserts a fact absent from the 16-character evidence or the verifier reports a conflict. The evidence gate rejecting those is the designed behaviour and was not weakened."
+  },
+  "cohortB": {
+    "label": "existing-recommendation-flow",
+    "command": "python3 .omo/evidence/task-27/bench/measure_final_to_console.py (cohort B section)",
+    "runs": 10,
+    "httpSuccessCount": 10,
+    "recommendCount": 10,
+    "p50Ms": 3637.1,
+    "p95Ms": 4496.9,
+    "maxMs": 4496.9,
+    "outcomes": {
+      "RECOMMEND": 10
+    },
+    "verdict": "PASS - 10/10 and p95 4,496.9 <= 5,000."
+  },
+  "independentTwentyRun": {
+    "command": "20-run direct /v1/recommendations profile at the same commit",
+    "recommend": "19/20",
+    "wallMs": {
+      "p50": 3492,
+      "p95": 4093,
+      "max": 4505
+    },
+    "hedgeEvents": {
+      "llm:STARTED": 21,
+      "rerank:STARTED": 17,
+      "llm:HEDGE_WON": 10
+    }
+  },
+  "hedgingProgression": [
+    {
+      "stage": "before hedging",
+      "recommend": "10/20",
+      "deadlineExceeded": 9,
+      "wallP95Ms": 4505
+    },
+    {
+      "stage": "ee55d5f hedge introduced",
+      "recommend": "15/20",
+      "deadlineExceeded": 5,
+      "wallP95Ms": 4505
+    },
+    {
+      "stage": "8272246 verifier tail reserved",
+      "recommend": "17/20",
+      "deadlineExceeded": 3,
+      "wallP95Ms": 4504
+    },
+    {
+      "stage": "46a4b9a duplicate starts at once when delay cannot avoid it",
+      "recommend": "19/20",
+      "deadlineExceeded": 1,
+      "wallP95Ms": 4301
+    }
+  ],
+  "coreFiveAcceptance": {
+    "command": "python3 scripts/verify-five-private-presentation-features.py",
+    "rounds": 3,
+    "result": "3/3 rounds exitCode 0, positive 2/2, negative 6/6, stt 2/2",
+    "beforeHedging": "2/12 positive across 6 rounds"
+  },
+  "unchanged": [
+    "recommendation-pipeline.ts deadline 5_000 and TERMINAL_DEADLINE_GUARD_MS 500",
+    "deterministic evidence reconciliation",
+    "verifier verdict handling",
+    "ACL, source revision, publication reauthorization, idempotency",
+    "tests/fixtures/** (frozen)"
+  ]
+}

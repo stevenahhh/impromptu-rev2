@@ -1,0 +1,153 @@
+{
+  "nonce": "1d0c812d48",
+  "samples": [
+    {
+      "i": 0,
+      "wallMs": 3557,
+      "outcome": "RECOMMEND"
+    },
+    {
+      "i": 1,
+      "wallMs": 3367,
+      "outcome": "RECOMMEND"
+    },
+    {
+      "i": 2,
+      "wallMs": 3492,
+      "outcome": "RECOMMEND"
+    },
+    {
+      "i": 3,
+      "wallMs": 3380,
+      "outcome": "RECOMMEND"
+    },
+    {
+      "i": 4,
+      "wallMs": 3238,
+      "outcome": "RECOMMEND"
+    },
+    {
+      "i": 5,
+      "wallMs": 3622,
+      "outcome": "RECOMMEND"
+    },
+    {
+      "i": 6,
+      "wallMs": 3891,
+      "outcome": "RECOMMEND"
+    },
+    {
+      "i": 7,
+      "wallMs": 3690,
+      "outcome": "RECOMMEND"
+    },
+    {
+      "i": 8,
+      "wallMs": 4505,
+      "outcome": "ABSTAIN:DEADLINE_EXCEEDED"
+    },
+    {
+      "i": 9,
+      "wallMs": 3214,
+      "outcome": "RECOMMEND"
+    },
+    {
+      "i": 10,
+      "wallMs": 3234,
+      "outcome": "RECOMMEND"
+    },
+    {
+      "i": 11,
+      "wallMs": 4093,
+      "outcome": "RECOMMEND"
+    },
+    {
+      "i": 12,
+      "wallMs": 3484,
+      "outcome": "RECOMMEND"
+    },
+    {
+      "i": 13,
+      "wallMs": 3213,
+      "outcome": "RECOMMEND"
+    },
+    {
+      "i": 14,
+      "wallMs": 3770,
+      "outcome": "RECOMMEND"
+    },
+    {
+      "i": 15,
+      "wallMs": 3359,
+      "outcome": "RECOMMEND"
+    },
+    {
+      "i": 16,
+      "wallMs": 3479,
+      "outcome": "RECOMMEND"
+    },
+    {
+      "i": 17,
+      "wallMs": 3890,
+      "outcome": "RECOMMEND"
+    },
+    {
+      "i": 18,
+      "wallMs": 3788,
+      "outcome": "RECOMMEND"
+    },
+    {
+      "i": 19,
+      "wallMs": 3173,
+      "outcome": "RECOMMEND"
+    }
+  ],
+  "stages": {
+    "embedding": {
+      "n": 21,
+      "p50": 124,
+      "p90": 127,
+      "p95": 128,
+      "max": 129
+    },
+    "rerank": {
+      "n": 38,
+      "p50": 990,
+      "p90": 1572,
+      "p95": 1632,
+      "max": 2190
+    },
+    "llm": {
+      "n": 42,
+      "p50": 1197,
+      "p90": 2497,
+      "p95": 3121,
+      "max": 3783
+    },
+    "verifier": {
+      "n": 21,
+      "p50": 1546,
+      "p90": 1907,
+      "p95": 1958,
+      "max": 1973
+    }
+  },
+  "hedges": {
+    "rerank:STARTED": 17,
+    "llm:STARTED": 21,
+    "rerank:PRIMARY_WON": 17,
+    "llm:HEDGE_WON": 10,
+    "llm:PRIMARY_WON": 11
+  },
+  "outcomes": {
+    "RECOMMEND": 19,
+    "ABSTAIN:DEADLINE_EXCEEDED": 1
+  },
+  "recommend": "19/20",
+  "wallMs": {
+    "p50": 3492,
+    "p90": 3891,
+    "p95": 4093,
+    "max": 4505
+  }
+}

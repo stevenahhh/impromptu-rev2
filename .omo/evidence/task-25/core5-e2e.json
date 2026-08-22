@@ -14,14 +14,14 @@
         "opt-in-coaching"
       ],
       "stepLatencyMs": {
-        "sign-in": 1349,
-        "upload": 650,
-        "capture-final": 1681,
-        "recommendation": 3976,
-        "opt-in-coaching": 25
+        "sign-in": 1337,
+        "upload": 526,
+        "capture-final": 1686,
+        "recommendation": 3665,
+        "opt-in-coaching": 21
       },
       "diagnostics": {
-        "presentationSessionId": "ps_634ef9e9e55321fa7b28220232766f17",
+        "presentationSessionId": "ps_e8178579436b7b0a33620681a2163edf",
         "deckVersion": "deck_34eac2a55addb409359febc4ec28e911f10c719abd28ce7b427421ab9a985c86",
         "finalKind": "FINAL",
         "finalSequence": 1,
@@ -31,7 +31,7 @@
         "recommendationStatus": 200,
         "recommendationOutcome": "RECOMMEND",
         "recommendationReason": null,
-        "recommendationLatencyMs": 3843,
+        "recommendationLatencyMs": 3540,
         "recommendationEvidenceCount": 1,
         "recommendationResponseBody": {
           "outcome": "RECOMMEND",
@@ -70,8 +70,8 @@
               "authorizationVersion": "acl-1"
             }
           ],
-          "completedAtMs": 1787367262889,
-          "latencyMs": 3843
+          "completedAtMs": 1787371986996,
+          "latencyMs": 3540
         },
         "coachingActiveNodes": 1,
         "coachingStateValue": "unavailable"
@@ -89,14 +89,14 @@
         "opt-in-coaching"
       ],
       "stepLatencyMs": {
-        "sign-in": 611,
-        "upload": 1836,
-        "capture-final": 1608,
-        "recommendation": 3744,
-        "opt-in-coaching": 20
+        "sign-in": 593,
+        "upload": 1530,
+        "capture-final": 1585,
+        "recommendation": 3616,
+        "opt-in-coaching": 18
       },
       "diagnostics": {
-        "presentationSessionId": "ps_7cdba0f3d984ab596e0f37a727442c77",
+        "presentationSessionId": "ps_f40eaa7d8e2289098a8ed31776f8ba63",
         "deckVersion": "deck_a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d",
         "finalKind": "FINAL",
         "finalSequence": 1,
@@ -106,7 +106,7 @@
         "recommendationStatus": 200,
         "recommendationOutcome": "RECOMMEND",
         "recommendationReason": null,
-        "recommendationLatencyMs": 3612,
+        "recommendationLatencyMs": 3490,
         "recommendationEvidenceCount": 1,
         "recommendationResponseBody": {
           "outcome": "RECOMMEND",
@@ -145,8 +145,8 @@
               "authorizationVersion": "acl-1"
             }
           ],
-          "completedAtMs": 1787367270764,
-          "latencyMs": 3612
+          "completedAtMs": 1787371994373,
+          "latencyMs": 3490
         },
         "coachingActiveNodes": 1,
         "coachingStateValue": "unavailable"
@@ -237,207 +237,428 @@
     {
       "stage": "embedding",
       "outcome": "SUCCESS",
-      "durationMs": 152,
-      "timestampMs": 1787367257510
+      "durationMs": 98,
+      "timestampMs": 1787371981867
+    },
+    {
+      "stage": "rerank",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787371982830
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787371982831
     },
     {
       "stage": "embedding",
       "outcome": "SUCCESS",
-      "durationMs": 129,
-      "timestampMs": 1787367259047
+      "durationMs": 83,
+      "timestampMs": 1787371983417
     },
     {
       "stage": "embedding",
       "outcome": "SUCCESS",
-      "durationMs": 114,
-      "timestampMs": 1787367259161
+      "durationMs": 87,
+      "timestampMs": 1787371983544
     },
     {
       "stage": "rerank",
       "outcome": "SUCCESS",
-      "durationMs": 1117,
-      "timestampMs": 1787367259506
+      "durationMs": 1094,
+      "timestampMs": 1787371983923
+    },
+    {
+      "stage": "rerank",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787371983923
     },
     {
       "stage": "llm",
       "outcome": "SUCCESS",
-      "durationMs": 1457,
-      "timestampMs": 1787367259846
+      "durationMs": 1407,
+      "timestampMs": 1787371984236
+    },
+    {
+      "stage": "llm",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787371984236
+    },
+    {
+      "stage": "rerank",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787371984252
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787371984253
+    },
+    {
+      "stage": "rerank",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787371984363
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787371984364
     },
     {
       "stage": "rerank",
       "outcome": "SUCCESS",
-      "durationMs": 841,
-      "timestampMs": 1787367260403
+      "durationMs": 691,
+      "timestampMs": 1787371984943
+    },
+    {
+      "stage": "rerank",
+      "outcome": "HEDGE_WON",
+      "durationMs": 0,
+      "timestampMs": 1787371984943
     },
     {
       "stage": "llm",
       "outcome": "SUCCESS",
-      "durationMs": 1185,
-      "timestampMs": 1787367261148
+      "durationMs": 2133,
+      "timestampMs": 1787371984964
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 2150,
+      "timestampMs": 1787371984980
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1212,
+      "timestampMs": 1787371985464
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1129,
+      "timestampMs": 1787371985491
+    },
+    {
+      "stage": "rerank",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787371985491
     },
     {
       "stage": "llm",
       "outcome": "SUCCESS",
-      "durationMs": 1784,
-      "timestampMs": 1787367261347
+      "durationMs": 1172,
+      "timestampMs": 1787371985536
+    },
+    {
+      "stage": "llm",
+      "outcome": "HEDGE_WON",
+      "durationMs": 0,
+      "timestampMs": 1787371985536
     },
     {
       "stage": "rerank",
       "outcome": "SUCCESS",
-      "durationMs": 1386,
-      "timestampMs": 1787367261349
+      "durationMs": 1202,
+      "timestampMs": 1787371985565
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1240,
+      "timestampMs": 1787371985602
     },
     {
       "stage": "verifier",
       "outcome": "SUCCESS",
-      "durationMs": 1670,
-      "timestampMs": 1787367261518
+      "durationMs": 1410,
+      "timestampMs": 1787371985649
     },
     {
       "stage": "verifier",
       "outcome": "SUCCESS",
-      "durationMs": 1536,
-      "timestampMs": 1787367262883
+      "durationMs": 1455,
+      "timestampMs": 1787371986993
     },
     {
-      "stage": "verifier",
-      "outcome": "SUCCESS",
-      "durationMs": 1533,
-      "timestampMs": 1787367262884
+      "stage": "llm",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 3584,
+      "timestampMs": 1787371987836
+    },
+    {
+      "stage": "llm",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 3583,
+      "timestampMs": 1787371987836
+    },
+    {
+      "stage": "llm",
+      "outcome": "BOTH_FAILED",
+      "durationMs": 0,
+      "timestampMs": 1787371987836
     },
     {
       "stage": "embedding",
       "outcome": "SUCCESS",
-      "durationMs": 142,
-      "timestampMs": 1787367265610
+      "durationMs": 87,
+      "timestampMs": 1787371989310
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787371989950
     },
     {
       "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 836,
-      "timestampMs": 1787367267096
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787371990823
     },
     {
       "stage": "embedding",
       "outcome": "SUCCESS",
-      "durationMs": 130,
-      "timestampMs": 1787367267152
-    },
-    {
-      "stage": "embedding",
-      "outcome": "SUCCESS",
-      "durationMs": 116,
-      "timestampMs": 1787367267270
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 795,
-      "timestampMs": 1787367268610
+      "durationMs": 83,
+      "timestampMs": 1787371990842
     },
     {
       "stage": "llm",
       "outcome": "SUCCESS",
       "durationMs": 991,
-      "timestampMs": 1787367268817
+      "timestampMs": 1787371990941
+    },
+    {
+      "stage": "llm",
+      "outcome": "HEDGE_WON",
+      "durationMs": 0,
+      "timestampMs": 1787371990941
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 88,
+      "timestampMs": 1787371990972
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787371991504
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787371991518
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 855,
+      "timestampMs": 1787371991679
+    },
+    {
+      "stage": "rerank",
+      "outcome": "HEDGE_WON",
+      "durationMs": 0,
+      "timestampMs": 1787371991679
+    },
+    {
+      "stage": "deterministic",
+      "outcome": "ENTITY:한국",
+      "durationMs": 0,
+      "timestampMs": 1787371991679
+    },
+    {
+      "stage": "llm",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 1734,
+      "timestampMs": 1787371991682
+    },
+    {
+      "stage": "rerank",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 1735,
+      "timestampMs": 1787371991682
+    },
+    {
+      "stage": "rerank",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787371992359
     },
     {
       "stage": "llm",
       "outcome": "SUCCESS",
-      "durationMs": 1210,
-      "timestampMs": 1787367269025
+      "durationMs": 897,
+      "timestampMs": 1787371992415
+    },
+    {
+      "stage": "llm",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787371992415
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 912,
+      "timestampMs": 1787371992415
+    },
+    {
+      "stage": "rerank",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787371992415
+    },
+    {
+      "stage": "rerank",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787371992483
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1001,
+      "timestampMs": 1787371992505
+    },
+    {
+      "stage": "llm",
+      "outcome": "HEDGE_WON",
+      "durationMs": 0,
+      "timestampMs": 1787371992505
     },
     {
       "stage": "deterministic",
       "outcome": "ENTITY:형식중립근육",
       "durationMs": 0,
-      "timestampMs": 1787367269025
+      "timestampMs": 1787371992505
     },
     {
       "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1408,
-      "timestampMs": 1787367269234
+      "outcome": "FAILED:cancelled",
+      "durationMs": 147,
+      "timestampMs": 1787371992506
     },
     {
       "stage": "llm",
       "outcome": "FAILED:cancelled",
-      "durationMs": 3713,
-      "timestampMs": 1787367269974
+      "durationMs": 1003,
+      "timestampMs": 1787371992506
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1068,
+      "timestampMs": 1787371992585
+    },
+    {
+      "stage": "rerank",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787371992585
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1521,
+      "timestampMs": 1787371993040
     },
     {
       "stage": "verifier",
       "outcome": "SUCCESS",
-      "durationMs": 1526,
-      "timestampMs": 1787367270760
+      "durationMs": 1783,
+      "timestampMs": 1787371994369
+    },
+    {
+      "stage": "rerank",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 1891,
+      "timestampMs": 1787371994375
     },
     {
       "stage": "embedding",
       "outcome": "SUCCESS",
-      "durationMs": 142,
-      "timestampMs": 1787367272213
+      "durationMs": 89,
+      "timestampMs": 1787371995643
     }
   ],
   "stageLatencySummaryMs": {
     "deterministic": {
-      "n": 1,
+      "n": 2,
       "min": 0,
       "median": 0,
       "max": 0
     },
     "embedding": {
       "n": 7,
-      "min": 114,
-      "median": 130,
-      "max": 152
+      "min": 83,
+      "median": 87,
+      "max": 98
     },
     "llm": {
-      "n": 6,
-      "min": 991,
-      "median": 1333,
-      "max": 3713
+      "n": 24,
+      "min": 0,
+      "median": 448,
+      "max": 3584
     },
     "rerank": {
-      "n": 6,
-      "min": 795,
-      "median": 979,
-      "max": 1408
+      "n": 24,
+      "min": 0,
+      "median": 73,
+      "max": 2150
     },
     "verifier": {
-      "n": 4,
-      "min": 1526,
-      "median": 1534,
-      "max": 1670
+      "n": 3,
+      "min": 1410,
+      "median": 1455,
+      "max": 1783
     }
   },
   "recommendationRequests": [
     {
       "outcome": "RECOMMEND",
-      "durationMs": 4167,
-      "timestampMs": 1787367261522
+      "durationMs": 3887,
+      "timestampMs": 1787371985653
     },
     {
       "outcome": "RECOMMEND",
-      "durationMs": 3844,
-      "timestampMs": 1787367262889
+      "durationMs": 3541,
+      "timestampMs": 1787371986996
     },
     {
-      "outcome": "ABSTAIN:DEADLINE_EXCEEDED",
-      "durationMs": 4504,
-      "timestampMs": 1787367269969
+      "outcome": "ABSTAIN:DETERMINISTIC_MISMATCH",
+      "durationMs": 2458,
+      "timestampMs": 1787371991679
     },
     {
       "outcome": "RECOMMEND",
-      "durationMs": 3613,
-      "timestampMs": 1787367270764
+      "durationMs": 3490,
+      "timestampMs": 1787371994373
     }
   ],
   "deterministicMismatches": [
     {
       "category": "ENTITY",
+      "value": "한국",
+      "timestampMs": 1787371991679
+    },
+    {
+      "category": "ENTITY",
       "value": "형식중립근육",
-      "timestampMs": 1787367269025
+      "timestampMs": 1787371992505
     }
   ]
 }
