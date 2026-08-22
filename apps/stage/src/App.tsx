@@ -662,8 +662,8 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
         <Brand eyebrow={copy.brandEyebrow} />
         <div className="stage-display__actions">
           <Badge tone={snapshot !== null ? "success" : "accent"}>
-            <StatusDot label={snapshot !== null ? copy.publicReady : copy.recovering} />
-            {snapshot !== null ? copy.publicOnly : copy.recovering}
+            <StatusDot label={snapshot !== null ? copy.publicReady : copy.awaitingPresentation} />
+            {snapshot !== null ? copy.publicOnly : copy.awaitingPresentation}
           </Badge>
           <Badge tone="success">
             <StatusDot label={copy.previewVisible} />
@@ -683,7 +683,7 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
       >
         {currentSlide === undefined ? (
           <section className="stage-claim ui-reveal">
-            <h1 id={titleId}>{copy.recovering}</h1>
+            <h1 id={titleId}>{copy.awaitingPresentation}</h1>
           </section>
         ) : (
           <section

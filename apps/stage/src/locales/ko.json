@@ -16,7 +16,7 @@
   "connectionCode": "청중 화면 연결 코드",
   "copyConnectionCode": "연결 코드 복사",
   "publicReady": "청중 화면 준비 완료",
-  "recovering": "청중 화면 복구 중",
+  "awaitingPresentation": "발표를 기다리는 중",
   "publicOnly": "청중 전용",
   "previewVisible": "미리보기 표시 중",
   "preview": "미리보기",
