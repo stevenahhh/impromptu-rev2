@@ -126,8 +126,6 @@ async function captureFinal(page: Page, csrfToken: string): Promise<Record<strin
       (request) => request.url().endsWith("/v1/audio/frames") && request.method() === "POST",
       { timeout: timeoutMs },
     );
-    await page.locator(".console-consent-notice").locator("..").getByRole("checkbox").check();
-    await page.getByRole("button", { name: "Start microphone" }).click();
     await frame;
     // The listener is already installed; stopping is the trigger that flushes a FINAL.
     await stopAudio(page, csrfToken);
@@ -360,11 +358,8 @@ async function micDenied(context: BrowserContext): Promise<Scenario> {
     });
     await signIn(page);
     await upload(page, "korean-text-layer.pdf");
-    await page
-      .getByRole("checkbox", { name: "I consent to microphone capture for the stated purpose." })
-      .check();
-    await page.getByRole("button", { name: "Start microphone" }).click();
-    await page.getByText("MICROPHONE_DENIED").waitFor({ timeout: timeoutMs });
+    // Capture starts on its own now, so the denial is what the Console reports back.
+    await page.locator("[data-capture-status='MICROPHONE_DENIED']").waitFor({ timeout: timeoutMs });
     if (audioRequests !== 0) fail(`microphone denial made ${audioRequests} audio requests`);
     return {
       name: "negative-mic-denied-audio-request-zero",
