@@ -1,0 +1,38 @@
+{
+  "task": "task-51-acceptance-measurement",
+  "commit": "e513b80662fc4c6d03bb3f8f0fdc0c1c4287d3d4",
+  "command": "python3 .omo/evidence/task-27/bench/measure_final_to_console.py",
+  "providerState": "rested ten minutes after the preceding gate run, measured once and recorded as run",
+  "cohortA": {
+    "label": "confirmed FINAL to Console recommendation",
+    "runs": 10,
+    "recommend": 10,
+    "p50Ms": 3120.2,
+    "p95Ms": 4606,
+    "maxMs": 4606,
+    "outcomes": {
+      "RECOMMEND": 10
+    }
+  },
+  "cohortB": {
+    "label": "existing recommendation flow",
+    "runs": 10,
+    "recommend": 10,
+    "p50Ms": 3062,
+    "p95Ms": 4627.2,
+    "maxMs": 4627.2,
+    "outcomes": {
+      "RECOMMEND": 10
+    }
+  },
+  "verdict": {
+    "tenOfTen": "both cohorts",
+    "p95UnderBar": "both cohorts",
+    "criterion6": "SATISFIED"
+  },
+  "budgetDecision": {
+    "change": "e513b80 widened the terminal budget from 5,000ms to 5,400ms",
+    "ceiling": "the abort lands at budget minus the 500ms terminal guard, and it has to stay under the 5,000ms acceptance bar so an aborted run still reports inside it. That caps the budget at 5,500ms; 5,400ms leaves the transport a few milliseconds.",
+    "hedgeScheduleSeparated": "hedge offsets are computed against the 5,000ms budget they were tuned on. Left to follow the wider budget they slid later - the llm duplicate moved from immediate to +1,012ms - which is the same effect that cost cohort A ten points when the verifier reserve was shrunk. The extra 400ms therefore buys tail room for a slow call, not permission to wait longer before duplicating."
+  }
+}
