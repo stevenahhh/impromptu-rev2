@@ -272,3 +272,82 @@ describe("verifier slot hedging", () => {
     expect(flow.calls.filter((capability) => capability === "verifier").length).toBe(2);
   });
 });
+
+/**
+ * The model only ever sees the first MAX_MODEL_EVIDENCE entries and the internal set is placed
+ * ahead of the external one, so once internal retrieval has filled those slots the external branch
+ * cannot reach the model, the deterministic reconciliation, or the selected evidence. Waiting for
+ * it there only spends budget the model stages need.
+ */
+describe("external branch on the critical path", () => {
+  test("runs the model pair while an unfinished external branch is still outstanding", async () => {
+    const calls: ModelCapability[] = [];
+    const rerankInvoked = deferred<void>();
+    const router = {
+      async invoke(untrusted: unknown): Promise<ModelResult<unknown>> {
+        const modelRequest = untrusted as { capability: ModelCapability };
+        calls.push(modelRequest.capability);
+        if (modelRequest.capability === "rerank") rerankInvoked.resolve();
+        const output =
+          modelRequest.capability === "embedding"
+            ? { vector: [0.5] }
+            : modelRequest.capability === "rerank"
+              ? { orderedEvidenceIds: ["e1"] }
+              : modelRequest.capability === "llm"
+                ? {
+                    claim: evidence.content,
+                    evidenceIds: ["e1"],
+                    facts: { numbers: [], units: [], dates: [], entities: [] },
+                  }
+                : { verdict: "SUPPORTED", rationaleCode: "ok" };
+        return {
+          ok: true,
+          output,
+          metadata: metadataFor(modelRequest.capability),
+        } as unknown as ModelResult<unknown>;
+      },
+    };
+    const second = { ...evidence, evidenceId: "internal:object-2:r1" };
+    let materialized = 0;
+    const internal = {
+      async retrieve() {
+        return [{ objectId: "object-1" }, { objectId: "object-2" }];
+      },
+      async materialize() {
+        materialized += 1;
+        return { outcome: "MATERIALIZED", evidence: materialized === 1 ? evidence : second };
+      },
+      async authorizeForPublication() {
+        return true;
+      },
+    } as unknown as InternalRetrievalService;
+
+    const pipeline = new PrivateRecommendationPipeline({
+      router,
+      contexts: {
+        async resolve() {
+          return { tenantId: "tenant-a", principalId: "actor-a", policyVersion: "model-policy-v1" };
+        },
+      },
+      internal,
+      now: () => 0,
+      scheduler: { schedule: () => () => undefined },
+      // Never settles, so the pair can only start if the pipeline stopped waiting for it.
+      externalSearch: {
+        async search() {
+          return await new Promise(() => undefined);
+        },
+      } as never,
+      externalFetch: {
+        async fetchCandidate() {
+          return await new Promise(() => undefined);
+        },
+      } as never,
+    });
+
+    void pipeline.recommend("session-a", request);
+    await bounded(rerankInvoked.promise, "rerank invocation while the external branch is pending");
+    expect(calls).toContain("rerank");
+    expect(calls).toContain("llm");
+  });
+});

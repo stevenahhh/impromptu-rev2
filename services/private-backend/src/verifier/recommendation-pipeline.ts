@@ -231,7 +231,18 @@ export class PrivateRecommendationPipeline {
         referenceByEvidenceId.set(materialized.evidence.evidenceId, reference);
       }
     }
-    evidence.push(...(await externalEvidence));
+    // The model sees only the first MAX_MODEL_EVIDENCE entries and the internal set is placed
+    // ahead of the external one, so once internal retrieval has filled those slots the external
+    // branch can no longer reach the model input, the deterministic reconciliation or the selected
+    // evidence. Waiting on it here would spend budget the model stages need for nothing, so it is
+    // awaited only while the internal set is still short of those slots.
+    if (evidence.length < MAX_MODEL_EVIDENCE) {
+      evidence.push(...(await externalEvidence));
+    } else {
+      // Its own child deadline bounds it; marking it handled keeps a late failure from surfacing
+      // as an unhandled rejection.
+      void externalEvidence.catch(() => undefined);
+    }
     if (signal.aborted) return abstain("DEADLINE_EXCEEDED", startedAtMs, deadlineAtMs);
     if (evidence.length === 0) return abstain("INSUFFICIENT_EVIDENCE", startedAtMs, this.#now());
 
