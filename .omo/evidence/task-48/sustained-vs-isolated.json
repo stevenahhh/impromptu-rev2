@@ -1,0 +1,60 @@
+{
+  "task": "task-48-criterion-6-under-sustained-measurement",
+  "commit": "2ccbefbc0211e4331109b04b13715f3bd2b0a3ab",
+  "codeState": "all three model slots (rerank, llm, verifier) hedge one duplicate inside the existing 5,000ms deadline; grounding defects in fact extraction are fixed and pinned",
+  "isolatedMeasurements": {
+    "note": "measured on a rested provider, one set at a time",
+    "twentyRunProfile": {
+      "recommend": "19/20",
+      "deterministicRejections": 0,
+      "wallP95Ms": 4485
+    },
+    "cohortsAfterVerifierHedge": {
+      "sets": [
+        {
+          "A": 9,
+          "B": 9
+        },
+        {
+          "A": 10,
+          "B": 8
+        },
+        {
+          "A": 10,
+          "B": 8
+        }
+      ],
+      "cohortA": "29/30 (97%), reached 10/10 in two of three sets",
+      "cohortB": "25/30 (83%)"
+    }
+  },
+  "sustainedMeasurement": {
+    "note": "the same commit, measured immediately after several hundred consecutive recommendations in this session",
+    "sets": [
+      {
+        "A": 8,
+        "B": 9
+      },
+      {
+        "A": 6,
+        "B": 4
+      },
+      {
+        "A": 3,
+        "B": 1
+      }
+    ],
+    "observation": "success decays monotonically across sets and the third set's median latency reaches the abort itself (A p50 4,502.9ms, B p50 4,507.1ms). The code is byte-identical to the state that measured 29/30, so this is provider capacity under sustained load, not a regression.",
+    "planPosition": "The plan states at line 44 that cold/concurrent production p95, long soak and capacity, and September hardening must not be passed off as 48-hour completion evidence. Back-to-back cohort sets are a soak, so they are not the acceptance measurement."
+  },
+  "rejectedAdjustment": {
+    "change": "eb17fc4 lowered HEDGE_VERIFIER_RESERVE_MS from 1,934 to 1,705 on the reasoning that a hedged verifier needs a smaller reserve",
+    "measured": "cohort A fell from 29/30 to 26/30 and cohort B from 25/30 to 24/30",
+    "cause": "a hedge fires at pairBudget minus the slot's typical call, so a smaller reserve enlarges pairBudget and therefore delays the duplicate. The rerank hedge slipped from 929ms to 1,158ms. The reasoning was backwards and the measurement caught it.",
+    "reverted": "2ccbefb"
+  },
+  "criterion6": {
+    "p95": "PASS - every measurement in this session stayed under 5,000ms; worst observed 4,509.0ms",
+    "tenOfTen": "cohort A reached 10/10 in two isolated sets and cohort B reached it in one earlier isolated set, but the two have not been observed at 10/10 within the same set"
+  }
+}
