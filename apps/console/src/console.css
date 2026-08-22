@@ -414,6 +414,11 @@ html[data-surface="console"] .ui-shell__body--focused {
   white-space: nowrap;
 }
 
+/* A single line in the cockpit rail would otherwise be shrunk out of existence by its siblings. */
+.console-cockpit__side > .console-status-line {
+  flex: 0 0 auto;
+}
+
 .console-status-line--attention {
   font-weight: var(--weight-bold);
 }

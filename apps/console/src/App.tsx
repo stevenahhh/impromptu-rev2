@@ -942,6 +942,11 @@ function PresentationWorkspacePage() {
               actorId={session.account.actorId}
               notice={CAPTURE_NOTICE}
               onServerEvent={onAudioServerEvent}
+              text={{
+                capturing: text.captureListening,
+                denied: text.captureDenied,
+                unavailable: text.captureUnavailable,
+              }}
             />
             <CoachingDisplay
               state={coachingState}

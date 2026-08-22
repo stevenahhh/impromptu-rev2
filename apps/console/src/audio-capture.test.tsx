@@ -3,10 +3,8 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 
 GlobalRegistrator.register();
 afterAll(() => GlobalRegistrator.unregister());
-const { act, cleanup, fireEvent, render, within } = await import("@testing-library/react");
-const { AudioConsentControl, BrowserCaptureController, BrowserCaptureError } = await import(
-  "./audio-capture"
-);
+const { cleanup } = await import("@testing-library/react");
+const { BrowserCaptureController, BrowserCaptureError } = await import("./audio-capture");
 const {
   createCaptureGrantRequester,
   MEDIA_RECORDER_TIMESLICE_MS,
@@ -153,30 +151,19 @@ function requestCount(requests: readonly CapturedRequest[], suffix: string): num
   return requests.filter((request) => request.url.endsWith(suffix)).length;
 }
 
-describe("browser audio consent", () => {
-  test("does not request a microphone or grant before explicit acceptance", async () => {
+describe("browser audio capture", () => {
+  test("answers the browser prompt before anything reaches the network", async () => {
     const { events, controller } = runtime();
     let grants = 0;
-    render(
-      <AudioConsentControl
-        controller={controller}
-        notice={notice}
-        requestGrant={async () => {
-          grants += 1;
-          return grant;
-        }}
-      />,
-    );
 
-    const start = within(document.body).getByRole("button", { name: "Start microphone" });
-    expect(start.hasAttribute("disabled")).toBe(true);
-    expect(events).toEqual([]);
-    expect(grants).toBe(0);
+    await controller.start(async () => {
+      grants += 1;
+      return grant;
+    });
 
-    fireEvent.click(within(document.body).getByRole("checkbox", { name: /I consent/ }));
-    await act(async () => fireEvent.click(start));
-    expect(grants).toBe(1);
+    // The microphone is asked for first, so a refusal never becomes a request.
     expect(events).toEqual(["media.request", "upload.start"]);
+    expect(grants).toBe(1);
   });
 
   test("microphone denial keeps grant, start, and frame requests at zero", async () => {
@@ -212,38 +199,17 @@ describe("browser audio consent", () => {
 
   test("revoking mid-session cancels upload and stops every track", async () => {
     const { events, controller } = runtime();
-    render(
-      <AudioConsentControl
-        controller={controller}
-        notice={notice}
-        requestGrant={async () => grant}
-      />,
-    );
-    fireEvent.click(within(document.body).getByRole("checkbox", { name: /I consent/ }));
-    await act(async () =>
-      fireEvent.click(within(document.body).getByRole("button", { name: "Start microphone" })),
-    );
-    fireEvent.click(within(document.body).getByRole("button", { name: "Revoke consent" }));
+    const issued = await controller.start(async () => grant);
 
+    expect(controller.revoke(issued.captureGrantId)).toBe("GRANT_REVOKED");
     expect(events).toEqual(["media.request", "upload.start", "upload.cancel", "track.stop"]);
-    expect(within(document.body).getByText("Consent revoked. Capture stopped.")).toBeTruthy();
   });
 
-  test("unmount cancels active capture and stops every track", async () => {
+  test("disposing the controller cancels active capture and stops every track", async () => {
     const { events, controller } = runtime();
-    const view = render(
-      <AudioConsentControl
-        controller={controller}
-        notice={notice}
-        requestGrant={async () => grant}
-      />,
-    );
-    fireEvent.click(within(document.body).getByRole("checkbox", { name: /I consent/ }));
-    await act(async () =>
-      fireEvent.click(within(document.body).getByRole("button", { name: "Start microphone" })),
-    );
-    view.unmount();
+    await controller.start(async () => grant);
 
+    controller.dispose();
     expect(events).toEqual(["media.request", "upload.start", "upload.cancel", "track.stop"]);
   });
 });

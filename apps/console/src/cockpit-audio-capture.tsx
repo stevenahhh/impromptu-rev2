@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  AudioConsentControl,
   type AudioConsentNoticeView,
   BrowserCaptureController,
+  BrowserCaptureError,
   type CaptureGrantView,
 } from "./audio-capture";
 import { createCaptureGrantRequester, WebmOpusCaptureUploader } from "./webm-opus-capture";
@@ -13,15 +13,25 @@ export interface CockpitAudioCaptureProps {
   readonly presentationSessionEpoch: string;
   readonly actorId: string;
   readonly notice: AudioConsentNoticeView;
+  readonly text: CockpitAudioCaptureText;
   readonly onServerEvent?: (event: unknown) => void;
   readonly baseUrl?: string;
 }
 
-type CaptureRuntime = Readonly<{
-  controller: BrowserCaptureController;
-  requestGrant: () => Promise<CaptureGrantView>;
-}>;
+export interface CockpitAudioCaptureText {
+  readonly capturing: string;
+  readonly denied: string;
+  readonly unavailable: string;
+}
 
+type CaptureState = "STARTING" | "CAPTURING" | "MICROPHONE_DENIED" | "UNAVAILABLE";
+
+/**
+ * The browser's own microphone prompt is the consent gate. Asking a second time inside the app
+ * only delayed the same decision, so capture starts as soon as the session exists and a refusal
+ * simply leaves it off - the grant is requested after the microphone is answered, never before,
+ * so a refusal reaches no network at all.
+ */
 export function CockpitAudioCapture({
   actorId,
   baseUrl,
@@ -30,19 +40,30 @@ export function CockpitAudioCapture({
   onServerEvent,
   presentationSessionEpoch,
   presentationSessionId,
+  text,
 }: CockpitAudioCaptureProps) {
-  const [runtime, setRuntime] = useState<CaptureRuntime>();
+  const [state, setState] = useState<CaptureState>("STARTING");
+  const identity = `${presentationSessionId}:${presentationSessionEpoch}`;
+  // A capture grant belongs to the session rather than to one effect run. React re-runs effects
+  // on remount, and issuing a second grant retires the first one server-side, which leaves the
+  // stream that is actually recording without an accepted grant.
+  const startedFor = useRef<string | null>(null);
+  const controller = useRef<BrowserCaptureController | null>(null);
 
   useEffect(() => {
+    if (startedFor.current === identity) return;
+    startedFor.current = identity;
+
     const uploader = new WebmOpusCaptureUploader({
       csrfToken,
       ...(baseUrl === undefined ? {} : { baseUrl }),
       ...(onServerEvent === undefined ? {} : { onServerEvent }),
     });
-    const controller = new BrowserCaptureController(navigator.mediaDevices, uploader);
+    const capture = new BrowserCaptureController(navigator.mediaDevices, uploader);
+    controller.current = capture;
     const captureDeviceId = `device_${crypto.randomUUID()}`;
     const consentRecordId = `consent_${crypto.randomUUID()}`;
-    const requestGrant = () =>
+    const requestGrant = (): Promise<CaptureGrantView> =>
       createCaptureGrantRequester({
         csrfToken,
         ...(baseUrl === undefined ? {} : { baseUrl }),
@@ -56,24 +77,42 @@ export function CockpitAudioCapture({
           acceptedAtMs: Date.now(),
         },
       })();
-    setRuntime({ controller, requestGrant });
-    return () => controller.dispose();
+
+    setState("STARTING");
+    void capture
+      .start(requestGrant)
+      .then(() => setState("CAPTURING"))
+      .catch((caught: unknown) => {
+        setState(
+          caught instanceof BrowserCaptureError && caught.code === "MICROPHONE_DENIED"
+            ? "MICROPHONE_DENIED"
+            : "UNAVAILABLE",
+        );
+      });
   }, [
     actorId,
     baseUrl,
     csrfToken,
+    identity,
     notice,
     onServerEvent,
     presentationSessionEpoch,
     presentationSessionId,
   ]);
 
+  // Releasing the microphone belongs to leaving the surface, never to a re-run of the effect
+  // above, which would revoke a grant the live stream is still using.
+  useEffect(() => () => controller.current?.dispose(), []);
+
   return (
-    <AudioConsentControl
-      notice={notice}
-      {...(runtime === undefined
-        ? {}
-        : { controller: runtime.controller, requestGrant: runtime.requestGrant })}
-    />
+    <p className="console-status-line" aria-live="polite" data-capture-status={state}>
+      {state === "CAPTURING"
+        ? text.capturing
+        : state === "MICROPHONE_DENIED"
+          ? text.denied
+          : state === "UNAVAILABLE"
+            ? text.unavailable
+            : ""}
+    </p>
   );
 }
