@@ -26,9 +26,17 @@
 .stage-welcome > .ui-eyebrow,
 .stage-welcome > h1,
 .stage-welcome > .stage-lead,
+.stage-welcome > .stage-placement-hint,
 .stage-welcome > .stage-join,
 .stage-welcome > .stage-note {
   grid-column: 1 / -1;
+}
+
+/* A line of running text left in a single grid column would displace the panels beside it. */
+.stage-welcome .stage-placement-hint {
+  max-width: var(--size-copy);
+  margin: var(--space-0);
+  color: var(--text-secondary);
 }
 
 .stage-welcome > .ui-panel {
