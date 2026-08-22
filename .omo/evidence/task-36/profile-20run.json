@@ -1,0 +1,165 @@
+{
+  "nonce": "93b2d76484",
+  "samples": [
+    {
+      "i": 0,
+      "wallMs": 3919,
+      "outcome": "ABSTAIN:CONFLICTING_EVIDENCE",
+      "latencyMs": 3918
+    },
+    {
+      "i": 1,
+      "wallMs": 3816,
+      "outcome": "RECOMMEND",
+      "latencyMs": 3814
+    },
+    {
+      "i": 2,
+      "wallMs": 3681,
+      "outcome": "RECOMMEND",
+      "latencyMs": 3680
+    },
+    {
+      "i": 3,
+      "wallMs": 3366,
+      "outcome": "RECOMMEND",
+      "latencyMs": 3364
+    },
+    {
+      "i": 4,
+      "wallMs": 4343,
+      "outcome": "RECOMMEND",
+      "latencyMs": 4342
+    },
+    {
+      "i": 5,
+      "wallMs": 4507,
+      "outcome": "ABSTAIN:DEADLINE_EXCEEDED",
+      "latencyMs": 5000
+    },
+    {
+      "i": 6,
+      "wallMs": 4504,
+      "outcome": "ABSTAIN:DEADLINE_EXCEEDED",
+      "latencyMs": 5000
+    },
+    {
+      "i": 7,
+      "wallMs": 4190,
+      "outcome": "RECOMMEND",
+      "latencyMs": 4189
+    },
+    {
+      "i": 8,
+      "wallMs": 3170,
+      "outcome": "RECOMMEND",
+      "latencyMs": 3168
+    },
+    {
+      "i": 9,
+      "wallMs": 3746,
+      "outcome": "RECOMMEND",
+      "latencyMs": 3745
+    },
+    {
+      "i": 10,
+      "wallMs": 3771,
+      "outcome": "RECOMMEND",
+      "latencyMs": 3770
+    },
+    {
+      "i": 11,
+      "wallMs": 4502,
+      "outcome": "ABSTAIN:DEADLINE_EXCEEDED",
+      "latencyMs": 5000
+    },
+    {
+      "i": 12,
+      "wallMs": 4504,
+      "outcome": "ABSTAIN:DEADLINE_EXCEEDED",
+      "latencyMs": 5000
+    },
+    {
+      "i": 13,
+      "wallMs": 4505,
+      "outcome": "ABSTAIN:DEADLINE_EXCEEDED",
+      "latencyMs": 5000
+    },
+    {
+      "i": 14,
+      "wallMs": 3759,
+      "outcome": "RECOMMEND",
+      "latencyMs": 3755
+    },
+    {
+      "i": 15,
+      "wallMs": 3437,
+      "outcome": "RECOMMEND",
+      "latencyMs": 3436
+    },
+    {
+      "i": 16,
+      "wallMs": 4503,
+      "outcome": "ABSTAIN:DEADLINE_EXCEEDED",
+      "latencyMs": 5000
+    },
+    {
+      "i": 17,
+      "wallMs": 4505,
+      "outcome": "ABSTAIN:DEADLINE_EXCEEDED",
+      "latencyMs": 5000
+    },
+    {
+      "i": 18,
+      "wallMs": 4504,
+      "outcome": "ABSTAIN:DEADLINE_EXCEEDED",
+      "latencyMs": 5000
+    },
+    {
+      "i": 19,
+      "wallMs": 4505,
+      "outcome": "ABSTAIN:DEADLINE_EXCEEDED",
+      "latencyMs": 5000
+    }
+  ],
+  "stages": {
+    "embedding": {
+      "n": 21,
+      "p50": 164,
+      "p90": 185,
+      "p95": 197,
+      "max": 730,
+      "failed": 0
+    },
+    "rerank": {
+      "n": 21,
+      "p50": 1024,
+      "p90": 1533,
+      "p95": 2864,
+      "max": 3781,
+      "failed": 1
+    },
+    "llm": {
+      "n": 21,
+      "p50": 1479,
+      "p90": 3656,
+      "p95": 3717,
+      "max": 3758,
+      "failed": 3
+    },
+    "verifier": {
+      "n": 17,
+      "p50": 1609,
+      "p90": 1859,
+      "p95": 1887,
+      "max": 1999,
+      "failed": 5
+    }
+  },
+  "reconcileOutcomes": {},
+  "outcomeDistribution": {
+    "ABSTAIN:CONFLICTING_EVIDENCE": 1,
+    "RECOMMEND": 10,
+    "ABSTAIN:DEADLINE_EXCEEDED": 9
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "task": "task-36-recommendation-latency-profile",
+  "commit": "813582bba55a206d96e0da1ee7675d0c26e17db2",
+  "runs": 20,
+  "outcome": {
+    "RECOMMEND": 10,
+    "ABSTAIN:DEADLINE_EXCEEDED": 9,
+    "ABSTAIN:CONFLICTING_EVIDENCE": 1
+  },
+  "deterministicMismatches": 0,
+  "wallMs": {
+    "p50": 4343,
+    "p90": 4505,
+    "p95": 4505,
+    "max": 4507
+  },
+  "stageMs": {
+    "embedding": {
+      "p50": 164,
+      "p90": 185,
+      "p95": 197,
+      "max": 730
+    },
+    "rerank": {
+      "p50": 1024,
+      "p90": 1533,
+      "p95": 2864,
+      "max": 3781
+    },
+    "llm": {
+      "p50": 1479,
+      "p90": 3656,
+      "p95": 3717,
+      "max": 3758
+    },
+    "verifier": {
+      "p50": 1609,
+      "p90": 1859,
+      "p95": 1887,
+      "max": 1999,
+      "neverRan": 4
+    }
+  },
+  "budget": {
+    "abortAtMs": 4500,
+    "source": "recommendation-pipeline.ts:96 startedAtMs + 5_000, TERMINAL_DEADLINE_GUARD_MS 500",
+    "fixedSerialOverheadMs": "embedding 164 + retrieval gap ~550 + verifier 1609 = ~2323 (52% of budget)",
+    "headroomForParallelPairMs": 2177
+  },
+  "refutedHypotheses": {
+    "stateKeyPollution": "acceptance row 67KB/rev38 vs WP5 16.7MB/rev15612; before/after 2837->2516ms noise",
+    "deterministicReconciler": "fixed in 12df695; 0 MISMATCH across 20 runs",
+    "harnessLocators": "fixed in 813582b; round-6 exitCode 0 with positive 2/2",
+    "outputLength": "rerank capped at max_completion_tokens 256, temperature 0, strict json_schema; still spikes to 3781ms",
+    "sharedConnectionContention": "0 runs with both rerank and llm slow simultaneously (rerank-only 2, llm-only 7)",
+    "modelConfiguration": "full 29-model catalog bakeoff in task-32; no config satisfies grounding x speed",
+    "verifierOverlap": "A/B 20 runs, 3/10 vs 4/10 noise; reverted"
+  },
+  "confirmedCause": "per-call provider latency variance on the chat endpoint. Failures are exactly the runs where max(rerank, llm) exceeds ~2177ms, leaving no room for verifier's ~1609ms.",
+  "planConstraint": ".omo/plans/impromptu-five-features-48h.md line 42 forbids adding retry / queue / circuit breaker / budget scheduler outside the existing 5s deadline, which rules out hedged or retried model calls.",
+  "criterion6Interpretation": "plan line 355-356: '두 10-run cohort 모두 10/10 성공' with failure fixtures including ABSTAIN. ABSTAIN counts as failure, so 10/10 means 10/10 non-ABSTAIN."
+}
