@@ -73,9 +73,16 @@ export function reconcileEvidence(
 
 export function extractFacts(text: string): EvidenceFactSet {
   const numbers = unique(
-    [...text.matchAll(/(?<![\p{L}\p{N}])[-+]?\d[\d,]*(?:\.\d+)?(?![\p{L}\p{N}])/gu)].map((match) =>
-      normalizeNumber(match[0]),
-    ),
+    [
+      // A figure ends where a Latin letter or another digit would continue it, not where any
+      // letter does. Korean sets the counter directly against the figure - 482억, 12,400명,
+      // 2026년 - so treating every letter as a continuation hid those figures entirely and
+      // truncated 12,400 to 12, which then let a claim of "12" pass against evidence that never
+      // stated it.
+      ...text.matchAll(
+        /(?<![\p{Script=Latin}\p{N}])[-+]?\d[\d,]*(?:\.\d+)?(?![\p{Script=Latin}\p{N}])/gu,
+      ),
+    ].map((match) => normalizeNumber(match[0])),
   );
   const dates = unique(
     [
@@ -84,7 +91,7 @@ export function extractFacts(text: string): EvidenceFactSet {
       // year that exists in the source is not rejected merely because the model labeled it
       // DATE instead of NUMBER. Restricted to plausible years so 4-digit quantities (e.g. 1200)
       // stay numbers. Existence is still enforced: the token must occur verbatim.
-      ...text.matchAll(/(?<![\p{L}\p{N}])(?:19|20)\d{2}(?![\p{L}\p{N}])/gu),
+      ...text.matchAll(/(?<![\p{Script=Latin}\p{N}])(?:19|20)\d{2}(?![\p{Script=Latin}\p{N}])/gu),
     ].map((match) => normalizeDate(match[0])),
   );
   const units = unique(
