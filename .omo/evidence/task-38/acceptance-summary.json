@@ -1,0 +1,44 @@
+{
+  "task": "task-38-core5-acceptance-after-hedging",
+  "commit": "46a4b9af5e6322a97ce2c369d3b3816348bdbec4",
+  "command": "python3 scripts/verify-five-private-presentation-features.py",
+  "rounds": [
+    {
+      "round": 1,
+      "exitCode": 0,
+      "positive": "2/2",
+      "negative": "6/6",
+      "stt": "2/2"
+    },
+    {
+      "round": 2,
+      "exitCode": 0,
+      "positive": "2/2",
+      "negative": "6/6",
+      "stt": "2/2"
+    },
+    {
+      "round": 3,
+      "exitCode": 0,
+      "positive": "2/2",
+      "negative": "6/6",
+      "stt": "2/2"
+    }
+  ],
+  "beforeHedging": {
+    "reference": ".omo/evidence/task-25/rounds/",
+    "positiveSuccess": "2/12 across 6 rounds",
+    "dominantFailure": "ABSTAIN:DEADLINE_EXCEEDED"
+  },
+  "afterHedging": {
+    "positiveSuccess": "6/6 across 3 rounds",
+    "rounds": "3/3 exitCode 0"
+  },
+  "hedgingCommits": [
+    "ee55d5f perf(recommendation): hedge one duplicate rerank and llm call inside the deadline",
+    "8272246 perf(recommendation): reserve the measured verifier tail before hedging a slot",
+    "46a4b9a perf(recommendation): start a duplicate at once when delaying cannot avoid it"
+  ],
+  "guardrailDecision": "Plan line 42 forbade retry/queue/breaker/scheduler outside the 5s deadline. The user explicitly relaxed it for the rerank and llm slots only: at most one duplicate call, inside the same deadline signal. The 5,000ms budget, the 500ms terminal guard, deterministic reconciliation, verifier verdict handling, ACL, source revision and idempotency are unchanged.",
+  "notARetry": "A primary that settles with an error is reported as-is and never starts a new call; the duplicate is bounded to one per slot by construction and pinned by services/private-backend/test/recommendation-hedge.test.ts."
+}
