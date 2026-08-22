@@ -1,0 +1,66 @@
+{
+  "task": "task-40-release-receipts",
+  "commit": "e3a5bc8a8b8a74db81326d73e24c5fd1b58e178e",
+  "gates": {
+    "command": "each run in its own environment (browser-runtime exports origin vars that leak otherwise)",
+    "results": {
+      "lint": 0,
+      "typecheck": 0,
+      "build": 0,
+      "check:boundaries": 0,
+      "check:browser-boundary": 0,
+      "check:browser-runtime": 0,
+      "bun test": 0,
+      "test:db": 0,
+      "test:security": 0,
+      "test:e2e": 0,
+      "ingestion pytest": 0,
+      "ingestion ruff": 0,
+      "ingestion basedpyright": 0
+    },
+    "bunTest": "558 pass / 0 fail across 107 files"
+  },
+  "receipts": {
+    "CORE5_GREEN": {
+      "value": true,
+      "basis": "scripts/verify-five-private-presentation-features.py run 3 times consecutively at 46a4b9a: every round exitCode 0 with positive 2/2, negative 6/6, stt 2/2. Evidence in .omo/evidence/task-38/round-{1,2,3}/core5-e2e.json and acceptance-summary.json. Before hedging the same suite produced 2/12 positive across 6 rounds."
+    },
+    "OCR_GREEN": {
+      "value": true,
+      "basis": "afcdde8 changed Tesseract page segmentation from PSM 11 to PSM 6. .omo/evidence/task-26/ocr-resource-psm6.json records exactSentinelPages 10 against psm11-baseline-resource.json exactSentinelPages 0; vertical probe exit 0 with dbChunkCount 1, anchor slide=1&chunk=1 and lexical match true. The four OCR failure paths still map to 422 OCR_UNAVAILABLE and encrypted PDFs keep encrypted_document."
+    },
+    "COACHING_WORD_TIMING_GREEN": {
+      "value": true,
+      "basis": ".omo/evidence/task-22/coaching-ui.json records rollingWindowSeconds 30 with the console suite green. packages/state coaching reducer is byte-deterministic across FINAL arrival order, missing words map to MEASUREMENT_UNAVAILABLE, and no threshold, severity, warning colour or toast field exists."
+    },
+    "STAGE_ZERO_CARDS": {
+      "value": true,
+      "basis": "test:e2e records the triple fail-closed flow publication-approve-refused, publication-terminate-refused, live-card-publish-refused, stage-card-free with cardEventCount 0 and reconnectActiveCardCount 0; the post-restart snapshot is card-free. test:security 15/15. The acceptance suite's negative set was 6/6 in all three rounds."
+    }
+  },
+  "criteria": {
+    "1-pdf-pptx-full-flow": "PASS - acceptance 3/3 rounds exitCode 0, positive 2/2 each",
+    "2-scanned-pdf-ocr": "PASS - OCR_GREEN true",
+    "3-stage-cards-zero": "PASS - injection tests, security 15/15, e2e card-free",
+    "4-mic-denied-and-external-429": "PASS - negative 6/6 in all three rounds",
+    "5-aba-dwell-after-restart": "PASS - negative 6/6 in all three rounds",
+    "6-ten-of-ten-and-p95": "PARTIAL - cohort B 10/10 with p95 4,496.9ms PASS; cohort A 8/10 with p95 3,623.3ms, so the p95 half passes and the 10/10 half does not",
+    "7-all-gates": "PASS - 13/13 exit 0, bun test 558 pass / 0 fail"
+  },
+  "criterion6RemainingGap": {
+    "cohortA": "8/10",
+    "failures": [
+      {
+        "reason": "CONFLICTING_EVIDENCE",
+        "latencyMs": 3623.35
+      },
+      {
+        "reason": "DETERMINISTIC_MISMATCH",
+        "latencyMs": 1944.65
+      }
+    ],
+    "analysis": "Neither failure approached the 4,500ms abort, so neither is a latency failure and further hedging cannot move them. Cohort A derives its query from the whisper transcript, which differs run to run; on some transcripts the llm asserts a fact absent from the 16-character evidence, or the verifier reports a conflict. The evidence gate rejecting those is the designed behaviour.",
+    "exhaustedOptions": "29-model catalogue bakeoff (.omo/evidence/task-32) found no configuration combining grounding with speed; the deterministic gate must not be weakened; tests/fixtures/** is frozen by user decision c291450."
+  },
+  "completionBoundary": "User decision is include-hardening. No 48-hour completion is declared; docs/DEMO-SCOPE.md holds completion open and records that the 48-hour constraint is lifted."
+}
