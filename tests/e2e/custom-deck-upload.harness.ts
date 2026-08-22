@@ -528,8 +528,8 @@ async function uploadFromConsole(
   if ((await input.count()) === 0) {
     await page.locator("[data-new-deck]").click();
   }
-  await input.setInputFiles(join(fixtureRoot, fixture));
-  actions.push(`Console selected ${fixture}`);
+  // Choosing the deck is the whole upload action now, so both observers have to be installed
+  // before the file reaches the input rather than after it.
   const responseIndex = await page.evaluate(
     () => (Reflect.get(window, "__customDeckUploadResponses") as unknown[]).length,
   );
@@ -537,11 +537,12 @@ async function uploadFromConsole(
     (response) => response.url().endsWith("/v1/deck-uploads"),
     { timeout: 60_000 },
   );
-  await page.locator("[data-deck-upload-submit]").click();
+  await input.setInputFiles(join(fixtureRoot, fixture));
+  actions.push(`Console selected ${fixture}`);
   const response = await responsePromise;
   await response.finished();
   if (response.status() !== 201) {
-    await page.locator(".console-caption--error").waitFor();
+    await page.locator(".console-status-line--attention").waitFor();
     const failed = await page.evaluate(
       (index) =>
         (

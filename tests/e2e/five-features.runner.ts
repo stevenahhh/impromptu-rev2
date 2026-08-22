@@ -61,12 +61,13 @@ async function signIn(page: Page): Promise<string> {
 }
 
 async function upload(page: Page, fixture: string): Promise<Upload> {
-  await page.locator("[data-deck-file-input]").setInputFiles(resolve(fixtureRoot, fixture));
+  // Choosing the deck is the whole upload action now, so the response observer has to be
+  // installed before the file reaches the input rather than after it.
   const response = page.waitForResponse(
     (candidate) => candidate.url().endsWith("/v1/deck-uploads"),
     { timeout: timeoutMs },
   );
-  await page.locator("[data-deck-upload-submit]").click();
+  await page.locator("[data-deck-file-input]").setInputFiles(resolve(fixtureRoot, fixture));
   const completed = await response;
   const body = record(await completed.json(), `${fixture} upload response`);
   if (completed.status() !== 201)
