@@ -39,6 +39,13 @@ const MAX_MODEL_CONTENT_CHARACTERS = 700;
  */
 const HEDGE_VERIFIER_RESERVE_MS = 1_934;
 const HEDGE_TYPICAL_CALL_MS = { rerank: 967, llm: 1_284 } as const;
+/**
+ * The fastest durations either slot was observed to return in. Deferring a duplicate to a point
+ * earlier than this can never avoid starting one - no call settles that early - so the delay
+ * would only shorten the duplicate's runway. Both hedged profiles recorded llm duplicates on
+ * every single run, which is exactly that situation.
+ */
+const HEDGE_FAST_PATH_MS = { rerank: 750, llm: 1_000 } as const;
 
 const embeddingOutputSchema = z
   .object({ vector: z.array(z.number().finite()).min(1).max(8_192) })
@@ -252,7 +259,13 @@ export class PrivateRecommendationPipeline {
       deadlineAtMs - TERMINAL_DEADLINE_GUARD_MS - pairStartedAtMs - HEDGE_VERIFIER_RESERVE_MS;
     const hedgeAtMs = (slot: "rerank" | "llm"): number | null => {
       const offset = pairBudgetMs - HEDGE_TYPICAL_CALL_MS[slot];
-      return offset <= 0 ? null : pairStartedAtMs + offset;
+      // Not even one typical call fits, so a duplicate cannot finish either: run the slot alone.
+      if (offset <= 0) return null;
+      // Waiting past the point where no call has ever settled cannot avoid the duplicate, so the
+      // delay would only cost the duplicate runway it needs. Such a slot starts its duplicate at
+      // once; a slot whose delay genuinely avoids duplicates keeps waiting.
+      const deferrable = offset >= HEDGE_FAST_PATH_MS[slot];
+      return pairStartedAtMs + (deferrable ? offset : 0);
     };
     const [reranked, structured] = await Promise.all([
       this.#hedgedModel(
