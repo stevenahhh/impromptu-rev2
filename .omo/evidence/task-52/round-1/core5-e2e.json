@@ -1,0 +1,1351 @@
+{
+  "command": "python3 scripts/verify-five-private-presentation-features.py",
+  "exitCode": 1,
+  "scenarios": [
+    {
+      "name": "positive-korean-text-layer.pdf",
+      "command": "Console upload + fake-device WebM capture + private HTTP recommendation",
+      "exitCode": 0,
+      "verdict": "PASS",
+      "assertions": [
+        "upload-201",
+        "fake-device-webm-final",
+        "hybrid-rrf-recommend",
+        "opt-in-coaching"
+      ],
+      "stepLatencyMs": {
+        "sign-in": 7240,
+        "upload": 2977,
+        "capture-final": 7972,
+        "recommendation": 3339,
+        "opt-in-coaching": 140
+      },
+      "diagnostics": {
+        "presentationSessionId": "ps_adcdb5e7fa1ef246535c136cfa1f3873",
+        "deckVersion": "deck_1495ab6922290f7a1ae111f0a6b79969e9beeb37da0f326ef52e3c79b426e46c",
+        "finalKind": "FINAL",
+        "finalSequence": 1,
+        "transcriptCharacters": 10,
+        "transcriptWordCount": 3,
+        "transcriptDurationMs": 120,
+        "recommendationStatus": 200,
+        "recommendationOutcome": "RECOMMEND",
+        "recommendationReason": null,
+        "recommendationLatencyMs": 3255,
+        "recommendationEvidenceCount": 1,
+        "recommendationResponseBody": {
+          "outcome": "RECOMMEND",
+          "recommendation": {
+            "claim": "2026년 형식 중립 근거 자료는 한빛유통의 2026년 사업 전략 보고서로, 경영기획본부가 2026년 1월 15일에 작성했습니다.",
+            "evidenceIds": [
+              "internal:7a93916cc74db13122339b3ef3b13680bce4ac5fdfe79fb2346b2c3290595d00:1495ab6922290f7a1ae111f0a6b79969e9beeb37da0f326ef52e3c79b426e46c"
+            ],
+            "facts": {
+              "numbers": [],
+              "units": [],
+              "dates": ["2026-01-15"],
+              "entities": ["한빛유통", "경영기획본부"]
+            }
+          },
+          "evidence": [
+            {
+              "evidenceId": "internal:7a93916cc74db13122339b3ef3b13680bce4ac5fdfe79fb2346b2c3290595d00:1495ab6922290f7a1ae111f0a6b79969e9beeb37da0f326ef52e3c79b426e46c",
+              "sourceId": "page:1",
+              "sourceRevision": "1495ab6922290f7a1ae111f0a6b79969e9beeb37da0f326ef52e3c79b426e46c",
+              "sourceHash": "72af5bc7a3a85c7a34e8811a7b04bb91fc0f93a5b28c208a0cad95684036609e",
+              "deckVersion": "deck_1495ab6922290f7a1ae111f0a6b79969e9beeb37da0f326ef52e3c79b426e46c",
+              "manifestHash": "17d7dcdeea205fe47d29060b9a620dcffc28a38ac2e9097d57c98f201d22b2ca",
+              "title": "Slide 1",
+              "content": "형식 중립 근거 자료 2026 한빛유통 2026년 사업 전략 보고 작성: 경영기획본부, 2026년 1월 15일",
+              "quote": "형식 중립 근거 자료 2026 한빛유통 2026년 사업 전략 보고 작성: 경영기획본부, 2026년 1월 15일",
+              "anchor": "slide=1&chunk=1",
+              "canonicalUrl": null,
+              "sourceDate": null,
+              "rights": "APPROVED",
+              "containsPii": false,
+              "authorizationVersion": "acl-1"
+            }
+          ],
+          "completedAtMs": 1787396978353,
+          "latencyMs": 3255
+        },
+        "coachingActiveNodes": 1,
+        "coachingStateValue": "unavailable"
+      }
+    },
+    {
+      "name": "positive-korean-structural.pptx",
+      "command": "Console upload + fake-device WebM capture + private HTTP recommendation",
+      "exitCode": 1,
+      "verdict": "FAIL",
+      "assertions": [
+        "upload-201",
+        "fake-device-webm-final",
+        "hybrid-rrf-recommend",
+        "opt-in-coaching"
+      ],
+      "detail": "hybrid retrieval abstained DEADLINE_EXCEEDED at 5400ms (abort guard 4,500ms) with 6 internal candidates: {\"outcome\":\"ABSTAIN\",\"reason\":\"DEADLINE_EXCEEDED\",\"completedAtMs\":1787397003346,\"latencyMs\":5400}",
+      "stepLatencyMs": {
+        "sign-in": 2383,
+        "upload": 7054,
+        "capture-final": 9482,
+        "recommendation": 5286
+      },
+      "diagnostics": {
+        "failedStep": "recommendation",
+        "presentationSessionId": "ps_5adad8a318aa46cb9359e27bb873b901",
+        "deckVersion": "deck_16d089f58618c3e943c230fd51978a4c4e660bc9794c27a65c2371990101a660",
+        "finalKind": "FINAL",
+        "finalSequence": 1,
+        "transcriptCharacters": 10,
+        "transcriptWordCount": 3,
+        "transcriptDurationMs": 120,
+        "recommendationStatus": 200,
+        "recommendationOutcome": "ABSTAIN",
+        "recommendationReason": "DEADLINE_EXCEEDED",
+        "recommendationLatencyMs": 5400,
+        "recommendationEvidenceCount": 0,
+        "recommendationResponseBody": {
+          "outcome": "ABSTAIN",
+          "reason": "DEADLINE_EXCEEDED",
+          "completedAtMs": 1787397003346,
+          "latencyMs": 5400
+        },
+        "retrievalCandidateCount": 6,
+        "abstainBudget": {
+          "abortGuardMs": 4500,
+          "latencyMs": 5400
+        }
+      }
+    },
+    {
+      "name": "negative-mic-denied-audio-request-zero",
+      "command": "Console denied getUserMedia + request observer",
+      "exitCode": 0,
+      "verdict": "PASS",
+      "assertions": ["audio-request-count=0"]
+    },
+    {
+      "name": "negative-external-429-internal-only",
+      "command": "bun test services/private-backend/test/recommendation-pipeline.test.ts",
+      "exitCode": 0,
+      "verdict": "PASS",
+      "assertions": ["HTTP_429 retains internal RECOMMEND"]
+    },
+    {
+      "name": "negative-stage-snapshot-cards-zero",
+      "command": "bun test tests/security/release-security.test.ts",
+      "exitCode": 0,
+      "verdict": "PASS",
+      "assertions": ["snapshot cards=0"]
+    },
+    {
+      "name": "negative-stage-sse-cards-zero",
+      "command": "bun test services/projection-gateway/test/prepared-evidence.test.ts",
+      "exitCode": 0,
+      "verdict": "PASS",
+      "assertions": ["SSE CARD dropped"]
+    },
+    {
+      "name": "negative-stage-ws-cards-zero",
+      "command": "bun test apps/stage/src/stage-client.test.ts",
+      "exitCode": 0,
+      "verdict": "PASS",
+      "assertions": ["WS CARD dropped"]
+    },
+    {
+      "name": "negative-aba-reload-dwell-identical",
+      "command": "bun test services/private-backend/test/session-report-finalizer.test.ts",
+      "exitCode": 0,
+      "verdict": "PASS",
+      "assertions": ["A-B-A report dwell byte-equivalent after reload"]
+    },
+    {
+      "name": "stt-partial-before-final",
+      "command": "bun test services/private-backend/test/stt-whisper-cpp.test.ts",
+      "exitCode": 0,
+      "verdict": "PASS",
+      "assertions": ["PARTIAL precedes exactly-one FINAL"]
+    },
+    {
+      "name": "stt-revoke-stops-and-blocks-late-delivery",
+      "command": "bun test services/private-backend/test/audio-ingest-http.test.ts",
+      "exitCode": 0,
+      "verdict": "PASS",
+      "assertions": ["revoke terminal blocks late delivery"]
+    }
+  ],
+  "positive": "1/2",
+  "negative": "6/6",
+  "stt": "2/2",
+  "models": {
+    "RERANK_MODEL": "deepseek-v4-flash",
+    "LLM_MODEL": "deepseek-v4-flash",
+    "VERIFIER_MODEL": "qwen3.6-plus"
+  },
+  "recommendationStageLatencyMs": [
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 1190,
+      "timestampMs": 1787396968771
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 1233,
+      "timestampMs": 1787396968785
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 1197,
+      "timestampMs": 1787396968788
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 1211,
+      "timestampMs": 1787396968794
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 329,
+      "timestampMs": 1787396968801
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 1219,
+      "timestampMs": 1787396968804
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787396969208
+    },
+    {
+      "stage": "rerank",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787396970069
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1721,
+      "timestampMs": 1787396970946
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1748,
+      "timestampMs": 1787396970946
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1785,
+      "timestampMs": 1787396970977
+    },
+    {
+      "stage": "rerank",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787396970977
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1765,
+      "timestampMs": 1787396971011
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 2036,
+      "timestampMs": 1787396971230
+    },
+    {
+      "stage": "llm",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787396971230
+    },
+    {
+      "stage": "verifier",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787396971236
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1963,
+      "timestampMs": 1787396971299
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 2205,
+      "timestampMs": 1787396971428
+    },
+    {
+      "stage": "deterministic",
+      "outcome": "UNIT:명",
+      "durationMs": 0,
+      "timestampMs": 1787396971428
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 2418,
+      "timestampMs": 1787396971755
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 2549,
+      "timestampMs": 1787396971757
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 2129,
+      "timestampMs": 1787396972199
+    },
+    {
+      "stage": "llm",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 3201,
+      "timestampMs": 1787396972448
+    },
+    {
+      "stage": "verifier",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 726,
+      "timestampMs": 1787396972481
+    },
+    {
+      "stage": "llm",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 3284,
+      "timestampMs": 1787396972482
+    },
+    {
+      "stage": "rerank",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 3223,
+      "timestampMs": 1787396972482
+    },
+    {
+      "stage": "llm",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 3223,
+      "timestampMs": 1787396972482
+    },
+    {
+      "stage": "verifier",
+      "outcome": "SUCCESS",
+      "durationMs": 1744,
+      "timestampMs": 1787396972980
+    },
+    {
+      "stage": "verifier",
+      "outcome": "HEDGE_WON",
+      "durationMs": 0,
+      "timestampMs": 1787396972980
+    },
+    {
+      "stage": "verifier",
+      "outcome": "SUCCESS",
+      "durationMs": 1750,
+      "timestampMs": 1787396972984
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 172,
+      "timestampMs": 1787396975191
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 149,
+      "timestampMs": 1787396975248
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 769,
+      "timestampMs": 1787396976026
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 819,
+      "timestampMs": 1787396976128
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787396976298
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787396976381
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1409,
+      "timestampMs": 1787396976665
+    },
+    {
+      "stage": "llm",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787396976665
+    },
+    {
+      "stage": "deterministic",
+      "outcome": "UNIT:명",
+      "durationMs": 0,
+      "timestampMs": 1787396976665
+    },
+    {
+      "stage": "llm",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 372,
+      "timestampMs": 1787396976671
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1561,
+      "timestampMs": 1787396976870
+    },
+    {
+      "stage": "llm",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787396976870
+    },
+    {
+      "stage": "verifier",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787396976873
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1615,
+      "timestampMs": 1787396977996
+    },
+    {
+      "stage": "verifier",
+      "outcome": "SUCCESS",
+      "durationMs": 1474,
+      "timestampMs": 1787396978346
+    },
+    {
+      "stage": "verifier",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787396978346
+    },
+    {
+      "stage": "verifier",
+      "outcome": "SUCCESS",
+      "durationMs": 1474,
+      "timestampMs": 1787396978347
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 463,
+      "timestampMs": 1787396988619
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 475,
+      "timestampMs": 1787396988635
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 472,
+      "timestampMs": 1787396988665
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 487,
+      "timestampMs": 1787396988672
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 478,
+      "timestampMs": 1787396988681
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 489,
+      "timestampMs": 1787396988687
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787396988852
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787396988872
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787396988957
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787396989016
+    },
+    {
+      "stage": "rerank",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787396989117
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787396989133
+    },
+    {
+      "stage": "rerank",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787396989191
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787396989215
+    },
+    {
+      "stage": "rerank",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787396989753
+    },
+    {
+      "stage": "rerank",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787396989760
+    },
+    {
+      "stage": "rerank",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787396989782
+    },
+    {
+      "stage": "rerank",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787396989785
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1526,
+      "timestampMs": 1787396990368
+    },
+    {
+      "stage": "rerank",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787396990368
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1583,
+      "timestampMs": 1787396990514
+    },
+    {
+      "stage": "rerank",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787396990514
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1721,
+      "timestampMs": 1787396990593
+    },
+    {
+      "stage": "llm",
+      "outcome": "HEDGE_WON",
+      "durationMs": 0,
+      "timestampMs": 1787396990593
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1900,
+      "timestampMs": 1787396991005
+    },
+    {
+      "stage": "rerank",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787396991005
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 2055,
+      "timestampMs": 1787396991214
+    },
+    {
+      "stage": "llm",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787396991214
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 2056,
+      "timestampMs": 1787396991214
+    },
+    {
+      "stage": "rerank",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787396991214
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 2366,
+      "timestampMs": 1787396991218
+    },
+    {
+      "stage": "llm",
+      "outcome": "HEDGE_WON",
+      "durationMs": 0,
+      "timestampMs": 1787396991218
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 2031,
+      "timestampMs": 1787396991222
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1438,
+      "timestampMs": 1787396991223
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 2236,
+      "timestampMs": 1787396991233
+    },
+    {
+      "stage": "rerank",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787396991233
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1461,
+      "timestampMs": 1787396991243
+    },
+    {
+      "stage": "llm",
+      "outcome": "FAILED:provider_error",
+      "durationMs": 2161,
+      "timestampMs": 1787396991267
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1661,
+      "timestampMs": 1787396991423
+    },
+    {
+      "stage": "rerank",
+      "outcome": "HEDGE_WON",
+      "durationMs": 0,
+      "timestampMs": 1787396991423
+    },
+    {
+      "stage": "llm",
+      "outcome": "FAILED:provider_error",
+      "durationMs": 2996,
+      "timestampMs": 1787396992129
+    },
+    {
+      "stage": "llm",
+      "outcome": "BOTH_FAILED",
+      "durationMs": 0,
+      "timestampMs": 1787396992129
+    },
+    {
+      "stage": "rerank",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 3014,
+      "timestampMs": 1787396992134
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 3644,
+      "timestampMs": 1787396992644
+    },
+    {
+      "stage": "llm",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787396992644
+    },
+    {
+      "stage": "deterministic",
+      "outcome": "UNIT:억 원",
+      "durationMs": 0,
+      "timestampMs": 1787396992644
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 2893,
+      "timestampMs": 1787396992646
+    },
+    {
+      "stage": "llm",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 3633,
+      "timestampMs": 1787396992649
+    },
+    {
+      "stage": "llm",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 4217,
+      "timestampMs": 1787396993062
+    },
+    {
+      "stage": "verifier",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 1636,
+      "timestampMs": 1787396993062
+    },
+    {
+      "stage": "rerank",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 4217,
+      "timestampMs": 1787396993062
+    },
+    {
+      "stage": "llm",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 4221,
+      "timestampMs": 1787396993062
+    },
+    {
+      "stage": "verifier",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 1844,
+      "timestampMs": 1787396993063
+    },
+    {
+      "stage": "verifier",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 1870,
+      "timestampMs": 1787396993086
+    },
+    {
+      "stage": "llm",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 3871,
+      "timestampMs": 1787396993086
+    },
+    {
+      "stage": "llm",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 4156,
+      "timestampMs": 1787396993088
+    },
+    {
+      "stage": "llm",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 4131,
+      "timestampMs": 1787396993088
+    },
+    {
+      "stage": "llm",
+      "outcome": "BOTH_FAILED",
+      "durationMs": 0,
+      "timestampMs": 1787396993088
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 189,
+      "timestampMs": 1787396997756
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787396997857
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 207,
+      "timestampMs": 1787396998155
+    },
+    {
+      "stage": "rerank",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787396999166
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1343,
+      "timestampMs": 1787396999196
+    },
+    {
+      "stage": "llm",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787396999196
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787396999229
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1534,
+      "timestampMs": 1787396999391
+    },
+    {
+      "stage": "rerank",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787396999549
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1395,
+      "timestampMs": 1787397000624
+    },
+    {
+      "stage": "llm",
+      "outcome": "HEDGE_WON",
+      "durationMs": 0,
+      "timestampMs": 1787397000624
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 3854,
+      "timestampMs": 1787397002060
+    },
+    {
+      "stage": "rerank",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 4620,
+      "timestampMs": 1787397002473
+    },
+    {
+      "stage": "rerank",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 3307,
+      "timestampMs": 1787397002473
+    },
+    {
+      "stage": "rerank",
+      "outcome": "BOTH_FAILED",
+      "durationMs": 0,
+      "timestampMs": 1787397002473
+    },
+    {
+      "stage": "rerank",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 4646,
+      "timestampMs": 1787397002851
+    },
+    {
+      "stage": "rerank",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 3302,
+      "timestampMs": 1787397002851
+    },
+    {
+      "stage": "rerank",
+      "outcome": "BOTH_FAILED",
+      "durationMs": 0,
+      "timestampMs": 1787397002851
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 431,
+      "timestampMs": 1787397008085
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 426,
+      "timestampMs": 1787397008086
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 437,
+      "timestampMs": 1787397008094
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 436,
+      "timestampMs": 1787397008110
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 452,
+      "timestampMs": 1787397008122
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 464,
+      "timestampMs": 1787397008127
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787397008245
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787397008261
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787397008322
+    },
+    {
+      "stage": "rerank",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787397008654
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787397008658
+    },
+    {
+      "stage": "rerank",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787397008782
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787397008791
+    },
+    {
+      "stage": "rerank",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787397008863
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787397008891
+    },
+    {
+      "stage": "rerank",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787397009251
+    },
+    {
+      "stage": "rerank",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787397009258
+    },
+    {
+      "stage": "rerank",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787397009265
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1473,
+      "timestampMs": 1787397009774
+    },
+    {
+      "stage": "rerank",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787397009774
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1784,
+      "timestampMs": 1787397010025
+    },
+    {
+      "stage": "llm",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787397010025
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1382,
+      "timestampMs": 1787397010036
+    },
+    {
+      "stage": "rerank",
+      "outcome": "HEDGE_WON",
+      "durationMs": 0,
+      "timestampMs": 1787397010036
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1899,
+      "timestampMs": 1787397010144
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1435,
+      "timestampMs": 1787397010251
+    },
+    {
+      "stage": "rerank",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787397010251
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1434,
+      "timestampMs": 1787397010298
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1212,
+      "timestampMs": 1787397010470
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1219,
+      "timestampMs": 1787397010470
+    },
+    {
+      "stage": "rerank",
+      "outcome": "HEDGE_WON",
+      "durationMs": 0,
+      "timestampMs": 1787397010470
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1783,
+      "timestampMs": 1787397010471
+    },
+    {
+      "stage": "rerank",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787397010471
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 2235,
+      "timestampMs": 1787397010536
+    },
+    {
+      "stage": "llm",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787397010536
+    },
+    {
+      "stage": "deterministic",
+      "outcome": "ENTITY:482억 원",
+      "durationMs": 0,
+      "timestampMs": 1787397010536
+    },
+    {
+      "stage": "llm",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 2219,
+      "timestampMs": 1787397010542
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 2028,
+      "timestampMs": 1787397010674
+    },
+    {
+      "stage": "llm",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787397010674
+    }
+  ],
+  "stageLatencySummaryMs": {
+    "deterministic": {
+      "n": 4,
+      "min": 0,
+      "median": 0,
+      "max": 0
+    },
+    "embedding": {
+      "n": 22,
+      "min": 149,
+      "median": 463,
+      "max": 1233
+    },
+    "llm": {
+      "n": 63,
+      "min": 0,
+      "median": 372,
+      "max": 4221
+    },
+    "rerank": {
+      "n": 61,
+      "min": 0,
+      "median": 819,
+      "max": 4646
+    },
+    "verifier": {
+      "n": 12,
+      "min": 0,
+      "median": 1474,
+      "max": 1870
+    }
+  },
+  "recommendationRequests": [
+    {
+      "outcome": "ABSTAIN:DETERMINISTIC_MISMATCH",
+      "durationMs": 3890,
+      "timestampMs": 1787396971428
+    },
+    {
+      "outcome": "ABSTAIN:DEADLINE_EXCEEDED",
+      "durationMs": 4907,
+      "timestampMs": 1787396972443
+    },
+    {
+      "outcome": "ABSTAIN:DEADLINE_EXCEEDED",
+      "durationMs": 4939,
+      "timestampMs": 1787396972477
+    },
+    {
+      "outcome": "ABSTAIN:DEADLINE_EXCEEDED",
+      "durationMs": 4939,
+      "timestampMs": 1787396972477
+    },
+    {
+      "outcome": "ABSTAIN:DEADLINE_EXCEEDED",
+      "durationMs": 4940,
+      "timestampMs": 1787396972478
+    },
+    {
+      "outcome": "RECOMMEND",
+      "durationMs": 4520,
+      "timestampMs": 1787396972986
+    },
+    {
+      "outcome": "RECOMMEND",
+      "durationMs": 3260,
+      "timestampMs": 1787396978353
+    },
+    {
+      "outcome": "REJECTED",
+      "durationMs": 4,
+      "timestampMs": 1787396988102
+    },
+    {
+      "outcome": "REJECTED",
+      "durationMs": 3,
+      "timestampMs": 1787396988128
+    },
+    {
+      "outcome": "REJECTED",
+      "durationMs": 4,
+      "timestampMs": 1787396988128
+    },
+    {
+      "outcome": "REJECTED",
+      "durationMs": 4,
+      "timestampMs": 1787396988128
+    },
+    {
+      "outcome": "REJECTED",
+      "durationMs": 4,
+      "timestampMs": 1787396988128
+    },
+    {
+      "outcome": "REJECTED",
+      "durationMs": 3,
+      "timestampMs": 1787396988131
+    },
+    {
+      "outcome": "ABSTAIN:MODEL_FAILURE",
+      "durationMs": 3952,
+      "timestampMs": 1787396992130
+    },
+    {
+      "outcome": "ABSTAIN:DETERMINISTIC_MISMATCH",
+      "durationMs": 4468,
+      "timestampMs": 1787396992645
+    },
+    {
+      "outcome": "ABSTAIN:DEADLINE_EXCEEDED",
+      "durationMs": 4904,
+      "timestampMs": 1787396993054
+    },
+    {
+      "outcome": "ABSTAIN:DEADLINE_EXCEEDED",
+      "durationMs": 4905,
+      "timestampMs": 1787396993055
+    },
+    {
+      "outcome": "ABSTAIN:DEADLINE_EXCEEDED",
+      "durationMs": 4904,
+      "timestampMs": 1787396993082
+    },
+    {
+      "outcome": "ABSTAIN:DEADLINE_EXCEEDED",
+      "durationMs": 4904,
+      "timestampMs": 1787396993082
+    },
+    {
+      "outcome": "ABSTAIN:DEADLINE_EXCEEDED",
+      "durationMs": 4905,
+      "timestampMs": 1787397002848
+    },
+    {
+      "outcome": "REJECTED",
+      "durationMs": 2,
+      "timestampMs": 1787397007587
+    },
+    {
+      "outcome": "REJECTED",
+      "durationMs": 3,
+      "timestampMs": 1787397007613
+    },
+    {
+      "outcome": "REJECTED",
+      "durationMs": 3,
+      "timestampMs": 1787397007614
+    },
+    {
+      "outcome": "REJECTED",
+      "durationMs": 3,
+      "timestampMs": 1787397007614
+    },
+    {
+      "outcome": "REJECTED",
+      "durationMs": 3,
+      "timestampMs": 1787397007614
+    },
+    {
+      "outcome": "REJECTED",
+      "durationMs": 4,
+      "timestampMs": 1787397007614
+    },
+    {
+      "outcome": "ABSTAIN:DETERMINISTIC_MISMATCH",
+      "durationMs": 2889,
+      "timestampMs": 1787397010537
+    }
+  ],
+  "deterministicMismatches": [
+    {
+      "category": "UNIT",
+      "value": "명",
+      "timestampMs": 1787396971428
+    },
+    {
+      "category": "UNIT",
+      "value": "명",
+      "timestampMs": 1787396976665
+    },
+    {
+      "category": "UNIT",
+      "value": "억 원",
+      "timestampMs": 1787396992644
+    },
+    {
+      "category": "ENTITY",
+      "value": "482억 원",
+      "timestampMs": 1787397010536
+    }
+  ]
+}

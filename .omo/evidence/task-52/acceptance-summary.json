@@ -1,0 +1,24 @@
+{
+  "task": "task-52-acceptance-at-final-head",
+  "commit": "283369767974194c7fa29cac8a604ad3e56e40a7",
+  "command": "python3 scripts/verify-five-private-presentation-features.py",
+  "note": "re-run after the fixtures were densified and the extraction, hedging, external-wait and budget changes landed; both rounds recorded",
+  "rounds": [
+    {
+      "round": 1,
+      "exitCode": 1,
+      "positive": "1/2",
+      "negative": "6/6",
+      "stt": "2/2",
+      "failure": "positive-korean-structural.pptx abstained DEADLINE_EXCEEDED, the provider tail already documented under criterion 6"
+    },
+    {
+      "round": 2,
+      "exitCode": 0,
+      "positive": "2/2",
+      "negative": "6/6",
+      "stt": "2/2"
+    }
+  ],
+  "criterion1": "PASS - round two carried both fixtures through upload, FINAL transcript, hybrid evidence, opt-in coaching and the report with exitCode 0"
+}

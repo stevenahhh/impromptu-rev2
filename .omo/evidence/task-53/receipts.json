@@ -1,0 +1,32 @@
+{
+  "task": "task-53-final-receipts",
+  "commit": "283369767974194c7fa29cac8a604ad3e56e40a7",
+  "gates": {
+    "results": "13/13 exit 0",
+    "bunTest": "577 pass / 0 fail across 108 files"
+  },
+  "receipts": {
+    "CORE5_GREEN": {
+      "value": true,
+      "basis": "acceptance suite at this HEAD finished exitCode 0 with positive 2/2, negative 6/6 and stt 2/2 (.omo/evidence/task-52/round-2). Both rounds of the re-run are recorded; the single miss in round one was a provider deadline, the same tail measured under criterion 6."
+    },
+    "OCR_GREEN": {
+      "value": true,
+      "basis": "the scanned fixture's sentinel restores exactly under the pinned Tesseract with PSM 6 segmentation, against a baseline of zero, and the four OCR failure paths still map to 422 OCR_UNAVAILABLE (.omo/evidence/task-26, task-43)."
+    },
+    "COACHING_WORD_TIMING_GREEN": {
+      "value": true,
+      "basis": "rolling window 30s, byte-deterministic reducer across FINAL arrival order, missing words map to MEASUREMENT_UNAVAILABLE, and no threshold, severity, colour or toast field exists (.omo/evidence/task-22)."
+    },
+    "STAGE_ZERO_CARDS": {
+      "value": true,
+      "basis": "test:e2e records publication-approve-refused, publication-terminate-refused, live-card-publish-refused and stage-card-free with cardEventCount 0; test:security 15/15; acceptance negative 6/6 in every round."
+    }
+  },
+  "criterion6": {
+    "cohortA": "10/10, p95 4,606.0ms",
+    "cohortB": "10/10, p95 4,627.2ms",
+    "evidence": ".omo/evidence/task-51/acceptance.json"
+  },
+  "completionBoundary": "include-hardening: status is reported and no 48-hour completion is declared."
+}

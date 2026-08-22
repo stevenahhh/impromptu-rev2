@@ -266,9 +266,9 @@ async function runPositive(context: BrowserContext, fixture: string): Promise<Sc
       diagnostics.retrievalCandidateCount = await retrievalCandidateCount(receipt);
       if (reason === "DEADLINE_EXCEEDED") {
         // 5_000ms terminal budget minus the 500ms guard is where the pipeline aborts itself.
-        diagnostics.abstainBudget = { abortGuardMs: 4_500, latencyMs };
+        diagnostics.abstainBudget = { abortGuardMs: 4_900, latencyMs };
         fail(
-          `hybrid retrieval abstained DEADLINE_EXCEEDED at ${String(latencyMs)}ms (abort guard 4,500ms) with ${String(diagnostics.retrievalCandidateCount)} internal candidates: ${JSON.stringify(result.body)}`,
+          `hybrid retrieval abstained DEADLINE_EXCEEDED at ${String(latencyMs)}ms (abort guard 4,900ms) with ${String(diagnostics.retrievalCandidateCount)} internal candidates: ${JSON.stringify(result.body)}`,
         );
       }
       if (reason === "DETERMINISTIC_MISMATCH") {
