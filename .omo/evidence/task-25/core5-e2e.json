@@ -14,29 +14,29 @@
         "opt-in-coaching"
       ],
       "stepLatencyMs": {
-        "sign-in": 5529,
-        "upload": 2774,
-        "capture-final": 7183,
-        "recommendation": 3502,
-        "opt-in-coaching": 105
+        "sign-in": 1544,
+        "upload": 824,
+        "capture-final": 4387,
+        "recommendation": 3123,
+        "opt-in-coaching": 21
       },
       "diagnostics": {
-        "presentationSessionId": "ps_e73b3d57b2dd2e567392df51e83c97f1",
+        "presentationSessionId": "ps_76a470a75ca7148445d13dfca31e97d4",
         "deckVersion": "deck_1495ab6922290f7a1ae111f0a6b79969e9beeb37da0f326ef52e3c79b426e46c",
         "finalKind": "FINAL",
         "finalSequence": 1,
-        "transcriptCharacters": 3,
+        "transcriptCharacters": 6,
         "transcriptWordCount": 1,
-        "transcriptDurationMs": 180,
+        "transcriptDurationMs": 960,
         "recommendationStatus": 200,
         "recommendationOutcome": "RECOMMEND",
         "recommendationReason": null,
-        "recommendationLatencyMs": 3005,
+        "recommendationLatencyMs": 3025,
         "recommendationEvidenceCount": 1,
         "recommendationResponseBody": {
           "outcome": "RECOMMEND",
           "recommendation": {
-            "claim": "2026년 형식 중립 근거 자료는 한빛유통의 2026년 사업 전략 보고서로, 경영기획본부가 2026년 1월 15일에 작성했습니다.",
+            "claim": "2026년 한빛유통 사업 전략 보고서는 경영기획본부가 2026년 1월 15일에 작성했다.",
             "evidenceIds": [
               "internal:7a93916cc74db13122339b3ef3b13680bce4ac5fdfe79fb2346b2c3290595d00:1495ab6922290f7a1ae111f0a6b79969e9beeb37da0f326ef52e3c79b426e46c"
             ],
@@ -71,8 +71,8 @@
               "authorizationVersion": "acl-1"
             }
           ],
-          "completedAtMs": 1787397042061,
-          "latencyMs": 3005
+          "completedAtMs": 1787408500763,
+          "latencyMs": 3025
         },
         "coachingActiveNodes": 1,
         "coachingStateValue": "unavailable"
@@ -90,24 +90,24 @@
         "opt-in-coaching"
       ],
       "stepLatencyMs": {
-        "sign-in": 2572,
-        "upload": 6086,
-        "capture-final": 6110,
-        "recommendation": 3892,
-        "opt-in-coaching": 174
+        "sign-in": 522,
+        "upload": 1937,
+        "capture-final": 4092,
+        "recommendation": 4563,
+        "opt-in-coaching": 24
       },
       "diagnostics": {
-        "presentationSessionId": "ps_0814dff45a4692cf6c0792a26a37bf9e",
+        "presentationSessionId": "ps_8758362608b3c09bd1ed775d196bbf93",
         "deckVersion": "deck_16d089f58618c3e943c230fd51978a4c4e660bc9794c27a65c2371990101a660",
         "finalKind": "FINAL",
         "finalSequence": 1,
-        "transcriptCharacters": 10,
-        "transcriptWordCount": 3,
-        "transcriptDurationMs": 120,
+        "transcriptCharacters": 4,
+        "transcriptWordCount": 1,
+        "transcriptDurationMs": 960,
         "recommendationStatus": 200,
         "recommendationOutcome": "RECOMMEND",
         "recommendationReason": null,
-        "recommendationLatencyMs": 3657,
+        "recommendationLatencyMs": 4424,
         "recommendationEvidenceCount": 1,
         "recommendationResponseBody": {
           "outcome": "RECOMMEND",
@@ -147,8 +147,8 @@
               "authorizationVersion": "acl-1"
             }
           ],
-          "completedAtMs": 1787397060950,
-          "latencyMs": 3657
+          "completedAtMs": 1787408511947,
+          "latencyMs": 4424
         },
         "coachingActiveNodes": 1,
         "coachingStateValue": "unavailable"
@@ -239,1534 +239,1129 @@
     {
       "stage": "embedding",
       "outcome": "SUCCESS",
-      "durationMs": 407,
-      "timestampMs": 1787397032449
+      "durationMs": 123,
+      "timestampMs": 1787408493589
     },
     {
       "stage": "embedding",
       "outcome": "SUCCESS",
-      "durationMs": 395,
-      "timestampMs": 1787397032460
+      "durationMs": 121,
+      "timestampMs": 1787408493597
     },
     {
       "stage": "embedding",
       "outcome": "SUCCESS",
-      "durationMs": 402,
-      "timestampMs": 1787397032469
+      "durationMs": 130,
+      "timestampMs": 1787408493606
     },
     {
       "stage": "embedding",
       "outcome": "SUCCESS",
-      "durationMs": 403,
-      "timestampMs": 1787397032476
+      "durationMs": 141,
+      "timestampMs": 1787408493617
     },
     {
       "stage": "embedding",
       "outcome": "SUCCESS",
-      "durationMs": 418,
-      "timestampMs": 1787397032487
-    },
-    {
-      "stage": "llm",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397032781
-    },
-    {
-      "stage": "llm",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397032788
-    },
-    {
-      "stage": "llm",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397032830
-    },
-    {
-      "stage": "llm",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397032840
-    },
-    {
-      "stage": "llm",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397032919
-    },
-    {
-      "stage": "rerank",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397033636
-    },
-    {
-      "stage": "rerank",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397033662
-    },
-    {
-      "stage": "rerank",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397033666
-    },
-    {
-      "stage": "rerank",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397033669
-    },
-    {
-      "stage": "rerank",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397033673
+      "durationMs": 153,
+      "timestampMs": 1787408493628
     },
     {
       "stage": "embedding",
       "outcome": "SUCCESS",
-      "durationMs": 327,
-      "timestampMs": 1787397033831
+      "durationMs": 95,
+      "timestampMs": 1787408493748
     },
     {
       "stage": "llm",
       "outcome": "STARTED",
       "durationMs": 0,
-      "timestampMs": 1787397034096
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1734,
-      "timestampMs": 1787397034495
-    },
-    {
-      "stage": "rerank",
-      "outcome": "PRIMARY_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397034495
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1792,
-      "timestampMs": 1787397034612
-    },
-    {
-      "stage": "rerank",
-      "outcome": "PRIMARY_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397034612
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1750,
-      "timestampMs": 1787397034655
-    },
-    {
-      "stage": "rerank",
-      "outcome": "PRIMARY_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397034655
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1940,
-      "timestampMs": 1787397034709
-    },
-    {
-      "stage": "rerank",
-      "outcome": "PRIMARY_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397034709
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1359,
-      "timestampMs": 1787397035032
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1399,
-      "timestampMs": 1787397035036
+      "timestampMs": 1787408494748
     },
     {
       "stage": "llm",
-      "outcome": "FAILED:provider_error",
-      "durationMs": 2206,
-      "timestampMs": 1787397035047
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 2131,
-      "timestampMs": 1787397035051
-    },
-    {
-      "stage": "llm",
-      "outcome": "HEDGE_WON",
+      "outcome": "STARTED",
       "durationMs": 0,
-      "timestampMs": 1787397035051
+      "timestampMs": 1787408494756
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787408494757
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787408494757
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787408494758
     },
     {
       "stage": "rerank",
       "outcome": "SUCCESS",
-      "durationMs": 2267,
-      "timestampMs": 1787397035075
+      "durationMs": 1258,
+      "timestampMs": 1787408494915
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787408494935
     },
     {
       "stage": "rerank",
-      "outcome": "PRIMARY_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397035075
+      "outcome": "SUCCESS",
+      "durationMs": 1254,
+      "timestampMs": 1787408494944
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1296,
+      "timestampMs": 1787408494957
     },
     {
       "stage": "rerank",
       "outcome": "STARTED",
       "durationMs": 0,
-      "timestampMs": 1787397035099
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 2234,
-      "timestampMs": 1787397035139
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 2339,
-      "timestampMs": 1787397035147
-    },
-    {
-      "stage": "llm",
-      "outcome": "PRIMARY_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397035147
-    },
-    {
-      "stage": "deterministic",
-      "outcome": "NUMBER:85억 원",
-      "durationMs": 0,
-      "timestampMs": 1787397035148
+      "timestampMs": 1787408495074
     },
     {
       "stage": "rerank",
-      "outcome": "FAILED:cancelled",
-      "durationMs": 1488,
-      "timestampMs": 1787397035154
-    },
-    {
-      "stage": "llm",
-      "outcome": "FAILED:cancelled",
-      "durationMs": 2324,
-      "timestampMs": 1787397035154
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787408495075
     },
     {
       "stage": "rerank",
       "outcome": "SUCCESS",
-      "durationMs": 1634,
-      "timestampMs": 1787397035303
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 2521,
-      "timestampMs": 1787397035341
-    },
-    {
-      "stage": "llm",
-      "outcome": "PRIMARY_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397035341
-    },
-    {
-      "stage": "deterministic",
-      "outcome": "ENTITY:482억 원",
-      "durationMs": 0,
-      "timestampMs": 1787397035341
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1270,
-      "timestampMs": 1787397035362
+      "durationMs": 1447,
+      "timestampMs": 1787408495094
     },
     {
       "stage": "rerank",
       "outcome": "PRIMARY_WON",
       "durationMs": 0,
-      "timestampMs": 1787397035362
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 2398,
-      "timestampMs": 1787397036060
+      "timestampMs": 1787408495094
     },
     {
       "stage": "llm",
       "outcome": "SUCCESS",
-      "durationMs": 1964,
-      "timestampMs": 1787397036060
+      "durationMs": 1592,
+      "timestampMs": 1787408495240
     },
     {
       "stage": "llm",
-      "outcome": "HEDGE_WON",
+      "outcome": "PRIMARY_WON",
       "durationMs": 0,
-      "timestampMs": 1787397036060
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 964,
-      "timestampMs": 1787397036063
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 1971,
-      "timestampMs": 1787397036063
+      "timestampMs": 1787408495240
     },
     {
       "stage": "verifier",
       "outcome": "STARTED",
       "durationMs": 0,
-      "timestampMs": 1787397036063
+      "timestampMs": 1787408495243
+    },
+    {
+      "stage": "rerank",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787408495252
     },
     {
       "stage": "llm",
       "outcome": "SUCCESS",
-      "durationMs": 3296,
-      "timestampMs": 1787397036065
+      "durationMs": 1653,
+      "timestampMs": 1787408495333
     },
     {
       "stage": "llm",
       "outcome": "PRIMARY_WON",
       "durationMs": 0,
-      "timestampMs": 1787397036065
-    },
-    {
-      "stage": "deterministic",
-      "outcome": "UNIT:명",
-      "durationMs": 0,
-      "timestampMs": 1787397036065
-    },
-    {
-      "stage": "llm",
-      "outcome": "FAILED:cancelled",
-      "durationMs": 3280,
-      "timestampMs": 1787397036069
-    },
-    {
-      "stage": "verifier",
-      "outcome": "SUCCESS",
-      "durationMs": 1409,
-      "timestampMs": 1787397036465
-    },
-    {
-      "stage": "llm",
-      "outcome": "FAILED:cancelled",
-      "durationMs": 4181,
-      "timestampMs": 1787397036944
-    },
-    {
-      "stage": "llm",
-      "outcome": "FAILED:cancelled",
-      "durationMs": 4163,
-      "timestampMs": 1787397036944
-    },
-    {
-      "stage": "llm",
-      "outcome": "BOTH_FAILED",
-      "durationMs": 0,
-      "timestampMs": 1787397036944
-    },
-    {
-      "stage": "verifier",
-      "outcome": "SUCCESS",
-      "durationMs": 1739,
-      "timestampMs": 1787397037803
-    },
-    {
-      "stage": "verifier",
-      "outcome": "HEDGE_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397037803
-    },
-    {
-      "stage": "verifier",
-      "outcome": "FAILED:cancelled",
-      "durationMs": 1758,
-      "timestampMs": 1787397037820
-    },
-    {
-      "stage": "embedding",
-      "outcome": "SUCCESS",
-      "durationMs": 196,
-      "timestampMs": 1787397038762
-    },
-    {
-      "stage": "embedding",
-      "outcome": "SUCCESS",
-      "durationMs": 209,
-      "timestampMs": 1787397039268
-    },
-    {
-      "stage": "llm",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397039843
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1011,
-      "timestampMs": 1787397039851
+      "timestampMs": 1787408495333
     },
     {
       "stage": "llm",
       "outcome": "SUCCESS",
-      "durationMs": 1255,
-      "timestampMs": 1787397040094
+      "durationMs": 1979,
+      "timestampMs": 1787408495640
     },
     {
       "stage": "llm",
       "outcome": "PRIMARY_WON",
       "durationMs": 0,
-      "timestampMs": 1787397040094
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 766,
-      "timestampMs": 1787397040104
-    },
-    {
-      "stage": "llm",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397040339
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 1227,
-      "timestampMs": 1787397040565
-    },
-    {
-      "stage": "llm",
-      "outcome": "PRIMARY_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397040565
-    },
-    {
-      "stage": "verifier",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397041418
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 1223,
-      "timestampMs": 1787397041562
-    },
-    {
-      "stage": "verifier",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397041913
-    },
-    {
-      "stage": "verifier",
-      "outcome": "SUCCESS",
-      "durationMs": 1901,
-      "timestampMs": 1787397041997
-    },
-    {
-      "stage": "verifier",
-      "outcome": "PRIMARY_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397041997
-    },
-    {
-      "stage": "verifier",
-      "outcome": "FAILED:cancelled",
-      "durationMs": 585,
-      "timestampMs": 1787397042007
-    },
-    {
-      "stage": "llm",
-      "outcome": "FAILED:cancelled",
-      "durationMs": 2164,
-      "timestampMs": 1787397042007
-    },
-    {
-      "stage": "verifier",
-      "outcome": "SUCCESS",
-      "durationMs": 1490,
-      "timestampMs": 1787397042056
-    },
-    {
-      "stage": "verifier",
-      "outcome": "PRIMARY_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397042056
-    },
-    {
-      "stage": "verifier",
-      "outcome": "FAILED:cancelled",
-      "durationMs": 151,
-      "timestampMs": 1787397042065
-    },
-    {
-      "stage": "embedding",
-      "outcome": "SUCCESS",
-      "durationMs": 370,
-      "timestampMs": 1787397051412
-    },
-    {
-      "stage": "embedding",
-      "outcome": "SUCCESS",
-      "durationMs": 395,
-      "timestampMs": 1787397051441
-    },
-    {
-      "stage": "embedding",
-      "outcome": "SUCCESS",
-      "durationMs": 397,
-      "timestampMs": 1787397051446
-    },
-    {
-      "stage": "embedding",
-      "outcome": "SUCCESS",
-      "durationMs": 475,
-      "timestampMs": 1787397051533
-    },
-    {
-      "stage": "embedding",
-      "outcome": "SUCCESS",
-      "durationMs": 495,
-      "timestampMs": 1787397051548
-    },
-    {
-      "stage": "embedding",
-      "outcome": "SUCCESS",
-      "durationMs": 496,
-      "timestampMs": 1787397051564
-    },
-    {
-      "stage": "llm",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397051616
-    },
-    {
-      "stage": "llm",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397051638
-    },
-    {
-      "stage": "llm",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397051672
-    },
-    {
-      "stage": "rerank",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397052159
-    },
-    {
-      "stage": "llm",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397052177
-    },
-    {
-      "stage": "rerank",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397052183
-    },
-    {
-      "stage": "llm",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397052203
-    },
-    {
-      "stage": "rerank",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397052249
-    },
-    {
-      "stage": "llm",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397052256
-    },
-    {
-      "stage": "rerank",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397052642
-    },
-    {
-      "stage": "rerank",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397052650
-    },
-    {
-      "stage": "rerank",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397052659
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1266,
-      "timestampMs": 1787397052894
-    },
-    {
-      "stage": "rerank",
-      "outcome": "PRIMARY_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397052894
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1262,
-      "timestampMs": 1787397052924
-    },
-    {
-      "stage": "rerank",
-      "outcome": "PRIMARY_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397052924
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 1667,
-      "timestampMs": 1787397053276
-    },
-    {
-      "stage": "llm",
-      "outcome": "PRIMARY_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397053276
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1104,
-      "timestampMs": 1787397053287
-    },
-    {
-      "stage": "rerank",
-      "outcome": "HEDGE_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397053287
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1138,
-      "timestampMs": 1787397053780
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1622,
-      "timestampMs": 1787397053781
-    },
-    {
-      "stage": "rerank",
-      "outcome": "HEDGE_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397053781
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 2154,
-      "timestampMs": 1787397053783
-    },
-    {
-      "stage": "llm",
-      "outcome": "PRIMARY_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397053783
-    },
-    {
-      "stage": "deterministic",
-      "outcome": "NUMBER:610억",
-      "durationMs": 0,
-      "timestampMs": 1787397053783
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1648,
-      "timestampMs": 1787397053785
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1537,
-      "timestampMs": 1787397053786
-    },
-    {
-      "stage": "rerank",
-      "outcome": "HEDGE_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397053786
-    },
-    {
-      "stage": "llm",
-      "outcome": "FAILED:cancelled",
-      "durationMs": 2148,
-      "timestampMs": 1787397053786
-    },
-    {
-      "stage": "rerank",
-      "outcome": "FAILED:cancelled",
-      "durationMs": 1130,
-      "timestampMs": 1787397053789
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 2185,
-      "timestampMs": 1787397053802
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1706,
-      "timestampMs": 1787397053805
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 2134,
-      "timestampMs": 1787397053806
-    },
-    {
-      "stage": "llm",
-      "outcome": "HEDGE_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397053806
-    },
-    {
-      "stage": "verifier",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397053809
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 2176,
-      "timestampMs": 1787397053838
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1794,
-      "timestampMs": 1787397054027
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1394,
-      "timestampMs": 1787397054044
-    },
-    {
-      "stage": "rerank",
-      "outcome": "HEDGE_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397054044
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 1869,
-      "timestampMs": 1787397054046
-    },
-    {
-      "stage": "llm",
-      "outcome": "HEDGE_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397054046
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 1838,
-      "timestampMs": 1787397054072
-    },
-    {
-      "stage": "llm",
-      "outcome": "PRIMARY_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397054072
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 2039,
-      "timestampMs": 1787397054138
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 1935,
-      "timestampMs": 1787397054138
-    },
-    {
-      "stage": "llm",
-      "outcome": "HEDGE_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397054138
+      "timestampMs": 1787408495640
     },
     {
       "stage": "deterministic",
       "outcome": "UNIT:억 원",
       "durationMs": 0,
-      "timestampMs": 1787397054138
+      "timestampMs": 1787408495640
     },
     {
       "stage": "llm",
       "outcome": "FAILED:cancelled",
-      "durationMs": 2007,
-      "timestampMs": 1787397054145
+      "durationMs": 887,
+      "timestampMs": 1787408495644
     },
     {
       "stage": "llm",
       "outcome": "SUCCESS",
-      "durationMs": 2146,
-      "timestampMs": 1787397054403
-    },
-    {
-      "stage": "verifier",
-      "outcome": "SUCCESS",
-      "durationMs": 1608,
-      "timestampMs": 1787397055415
-    },
-    {
-      "stage": "verifier",
-      "outcome": "PRIMARY_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397055415
-    },
-    {
-      "stage": "verifier",
-      "outcome": "FAILED:cancelled",
-      "durationMs": 1617,
-      "timestampMs": 1787397055426
-    },
-    {
-      "stage": "verifier",
-      "outcome": "SUCCESS",
-      "durationMs": 1619,
-      "timestampMs": 1787397055693
-    },
-    {
-      "stage": "rerank",
-      "outcome": "FAILED:cancelled",
-      "durationMs": 4349,
-      "timestampMs": 1787397055958
-    },
-    {
-      "stage": "verifier",
-      "outcome": "FAILED:cancelled",
-      "durationMs": 1915,
-      "timestampMs": 1787397055971
-    },
-    {
-      "stage": "verifier",
-      "outcome": "FAILED:cancelled",
-      "durationMs": 1932,
-      "timestampMs": 1787397055979
-    },
-    {
-      "stage": "embedding",
-      "outcome": "SUCCESS",
-      "durationMs": 180,
-      "timestampMs": 1787397057246
-    },
-    {
-      "stage": "embedding",
-      "outcome": "SUCCESS",
-      "durationMs": 205,
-      "timestampMs": 1787397057499
-    },
-    {
-      "stage": "llm",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397058345
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1075,
-      "timestampMs": 1787397058401
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 877,
-      "timestampMs": 1787397058446
-    },
-    {
-      "stage": "llm",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397058576
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 1984,
-      "timestampMs": 1787397059309
+      "durationMs": 2172,
+      "timestampMs": 1787408495952
     },
     {
       "stage": "llm",
       "outcome": "PRIMARY_WON",
       "durationMs": 0,
-      "timestampMs": 1787397059309
-    },
-    {
-      "stage": "deterministic",
-      "outcome": "UNIT:명",
-      "durationMs": 0,
-      "timestampMs": 1787397059310
+      "timestampMs": 1787408495952
     },
     {
       "stage": "llm",
       "outcome": "SUCCESS",
-      "durationMs": 1745,
-      "timestampMs": 1787397059313
+      "durationMs": 2302,
+      "timestampMs": 1787408495959
     },
     {
       "stage": "llm",
       "outcome": "PRIMARY_WON",
       "durationMs": 0,
-      "timestampMs": 1787397059313
-    },
-    {
-      "stage": "verifier",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397059317
-    },
-    {
-      "stage": "llm",
-      "outcome": "FAILED:cancelled",
-      "durationMs": 975,
-      "timestampMs": 1787397059320
-    },
-    {
-      "stage": "verifier",
-      "outcome": "SUCCESS",
-      "durationMs": 1627,
-      "timestampMs": 1787397060944
-    },
-    {
-      "stage": "verifier",
-      "outcome": "HEDGE_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397060944
-    },
-    {
-      "stage": "verifier",
-      "outcome": "SUCCESS",
-      "durationMs": 1631,
-      "timestampMs": 1787397060945
-    },
-    {
-      "stage": "llm",
-      "outcome": "FAILED:cancelled",
-      "durationMs": 2380,
-      "timestampMs": 1787397060956
-    },
-    {
-      "stage": "embedding",
-      "outcome": "SUCCESS",
-      "durationMs": 381,
-      "timestampMs": 1787397066404
-    },
-    {
-      "stage": "embedding",
-      "outcome": "SUCCESS",
-      "durationMs": 392,
-      "timestampMs": 1787397066410
-    },
-    {
-      "stage": "embedding",
-      "outcome": "SUCCESS",
-      "durationMs": 394,
-      "timestampMs": 1787397066426
-    },
-    {
-      "stage": "embedding",
-      "outcome": "SUCCESS",
-      "durationMs": 389,
-      "timestampMs": 1787397066428
-    },
-    {
-      "stage": "embedding",
-      "outcome": "SUCCESS",
-      "durationMs": 392,
-      "timestampMs": 1787397066437
-    },
-    {
-      "stage": "embedding",
-      "outcome": "SUCCESS",
-      "durationMs": 447,
-      "timestampMs": 1787397066462
-    },
-    {
-      "stage": "llm",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397066607
-    },
-    {
-      "stage": "llm",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397066630
-    },
-    {
-      "stage": "llm",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397066665
-    },
-    {
-      "stage": "llm",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397066678
-    },
-    {
-      "stage": "llm",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397066735
-    },
-    {
-      "stage": "rerank",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397066872
-    },
-    {
-      "stage": "llm",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397066875
-    },
-    {
-      "stage": "rerank",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397067613
-    },
-    {
-      "stage": "rerank",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397067617
-    },
-    {
-      "stage": "rerank",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397067619
-    },
-    {
-      "stage": "rerank",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397067634
-    },
-    {
-      "stage": "rerank",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397067640
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1388,
-      "timestampMs": 1787397068004
-    },
-    {
-      "stage": "rerank",
-      "outcome": "PRIMARY_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397068004
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1547,
-      "timestampMs": 1787397068151
-    },
-    {
-      "stage": "rerank",
-      "outcome": "PRIMARY_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397068151
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1593,
-      "timestampMs": 1787397068238
-    },
-    {
-      "stage": "rerank",
-      "outcome": "PRIMARY_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397068238
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 1695,
-      "timestampMs": 1787397068311
-    },
-    {
-      "stage": "llm",
-      "outcome": "PRIMARY_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397068311
-    },
-    {
-      "stage": "deterministic",
-      "outcome": "UNIT:억 원",
-      "durationMs": 0,
-      "timestampMs": 1787397068312
-    },
-    {
-      "stage": "rerank",
-      "outcome": "FAILED:cancelled",
-      "durationMs": 704,
-      "timestampMs": 1787397068318
-    },
-    {
-      "stage": "llm",
-      "outcome": "FAILED:cancelled",
-      "durationMs": 1688,
-      "timestampMs": 1787397068318
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 1731,
-      "timestampMs": 1787397068376
-    },
-    {
-      "stage": "llm",
-      "outcome": "PRIMARY_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397068377
-    },
-    {
-      "stage": "verifier",
-      "outcome": "STARTED",
-      "durationMs": 0,
-      "timestampMs": 1787397068379
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 1749,
-      "timestampMs": 1787397068415
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 1623,
-      "timestampMs": 1787397068490
-    },
-    {
-      "stage": "llm",
-      "outcome": "PRIMARY_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397068490
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1778,
-      "timestampMs": 1787397068645
-    },
-    {
-      "stage": "rerank",
-      "outcome": "PRIMARY_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397068645
-    },
-    {
-      "stage": "deterministic",
-      "outcome": "UNIT:명",
-      "durationMs": 0,
-      "timestampMs": 1787397068645
-    },
-    {
-      "stage": "llm",
-      "outcome": "FAILED:cancelled",
-      "durationMs": 1773,
-      "timestampMs": 1787397068650
-    },
-    {
-      "stage": "rerank",
-      "outcome": "FAILED:cancelled",
-      "durationMs": 1778,
-      "timestampMs": 1787397068650
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1200,
-      "timestampMs": 1787397068818
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 2231,
-      "timestampMs": 1787397068838
-    },
-    {
-      "stage": "llm",
-      "outcome": "HEDGE_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397068838
+      "timestampMs": 1787408495959
     },
     {
       "stage": "deterministic",
       "outcome": "UNIT:대",
       "durationMs": 0,
-      "timestampMs": 1787397068838
+      "timestampMs": 1787408495959
     },
     {
       "stage": "llm",
       "outcome": "FAILED:cancelled",
-      "durationMs": 2241,
-      "timestampMs": 1787397068845
+      "durationMs": 1213,
+      "timestampMs": 1787408495961
     },
     {
-      "stage": "llm",
+      "stage": "rerank",
       "outcome": "SUCCESS",
-      "durationMs": 2234,
-      "timestampMs": 1787397068912
+      "durationMs": 959,
+      "timestampMs": 1787408496034
     },
     {
-      "stage": "llm",
+      "stage": "rerank",
       "outcome": "HEDGE_WON",
       "durationMs": 0,
-      "timestampMs": 1787397068912
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 2308,
-      "timestampMs": 1787397068963
-    },
-    {
-      "stage": "rerank",
-      "outcome": "PRIMARY_WON",
-      "durationMs": 0,
-      "timestampMs": 1787397068963
+      "timestampMs": 1787408496034
     },
     {
       "stage": "deterministic",
-      "outcome": "UNIT:억 원",
+      "outcome": "ENTITY:단비",
       "durationMs": 0,
-      "timestampMs": 1787397068963
+      "timestampMs": 1787408496034
+    },
+    {
+      "stage": "rerank",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 2355,
+      "timestampMs": 1787408496036
+    },
+    {
+      "stage": "llm",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 1280,
+      "timestampMs": 1787408496036
     },
     {
       "stage": "llm",
       "outcome": "SUCCESS",
-      "durationMs": 2247,
-      "timestampMs": 1787397068974
+      "durationMs": 2436,
+      "timestampMs": 1787408496126
     },
     {
       "stage": "llm",
       "outcome": "PRIMARY_WON",
       "durationMs": 0,
-      "timestampMs": 1787397068974
+      "timestampMs": 1787408496126
+    },
+    {
+      "stage": "deterministic",
+      "outcome": "UNIT:명",
+      "durationMs": 0,
+      "timestampMs": 1787408496127
     },
     {
       "stage": "llm",
       "outcome": "FAILED:cancelled",
-      "durationMs": 2322,
-      "timestampMs": 1787397068976
+      "durationMs": 1370,
+      "timestampMs": 1787408496128
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1359,
+      "timestampMs": 1787408496294
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1947,
+      "timestampMs": 1787408496704
+    },
+    {
+      "stage": "verifier",
+      "outcome": "SUCCESS",
+      "durationMs": 1528,
+      "timestampMs": 1787408496771
+    },
+    {
+      "stage": "verifier",
+      "outcome": "HEDGE_WON",
+      "durationMs": 0,
+      "timestampMs": 1787408496772
+    },
+    {
+      "stage": "verifier",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 1537,
+      "timestampMs": 1787408496778
     },
     {
       "stage": "rerank",
       "outcome": "FAILED:cancelled",
-      "durationMs": 1357,
-      "timestampMs": 1787397068976
+      "durationMs": 1704,
+      "timestampMs": 1787408496778
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1630,
+      "timestampMs": 1787408496883
+    },
+    {
+      "stage": "rerank",
+      "outcome": "HEDGE_WON",
+      "durationMs": 0,
+      "timestampMs": 1787408496883
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 94,
+      "timestampMs": 1787408497740
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 88,
+      "timestampMs": 1787408497827
+    },
+    {
+      "stage": "verifier",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 1675,
+      "timestampMs": 1787408498558
+    },
+    {
+      "stage": "rerank",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 4778,
+      "timestampMs": 1787408498558
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 728,
+      "timestampMs": 1787408498576
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 963,
+      "timestampMs": 1787408498733
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787408498927
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1199,
+      "timestampMs": 1787408498969
+    },
+    {
+      "stage": "llm",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787408498969
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787408499021
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1306,
+      "timestampMs": 1787408499154
+    },
+    {
+      "stage": "llm",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787408499154
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1061,
+      "timestampMs": 1787408499988
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1063,
+      "timestampMs": 1787408500084
+    },
+    {
+      "stage": "verifier",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787408500502
+    },
+    {
+      "stage": "verifier",
+      "outcome": "SUCCESS",
+      "durationMs": 1593,
+      "timestampMs": 1787408500562
+    },
+    {
+      "stage": "verifier",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787408500562
+    },
+    {
+      "stage": "verifier",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 65,
+      "timestampMs": 1787408500567
+    },
+    {
+      "stage": "verifier",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787408500595
+    },
+    {
+      "stage": "verifier",
+      "outcome": "SUCCESS",
+      "durationMs": 1607,
+      "timestampMs": 1787408500761
+    },
+    {
+      "stage": "verifier",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787408500761
+    },
+    {
+      "stage": "verifier",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 170,
+      "timestampMs": 1787408500765
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 100,
+      "timestampMs": 1787408503404
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 103,
+      "timestampMs": 1787408503411
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 108,
+      "timestampMs": 1787408503418
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 117,
+      "timestampMs": 1787408503426
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 123,
+      "timestampMs": 1787408503434
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 131,
+      "timestampMs": 1787408503442
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 868,
+      "timestampMs": 1787408504315
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 855,
+      "timestampMs": 1787408504318
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787408504586
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787408504589
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787408504590
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787408504591
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787408504591
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787408504592
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1157,
+      "timestampMs": 1787408504614
+    },
+    {
+      "stage": "llm",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787408504614
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1259,
+      "timestampMs": 1787408504752
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1321,
+      "timestampMs": 1787408504784
+    },
+    {
+      "stage": "llm",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787408504784
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1371,
+      "timestampMs": 1787408504828
+    },
+    {
+      "stage": "rerank",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787408504907
+    },
+    {
+      "stage": "rerank",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787408504908
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1838,
+      "timestampMs": 1787408505285
+    },
+    {
+      "stage": "llm",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787408505285
+    },
+    {
+      "stage": "verifier",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787408505286
+    },
+    {
+      "stage": "llm",
+      "outcome": "FAILED:provider_error",
+      "durationMs": 1910,
+      "timestampMs": 1787408505386
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1933,
+      "timestampMs": 1787408505418
+    },
+    {
+      "stage": "llm",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787408505418
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 2026,
+      "timestampMs": 1787408505502
+    },
+    {
+      "stage": "rerank",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787408505502
+    },
+    {
+      "stage": "llm",
+      "outcome": "FAILED:provider_error",
+      "durationMs": 1007,
+      "timestampMs": 1787408505597
+    },
+    {
+      "stage": "llm",
+      "outcome": "BOTH_FAILED",
+      "durationMs": 0,
+      "timestampMs": 1787408505597
+    },
+    {
+      "stage": "rerank",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 692,
+      "timestampMs": 1787408505599
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 2136,
+      "timestampMs": 1787408505621
+    },
+    {
+      "stage": "rerank",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787408505621
+    },
+    {
+      "stage": "verifier",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787408505622
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 881,
+      "timestampMs": 1787408505790
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 2369,
+      "timestampMs": 1787408505862
+    },
+    {
+      "stage": "llm",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787408505862
+    },
+    {
+      "stage": "deterministic",
+      "outcome": "UNIT:대",
+      "durationMs": 0,
+      "timestampMs": 1787408505862
+    },
+    {
+      "stage": "llm",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 1272,
+      "timestampMs": 1787408505864
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1323,
+      "timestampMs": 1787408505912
+    },
+    {
+      "stage": "verifier",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787408506164
+    },
+    {
+      "stage": "verifier",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787408506166
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1653,
+      "timestampMs": 1787408506244
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1726,
+      "timestampMs": 1787408506317
+    },
+    {
+      "stage": "verifier",
+      "outcome": "SUCCESS",
+      "durationMs": 1552,
+      "timestampMs": 1787408506336
+    },
+    {
+      "stage": "verifier",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787408506336
+    },
+    {
+      "stage": "verifier",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 174,
+      "timestampMs": 1787408506340
+    },
+    {
+      "stage": "verifier",
+      "outcome": "SUCCESS",
+      "durationMs": 1586,
+      "timestampMs": 1787408506414
+    },
+    {
+      "stage": "verifier",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787408506414
+    },
+    {
+      "stage": "verifier",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 255,
+      "timestampMs": 1787408506419
+    },
+    {
+      "stage": "verifier",
+      "outcome": "SUCCESS",
+      "durationMs": 1784,
+      "timestampMs": 1787408507070
+    },
+    {
+      "stage": "verifier",
+      "outcome": "HEDGE_WON",
+      "durationMs": 0,
+      "timestampMs": 1787408507070
+    },
+    {
+      "stage": "verifier",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 1789,
+      "timestampMs": 1787408507074
+    },
+    {
+      "stage": "llm",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 2489,
+      "timestampMs": 1787408507075
+    },
+    {
+      "stage": "verifier",
+      "outcome": "SUCCESS",
+      "durationMs": 1707,
+      "timestampMs": 1787408507329
+    },
+    {
+      "stage": "verifier",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787408507329
+    },
+    {
+      "stage": "verifier",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 1712,
+      "timestampMs": 1787408507334
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 89,
+      "timestampMs": 1787408507477
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 88,
+      "timestampMs": 1787408507612
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787408508669
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1222,
+      "timestampMs": 1787408508723
+    },
+    {
+      "stage": "llm",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787408508805
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1299,
+      "timestampMs": 1787408508935
+    },
+    {
+      "stage": "llm",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787408508935
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1575,
+      "timestampMs": 1787408509076
+    },
+    {
+      "stage": "llm",
+      "outcome": "PRIMARY_WON",
+      "durationMs": 0,
+      "timestampMs": 1787408509076
+    },
+    {
+      "stage": "verifier",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787408509077
+    },
+    {
+      "stage": "rerank",
+      "outcome": "STARTED",
+      "durationMs": 0,
+      "timestampMs": 1787408509122
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1055,
+      "timestampMs": 1787408509860
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1330,
+      "timestampMs": 1787408510452
+    },
+    {
+      "stage": "rerank",
+      "outcome": "HEDGE_WON",
+      "durationMs": 0,
+      "timestampMs": 1787408510452
+    },
+    {
+      "stage": "verifier",
+      "outcome": "SUCCESS",
+      "durationMs": 1493,
+      "timestampMs": 1787408510570
+    },
+    {
+      "stage": "verifier",
+      "outcome": "HEDGE_WON",
+      "durationMs": 0,
+      "timestampMs": 1787408510570
+    },
+    {
+      "stage": "llm",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 1901,
+      "timestampMs": 1787408510571
+    },
+    {
+      "stage": "verifier",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 1495,
+      "timestampMs": 1787408510571
+    },
+    {
+      "stage": "verifier",
+      "outcome": "SUCCESS",
+      "durationMs": 1492,
+      "timestampMs": 1787408511944
+    },
+    {
+      "stage": "rerank",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 4314,
+      "timestampMs": 1787408511950
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 95,
+      "timestampMs": 1787408513448
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 104,
+      "timestampMs": 1787408513456
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 110,
+      "timestampMs": 1787408513463
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 95,
+      "timestampMs": 1787408513472
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 104,
+      "timestampMs": 1787408513481
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 113,
+      "timestampMs": 1787408513489
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 788,
+      "timestampMs": 1787408514287
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 815,
+      "timestampMs": 1787408514302
     }
   ],
   "stageLatencySummaryMs": {
     "deterministic": {
-      "n": 10,
+      "n": 5,
       "min": 0,
       "median": 0,
       "max": 0
     },
     "embedding": {
       "n": 22,
-      "min": 180,
-      "median": 394,
-      "max": 496
+      "min": 88,
+      "median": 106,
+      "max": 153
     },
     "llm": {
-      "n": 87,
+      "n": 64,
       "min": 0,
-      "median": 0,
-      "max": 4181
+      "median": 443,
+      "max": 2489
     },
     "rerank": {
-      "n": 72,
+      "n": 36,
       "min": 0,
-      "median": 735,
-      "max": 4349
+      "median": 874,
+      "max": 4778
     },
     "verifier": {
-      "n": 25,
+      "n": 34,
       "min": 0,
-      "median": 585,
-      "max": 1932
+      "median": 117,
+      "max": 1789
     }
   },
   "recommendationRequests": [
     {
       "outcome": "ABSTAIN:DETERMINISTIC_MISMATCH",
-      "durationMs": 3116,
-      "timestampMs": 1787397035150
+      "durationMs": 2180,
+      "timestampMs": 1787408495641
     },
     {
       "outcome": "ABSTAIN:DETERMINISTIC_MISMATCH",
-      "durationMs": 3308,
-      "timestampMs": 1787397035341
+      "durationMs": 2498,
+      "timestampMs": 1787408495959
     },
     {
       "outcome": "ABSTAIN:DETERMINISTIC_MISMATCH",
-      "durationMs": 4032,
-      "timestampMs": 1787397036065
+      "durationMs": 2573,
+      "timestampMs": 1787408496034
+    },
+    {
+      "outcome": "ABSTAIN:DETERMINISTIC_MISMATCH",
+      "durationMs": 2666,
+      "timestampMs": 1787408496127
     },
     {
       "outcome": "RECOMMEND",
-      "durationMs": 4440,
-      "timestampMs": 1787397036473
+      "durationMs": 3314,
+      "timestampMs": 1787408496775
     },
     {
       "outcome": "ABSTAIN:DEADLINE_EXCEEDED",
-      "durationMs": 4905,
-      "timestampMs": 1787397036937
+      "durationMs": 4902,
+      "timestampMs": 1787408498554
     },
     {
       "outcome": "RECOMMEND",
-      "durationMs": 4320,
-      "timestampMs": 1787397037814
+      "durationMs": 3028,
+      "timestampMs": 1787408500764
+    },
+    {
+      "outcome": "ABSTAIN:MODEL_FAILURE",
+      "durationMs": 2290,
+      "timestampMs": 1787408505597
+    },
+    {
+      "outcome": "ABSTAIN:DETERMINISTIC_MISMATCH",
+      "durationMs": 2555,
+      "timestampMs": 1787408505862
     },
     {
       "outcome": "RECOMMEND",
-      "durationMs": 3011,
-      "timestampMs": 1787397042062
+      "durationMs": 3032,
+      "timestampMs": 1787408506339
     },
     {
-      "outcome": "REJECTED",
-      "durationMs": 3,
-      "timestampMs": 1787397050961
+      "outcome": "RECOMMEND",
+      "durationMs": 3110,
+      "timestampMs": 1787408506417
+    },
+    {
+      "outcome": "RECOMMEND",
+      "durationMs": 3772,
+      "timestampMs": 1787408507073
+    },
+    {
+      "outcome": "RECOMMEND",
+      "durationMs": 4025,
+      "timestampMs": 1787408507332
+    },
+    {
+      "outcome": "RECOMMEND",
+      "durationMs": 4424,
+      "timestampMs": 1787408511947
     },
     {
       "outcome": "REJECTED",
       "durationMs": 1,
-      "timestampMs": 1787397050982
-    },
-    {
-      "outcome": "REJECTED",
-      "durationMs": 2,
-      "timestampMs": 1787397050982
-    },
-    {
-      "outcome": "REJECTED",
-      "durationMs": 7,
-      "timestampMs": 1787397051005
-    },
-    {
-      "outcome": "REJECTED",
-      "durationMs": 6,
-      "timestampMs": 1787397051005
-    },
-    {
-      "outcome": "REJECTED",
-      "durationMs": 6,
-      "timestampMs": 1787397051005
-    },
-    {
-      "outcome": "ABSTAIN:DETERMINISTIC_MISMATCH",
-      "durationMs": 2751,
-      "timestampMs": 1787397053785
-    },
-    {
-      "outcome": "ABSTAIN:DETERMINISTIC_MISMATCH",
-      "durationMs": 3104,
-      "timestampMs": 1787397054138
-    },
-    {
-      "outcome": "RECOMMEND",
-      "durationMs": 4387,
-      "timestampMs": 1787397055421
-    },
-    {
-      "outcome": "RECOMMEND",
-      "durationMs": 4666,
-      "timestampMs": 1787397055700
-    },
-    {
-      "outcome": "ABSTAIN:DEADLINE_EXCEEDED",
-      "durationMs": 4914,
-      "timestampMs": 1787397055947
-    },
-    {
-      "outcome": "ABSTAIN:DEADLINE_EXCEEDED",
-      "durationMs": 4911,
-      "timestampMs": 1787397055974
-    },
-    {
-      "outcome": "RECOMMEND",
-      "durationMs": 3660,
-      "timestampMs": 1787397060951
-    },
-    {
-      "outcome": "REJECTED",
-      "durationMs": 2,
-      "timestampMs": 1787397065960
-    },
-    {
-      "outcome": "REJECTED",
-      "durationMs": 3,
-      "timestampMs": 1787397065986
-    },
-    {
-      "outcome": "REJECTED",
-      "durationMs": 2,
-      "timestampMs": 1787397065986
-    },
-    {
-      "outcome": "REJECTED",
-      "durationMs": 2,
-      "timestampMs": 1787397065986
-    },
-    {
-      "outcome": "REJECTED",
-      "durationMs": 2,
-      "timestampMs": 1787397065986
+      "timestampMs": 1787408513342
     },
     {
       "outcome": "REJECTED",
       "durationMs": 1,
-      "timestampMs": 1787397065996
+      "timestampMs": 1787408513347
     },
     {
-      "outcome": "ABSTAIN:DETERMINISTIC_MISMATCH",
-      "durationMs": 2301,
-      "timestampMs": 1787397068312
+      "outcome": "REJECTED",
+      "durationMs": 1,
+      "timestampMs": 1787408513347
     },
     {
-      "outcome": "ABSTAIN:DETERMINISTIC_MISMATCH",
-      "durationMs": 2634,
-      "timestampMs": 1787397068645
+      "outcome": "REJECTED",
+      "durationMs": 1,
+      "timestampMs": 1787408513347
     },
     {
-      "outcome": "ABSTAIN:DETERMINISTIC_MISMATCH",
-      "durationMs": 2827,
-      "timestampMs": 1787397068839
+      "outcome": "REJECTED",
+      "durationMs": 1,
+      "timestampMs": 1787408513347
     },
     {
-      "outcome": "ABSTAIN:DETERMINISTIC_MISMATCH",
-      "durationMs": 2953,
-      "timestampMs": 1787397068965
+      "outcome": "REJECTED",
+      "durationMs": 1,
+      "timestampMs": 1787408513347
     }
   ],
   "deterministicMismatches": [
     {
-      "category": "NUMBER",
-      "value": "85억 원",
-      "timestampMs": 1787397035148
-    },
-    {
-      "category": "ENTITY",
-      "value": "482억 원",
-      "timestampMs": 1787397035341
-    },
-    {
-      "category": "UNIT",
-      "value": "명",
-      "timestampMs": 1787397036065
-    },
-    {
-      "category": "NUMBER",
-      "value": "610억",
-      "timestampMs": 1787397053783
-    },
-    {
       "category": "UNIT",
       "value": "억 원",
-      "timestampMs": 1787397054138
-    },
-    {
-      "category": "UNIT",
-      "value": "명",
-      "timestampMs": 1787397059310
-    },
-    {
-      "category": "UNIT",
-      "value": "억 원",
-      "timestampMs": 1787397068312
-    },
-    {
-      "category": "UNIT",
-      "value": "명",
-      "timestampMs": 1787397068645
+      "timestampMs": 1787408495640
     },
     {
       "category": "UNIT",
       "value": "대",
-      "timestampMs": 1787397068838
+      "timestampMs": 1787408495959
+    },
+    {
+      "category": "ENTITY",
+      "value": "단비",
+      "timestampMs": 1787408496034
     },
     {
       "category": "UNIT",
-      "value": "억 원",
-      "timestampMs": 1787397068963
+      "value": "명",
+      "timestampMs": 1787408496127
+    },
+    {
+      "category": "UNIT",
+      "value": "대",
+      "timestampMs": 1787408505862
     }
   ]
 }
