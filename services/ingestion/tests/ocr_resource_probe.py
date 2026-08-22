@@ -10,17 +10,29 @@ from pathlib import Path
 
 import pymupdf
 
-from impromptu_ingestion.contracts import IngestionJob
+from impromptu_ingestion.contracts import CompletedIngestion, IngestionJob
 from impromptu_ingestion.worker import ingest
 
 _EXPECTED_SENTINEL = "형식 중립 근거 자료 2026"
+SLIDES_PER_SENTINEL_PAGE = 6
 
 
 def _ten_page_copy(source_path: Path, output_path: Path) -> None:
+    """Builds a ten-page document by cycling the fixture's slides one page at a
+    time so the probe always measures exactly ten sequential OCR operations,
+    independent of the fixture's slide count."""
     with pymupdf.open(source_path) as source, pymupdf.open() as target:
-        for _ in range(10):
-            target.insert_pdf(source)
+        slide_count = source.page_count
+        for index in range(10):
+            target.insert_pdf(source, from_page=index % slide_count, to_page=index % slide_count)
         target.save(output_path)
+
+
+def _lines_by_page(result: CompletedIngestion) -> list[list[str]]:
+    return [
+        [element.text for element in slide.elements if element.kind == "text"]
+        for slide in result.manifest.slides
+    ]
 
 
 def main() -> int:
@@ -44,6 +56,7 @@ def main() -> int:
         " ".join(element.text for element in slide.elements if element.kind == "text")
         for slide in result.manifest.slides
     ]
+    lines_by_page = _lines_by_page(result)
     warning_codes_by_page = [
         [warning.code for warning in slide.warnings] for slide in result.manifest.slides
     ]
@@ -77,7 +90,14 @@ def main() -> int:
         "concurrency": 1,
         "expectedSentinel": _EXPECTED_SENTINEL,
         "recognizedTexts": texts_by_page,
-        "exactSentinelPages": sum(text == _EXPECTED_SENTINEL for text in texts_by_page),
+        # The dense fixture carries body text around the sentinel, so exact
+        # restoration is asserted at line level: the sentinel must appear as a
+        # standalone recognized line with no extra or missing characters.
+        "recognizedLinesByPage": lines_by_page,
+        "exactSentinelPages": sum(
+            _EXPECTED_SENTINEL in lines for lines in lines_by_page
+        ),
+        "pagesWithAnyText": sum(bool(lines) for lines in lines_by_page),
         "ocrAppliedPages": sum(
             "ocr_applied" in warning_codes for warning_codes in warning_codes_by_page
         ),
@@ -85,6 +105,12 @@ def main() -> int:
     }
     print(json.dumps(receipt, ensure_ascii=False, sort_keys=True))
     if receipt["pageCount"] != 10 or receipt["ocrAppliedPages"] != 10:
+        return 1
+    # Slide one (the only sentinel-bearing slide) is replicated onto 10-page
+    # copies at positions 0 and 6, so exactly those two pages must restore
+    # the sentinel line verbatim.
+    expected_sentinel_pages = len(range(0, receipt["pageCount"], SLIDES_PER_SENTINEL_PAGE))
+    if receipt["exactSentinelPages"] != expected_sentinel_pages:
         return 1
     return 0
 

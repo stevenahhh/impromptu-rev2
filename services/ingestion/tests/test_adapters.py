@@ -17,6 +17,7 @@ from impromptu_ingestion.adapters import (
 from impromptu_ingestion.adapters.pdf import extract_pdf_in_process
 from impromptu_ingestion.canonical import canonical_manifest_bytes, manifest_sha256
 from impromptu_ingestion.contracts import (
+    DeckManifest,
     IngestionJob,
     IngestionLimits,
     InputKind,
@@ -109,12 +110,14 @@ def test_pdf_extracts_positioned_text_and_images(sample_pdf: Path) -> None:
     assert manifest.slides[1].warnings == ()
 
 
-def test_frozen_pdf_and_pptx_share_korean_structural_sentinel() -> None:
+def test_frozen_pdf_and_pptx_share_korean_structural_content() -> None:
     registry = _fixture_registry()
     sentinel = registry["sentinels"]["structural"]
     forbidden = registry["sentinels"]["forbiddenPptxText"]
+    density = registry["density"]
     fixture_by_kind = {fixture["kind"]: fixture for fixture in registry["fixtures"]}
 
+    manifests: dict[str, DeckManifest] = {}
     texts_by_kind: dict[str, tuple[str, ...]] = {}
     for kind, adapter in (
         ("pptx", PptxStructuralAdapter()),
@@ -123,6 +126,7 @@ def test_frozen_pdf_and_pptx_share_korean_structural_sentinel() -> None:
         path = _REPOSITORY_ROOT / fixture_by_kind[kind]["path"]
         with _staged(path) as source:
             manifest = adapter.extract(source)
+        manifests[kind] = manifest
         texts_by_kind[kind] = tuple(
             element.text
             for slide in manifest.slides
@@ -130,11 +134,18 @@ def test_frozen_pdf_and_pptx_share_korean_structural_sentinel() -> None:
             if element.kind == "text"
         )
 
-    assert texts_by_kind == {
-        "pptx": (sentinel,),
-        "text-layer-pdf": (sentinel,),
-    }
+    # Format neutrality: both formats must yield byte-identical ordered text.
+    assert texts_by_kind["pptx"] == texts_by_kind["text-layer-pdf"]
+    assert texts_by_kind["pptx"][0] == sentinel
     assert forbidden not in "".join(texts_by_kind["pptx"])
+
+    # Pinned density invariants from the frozen registry.
+    assert len(manifests["pptx"].slides) == density["slideCount"]
+    assert len(manifests["text-layer-pdf"].slides) == density["slideCount"]
+    assert len(texts_by_kind["pptx"]) == density["textElementCount"]
+    assert sum(len(text) for text in texts_by_kind["pptx"]) == density[
+        "totalTextCharacters"
+    ]
 
 
 def test_frozen_scanned_pdf_uses_ocr_only_for_the_raster_page(
@@ -162,13 +173,16 @@ def test_frozen_scanned_pdf_uses_ocr_only_for_the_raster_page(
     with _staged(_REPOSITORY_ROOT / fixture["path"]) as source:
         manifest = extract_pdf_in_process(source)
 
-    assert calls == [30]
+    assert calls == [30] * registry["density"]["slideCount"]
     assert [
-        element.text
-        for element in manifest.slides[0].elements
-        if element.kind == "text"
-    ] == [sentinel]
-    assert {warning.code for warning in manifest.slides[0].warnings} == {"ocr_applied"}
+        [element.text for element in slide.elements if element.kind == "text"]
+        for slide in manifest.slides
+    ] == [[sentinel]] * registry["density"]["slideCount"]
+    assert {
+        warning.code
+        for slide in manifest.slides
+        for warning in slide.warnings
+    } == {"ocr_applied"}
 
 
 def test_fixture_hash_registry_accepts_frozen_binaries() -> None:

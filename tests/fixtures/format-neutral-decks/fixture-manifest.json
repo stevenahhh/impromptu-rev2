@@ -1,43 +1,49 @@
 {
+  "density": {
+    "note": "Pinned machine-checkable density invariants for the structural fixtures; the freeze tests assert them against real extraction.",
+    "slideCount": 6,
+    "textElementCount": 24,
+    "totalTextCharacters": 615
+  },
   "fixtures": [
     {
-      "expectedSemantics": "DeckManifest contains the structural sentinel as one TextElement",
+      "expectedSemantics": "DeckManifest has 6 slides whose ordered TextElement tuples are identical across the PPTX and text-layer PDF fixtures; slide one opens with the sentinel",
       "id": "korean-structural-pptx",
       "kind": "pptx",
       "path": "tests/fixtures/format-neutral-decks/korean-structural.pptx",
       "provenance": {
         "generatedBy": "scripts/generate-format-neutral-deck-fixtures.py",
         "origin": "repository-generated synthetic fixture",
-        "sourceMethod": "python-pptx blank slide with one native Korean text shape; ZIP metadata normalized",
+        "sourceMethod": "python-pptx six-slide deck with one native Korean textbox per line; ZIP metadata normalized",
         "thirdPartySourceMaterial": false
       },
-      "sha256": "a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d"
+      "sha256": "16d089f58618c3e943c230fd51978a4c4e660bc9794c27a65c2371990101a660"
     },
     {
-      "expectedSemantics": "DeckManifest contains the same structural sentinel as the PPTX fixture",
+      "expectedSemantics": "DeckManifest has 6 slides whose ordered TextElement tuples are identical across the PPTX and text-layer PDF fixtures; slide one opens with the sentinel",
       "id": "korean-text-layer-pdf",
       "kind": "text-layer-pdf",
       "path": "tests/fixtures/format-neutral-decks/korean-text-layer.pdf",
       "provenance": {
         "generatedBy": "scripts/generate-format-neutral-deck-fixtures.py",
         "origin": "repository-generated synthetic fixture",
-        "sourceMethod": "PyMuPDF page with native Korean PDF text using the built-in Korea CJK font",
+        "sourceMethod": "PyMuPDF pages with native Korean PDF text using the built-in Korea CJK font",
         "thirdPartySourceMaterial": false
       },
-      "sha256": "34eac2a55addb409359febc4ec28e911f10c719abd28ce7b427421ab9a985c86"
+      "sha256": "1495ab6922290f7a1ae111f0a6b79969e9beeb37da0f326ef52e3c79b426e46c"
     },
     {
-      "expectedSemantics": "DeckManifest has no TextElement and warns scanned_page_requires_ocr; OCR target is the OCR sentinel",
+      "expectedSemantics": "DeckManifest has no TextElement and warns scanned_page_requires_ocr per page; OCR must restore the sentinel line exactly on slide one",
       "id": "korean-scanned-pdf",
       "kind": "scanned-pdf",
       "path": "tests/fixtures/format-neutral-decks/korean-scanned.pdf",
       "provenance": {
         "generatedBy": "scripts/generate-format-neutral-deck-fixtures.py",
         "origin": "repository-generated synthetic fixture",
-        "sourceMethod": "2x rasterization of the synthetic Korean page embedded as the PDF page's only image",
+        "sourceMethod": "2x rasterization of the same six synthetic Korean pages embedded as each PDF page's only image",
         "thirdPartySourceMaterial": false
       },
-      "sha256": "de579a639a3c77b9387714a517bcf5b9515d09e1473c6036a6c3d45ee0484906"
+      "sha256": "642dc70609f3b11ea63424404e801d0fdf622ff361bd0d5960b559ba6c2990ae"
     }
   ],
   "generator": {
@@ -62,7 +68,7 @@
       "newMigrationAllowed": false
     }
   },
-  "registryId": "impromptu-format-neutral-korean-decks-v1",
+  "registryId": "impromptu-format-neutral-korean-decks-v2",
   "schemaVersion": 1,
   "sentinels": {
     "forbiddenPptxText": "<date/time>",

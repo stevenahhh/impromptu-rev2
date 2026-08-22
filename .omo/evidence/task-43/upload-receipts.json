@@ -1,0 +1,365 @@
+{
+  "registrationStatus": true,
+  "korean-text-layer.pdf": {
+    "status": 201,
+    "uploadMs": 680.2,
+    "response": {
+      "presentationSessionId": "ps_8d6ecc31d6e2d48d153a7232e53c8475",
+      "presentationSessionEpoch": "pse_1",
+      "deckVersion": "deck_1495ab6922290f7a1ae111f0a6b79969e9beeb37da0f326ef52e3c79b426e46c",
+      "privateDeck": {
+        "deckId": "private_deck_1495ab6922290f7a1ae111f0a6b79969e9beeb37da0f326ef52e3c79b426e46c",
+        "deckVersion": "deck_1495ab6922290f7a1ae111f0a6b79969e9beeb37da0f326ef52e3c79b426e46c",
+        "manifestHash": "17d7dcdeea205fe47d29060b9a620dcffc28a38ac2e9097d57c98f201d22b2ca",
+        "title": "Korean text layer",
+        "ownerAccountId": "account_local_demo",
+        "aclPolicyVersion": "acl-1",
+        "privateObjectPrefix": "private-decks/account_local_demo/1495ab6922290f7a1ae111f0a6b79969e9beeb37da0f326ef52e3c79b426e46c",
+        "slides": [
+          {
+            "privateSlideId": "private_slide_77ce11179b91870131cf4918dd509713ab502252c9b0733e4e155bcc5ee5ca3a",
+            "publicSlideKey": "slide_72d5bce5204ffcebb65656c08483477939f8d3e30921a80b20de81c09938d4b8",
+            "ordinal": 1,
+            "speakerNotes": "",
+            "extractedText": "",
+            "sourceAssetIds": [
+              "asset_77ce11179b91870131cf4918dd509713ab502252c9b0733e4e155bcc5ee5ca3a"
+            ]
+          },
+          {
+            "privateSlideId": "private_slide_421f695b04060e6ca928e1394c2ecba334c71e2a4d8225fcb3db0ff5c083dcc7",
+            "publicSlideKey": "slide_6fc7d179672c39e0e901c075f6ce8c82d02d9a058fea308826afd39c05e33cf9",
+            "ordinal": 2,
+            "speakerNotes": "",
+            "extractedText": "",
+            "sourceAssetIds": [
+              "asset_421f695b04060e6ca928e1394c2ecba334c71e2a4d8225fcb3db0ff5c083dcc7"
+            ]
+          },
+          {
+            "privateSlideId": "private_slide_ca3a1aa865adc1caf9f5a93a3b9bbbcf761251f184168882a2e9333a98454ced",
+            "publicSlideKey": "slide_c0adefbe1841e11901b1001138ac0920a9a4ba8d71a0bf9ac106502b18245e2e",
+            "ordinal": 3,
+            "speakerNotes": "",
+            "extractedText": "",
+            "sourceAssetIds": [
+              "asset_ca3a1aa865adc1caf9f5a93a3b9bbbcf761251f184168882a2e9333a98454ced"
+            ]
+          },
+          {
+            "privateSlideId": "private_slide_4a374cde7479497f9aec7cc7d40c902f12d6126f9e77caf6cd335f9f1c2b4392",
+            "publicSlideKey": "slide_06de30d7a493ce0fc4b0e8427b53567fc7aeb0aa909836524681325be9b8fa08",
+            "ordinal": 4,
+            "speakerNotes": "",
+            "extractedText": "",
+            "sourceAssetIds": [
+              "asset_4a374cde7479497f9aec7cc7d40c902f12d6126f9e77caf6cd335f9f1c2b4392"
+            ]
+          },
+          {
+            "privateSlideId": "private_slide_eba122d791de9cf5444b9f024ddc7a19efdc4e9e43325fcf72e25b4ca8b401b3",
+            "publicSlideKey": "slide_4ef45c5347ce9a8d95239a4db3b715fbdcbbb4af02e93a1a9fc3304a7519156a",
+            "ordinal": 5,
+            "speakerNotes": "",
+            "extractedText": "",
+            "sourceAssetIds": [
+              "asset_eba122d791de9cf5444b9f024ddc7a19efdc4e9e43325fcf72e25b4ca8b401b3"
+            ]
+          },
+          {
+            "privateSlideId": "private_slide_b3406e16aac55a323e34d7c6d7e3418bbd78c4780af5cfff11a026f2d8d80b56",
+            "publicSlideKey": "slide_6b8c4efce28f44b7907f6d2a2318cdfa862a820f56579b7318808b53be84aafe",
+            "ordinal": 6,
+            "speakerNotes": "",
+            "extractedText": "",
+            "sourceAssetIds": [
+              "asset_b3406e16aac55a323e34d7c6d7e3418bbd78c4780af5cfff11a026f2d8d80b56"
+            ]
+          }
+        ]
+      },
+      "publicDeck": {
+        "deckVersion": "deck_1495ab6922290f7a1ae111f0a6b79969e9beeb37da0f326ef52e3c79b426e46c",
+        "manifestHash": "17d7dcdeea205fe47d29060b9a620dcffc28a38ac2e9097d57c98f201d22b2ca",
+        "title": "Korean text layer",
+        "slides": [
+          {
+            "publicSlideKey": "slide_72d5bce5204ffcebb65656c08483477939f8d3e30921a80b20de81c09938d4b8",
+            "ordinal": 1,
+            "image": {
+              "url": "http://127.0.0.1:1/v1/deck-assets/883530bdd59b9b2cbce0c48577acfbdfc1cf0ba6f18f9c3fe4ddb8444d7d42fc/slides/slide-1.png",
+              "contentHash": "77ce11179b91870131cf4918dd509713ab502252c9b0733e4e155bcc5ee5ca3a",
+              "width": 1280,
+              "height": 720
+            },
+            "accessibilityLabel": "Korean text layer — slide 1"
+          },
+          {
+            "publicSlideKey": "slide_6fc7d179672c39e0e901c075f6ce8c82d02d9a058fea308826afd39c05e33cf9",
+            "ordinal": 2,
+            "image": {
+              "url": "http://127.0.0.1:1/v1/deck-assets/883530bdd59b9b2cbce0c48577acfbdfc1cf0ba6f18f9c3fe4ddb8444d7d42fc/slides/slide-2.png",
+              "contentHash": "421f695b04060e6ca928e1394c2ecba334c71e2a4d8225fcb3db0ff5c083dcc7",
+              "width": 1280,
+              "height": 720
+            },
+            "accessibilityLabel": "Korean text layer — slide 2"
+          },
+          {
+            "publicSlideKey": "slide_c0adefbe1841e11901b1001138ac0920a9a4ba8d71a0bf9ac106502b18245e2e",
+            "ordinal": 3,
+            "image": {
+              "url": "http://127.0.0.1:1/v1/deck-assets/883530bdd59b9b2cbce0c48577acfbdfc1cf0ba6f18f9c3fe4ddb8444d7d42fc/slides/slide-3.png",
+              "contentHash": "ca3a1aa865adc1caf9f5a93a3b9bbbcf761251f184168882a2e9333a98454ced",
+              "width": 1280,
+              "height": 720
+            },
+            "accessibilityLabel": "Korean text layer — slide 3"
+          },
+          {
+            "publicSlideKey": "slide_06de30d7a493ce0fc4b0e8427b53567fc7aeb0aa909836524681325be9b8fa08",
+            "ordinal": 4,
+            "image": {
+              "url": "http://127.0.0.1:1/v1/deck-assets/883530bdd59b9b2cbce0c48577acfbdfc1cf0ba6f18f9c3fe4ddb8444d7d42fc/slides/slide-4.png",
+              "contentHash": "4a374cde7479497f9aec7cc7d40c902f12d6126f9e77caf6cd335f9f1c2b4392",
+              "width": 1280,
+              "height": 720
+            },
+            "accessibilityLabel": "Korean text layer — slide 4"
+          },
+          {
+            "publicSlideKey": "slide_4ef45c5347ce9a8d95239a4db3b715fbdcbbb4af02e93a1a9fc3304a7519156a",
+            "ordinal": 5,
+            "image": {
+              "url": "http://127.0.0.1:1/v1/deck-assets/883530bdd59b9b2cbce0c48577acfbdfc1cf0ba6f18f9c3fe4ddb8444d7d42fc/slides/slide-5.png",
+              "contentHash": "eba122d791de9cf5444b9f024ddc7a19efdc4e9e43325fcf72e25b4ca8b401b3",
+              "width": 1280,
+              "height": 720
+            },
+            "accessibilityLabel": "Korean text layer — slide 5"
+          },
+          {
+            "publicSlideKey": "slide_6b8c4efce28f44b7907f6d2a2318cdfa862a820f56579b7318808b53be84aafe",
+            "ordinal": 6,
+            "image": {
+              "url": "http://127.0.0.1:1/v1/deck-assets/883530bdd59b9b2cbce0c48577acfbdfc1cf0ba6f18f9c3fe4ddb8444d7d42fc/slides/slide-6.png",
+              "contentHash": "b3406e16aac55a323e34d7c6d7e3418bbd78c4780af5cfff11a026f2d8d80b56",
+              "width": 1280,
+              "height": 720
+            },
+            "accessibilityLabel": "Korean text layer — slide 6"
+          }
+        ]
+      },
+      "sourceHash": "1495ab6922290f7a1ae111f0a6b79969e9beeb37da0f326ef52e3c79b426e46c"
+    }
+  },
+  "korean-structural.pptx": {
+    "status": 201,
+    "uploadMs": 1724.9,
+    "response": {
+      "presentationSessionId": "ps_a4c3c8e772a96eaea8442d221d4ba3b6",
+      "presentationSessionEpoch": "pse_1",
+      "deckVersion": "deck_16d089f58618c3e943c230fd51978a4c4e660bc9794c27a65c2371990101a660",
+      "privateDeck": {
+        "deckId": "private_deck_16d089f58618c3e943c230fd51978a4c4e660bc9794c27a65c2371990101a660",
+        "deckVersion": "deck_16d089f58618c3e943c230fd51978a4c4e660bc9794c27a65c2371990101a660",
+        "manifestHash": "b3d0dd1dfc1c10056543bac353d6e58e14ebd5d25a845c2d68d88afb5147c942",
+        "title": "Korean structural",
+        "ownerAccountId": "account_local_demo",
+        "aclPolicyVersion": "acl-1",
+        "privateObjectPrefix": "private-decks/account_local_demo/16d089f58618c3e943c230fd51978a4c4e660bc9794c27a65c2371990101a660",
+        "slides": [
+          {
+            "privateSlideId": "private_slide_7e92b33b127a62f3ac7c125636ec36deb1cc5ecbde9e4444555c8e2cbe2d180d",
+            "publicSlideKey": "slide_64c0489481dc226a30c45e072ab64005e4e0981cc2e3c473e7eebfce3b1b3ca8",
+            "ordinal": 1,
+            "speakerNotes": "",
+            "extractedText": "",
+            "sourceAssetIds": [
+              "asset_7e92b33b127a62f3ac7c125636ec36deb1cc5ecbde9e4444555c8e2cbe2d180d"
+            ]
+          },
+          {
+            "privateSlideId": "private_slide_46f2599989d04f866b6ca99023bff62a31c029ef4625c89bf7967a1eade82826",
+            "publicSlideKey": "slide_769f8dd263075599bd362079a1d54cacedbd63bb21ebde157a1daeb8a0463dae",
+            "ordinal": 2,
+            "speakerNotes": "",
+            "extractedText": "",
+            "sourceAssetIds": [
+              "asset_46f2599989d04f866b6ca99023bff62a31c029ef4625c89bf7967a1eade82826"
+            ]
+          },
+          {
+            "privateSlideId": "private_slide_4d88b059053cd46637ea4dc2a39a71db479e198ae584ae532f865e405034d8d9",
+            "publicSlideKey": "slide_1779e089c396c96b8ab95b909ec413bb6b13735bd28fb5907888ef378e40e2e7",
+            "ordinal": 3,
+            "speakerNotes": "",
+            "extractedText": "",
+            "sourceAssetIds": [
+              "asset_4d88b059053cd46637ea4dc2a39a71db479e198ae584ae532f865e405034d8d9"
+            ]
+          },
+          {
+            "privateSlideId": "private_slide_d354e605c06a889ae9bdd6bddf5ecf32a21b2a3a7d4f5f7a16f05fe787ab2b21",
+            "publicSlideKey": "slide_15823a949f757d9da0bdf7409fdc1693f8e832efbe3fcc925a06ca4ed0b21c85",
+            "ordinal": 4,
+            "speakerNotes": "",
+            "extractedText": "",
+            "sourceAssetIds": [
+              "asset_d354e605c06a889ae9bdd6bddf5ecf32a21b2a3a7d4f5f7a16f05fe787ab2b21"
+            ]
+          },
+          {
+            "privateSlideId": "private_slide_f3e0d559951768554091a2e57423dc36ce4269a2dedcb5b04b3dda4beb9aecbb",
+            "publicSlideKey": "slide_3fb634bd7873aa9db7ee1657b5ff89be89adc03184463cb8e385e89170467148",
+            "ordinal": 5,
+            "speakerNotes": "",
+            "extractedText": "",
+            "sourceAssetIds": [
+              "asset_f3e0d559951768554091a2e57423dc36ce4269a2dedcb5b04b3dda4beb9aecbb"
+            ]
+          },
+          {
+            "privateSlideId": "private_slide_cb5ed63fbf9a3a9ed6d324e2a4bb5db992bc6d0e316a5a6dc6b91c8a233c7ea3",
+            "publicSlideKey": "slide_b4a64ad3afa29b5275a7f434b645df7de192fd800878a4f04859fe5ffac746fd",
+            "ordinal": 6,
+            "speakerNotes": "",
+            "extractedText": "",
+            "sourceAssetIds": [
+              "asset_cb5ed63fbf9a3a9ed6d324e2a4bb5db992bc6d0e316a5a6dc6b91c8a233c7ea3"
+            ]
+          }
+        ]
+      },
+      "publicDeck": {
+        "deckVersion": "deck_16d089f58618c3e943c230fd51978a4c4e660bc9794c27a65c2371990101a660",
+        "manifestHash": "b3d0dd1dfc1c10056543bac353d6e58e14ebd5d25a845c2d68d88afb5147c942",
+        "title": "Korean structural",
+        "slides": [
+          {
+            "publicSlideKey": "slide_64c0489481dc226a30c45e072ab64005e4e0981cc2e3c473e7eebfce3b1b3ca8",
+            "ordinal": 1,
+            "image": {
+              "url": "http://127.0.0.1:1/v1/deck-assets/47ca1707706fc7a0f33e3809cd8678397365eb0b8340f01651ed94d09e54e2c5/slides/slide-1.svg",
+              "contentHash": "7e92b33b127a62f3ac7c125636ec36deb1cc5ecbde9e4444555c8e2cbe2d180d",
+              "width": 1280,
+              "height": 720
+            },
+            "accessibilityLabel": "Korean structural — slide 1",
+            "runtime": {
+              "timeline": {
+                "slide_key": "slide_64c0489481dc226a30c45e072ab64005e4e0981cc2e3c473e7eebfce3b1b3ca8",
+                "click_groups": [],
+                "transition": null,
+                "unsupported": []
+              },
+              "fonts": []
+            }
+          },
+          {
+            "publicSlideKey": "slide_769f8dd263075599bd362079a1d54cacedbd63bb21ebde157a1daeb8a0463dae",
+            "ordinal": 2,
+            "image": {
+              "url": "http://127.0.0.1:1/v1/deck-assets/47ca1707706fc7a0f33e3809cd8678397365eb0b8340f01651ed94d09e54e2c5/slides/slide-2.svg",
+              "contentHash": "46f2599989d04f866b6ca99023bff62a31c029ef4625c89bf7967a1eade82826",
+              "width": 1280,
+              "height": 720
+            },
+            "accessibilityLabel": "Korean structural — slide 2",
+            "runtime": {
+              "timeline": {
+                "slide_key": "slide_769f8dd263075599bd362079a1d54cacedbd63bb21ebde157a1daeb8a0463dae",
+                "click_groups": [],
+                "transition": null,
+                "unsupported": []
+              },
+              "fonts": []
+            }
+          },
+          {
+            "publicSlideKey": "slide_1779e089c396c96b8ab95b909ec413bb6b13735bd28fb5907888ef378e40e2e7",
+            "ordinal": 3,
+            "image": {
+              "url": "http://127.0.0.1:1/v1/deck-assets/47ca1707706fc7a0f33e3809cd8678397365eb0b8340f01651ed94d09e54e2c5/slides/slide-3.svg",
+              "contentHash": "4d88b059053cd46637ea4dc2a39a71db479e198ae584ae532f865e405034d8d9",
+              "width": 1280,
+              "height": 720
+            },
+            "accessibilityLabel": "Korean structural — slide 3",
+            "runtime": {
+              "timeline": {
+                "slide_key": "slide_1779e089c396c96b8ab95b909ec413bb6b13735bd28fb5907888ef378e40e2e7",
+                "click_groups": [],
+                "transition": null,
+                "unsupported": []
+              },
+              "fonts": []
+            }
+          },
+          {
+            "publicSlideKey": "slide_15823a949f757d9da0bdf7409fdc1693f8e832efbe3fcc925a06ca4ed0b21c85",
+            "ordinal": 4,
+            "image": {
+              "url": "http://127.0.0.1:1/v1/deck-assets/47ca1707706fc7a0f33e3809cd8678397365eb0b8340f01651ed94d09e54e2c5/slides/slide-4.svg",
+              "contentHash": "d354e605c06a889ae9bdd6bddf5ecf32a21b2a3a7d4f5f7a16f05fe787ab2b21",
+              "width": 1280,
+              "height": 720
+            },
+            "accessibilityLabel": "Korean structural — slide 4",
+            "runtime": {
+              "timeline": {
+                "slide_key": "slide_15823a949f757d9da0bdf7409fdc1693f8e832efbe3fcc925a06ca4ed0b21c85",
+                "click_groups": [],
+                "transition": null,
+                "unsupported": []
+              },
+              "fonts": []
+            }
+          },
+          {
+            "publicSlideKey": "slide_3fb634bd7873aa9db7ee1657b5ff89be89adc03184463cb8e385e89170467148",
+            "ordinal": 5,
+            "image": {
+              "url": "http://127.0.0.1:1/v1/deck-assets/47ca1707706fc7a0f33e3809cd8678397365eb0b8340f01651ed94d09e54e2c5/slides/slide-5.svg",
+              "contentHash": "f3e0d559951768554091a2e57423dc36ce4269a2dedcb5b04b3dda4beb9aecbb",
+              "width": 1280,
+              "height": 720
+            },
+            "accessibilityLabel": "Korean structural — slide 5",
+            "runtime": {
+              "timeline": {
+                "slide_key": "slide_3fb634bd7873aa9db7ee1657b5ff89be89adc03184463cb8e385e89170467148",
+                "click_groups": [],
+                "transition": null,
+                "unsupported": []
+              },
+              "fonts": []
+            }
+          },
+          {
+            "publicSlideKey": "slide_b4a64ad3afa29b5275a7f434b645df7de192fd800878a4f04859fe5ffac746fd",
+            "ordinal": 6,
+            "image": {
+              "url": "http://127.0.0.1:1/v1/deck-assets/47ca1707706fc7a0f33e3809cd8678397365eb0b8340f01651ed94d09e54e2c5/slides/slide-6.svg",
+              "contentHash": "cb5ed63fbf9a3a9ed6d324e2a4bb5db992bc6d0e316a5a6dc6b91c8a233c7ea3",
+              "width": 1280,
+              "height": 720
+            },
+            "accessibilityLabel": "Korean structural — slide 6",
+            "runtime": {
+              "timeline": {
+                "slide_key": "slide_b4a64ad3afa29b5275a7f434b645df7de192fd800878a4f04859fe5ffac746fd",
+                "click_groups": [],
+                "transition": null,
+                "unsupported": []
+              },
+              "fonts": []
+            }
+          }
+        ]
+      },
+      "sourceHash": "16d089f58618c3e943c230fd51978a4c4e660bc9794c27a65c2371990101a660"
+    }
+  }
+}

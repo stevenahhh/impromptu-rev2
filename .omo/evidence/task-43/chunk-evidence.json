@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "tenantId": "account_local_demo",
+  "anonymousRowCountWithoutTenantContext": 18,
+  "identity": {
+    "sameChunkCount": true,
+    "identicalContents": true
+  },
+  "results": {
+    "korean-text-layer.pdf": {
+      "deckVersion": "deck_1495ab6922290f7a1ae111f0a6b79969e9beeb37da0f326ef52e3c79b426e46c",
+      "manifestHash": "17d7dcdeea205fe47d29060b9a620dcffc28a38ac2e9097d57c98f201d22b2ca",
+      "chunks": [
+        {
+          "anchor": "slide=1&chunk=1",
+          "title": "Slide 1",
+          "length": 61,
+          "content": "형식 중립 근거 자료 2026 한빛유통 2026년 사업 전략 보고 작성: 경영기획본부, 2026년 1월 15일"
+        },
+        {
+          "anchor": "slide=2&chunk=1",
+          "title": "Slide 2",
+          "length": 120,
+          "content": "매출 실적 요약 2025년 연간 매출은 482억 원으로 전년 대비 23% 증가했다. 대면 판매 채널 매출은 217억 원이고 온라인 몰 매출은 265억 원이다. 4분기 매출은 분기 사상 최대인 151억 원을 기록했다."
+        },
+        {
+          "anchor": "slide=3&chunk=1",
+          "title": "Slide 3",
+          "length": 110,
+          "content": "구독 사업 현황 유료 구독자 수는 2025년 말 기준 12,400명이다. 월 구독 객단가는 19,000원이고 연 구독 유지율은 78%다. 2026년 말까지 구독자 20,000명 달성을 목표로 한다."
+        },
+        {
+          "anchor": "slide=4&chunk=1",
+          "title": "Slide 4",
+          "length": 108,
+          "content": "신규 상품 계획 2026년 3월에 프리미엄 배송 상품 단비를 출시한다. 단비는 서울과 부산 등 6개 권역에서 우선 운영한다. 초기 투자는 85억 원이고 손익분기 도달 시점은 2028년으로 본다."
+        },
+        {
+          "anchor": "slide=5&chunk=1",
+          "title": "Slide 5",
+          "length": 102,
+          "content": "시장 환경과 경쟁 국내 유통 시장의 온라인 비중은 2025년에 42.7%였다. 경쟁사 모아마켓의 점유율은 18.2%로 업계 2위다. 물류 인건비는 최근 3년간 연평균 9.6% 올랐다."
+        },
+        {
+          "anchor": "slide=6&chunk=1",
+          "title": "Slide 6",
+          "length": 132,
+          "content": "2026년 실행 계획 1분기에 물류센터 자동화 로봇 12대를 도입한다. 2분기에 충청권 신규 물류센터를 준공한다. 3분기에 단비 권역을 12개로 확대하고 앱 3.0을 출시한다. 연말까지 매출 610억 원과 영업이익률 8.5%를 달성한다."
+        }
+      ]
+    },
+    "korean-structural.pptx": {
+      "deckVersion": "deck_16d089f58618c3e943c230fd51978a4c4e660bc9794c27a65c2371990101a660",
+      "manifestHash": "b3d0dd1dfc1c10056543bac353d6e58e14ebd5d25a845c2d68d88afb5147c942",
+      "chunks": [
+        {
+          "anchor": "slide=1&chunk=1",
+          "title": "Slide 1",
+          "length": 61,
+          "content": "형식 중립 근거 자료 2026 한빛유통 2026년 사업 전략 보고 작성: 경영기획본부, 2026년 1월 15일"
+        },
+        {
+          "anchor": "slide=2&chunk=1",
+          "title": "Slide 2",
+          "length": 120,
+          "content": "매출 실적 요약 2025년 연간 매출은 482억 원으로 전년 대비 23% 증가했다. 대면 판매 채널 매출은 217억 원이고 온라인 몰 매출은 265억 원이다. 4분기 매출은 분기 사상 최대인 151억 원을 기록했다."
+        },
+        {
+          "anchor": "slide=3&chunk=1",
+          "title": "Slide 3",
+          "length": 110,
+          "content": "구독 사업 현황 유료 구독자 수는 2025년 말 기준 12,400명이다. 월 구독 객단가는 19,000원이고 연 구독 유지율은 78%다. 2026년 말까지 구독자 20,000명 달성을 목표로 한다."
+        },
+        {
+          "anchor": "slide=4&chunk=1",
+          "title": "Slide 4",
+          "length": 108,
+          "content": "신규 상품 계획 2026년 3월에 프리미엄 배송 상품 단비를 출시한다. 단비는 서울과 부산 등 6개 권역에서 우선 운영한다. 초기 투자는 85억 원이고 손익분기 도달 시점은 2028년으로 본다."
+        },
+        {
+          "anchor": "slide=5&chunk=1",
+          "title": "Slide 5",
+          "length": 102,
+          "content": "시장 환경과 경쟁 국내 유통 시장의 온라인 비중은 2025년에 42.7%였다. 경쟁사 모아마켓의 점유율은 18.2%로 업계 2위다. 물류 인건비는 최근 3년간 연평균 9.6% 올랐다."
+        },
+        {
+          "anchor": "slide=6&chunk=1",
+          "title": "Slide 6",
+          "length": 132,
+          "content": "2026년 실행 계획 1분기에 물류센터 자동화 로봇 12대를 도입한다. 2분기에 충청권 신규 물류센터를 준공한다. 3분기에 단비 권역을 12개로 확대하고 앱 3.0을 출시한다. 연말까지 매출 610억 원과 영업이익률 8.5%를 달성한다."
+        }
+      ]
+    }
+  }
+}
