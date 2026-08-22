@@ -1,0 +1,40 @@
+{
+  "task": "task-41-grounding-guidance-attempt-and-revert",
+  "commit": "33fb00829d470c13a9be8ea31c30c65e84e278c8",
+  "hypothesis": "The deterministic gate accepts a fact only when its token occurs in the evidence text, but the generation slot was never told that rule - its instruction said only 'grounded only in evidence'. Stating the gate's own condition in the generation instruction should reduce DETERMINISTIC_MISMATCH and CONFLICTING_EVIDENCE without touching the gate.",
+  "change": "f3ffdc4 appended a verbatim-grounding sentence to the llm slot's system message only.",
+  "gatesAtCommitTime": "lint, typecheck, build, test:retrieval, test:security, private-backend, model-router all exit 0",
+  "measuredEffect": {
+    "cohortA": {
+      "before": "8/10",
+      "after": "0/10",
+      "p50MsBefore": 3360.1,
+      "p50MsAfter": 4263
+    },
+    "cohortB": {
+      "before": "10/10",
+      "after": "0/10",
+      "p50MsBefore": 3637.1,
+      "p50MsAfter": 4200.2
+    },
+    "verdict": "The hypothesis was wrong. Constraining the instruction collapsed both cohorts to zero recommendations and slowed the median by roughly 600-900ms. The added constraint degraded output quality and speed together on this model."
+  },
+  "revert": {
+    "commit": "33fb008 Revert \"fix(model-adapters): tell the generation slot the grounding rule its gate enforces\"",
+    "method": "git revert, stacking a new commit rather than rewriting history",
+    "restored": {
+      "cohortA": "8/10",
+      "cohortB": "7/10"
+    },
+    "gatesAfterRevert": "lint, typecheck, build, test:retrieval, test:security, private-backend all exit 0"
+  },
+  "whyUnitTestsMissedIt": "Every gate was green when the change was committed. The regression lived entirely in real provider output quality, which only the cohort measurement exercises. Pinning the prompt prose in a test would have made this worse, not better: a prose test would have gone green on the new wording and lent the regression false authority.",
+  "standingConclusion": "Cohort variance is now the whole story. The same code produced cohort B 10/10 in one session and 7/10 in the next, and a 20-run direct profile at the same commit produced 19/20. Per-run success sits between roughly 70% and 95% depending on the session, so a 10-run cohort reaching 10/10 is attainable but not dependable.",
+  "exhaustedWithinGuardrails": [
+    "latency: hedging took the direct profile from 10/20 to 19/20 and deadline aborts from 9 to 1",
+    "model choice: 29-model catalogue bakeoff found no grounding-by-speed intersection (.omo/evidence/task-32)",
+    "generation instruction: attempted here, measured worse, reverted",
+    "the deterministic gate and verifier verdict handling must not be weakened",
+    "tests/fixtures/** is frozen by user decision c291450"
+  ]
+}
