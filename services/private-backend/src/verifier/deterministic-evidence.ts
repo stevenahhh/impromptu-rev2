@@ -92,7 +92,9 @@ export function extractFacts(text: string): EvidenceFactSet {
       // DATE instead of NUMBER. Restricted to plausible years so 4-digit quantities (e.g. 1200)
       // stay numbers. Existence is still enforced: the token must occur verbatim.
       ...text.matchAll(/(?<![\p{Script=Latin}\p{N}])(?:19|20)\d{2}(?![\p{Script=Latin}\p{N}])/gu),
-    ].map((match) => normalizeDate(match[0])),
+    ]
+      .map((match) => normalizeDate(match[0]))
+      .concat(koreanCalendarDates(text)),
   );
   const units = unique(
     [
@@ -131,6 +133,23 @@ function normalizeNumber(value: string): string {
 function normalizeUnit(value: string): string {
   const normalized = fold(value);
   return UNIT_ALIASES[normalized] ?? normalized;
+}
+
+/**
+ * Korean writes a calendar date as 2026년 1월 15일, and a month alone as 2026년 3월. A model
+ * reading such a deck reports the date in its normalized form, so the extractor has to recognise
+ * the notation the evidence is actually written in. Existence is still enforced: the date must be
+ * constructible from the evidence text, so a date the deck never states stays rejected.
+ */
+function koreanCalendarDates(text: string): string[] {
+  const values: string[] = [];
+  for (const match of text.matchAll(/(\d{4})년\s*(\d{1,2})월(?:\s*(\d{1,2})일)?/gu)) {
+    const [, year, month, day] = match;
+    if (year === undefined || month === undefined) continue;
+    const yearMonth = `${year}-${month.padStart(2, "0")}`;
+    values.push(day === undefined ? yearMonth : `${yearMonth}-${day.padStart(2, "0")}`);
+  }
+  return values;
 }
 
 function normalizeDate(value: string): string {
