@@ -1,12 +1,12 @@
 {
   "task": "task-27-performance-and-scope",
-  "commitSha": "46cdd169b5716048f6d4c485d07e94270717416f",
+  "commitSha": "12a0f71f490586dc597d427430a90e1602f655f8",
   "command": "python3 .omo/evidence/task-27/bench/measure_final_to_console.py",
-  "generatedAt": "2026-08-22T04:15:14Z",
+  "generatedAt": "2026-08-22T06:26:18Z",
   "fixture": "korean-text-layer.pdf",
   "ports": {
-    "private": 53579,
-    "projection": 53580
+    "private": 55257,
+    "projection": 55258
   },
   "models": {
     "RERANK_MODEL": null,
@@ -19,9 +19,9 @@
     "label": "confirmed-final-to-console-recommendation",
     "runs": 10,
     "httpSuccessCount": 10,
-    "p50Ms": 3360.1,
-    "p95Ms": 3623.3,
-    "maxMs": 3623.3,
+    "p50Ms": 3852.0,
+    "p95Ms": 4501.7,
+    "maxMs": 4501.7,
     "outcomes": {
       "ABSTAIN": 2,
       "RECOMMEND": 8
@@ -31,29 +31,29 @@
         "index": 0,
         "warmup": true,
         "httpOk": true,
-        "latencyMs": 4049.259,
-        "totalFromStreamStopMs": 4548.453,
-        "serverLatencyMs": 4049,
-        "outcome": "RECOMMEND",
-        "reason": null
+        "latencyMs": 4503.561,
+        "totalFromStreamStopMs": 5102.089,
+        "serverLatencyMs": 5000,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED"
       },
       {
         "index": 1,
         "warmup": false,
         "httpOk": true,
-        "latencyMs": 3343.829,
-        "totalFromStreamStopMs": 3873.949,
-        "serverLatencyMs": 3344,
-        "outcome": "RECOMMEND",
-        "reason": null
+        "latencyMs": 4501.684,
+        "totalFromStreamStopMs": 5125.175,
+        "serverLatencyMs": 5000,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED"
       },
       {
         "index": 2,
         "warmup": false,
         "httpOk": true,
-        "latencyMs": 3224.071,
-        "totalFromStreamStopMs": 3751.21,
-        "serverLatencyMs": 3223,
+        "latencyMs": 3783.148,
+        "totalFromStreamStopMs": 4430.182,
+        "serverLatencyMs": 3782,
         "outcome": "RECOMMEND",
         "reason": null
       },
@@ -61,9 +61,9 @@
         "index": 3,
         "warmup": false,
         "httpOk": true,
-        "latencyMs": 3570.256,
-        "totalFromStreamStopMs": 4103.698,
-        "serverLatencyMs": 3570,
+        "latencyMs": 3055.566,
+        "totalFromStreamStopMs": 3668.6,
+        "serverLatencyMs": 3055,
         "outcome": "RECOMMEND",
         "reason": null
       },
@@ -71,9 +71,9 @@
         "index": 4,
         "warmup": false,
         "httpOk": true,
-        "latencyMs": 3376.308,
-        "totalFromStreamStopMs": 3913.48,
-        "serverLatencyMs": 3376,
+        "latencyMs": 3920.795,
+        "totalFromStreamStopMs": 4472.592,
+        "serverLatencyMs": 3921,
         "outcome": "RECOMMEND",
         "reason": null
       },
@@ -81,9 +81,9 @@
         "index": 5,
         "warmup": false,
         "httpOk": true,
-        "latencyMs": 3513.194,
-        "totalFromStreamStopMs": 4047.936,
-        "serverLatencyMs": 3512,
+        "latencyMs": 3650.146,
+        "totalFromStreamStopMs": 4277.098,
+        "serverLatencyMs": 3650,
         "outcome": "RECOMMEND",
         "reason": null
       },
@@ -91,9 +91,9 @@
         "index": 6,
         "warmup": false,
         "httpOk": true,
-        "latencyMs": 3070.552,
-        "totalFromStreamStopMs": 3614.386,
-        "serverLatencyMs": 3070,
+        "latencyMs": 3968.774,
+        "totalFromStreamStopMs": 4543.65,
+        "serverLatencyMs": 3969,
         "outcome": "RECOMMEND",
         "reason": null
       },
@@ -101,29 +101,29 @@
         "index": 7,
         "warmup": false,
         "httpOk": true,
-        "latencyMs": 3623.35,
-        "totalFromStreamStopMs": 4157.833,
-        "serverLatencyMs": 3622,
-        "outcome": "ABSTAIN",
-        "reason": "CONFLICTING_EVIDENCE"
+        "latencyMs": 3401.483,
+        "totalFromStreamStopMs": 3952.899,
+        "serverLatencyMs": 3401,
+        "outcome": "RECOMMEND",
+        "reason": null
       },
       {
         "index": 8,
         "warmup": false,
         "httpOk": true,
-        "latencyMs": 3246.268,
-        "totalFromStreamStopMs": 3767.179,
-        "serverLatencyMs": 3246,
-        "outcome": "RECOMMEND",
-        "reason": null
+        "latencyMs": 3410.921,
+        "totalFromStreamStopMs": 3958.632,
+        "serverLatencyMs": 3411,
+        "outcome": "ABSTAIN",
+        "reason": "CONFLICTING_EVIDENCE"
       },
       {
         "index": 9,
         "warmup": false,
         "httpOk": true,
-        "latencyMs": 3405.441,
-        "totalFromStreamStopMs": 3960.464,
-        "serverLatencyMs": 3405,
+        "latencyMs": 4248.735,
+        "totalFromStreamStopMs": 4814.366,
+        "serverLatencyMs": 4248,
         "outcome": "RECOMMEND",
         "reason": null
       },
@@ -131,11 +131,11 @@
         "index": 10,
         "warmup": false,
         "httpOk": true,
-        "latencyMs": 1944.654,
-        "totalFromStreamStopMs": 2531.585,
-        "serverLatencyMs": 1944,
-        "outcome": "ABSTAIN",
-        "reason": "DETERMINISTIC_MISMATCH"
+        "latencyMs": 4111.027,
+        "totalFromStreamStopMs": 4651.047,
+        "serverLatencyMs": 4110,
+        "outcome": "RECOMMEND",
+        "reason": null
       }
     ]
   },
@@ -143,19 +143,20 @@
     "label": "existing-recommendation-flow",
     "runs": 10,
     "httpSuccessCount": 10,
-    "p50Ms": 3637.1,
-    "p95Ms": 4496.9,
-    "maxMs": 4496.9,
+    "p50Ms": 4339.6,
+    "p95Ms": 4505.2,
+    "maxMs": 4505.2,
     "outcomes": {
-      "RECOMMEND": 10
+      "ABSTAIN": 3,
+      "RECOMMEND": 7
     },
     "samples": [
       {
         "index": 0,
         "warmup": true,
         "httpOk": true,
-        "latencyMs": 3346.236,
-        "serverLatencyMs": 3344,
+        "latencyMs": 3218.624,
+        "serverLatencyMs": 3217,
         "outcome": "RECOMMEND",
         "reason": null
       },
@@ -163,8 +164,8 @@
         "index": 1,
         "warmup": false,
         "httpOk": true,
-        "latencyMs": 3417.11,
-        "serverLatencyMs": 3415,
+        "latencyMs": 4298.331,
+        "serverLatencyMs": 4296,
         "outcome": "RECOMMEND",
         "reason": null
       },
@@ -172,8 +173,8 @@
         "index": 2,
         "warmup": false,
         "httpOk": true,
-        "latencyMs": 4496.854,
-        "serverLatencyMs": 4493,
+        "latencyMs": 3405.36,
+        "serverLatencyMs": 3404,
         "outcome": "RECOMMEND",
         "reason": null
       },
@@ -181,26 +182,26 @@
         "index": 3,
         "warmup": false,
         "httpOk": true,
-        "latencyMs": 3695.706,
-        "serverLatencyMs": 3693,
-        "outcome": "RECOMMEND",
-        "reason": null
+        "latencyMs": 4504.185,
+        "serverLatencyMs": 5000,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED"
       },
       {
         "index": 4,
         "warmup": false,
         "httpOk": true,
-        "latencyMs": 3501.983,
-        "serverLatencyMs": 3500,
-        "outcome": "RECOMMEND",
-        "reason": null
+        "latencyMs": 4505.211,
+        "serverLatencyMs": 5000,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED"
       },
       {
         "index": 5,
         "warmup": false,
         "httpOk": true,
-        "latencyMs": 4425.729,
-        "serverLatencyMs": 4424,
+        "latencyMs": 4380.786,
+        "serverLatencyMs": 4377,
         "outcome": "RECOMMEND",
         "reason": null
       },
@@ -208,8 +209,8 @@
         "index": 6,
         "warmup": false,
         "httpOk": true,
-        "latencyMs": 4158.525,
-        "serverLatencyMs": 4155,
+        "latencyMs": 3789.177,
+        "serverLatencyMs": 3787,
         "outcome": "RECOMMEND",
         "reason": null
       },
@@ -217,8 +218,8 @@
         "index": 7,
         "warmup": false,
         "httpOk": true,
-        "latencyMs": 3578.516,
-        "serverLatencyMs": 3576,
+        "latencyMs": 3183.3,
+        "serverLatencyMs": 3181,
         "outcome": "RECOMMEND",
         "reason": null
       },
@@ -226,8 +227,8 @@
         "index": 8,
         "warmup": false,
         "httpOk": true,
-        "latencyMs": 3386.112,
-        "serverLatencyMs": 3384,
+        "latencyMs": 4436.008,
+        "serverLatencyMs": 4434,
         "outcome": "RECOMMEND",
         "reason": null
       },
@@ -235,17 +236,17 @@
         "index": 9,
         "warmup": false,
         "httpOk": true,
-        "latencyMs": 3988.23,
-        "serverLatencyMs": 3987,
-        "outcome": "RECOMMEND",
-        "reason": null
+        "latencyMs": 4502.428,
+        "serverLatencyMs": 5000,
+        "outcome": "ABSTAIN",
+        "reason": "DEADLINE_EXCEEDED"
       },
       {
         "index": 10,
         "warmup": false,
         "httpOk": true,
-        "latencyMs": 3360.83,
-        "serverLatencyMs": 3359,
+        "latencyMs": 3647.478,
+        "serverLatencyMs": 3646,
         "outcome": "RECOMMEND",
         "reason": null
       }

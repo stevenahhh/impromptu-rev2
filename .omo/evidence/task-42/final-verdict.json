@@ -1,0 +1,76 @@
+{
+  "task": "task-42-criterion-6-final-verdict",
+  "commit": "12a0f71f490586dc597d427430a90e1602f655f8",
+  "method": "5 consecutive sets of the task-27 bench, each set 10 cohort-A runs plus 10 cohort-B runs, 100 recommendations total. Every set recorded, none discarded.",
+  "sets": [
+    {
+      "set": 1,
+      "cohortA": 8,
+      "cohortAp95": 4504.2,
+      "cohortB": 6,
+      "cohortBp95": 4508.9
+    },
+    {
+      "set": 2,
+      "cohortA": 6,
+      "cohortAp95": 4503.2,
+      "cohortB": 8,
+      "cohortBp95": 4503.8
+    },
+    {
+      "set": 3,
+      "cohortA": 7,
+      "cohortAp95": 4504.3,
+      "cohortB": 8,
+      "cohortBp95": 4504.1
+    },
+    {
+      "set": 4,
+      "cohortA": 7,
+      "cohortAp95": 4502.6,
+      "cohortB": 0,
+      "cohortBp95": 4506.5
+    },
+    {
+      "set": 5,
+      "cohortA": 8,
+      "cohortAp95": 4501.7,
+      "cohortB": 7,
+      "cohortBp95": 4505.2
+    }
+  ],
+  "aggregate": {
+    "cohortA": {
+      "perfectSets": "0/5",
+      "overall": "36/50 (72%)",
+      "p95MaxMs": 4504.3
+    },
+    "cohortB": {
+      "perfectSets": "0/5",
+      "overall": "29/50 (58%)",
+      "p95MaxMs": 4508.9
+    }
+  },
+  "verdict": {
+    "p95Half": "PASS - every one of the 100 runs stayed under the 5,000ms bar, worst observed p95 4,508.9ms.",
+    "tenOfTenHalf": "FAIL - no set of ten reached 10/10 in either cohort."
+  },
+  "sustainedLoadFinding": "A standalone 20-run profile at this same commit produced 19/20 (95%), but five back-to-back sets produced 58-72%, and set 4 cohort B collapsed to 0/10 with a p50 of 4,505.6ms, meaning every run in that set hit the abort. Hedging doubles the calls into the generation slot, so sustained batches degrade the very provider the hedge is compensating for. Hedging fixes an isolated slow call; it cannot fix a provider that is uniformly slow for a window.",
+  "leversExhausted": {
+    "latency": "hedging moved the standalone profile from 10/20 to 19/20 and deadline aborts from 9 to 1 (ee55d5f, 8272246, 46a4b9a)",
+    "modelChoice": "29-model catalogue bakeoff found no grounding-by-speed intersection (.omo/evidence/task-32)",
+    "generationInstruction": "attempted at f3ffdc4, collapsed both cohorts to 0/10, reverted at 33fb008 (.omo/evidence/task-41)",
+    "outOfBounds": "the deterministic gate and verifier verdict must not be weakened; tests/fixtures/** is frozen by user decision c291450; the 5,000ms budget and 500ms guard are fixed"
+  },
+  "productDecisionRequired": [
+    "a) carry the remaining gap into September hardening - matches the include-hardening completion boundary already recorded in docs/DEMO-SCOPE.md",
+    "b) unfreeze the deck fixtures so the evidence carries enough substance for a grounded claim",
+    "c) extend the hedging relaxation to the verifier slot as well"
+  ],
+  "unchangedThroughout": [
+    "recommendation deadline 5_000 and TERMINAL_DEADLINE_GUARD_MS 500",
+    "deterministic evidence reconciliation and verifier verdict handling",
+    "ACL, source revision, publication reauthorization, idempotency",
+    "tests/fixtures/**"
+  ]
+}

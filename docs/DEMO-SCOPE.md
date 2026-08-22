@@ -171,3 +171,33 @@ full-catalogue model bakeoff found no configuration that combines grounded outpu
 time that fits the budget, the deck fixtures are frozen, and the evidence gate stays as it is.
 It therefore stays open as September hardening, consistent with holding completion open here.
 
+
+### Criterion 6 repeatability, measured over 100 runs
+
+Five consecutive sets of the ten-run cohorts were measured at one commit and every set is recorded.
+
+| Set | FINAL to Console | p95 | Existing flow | p95 |
+| --- | --- | --- | --- | --- |
+| 1 | 8/10 | 4,504ms | 6/10 | 4,509ms |
+| 2 | 6/10 | 4,503ms | 8/10 | 4,504ms |
+| 3 | 7/10 | 4,504ms | 8/10 | 4,504ms |
+| 4 | 7/10 | 4,503ms | 0/10 | 4,507ms |
+| 5 | 8/10 | 4,502ms | 7/10 | 4,505ms |
+
+The p95 requirement holds without exception: the worst p95 across all one hundred runs was 4,509ms
+against a 5,000ms bar. The ten-of-ten requirement was not reached in any set, in either cohort.
+
+A standalone twenty-run profile at the same commit produced nineteen recommendations, so the
+per-run rate is not fixed. Sustained batches are worse than isolated ones, and set four saw every
+run in a cohort abort with a median already past the guard, which is a provider-wide slow window
+rather than a code path. Hedging duplicates the generation call, so a long batch adds load to the
+provider whose variance the hedge exists to absorb: it rescues an isolated slow call and cannot
+rescue a uniformly slow window.
+
+Everything available inside the guardrails has been applied. Hedging carried the standalone
+profile from ten to nineteen recommendations out of twenty and deadline aborts from nine to one.
+The full model catalogue was measured and no configuration combines grounded output with a
+response that fits the budget. Stating the gate's grounding rule in the generation instruction was
+tried, measured worse, and reverted. What remains is a product decision rather than an
+implementation one, and completion stays open here accordingly.
+

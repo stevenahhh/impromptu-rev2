@@ -1,0 +1,63 @@
+{
+  "sets": [
+    {
+      "set": "set-1.json",
+      "cohortA": {
+        "recommend": 8,
+        "p95Ms": 4504.2
+      },
+      "cohortB": {
+        "recommend": 6,
+        "p95Ms": 4508.9
+      }
+    },
+    {
+      "set": "set-2.json",
+      "cohortA": {
+        "recommend": 6,
+        "p95Ms": 4503.2
+      },
+      "cohortB": {
+        "recommend": 8,
+        "p95Ms": 4503.8
+      }
+    },
+    {
+      "set": "set-3.json",
+      "cohortA": {
+        "recommend": 7,
+        "p95Ms": 4504.3
+      },
+      "cohortB": {
+        "recommend": 8,
+        "p95Ms": 4504.1
+      }
+    },
+    {
+      "set": "set-4.json",
+      "cohortA": {
+        "recommend": 7,
+        "p95Ms": 4502.6
+      },
+      "cohortB": {
+        "recommend": 0,
+        "p95Ms": 4506.5
+      }
+    },
+    {
+      "set": "set-5.json",
+      "cohortA": {
+        "recommend": 8,
+        "p95Ms": 4501.7
+      },
+      "cohortB": {
+        "recommend": 7,
+        "p95Ms": 4505.2
+      }
+    }
+  ],
+  "cohortAPerfectSets": 0,
+  "cohortBPerfectSets": 0,
+  "cohortATotal": "36/50",
+  "cohortBTotal": "29/50"
+}
