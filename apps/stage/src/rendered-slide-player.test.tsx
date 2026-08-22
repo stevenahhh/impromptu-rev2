@@ -182,38 +182,25 @@ function host() {
   return document.body.querySelector("[data-slide-runtime]");
 }
 
-function waitForRuntimeStatus(expected: "active" | "error"): Promise<void> {
-  if (host()?.getAttribute("data-slide-runtime") === expected) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const observer = new MutationObserver(() => {
-      if (host()?.getAttribute("data-slide-runtime") !== expected) return;
-      observer.disconnect();
-      resolve();
-    });
-    observer.observe(document.body, {
-      attributes: true,
-      attributeFilter: ["data-slide-runtime"],
-      childList: true,
-      subtree: true,
-    });
-    const signal = AbortSignal.timeout(2_000);
-    signal.addEventListener(
-      "abort",
-      () => {
-        observer.disconnect();
-        reject(
-          new Error(
-            `runtime did not enter ${expected}; current=${host()?.getAttribute("data-slide-runtime")}`,
-          ),
-        );
-      },
-      { once: true },
-    );
-  });
-}
+/**
+ * Drains React's pending work until the runtime attribute settles. The player reaches its state
+ * through a chain of awaited promises - fetch, parse, font readiness - so each pass releases one
+ * link. This deliberately does not watch the DOM: happy-dom delivered no mutation record for the
+ * activation, so the previous observer timed out reporting a state the runtime was already in.
+ * Nothing here waits on wall-clock time; each pass only drains microtasks through act.
+ */
+const RUNTIME_SETTLE_PASSES = 32;
 
 async function settleRuntimeStatus(expected: "active" | "error"): Promise<void> {
-  await act(async () => waitForRuntimeStatus(expected));
+  for (let pass = 0; pass < RUNTIME_SETTLE_PASSES; pass += 1) {
+    if (host()?.getAttribute("data-slide-runtime") === expected) return;
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
+  throw new Error(
+    `runtime did not enter ${expected}; current=${host()?.getAttribute("data-slide-runtime")}`,
+  );
 }
 
 describe("RenderedSlidePlayer", () => {
@@ -383,11 +370,8 @@ describe("RenderedSlidePlayer", () => {
     expect(host()?.querySelector("svg")).toBeNull();
     expect(fontSet.added).toHaveLength(0);
 
-    const becameActive = waitForRuntimeStatus("active");
-    await act(async () => {
-      fontReady.resolve();
-      await becameActive;
-    });
+    fontReady.resolve();
+    await settleRuntimeStatus("active");
 
     expect(host()?.getAttribute("data-slide-runtime")).toBe("active");
     expect(FakeFontFace.instances).toHaveLength(1);
@@ -447,11 +431,8 @@ describe("RenderedSlidePlayer", () => {
     expect(host()?.getAttribute("data-click-group")).toBe("0");
     expect(ref.current?.exhausted).toBe(false);
 
-    const becameActive = waitForRuntimeStatus("active");
-    await act(async () => {
-      response.resolve(fetchResponse(SVG_DOCUMENT));
-      await becameActive;
-    });
+    response.resolve(fetchResponse(SVG_DOCUMENT));
+    await settleRuntimeStatus("active");
     expect(host()?.getAttribute("data-slide-runtime")).toBe("active");
     expect(ref.current?.exhausted).toBe(false);
   });
@@ -531,8 +512,7 @@ describe("RenderedSlidePlayer", () => {
   test("rejects mismatched SVG bytes before mounting a live element tree", async () => {
     stubFetch(SVG_DOCUMENT.replace('<g id="body" />', '<g id="body" data-tampered="true" />'));
     render(<RenderedSlidePlayer slide={slide} runtime={animatedRuntime} />);
-    const becameError = waitForRuntimeStatus("error");
-    await act(async () => becameError);
+    await settleRuntimeStatus("error");
 
     expect(host()?.getAttribute("data-slide-runtime")).toBe("error");
     expect(host()?.querySelector("svg")).toBeNull();
@@ -554,8 +534,7 @@ describe("RenderedSlidePlayer", () => {
         runtime={animatedRuntime}
       />,
     );
-    const becameError = waitForRuntimeStatus("error");
-    await act(async () => becameError);
+    await settleRuntimeStatus("error");
 
     expect(host()?.getAttribute("data-slide-runtime")).toBe("error");
     expect(host()?.querySelector("svg")).toBeNull();
