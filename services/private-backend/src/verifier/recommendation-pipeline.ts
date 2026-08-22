@@ -33,14 +33,11 @@ const MAX_MODEL_CONTENT_CHARACTERS = 700;
  * `.omo/evidence/task-37`. The verifier runs serially after the pair, so the pair must leave
  * behind enough room for the verifier tail rather than its median: reserving the p50 leaves the
  * verifier short on half of all runs, which is exactly the abort the reserve exists to prevent.
- * The verifier now hedges as well, and both of its calls start together, so the slot takes the
- * lesser of two draws rather than one. The p90 of that minimum sits at the 0.684 quantile of a
- * single call, which the measured distribution puts at 1,705ms - reserving the old unhedged p90
- * of 1,934ms simply took budget away from the pair. The per-slot figures are the
+ * The reserve is therefore the measured verifier p90 (1,934ms). The per-slot figures are the
  * measured p50 of each slot, because that is how long a duplicate typically needs in order to
  * be worth starting at all.
  */
-const HEDGE_VERIFIER_RESERVE_MS = 1_705;
+const HEDGE_VERIFIER_RESERVE_MS = 1_934;
 const HEDGE_TYPICAL_CALL_MS = { rerank: 967, llm: 1_284, verifier: 1_644 } as const;
 /**
  * The fastest durations either slot was observed to return in. Deferring a duplicate to a point
