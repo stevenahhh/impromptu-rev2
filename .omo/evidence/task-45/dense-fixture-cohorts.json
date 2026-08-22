@@ -1,0 +1,59 @@
+{
+  "sets": [
+    {
+      "set": "dense-1.json",
+      "cohortA": {
+        "recommend": 0,
+        "p95Ms": 3366.3,
+        "outcomes": {
+          "ABSTAIN": 10
+        }
+      },
+      "cohortB": {
+        "recommend": 0,
+        "p95Ms": 3406.6,
+        "outcomes": {
+          "ABSTAIN": 10
+        }
+      }
+    },
+    {
+      "set": "dense-2.json",
+      "cohortA": {
+        "recommend": 0,
+        "p95Ms": 3046.6,
+        "outcomes": {
+          "ABSTAIN": 10
+        }
+      },
+      "cohortB": {
+        "recommend": 0,
+        "p95Ms": 4504.5,
+        "outcomes": {
+          "ABSTAIN": 10
+        }
+      }
+    },
+    {
+      "set": "dense-3.json",
+      "cohortA": {
+        "recommend": 0,
+        "p95Ms": 3039.3,
+        "outcomes": {
+          "ABSTAIN": 10
+        }
+      },
+      "cohortB": {
+        "recommend": 0,
+        "p95Ms": 3797.3,
+        "outcomes": {
+          "ABSTAIN": 10
+        }
+      }
+    }
+  ],
+  "cohortAPerfectSets": 0,
+  "cohortBPerfectSets": 0,
+  "cohortATotal": "0/30",
+  "cohortBTotal": "0/30"
+}

@@ -201,3 +201,38 @@ response that fits the budget. Stating the gate's grounding rule in the generati
 tried, measured worse, and reverted. What remains is a product decision rather than an
 implementation one, and completion stays open here accordingly.
 
+
+### Grounding after the fixtures were unfrozen
+
+The deck fixtures were replaced with a six-slide Korean business deck. Both formats still extract
+byte-identical text and the scanned sentinel still restores exactly, so the OCR receipt is intact.
+
+Giving the deck real figures to quote immediately exposed two defects in fact extraction, both of
+the same kind: the extractor understood Latin and ISO notation only. A figure boundary treated any
+letter as a continuation, so 482억 and 2026년 disappeared and 12,400명 was truncated to 12 - which
+had been letting a claim of "12" pass against evidence that never said it. The date reader knew
+only ISO and slash forms, so a model normalizing the deck's own 2026년 1월 15일 to 2026-01-15 was
+rejected; that single token accounted for every rejection in a twenty-run probe. Both are fixed and
+pinned, and every fabricated-fact case still rejects, so the gate only tightened.
+
+| Measurement | Before | After |
+| --- | --- | --- |
+| Deterministic rejections in a 20-run profile | 20/20 | 0/20 |
+| Recommendations in that profile | 0/20 | 19/20 |
+| Existing-flow cohort | 0/10 | 28/30, one set at 10/10 |
+| FINAL-to-Console cohort | 0/10 | 23/30 |
+
+All sixty cohort runs stayed inside the 5,000ms p95 bar. The existing-flow cohort met the plan bar
+outright in one set, at 10/10 with a p95 of 4,394.7ms. The FINAL-to-Console cohort remains lower
+because its query is the whisper transcript and therefore differs on every run, so what is left is
+provider latency tail and query variation rather than grounding.
+
+### Connecting the audience screen
+
+Pairing used to take six steps across two windows and required reading a join code off the audience
+screen and typing it into the Console. The Console now opens the audience screen itself, that window
+reports its own join over a origin-checked message, and the presenter approves once. Two clicks.
+The approval gate is unchanged - an audience screen still cannot join without an explicit presenter
+action, a forged-origin handshake is ignored, and the typed-code path remains for a screen opened on
+another machine or when the popup is blocked.
+

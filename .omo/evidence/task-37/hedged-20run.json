@@ -1,19 +1,19 @@
 {
-  "nonce": "1d0c812d48",
+  "nonce": "c0f16b40ba",
   "samples": [
     {
       "i": 0,
-      "wallMs": 3557,
+      "wallMs": 3787,
       "outcome": "RECOMMEND"
     },
     {
       "i": 1,
-      "wallMs": 3367,
+      "wallMs": 3585,
       "outcome": "RECOMMEND"
     },
     {
       "i": 2,
-      "wallMs": 3492,
+      "wallMs": 3683,
       "outcome": "RECOMMEND"
     },
     {
@@ -23,120 +23,121 @@
     },
     {
       "i": 4,
-      "wallMs": 3238,
+      "wallMs": 3684,
       "outcome": "RECOMMEND"
     },
     {
       "i": 5,
-      "wallMs": 3622,
+      "wallMs": 4485,
       "outcome": "RECOMMEND"
     },
     {
       "i": 6,
-      "wallMs": 3891,
+      "wallMs": 3809,
       "outcome": "RECOMMEND"
     },
     {
       "i": 7,
-      "wallMs": 3690,
+      "wallMs": 3481,
       "outcome": "RECOMMEND"
     },
     {
       "i": 8,
-      "wallMs": 4505,
-      "outcome": "ABSTAIN:DEADLINE_EXCEEDED"
+      "wallMs": 3581,
+      "outcome": "RECOMMEND"
     },
     {
       "i": 9,
-      "wallMs": 3214,
+      "wallMs": 3995,
       "outcome": "RECOMMEND"
     },
     {
       "i": 10,
-      "wallMs": 3234,
+      "wallMs": 3789,
       "outcome": "RECOMMEND"
     },
     {
       "i": 11,
-      "wallMs": 4093,
+      "wallMs": 4319,
       "outcome": "RECOMMEND"
     },
     {
       "i": 12,
-      "wallMs": 3484,
+      "wallMs": 3565,
       "outcome": "RECOMMEND"
     },
     {
       "i": 13,
-      "wallMs": 3213,
+      "wallMs": 3687,
       "outcome": "RECOMMEND"
     },
     {
       "i": 14,
-      "wallMs": 3770,
+      "wallMs": 3378,
       "outcome": "RECOMMEND"
     },
     {
       "i": 15,
-      "wallMs": 3359,
+      "wallMs": 3340,
       "outcome": "RECOMMEND"
     },
     {
       "i": 16,
-      "wallMs": 3479,
+      "wallMs": 4440,
       "outcome": "RECOMMEND"
     },
     {
       "i": 17,
-      "wallMs": 3890,
-      "outcome": "RECOMMEND"
+      "wallMs": 4503,
+      "outcome": "ABSTAIN:DEADLINE_EXCEEDED"
     },
     {
       "i": 18,
-      "wallMs": 3788,
+      "wallMs": 3995,
       "outcome": "RECOMMEND"
     },
     {
       "i": 19,
-      "wallMs": 3173,
+      "wallMs": 4408,
       "outcome": "RECOMMEND"
     }
   ],
   "stages": {
     "embedding": {
       "n": 21,
-      "p50": 124,
-      "p90": 127,
-      "p95": 128,
+      "p50": 125,
+      "p90": 129,
+      "p95": 129,
       "max": 129
     },
     "rerank": {
-      "n": 38,
-      "p50": 990,
-      "p90": 1572,
-      "p95": 1632,
-      "max": 2190
+      "n": 36,
+      "p50": 1037,
+      "p90": 2478,
+      "p95": 2645,
+      "max": 3734
     },
     "llm": {
       "n": 42,
-      "p50": 1197,
-      "p90": 2497,
-      "p95": 3121,
-      "max": 3783
+      "p50": 1337,
+      "p90": 2642,
+      "p95": 3287,
+      "max": 3596
     },
     "verifier": {
       "n": 21,
-      "p50": 1546,
-      "p90": 1907,
-      "p95": 1958,
-      "max": 1973
+      "p50": 1644,
+      "p90": 1858,
+      "p95": 2040,
+      "max": 2711
     }
   },
   "hedges": {
-    "rerank:STARTED": 17,
+    "rerank:STARTED": 15,
     "llm:STARTED": 21,
-    "rerank:PRIMARY_WON": 17,
+    "rerank:HEDGE_WON": 4,
     "llm:HEDGE_WON": 10,
+    "rerank:PRIMARY_WON": 11,
     "llm:PRIMARY_WON": 11
   },
   "outcomes": {
@@ -145,9 +146,9 @@
   },
   "recommend": "19/20",
   "wallMs": {
-    "p50": 3492,
-    "p90": 3891,
-    "p95": 4093,
-    "max": 4505
+    "p50": 3787,
+    "p90": 4440,
+    "p95": 4485,
+    "max": 4503
   }
 }

@@ -1,0 +1,53 @@
+{
+  "task": "task-46-final-state",
+  "commit": "2b9464a6e5d10861e0159977aedf363283281c0b",
+  "gates": {
+    "results": "13/13 exit 0",
+    "bunTest": "575 pass / 0 fail across 108 files"
+  },
+  "criterion6": {
+    "requirement": "both ten-run cohorts at 10/10 with p95 <= 5,000ms",
+    "cohortA": {
+      "label": "confirmed FINAL to Console",
+      "perfectSets": "0/3",
+      "overall": "23/30 (77%)",
+      "p95MaxMs": 4504
+    },
+    "cohortB": {
+      "label": "existing recommendation flow",
+      "perfectSets": "1/3",
+      "overall": "28/30 (93%)",
+      "p95MaxMs": 4504.9,
+      "note": "set two reached 10/10 with p95 4,394.7ms, the first time either cohort met the bar in the plan's own format"
+    },
+    "p95Half": "PASS - all 60 runs stayed under 5,000ms",
+    "tenOfTenHalf": "cohort B met it once in three sets; cohort A did not"
+  },
+  "standaloneProfile": {
+    "runs": 20,
+    "recommend": "19/20",
+    "deterministicRejections": 0,
+    "wallP95Ms": 4485
+  },
+  "whatChangedThisRound": {
+    "decision": "The user unfroze the deck fixtures (option b).",
+    "fixtureDensity": "51bc74b replaced a 16-character single line with a six-slide Korean business deck; PDF and PPTX still extract byte-identical text and the OCR sentinel still restores exactly.",
+    "exposedDefects": [
+      "e09d890 - the number boundary treated any letter as a continuation, so 482억 and 2026년 vanished entirely and 12,400명 was truncated to 12, which had been letting a claim of '12' pass against evidence that never stated it",
+      "b37cb72 - the date extractor knew only ISO and slash notation, so a model normalizing the deck's own 2026년 1월 15일 to 2026-01-15 was rejected; this single token caused 21 of 21 rejections"
+    ],
+    "pinnedBy": "2b9464a - thirteen cases including four negative characterizations; disabling koreanCalendarDates fails exactly the three positive cases and restoring it passes all thirteen",
+    "measuredEffect": "deterministic rejections went from 20/20 of all runs to 0/20; the standalone profile went from 0 recommendations to 19/20"
+  },
+  "screenConnectionFlow": {
+    "commit": "a282c7d",
+    "before": "six steps across two windows, including dictating a join code by hand",
+    "after": "two clicks - open the audience screen from the Console, then approve the request it reports",
+    "verified": "no change under services/ or packages/contracts/; the presenter approval gate and the manual-code fallback both remain, and a forged-origin handshake is ignored"
+  },
+  "remainingGap": {
+    "cohortA": "23/30",
+    "analysis": "Cohort A derives its query from the whisper transcript, so the query text differs run to run while cohort B uses a fixed query. Grounding itself is resolved - the twenty-run profile recorded zero deterministic rejections - so what remains is provider latency tail plus query variation."
+  },
+  "completionBoundary": "include-hardening: no 48-hour completion is declared."
+}
