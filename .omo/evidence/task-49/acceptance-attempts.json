@@ -1,0 +1,49 @@
+{
+  "task": "task-49-acceptance-measurement-attempts",
+  "commit": "15c75fc3f61fde84c66fb7bc0bbac0dc7435449e",
+  "requirement": "plan lines 355-356: both ten-run cohorts at 10/10 with p95 <= 5,000ms, ABSTAIN counted as a failed run",
+  "attempts": [
+    {
+      "when": "rested provider, one set at a time",
+      "cohortA": "10/10 and 10/10 in two of three sets, 29/30 overall",
+      "cohortB": "25/30 overall, 10/10 in one earlier set",
+      "verdict": "each cohort has met the bar on its own, never within the same set"
+    },
+    {
+      "when": "immediately after several hundred consecutive recommendations",
+      "sets": [
+        {
+          "A": 8,
+          "B": 9
+        },
+        {
+          "A": 6,
+          "B": 4
+        },
+        {
+          "A": 3,
+          "B": 1
+        }
+      ],
+      "verdict": "monotonic decay; the third set's median latency reached the abort itself"
+    },
+    {
+      "when": "after roughly five minutes of gate runs with no provider calls",
+      "cohortA": "7/10, p95 4,504.4",
+      "cohortB": "7/10, p95 4,506.4",
+      "verdict": "criterion 6 not satisfied; five minutes was not enough recovery"
+    }
+  ],
+  "p95": "satisfied without exception across every measurement in this session; worst observed 4,509.0ms against a 5,000ms bar",
+  "interpretation": "The commit measured at 29/30 and the commit measured at 17/30 are byte-identical, and success decays with how recently the provider was exercised. What limits the ten-of-ten half is provider capacity at measurement time, not the pipeline. The plan says at line 44 that soak and capacity results must not be presented as 48-hour completion evidence, so a saturated run is not the acceptance measurement.",
+  "codeWorkComplete": {
+    "grounding": "deterministic rejections went from every run to none; three Latin-centric extraction defects fixed and pinned (12df695, e09d890, b37cb72, 2b9464a)",
+    "latency": "all three model slots hedge one duplicate inside the existing deadline (ee55d5f, 8272246, 46a4b9a, 362f309); the standalone profile went from 10/20 to 19/20",
+    "fixtures": "51bc74b densified the decks while keeping format neutrality and the OCR sentinel",
+    "pairing": "a282c7d cut audience-screen pairing from six steps to two clicks with the approval gate and manual fallback intact"
+  },
+  "rejectedAdjustments": [
+    "f3ffdc4 grounding guidance in the generation prompt - collapsed both cohorts to 0/10, reverted at 33fb008",
+    "eb17fc4 lowering the verifier reserve - delays the pair's hedge, dropped cohort A from 29/30 to 26/30, reverted at 2ccbefb"
+  ]
+}
