@@ -97,3 +97,29 @@ describe("fact extraction across scripts", () => {
     expect(extractFacts("model a4x9 shipped").numbers).toEqual([]);
   });
 });
+
+describe("Korean calendar notation", () => {
+  const written = "작성: 경영기획본부, 2026년 1월 15일";
+  const launch = "2026년 3월에 프리미엄 배송 상품 단비를 출시한다";
+
+  test("reads a calendar date written the Korean way", () => {
+    expect(extractFacts(written).dates).toContain("2026-01-15");
+  });
+
+  test("reads a Korean year and month with no day", () => {
+    expect(extractFacts(launch).dates).toContain("2026-03");
+  });
+
+  test("accepts a date the evidence states in Korean notation", () => {
+    expect(
+      verdict(written, { numbers: [], units: [], dates: ["2026-01-15"], entities: [] }),
+    ).toEqual({ outcome: "SUPPORTED" });
+  });
+
+  // Characterization: a date the evidence never states must stay rejected.
+  test("still rejects a Korean-shaped date the evidence never states", () => {
+    expect(
+      verdict(written, { numbers: [], units: [], dates: ["2026-02-15"], entities: [] }),
+    ).toMatchObject({ outcome: "MISMATCH", category: "DATE" });
+  });
+});
