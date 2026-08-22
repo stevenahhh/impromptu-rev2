@@ -128,3 +128,46 @@ held open under `include-hardening`.
   219,332,608 bytes; rasterizing a scanned page for OCR adds 17,805,650 bytes of image data per
   the measured fixture.
 
+
+## Recommendation latency after slot hedging
+
+The plan originally forbade any retry, queue, circuit breaker or budget scheduler outside the
+existing five second recommendation deadline. That guardrail was relaxed by explicit decision for
+the `rerank` and `llm` slots only: at most one duplicate call per slot, inside the same deadline
+signal, against the same model, schema and trusted context. The 5,000ms budget, the 500ms terminal
+guard, deterministic evidence reconciliation, verifier verdict handling, ACL, source revision and
+idempotency are unchanged, and a primary that settles with an error never starts a new call.
+
+Measured on the frozen text-layer fixture, 20 direct recommendations per stage:
+
+| Stage | RECOMMEND | Deadline aborts | Wall p95 |
+| --- | --- | --- | --- |
+| Before hedging | 10/20 | 9 | 4,505ms |
+| Hedge introduced | 15/20 | 5 | 4,505ms |
+| Verifier tail reserved | 17/20 | 3 | 4,504ms |
+| Duplicate starts at once when delay cannot avoid it | 19/20 | 1 | 4,301ms |
+
+Core-5 acceptance was then run three times in a row and every round finished `exitCode 0` with
+positive 2/2, negative 6/6 and stt 2/2. The same suite produced 2/12 positive across six rounds
+before hedging.
+
+### Ten-run cohorts
+
+| Cohort | Success | p50 | p95 | Verdict |
+| --- | --- | --- | --- | --- |
+| Existing recommendation flow | 10/10 | 3,637ms | 4,497ms | meets the bar |
+| Confirmed FINAL to Console | 8/10 | 3,360ms | 3,623ms | p95 meets the bar, 10/10 does not |
+
+Both cohorts sit inside the 5,000ms p95 requirement. The two shortfalls in the FINAL to Console
+cohort were `CONFLICTING_EVIDENCE` at 3,623ms and `DETERMINISTIC_MISMATCH` at 1,944ms, neither of
+which came close to the 4,500ms abort, so neither is a latency failure and no amount of further
+hedging moves them. That cohort derives its query from the whisper transcript, which differs run
+to run, and on some transcripts the generation slot asserts a fact that is absent from the
+evidence or the verifier reports a conflict. The evidence gate rejecting those claims is the
+behaviour the gate exists for, and it was not weakened to raise the number.
+
+Closing that remaining gap is a grounding-quality question rather than a latency one. The
+full-catalogue model bakeoff found no configuration that combines grounded output with a response
+time that fits the budget, the deck fixtures are frozen, and the evidence gate stays as it is.
+It therefore stays open as September hardening, consistent with holding completion open here.
+
