@@ -318,23 +318,20 @@ html[data-surface="console"] .ui-shell__body--focused {
   justify-items: center;
   gap: var(--space-4);
   min-inline-size: 0;
-  min-block-size: 0;
+  min-block-size: var(--space-20);
   padding: var(--space-8);
-  border: calc(var(--size-hairline) * 2) dashed var(--border-strong);
+  border: var(--size-hairline) dashed var(--border-strong);
   border-radius: var(--radius-lg);
   background: var(--surface-raised);
   text-align: center;
   transition:
     border-color var(--duration-fast) var(--ease-out),
-    background var(--duration-fast) var(--ease-out),
     opacity var(--duration-fast) var(--ease-out);
 }
 
-.console-dropzone:hover,
-.console-dropzone:focus-within,
 .console-dropzone[data-dragging="true"] {
+  border-style: solid;
   border-color: var(--primary);
-  background: var(--surface-panel);
 }
 
 .console-dropzone--busy {
@@ -367,6 +364,58 @@ html[data-surface="console"] .ui-shell__body--focused {
 
 .console-selected-file {
   overflow-wrap: anywhere;
+}
+
+.console-primary-action {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  inline-size: var(--size-full);
+}
+
+.console-primary-action > button {
+  min-block-size: var(--size-target);
+}
+
+.console-primary-action > p {
+  margin: var(--space-0);
+  color: var(--text-secondary);
+  font-size: var(--text-caption);
+}
+
+.console-advanced-connect {
+  min-inline-size: 0;
+}
+
+.console-advanced-connect summary {
+  padding-block: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-small);
+  cursor: pointer;
+}
+
+.console-advanced-connect[open] summary {
+  margin-block-end: var(--space-3);
+}
+
+.console-advanced-connect[open] > *:not(summary) {
+  margin-block: var(--space-0) var(--space-3);
+  margin-inline-start: var(--space-4);
+}
+
+.console-status-line {
+  overflow: hidden;
+  margin: var(--space-0);
+  color: var(--text-secondary);
+  font-size: var(--text-small);
+  line-height: var(--line-body);
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.console-status-line--attention {
+  font-weight: var(--weight-bold);
 }
 
 .console-upload-ready {
