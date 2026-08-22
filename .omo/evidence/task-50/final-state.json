@@ -1,0 +1,39 @@
+{
+  "task": "task-50-final-state",
+  "commit": "088c7e5adc08735ceeb6e32f8f7374ef468087d2",
+  "criteriaMet": {
+    "1 pdf and pptx end to end": "PASS - acceptance suite green three rounds running, positive 2/2 each",
+    "2 scanned pdf ocr": "PASS - exactSentinelPages restores exactly against a baseline of zero",
+    "3 stage cards zero": "PASS - triple fail-closed refusals, cardEventCount 0, security 15/15",
+    "4 mic denied and external 429": "PASS - negative 6/6 in every acceptance round",
+    "5 aba dwell after restart": "PASS - negative 6/6 in every acceptance round",
+    "7 all gates": "PASS - 13/13 exit 0, bun test 576 pass / 0 fail"
+  },
+  "criterion6": {
+    "p95": "PASS without exception - every run in this session finished under 5,000ms, worst observed 4,509.0ms",
+    "tenOfTen": "NOT MET - the best rested measurement puts both cohorts at 9/10. Cohort A reached 10/10 in two isolated sets and cohort B in one, but never both within the same set.",
+    "remainingFailure": "one ABSTAIN: DEADLINE_EXCEEDED per cohort per set; deterministic rejections are zero"
+  },
+  "leversApplied": [
+    "hedging on all three model slots inside the existing deadline (ee55d5f, 8272246, 46a4b9a, 362f309)",
+    "three Latin-centric fact-extraction defects fixed and pinned (12df695, e09d890, b37cb72, 2b9464a)",
+    "deck fixtures densified so a grounded claim is possible at all (51bc74b)",
+    "the external branch no longer blocks the model pair it cannot reach (088c7e5)"
+  ],
+  "leversRefutedByMeasurement": [
+    "f3ffdc4 grounding guidance in the generation prompt - both cohorts fell to 0/10; reverted at 33fb008",
+    "eb17fc4 a smaller verifier reserve - enlarges the pair budget and therefore delays its hedge; cohort A fell from 29/30 to 26/30; reverted at 2ccbefb"
+  ],
+  "leversExhausted": [
+    "the 29-model catalogue bakeoff found no configuration combining grounded output with a response inside the budget",
+    "the deterministic gate and verifier verdict must not be weakened",
+    "the 5,000ms budget and the 500ms terminal guard are fixed by the plan"
+  ],
+  "whatWouldCloseIt": [
+    "raise the 5,000ms recommendation budget - a product decision, currently fixed by the plan",
+    "a faster model tier for the rerank, generation and verifier slots",
+    "carry the residual into September hardening, which is what the include-hardening completion boundary already records"
+  ],
+  "providerDependence": "One commit measured 29/30 rested and 17/30 saturated. Success decays with how recently the provider was exercised and the third saturated set had its median latency at the abort. Plan line 44 says soak and capacity results must not stand in for 48-hour completion evidence.",
+  "completionBoundary": "include-hardening: no 48-hour completion is declared."
+}

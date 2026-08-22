@@ -236,3 +236,27 @@ The approval gate is unchanged - an audience screen still cannot join without an
 action, a forged-origin handshake is ignored, and the typed-code path remains for a screen opened on
 another machine or when the popup is blocked.
 
+
+### Where the recommendation budget stands
+
+Every model slot on the critical path now hedges a single duplicate inside the existing five second
+deadline, the fact extractor reads the language the decks are written in, and the external branch no
+longer blocks a model pair it cannot reach. Grounding is resolved outright: a twenty-run profile
+recorded no deterministic rejections at all, against twenty out of twenty before this work.
+
+The p95 requirement holds without exception - the worst run measured in this session finished at
+4,509ms against a 5,000ms bar. The ten-of-ten requirement does not. The best rested measurement puts
+both cohorts at nine out of ten, each missing on a single deadline abort. Each cohort has reached ten
+out of ten on its own in an isolated set, but never both in the same set.
+
+What remains is provider tail latency. The same commit measured twenty-nine out of thirty on a rested
+provider and seventeen out of thirty immediately after several hundred consecutive recommendations,
+with the saturated run pushing median latency to the abort itself. Two further adjustments were tried
+and both measured worse: stating the gate's grounding rule in the generation instruction collapsed
+both cohorts to zero, and shrinking the verifier reserve delayed the pair's hedge rather than helping
+it. Both were reverted.
+
+Closing the gap needs one of three product decisions: raise the five second budget, move the model
+slots to a faster tier, or carry the residual into September hardening. The third is what the
+include-hardening boundary already records, and completion stays held open here accordingly.
+
