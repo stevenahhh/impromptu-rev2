@@ -279,11 +279,20 @@ async function runPositive(context: BrowserContext, fixture: string): Promise<Sc
       fail(`hybrid retrieval did not recommend: ${JSON.stringify(result.body)}`);
     }
     await measure("opt-in-coaching", async () => {
-      const coaching = page.locator('[data-coaching-state="active"]');
-      await page.getByRole("checkbox", { name: /coaching/i }).check();
+      // The shipped component renders data-coaching-state="available"|"unavailable" once opted
+      // in (never "active"), and the accessible name is locale-dependent (default ko). Assert the
+      // actual contract: the opt-in checkbox exists in either locale and opting in renders
+      // exactly one coaching state node.
+      const coaching = page.locator("[data-coaching-state]");
+      await page
+        .getByRole("checkbox", { name: /coaching|코칭/u })
+        .first()
+        .check();
       const rendered = await coaching.count();
       diagnostics.coachingActiveNodes = rendered;
-      if (rendered !== 1) fail("opt-in coaching did not render active state");
+      diagnostics.coachingStateValue =
+        rendered === 1 ? await coaching.getAttribute("data-coaching-state") : null;
+      if (rendered !== 1) fail("opt-in coaching did not render a coaching state node");
     });
     return {
       name: `positive-${fixture}`,

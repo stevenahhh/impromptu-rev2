@@ -1,27 +1,29 @@
 {
   "command": "python3 scripts/verify-five-private-presentation-features.py",
-  "exitCode": 0,
+  "exitCode": 1,
   "scenarios": [
     {
       "name": "positive-korean-text-layer.pdf",
       "command": "Console upload + fake-device WebM capture + private HTTP recommendation",
-      "exitCode": 0,
-      "verdict": "PASS",
+      "exitCode": 1,
+      "verdict": "FAIL",
       "assertions": [
         "upload-201",
         "fake-device-webm-final",
         "hybrid-rrf-recommend",
         "opt-in-coaching"
       ],
+      "detail": "check: Error: strict mode violation: getByRole('checkbox', { name: /coaching|\\uCF54\\uCE6D/u }) resolved to 2 elements:\n    1) <input type=\"checkbox\"/> aka getByRole('checkbox', { name: '코칭 지표 표시' })\n    2) <input disabled type=\"checkbox\"/> aka getByRole('checkbox', { name: '코칭 표시 음소거' })\n\nCall log:\n\u001b[2m  - waiting for getByRole('checkbox', { name: /coaching|\\uCF54\\uCE6D/u })\u001b[22m\n",
       "stepLatencyMs": {
-        "sign-in": 1349,
-        "upload": 650,
-        "capture-final": 1681,
-        "recommendation": 3976,
-        "opt-in-coaching": 25
+        "sign-in": 1339,
+        "upload": 653,
+        "capture-final": 1731,
+        "recommendation": 3933,
+        "opt-in-coaching": 10
       },
       "diagnostics": {
-        "presentationSessionId": "ps_634ef9e9e55321fa7b28220232766f17",
+        "failedStep": "opt-in-coaching",
+        "presentationSessionId": "ps_628c5b49150ffe9ba716063efb616f3d",
         "deckVersion": "deck_34eac2a55addb409359febc4ec28e911f10c719abd28ce7b427421ab9a985c86",
         "finalKind": "FINAL",
         "finalSequence": 1,
@@ -31,7 +33,7 @@
         "recommendationStatus": 200,
         "recommendationOutcome": "RECOMMEND",
         "recommendationReason": null,
-        "recommendationLatencyMs": 3843,
+        "recommendationLatencyMs": 3824,
         "recommendationEvidenceCount": 1,
         "recommendationResponseBody": {
           "outcome": "RECOMMEND",
@@ -70,43 +72,43 @@
               "authorizationVersion": "acl-1"
             }
           ],
-          "completedAtMs": 1787367262889,
-          "latencyMs": 3843
-        },
-        "coachingActiveNodes": 1,
-        "coachingStateValue": "unavailable"
+          "completedAtMs": 1787367216494,
+          "latencyMs": 3824
+        }
       }
     },
     {
       "name": "positive-korean-structural.pptx",
       "command": "Console upload + fake-device WebM capture + private HTTP recommendation",
-      "exitCode": 0,
-      "verdict": "PASS",
+      "exitCode": 1,
+      "verdict": "FAIL",
       "assertions": [
         "upload-201",
         "fake-device-webm-final",
         "hybrid-rrf-recommend",
         "opt-in-coaching"
       ],
+      "detail": "check: Error: strict mode violation: getByRole('checkbox', { name: /coaching|\\uCF54\\uCE6D/u }) resolved to 2 elements:\n    1) <input type=\"checkbox\"/> aka getByRole('checkbox', { name: '코칭 지표 표시' })\n    2) <input disabled type=\"checkbox\"/> aka getByRole('checkbox', { name: '코칭 표시 음소거' })\n\nCall log:\n\u001b[2m  - waiting for getByRole('checkbox', { name: /coaching|\\uCF54\\uCE6D/u })\u001b[22m\n",
       "stepLatencyMs": {
-        "sign-in": 611,
-        "upload": 1836,
-        "capture-final": 1608,
-        "recommendation": 3744,
-        "opt-in-coaching": 20
+        "sign-in": 527,
+        "upload": 1740,
+        "capture-final": 1786,
+        "recommendation": 3561,
+        "opt-in-coaching": 4
       },
       "diagnostics": {
-        "presentationSessionId": "ps_7cdba0f3d984ab596e0f37a727442c77",
+        "failedStep": "opt-in-coaching",
+        "presentationSessionId": "ps_9e3e8690ae2c376811ba5aa90b372df6",
         "deckVersion": "deck_a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d",
         "finalKind": "FINAL",
         "finalSequence": 1,
-        "transcriptCharacters": 6,
+        "transcriptCharacters": 7,
         "transcriptWordCount": 1,
         "transcriptDurationMs": 960,
         "recommendationStatus": 200,
         "recommendationOutcome": "RECOMMEND",
         "recommendationReason": null,
-        "recommendationLatencyMs": 3612,
+        "recommendationLatencyMs": 3428,
         "recommendationEvidenceCount": 1,
         "recommendationResponseBody": {
           "outcome": "RECOMMEND",
@@ -145,11 +147,9 @@
               "authorizationVersion": "acl-1"
             }
           ],
-          "completedAtMs": 1787367270764,
-          "latencyMs": 3612
-        },
-        "coachingActiveNodes": 1,
-        "coachingStateValue": "unavailable"
+          "completedAtMs": 1787367224172,
+          "latencyMs": 3428
+        }
       }
     },
     {
@@ -225,7 +225,7 @@
       ]
     }
   ],
-  "positive": "2/2",
+  "positive": "0/2",
   "negative": "6/6",
   "stt": "2/2",
   "models": {
@@ -237,151 +237,157 @@
     {
       "stage": "embedding",
       "outcome": "SUCCESS",
-      "durationMs": 152,
-      "timestampMs": 1787367257510
-    },
-    {
-      "stage": "embedding",
-      "outcome": "SUCCESS",
-      "durationMs": 129,
-      "timestampMs": 1787367259047
-    },
-    {
-      "stage": "embedding",
-      "outcome": "SUCCESS",
-      "durationMs": 114,
-      "timestampMs": 1787367259161
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1117,
-      "timestampMs": 1787367259506
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 1457,
-      "timestampMs": 1787367259846
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 841,
-      "timestampMs": 1787367260403
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 1185,
-      "timestampMs": 1787367261148
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 1784,
-      "timestampMs": 1787367261347
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1386,
-      "timestampMs": 1787367261349
-    },
-    {
-      "stage": "verifier",
-      "outcome": "SUCCESS",
-      "durationMs": 1670,
-      "timestampMs": 1787367261518
-    },
-    {
-      "stage": "verifier",
-      "outcome": "SUCCESS",
-      "durationMs": 1536,
-      "timestampMs": 1787367262883
-    },
-    {
-      "stage": "verifier",
-      "outcome": "SUCCESS",
-      "durationMs": 1533,
-      "timestampMs": 1787367262884
-    },
-    {
-      "stage": "embedding",
-      "outcome": "SUCCESS",
-      "durationMs": 142,
-      "timestampMs": 1787367265610
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 836,
-      "timestampMs": 1787367267096
+      "durationMs": 149,
+      "timestampMs": 1787367211105
     },
     {
       "stage": "embedding",
       "outcome": "SUCCESS",
       "durationMs": 130,
-      "timestampMs": 1787367267152
+      "timestampMs": 1787367212694
     },
     {
       "stage": "embedding",
       "outcome": "SUCCESS",
-      "durationMs": 116,
-      "timestampMs": 1787367267270
+      "durationMs": 115,
+      "timestampMs": 1787367212786
     },
     {
       "stage": "rerank",
       "outcome": "SUCCESS",
-      "durationMs": 795,
-      "timestampMs": 1787367268610
+      "durationMs": 1375,
+      "timestampMs": 1787367213318
     },
     {
       "stage": "llm",
       "outcome": "SUCCESS",
-      "durationMs": 991,
-      "timestampMs": 1787367268817
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 1210,
-      "timestampMs": 1787367269025
+      "durationMs": 1421,
+      "timestampMs": 1787367213365
     },
     {
       "stage": "deterministic",
-      "outcome": "ENTITY:형식중립근육",
+      "outcome": "ENTITY:한국어",
       "durationMs": 0,
-      "timestampMs": 1787367269025
+      "timestampMs": 1787367213367
     },
     {
       "stage": "rerank",
       "outcome": "SUCCESS",
-      "durationMs": 1408,
-      "timestampMs": 1787367269234
+      "durationMs": 1005,
+      "timestampMs": 1787367214341
     },
     {
       "stage": "llm",
-      "outcome": "FAILED:cancelled",
-      "durationMs": 3713,
-      "timestampMs": 1787367269974
+      "outcome": "SUCCESS",
+      "durationMs": 1111,
+      "timestampMs": 1787367214446
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1200,
+      "timestampMs": 1787367214766
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1495,
+      "timestampMs": 1787367215061
     },
     {
       "stage": "verifier",
       "outcome": "SUCCESS",
-      "durationMs": 1526,
-      "timestampMs": 1787367270760
+      "durationMs": 1735,
+      "timestampMs": 1787367216181
+    },
+    {
+      "stage": "verifier",
+      "outcome": "SUCCESS",
+      "durationMs": 1429,
+      "timestampMs": 1787367216490
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 135,
+      "timestampMs": 1787367219012
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 132,
+      "timestampMs": 1787367220745
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 114,
+      "timestampMs": 1787367220860
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1327,
+      "timestampMs": 1787367220997
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 880,
+      "timestampMs": 1787367222326
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1127,
+      "timestampMs": 1787367222536
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1162,
+      "timestampMs": 1787367222571
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 3379,
+      "timestampMs": 1787367223049
+    },
+    {
+      "stage": "deterministic",
+      "outcome": "ENTITY:한국",
+      "durationMs": 0,
+      "timestampMs": 1787367223049
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 2011,
+      "timestampMs": 1787367223457
+    },
+    {
+      "stage": "verifier",
+      "outcome": "SUCCESS",
+      "durationMs": 1597,
+      "timestampMs": 1787367224168
+    },
+    {
+      "stage": "verifier",
+      "outcome": "SUCCESS",
+      "durationMs": 1530,
+      "timestampMs": 1787367224987
     },
     {
       "stage": "embedding",
       "outcome": "SUCCESS",
       "durationMs": 142,
-      "timestampMs": 1787367272213
+      "timestampMs": 1787367225522
     }
   ],
   "stageLatencySummaryMs": {
     "deterministic": {
-      "n": 1,
+      "n": 2,
       "min": 0,
       "median": 0,
       "max": 0
@@ -389,55 +395,60 @@
     "embedding": {
       "n": 7,
       "min": 114,
-      "median": 130,
-      "max": 152
+      "median": 132,
+      "max": 149
     },
     "llm": {
       "n": 6,
-      "min": 991,
-      "median": 1333,
-      "max": 3713
+      "min": 1111,
+      "median": 1374,
+      "max": 2011
     },
     "rerank": {
       "n": 6,
-      "min": 795,
-      "median": 979,
-      "max": 1408
+      "min": 880,
+      "median": 1163,
+      "max": 3379
     },
     "verifier": {
       "n": 4,
-      "min": 1526,
-      "median": 1534,
-      "max": 1670
+      "min": 1429,
+      "median": 1563,
+      "max": 1735
     }
   },
   "recommendationRequests": [
     {
-      "outcome": "RECOMMEND",
-      "durationMs": 4167,
-      "timestampMs": 1787367261522
+      "outcome": "ABSTAIN:DETERMINISTIC_MISMATCH",
+      "durationMs": 2416,
+      "timestampMs": 1787367213367
     },
     {
       "outcome": "RECOMMEND",
-      "durationMs": 3844,
-      "timestampMs": 1787367262889
+      "durationMs": 3826,
+      "timestampMs": 1787367216494
     },
     {
-      "outcome": "ABSTAIN:DEADLINE_EXCEEDED",
-      "durationMs": 4504,
-      "timestampMs": 1787367269969
+      "outcome": "ABSTAIN:DETERMINISTIC_MISMATCH",
+      "durationMs": 4175,
+      "timestampMs": 1787367223049
     },
     {
       "outcome": "RECOMMEND",
-      "durationMs": 3613,
-      "timestampMs": 1787367270764
+      "durationMs": 3430,
+      "timestampMs": 1787367224172
     }
   ],
   "deterministicMismatches": [
     {
       "category": "ENTITY",
-      "value": "형식중립근육",
-      "timestampMs": 1787367269025
+      "value": "한국어",
+      "timestampMs": 1787367213367
+    },
+    {
+      "category": "ENTITY",
+      "value": "한국",
+      "timestampMs": 1787367223049
     }
   ]
 }

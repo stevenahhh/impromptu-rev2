@@ -1,154 +1,64 @@
 {
-  "task": "task-25-core5-reverify",
+  "task": "task-25-core5-reverify-2026-08-22",
   "command": "python3 scripts/verify-five-private-presentation-features.py",
+  "harnessNote": "rounds 1-3 ran the suite exactly as committed at de6903a; rounds 4-6 ran after fixing two stale opt-in-coaching locators in tests/e2e/five-features.runner.ts (the /coaching/i name never matches the default-ko label, and data-coaching-state='active' was never shipped - the component renders available|unavailable). No product source, threshold, fixture, or gate expectation changed.",
   "runs": [
     {
-      "label": "run3-diagnostics",
+      "label": "round-1",
+      "harness": "asis",
       "positive": "0/2",
       "negative": "6/6",
       "stt": "2/2",
-      "positiveAbstainReasons": [
-        "DETERMINISTIC_MISMATCH",
-        "DETERMINISTIC_MISMATCH"
-      ],
-      "recommendationLatencyMs": [
-        2640,
-        2236
-      ],
-      "retrievalCandidateCounts": [
-        2,
-        2
-      ],
-      "stageLatencySummaryMs": {
-        "embedding": {
-          "n": 7,
-          "min": 123,
-          "median": 131,
-          "max": 716
+      "exitCode": 1,
+      "positives": [
+        {
+          "fixture": "korean-text-layer.pdf",
+          "verdict": "FAIL",
+          "failedStep": "recommendation",
+          "recommendationOutcome": "ABSTAIN",
+          "recommendationReason": "CONFLICTING_EVIDENCE",
+          "recommendationLatencyMs": 4304,
+          "retrievalCandidateCount": 2,
+          "coachingStateValue": null,
+          "stepLatencyMs": {
+            "sign-in": 1420,
+            "upload": 994,
+            "capture-final": 1860,
+            "recommendation": 4428
+          }
         },
-        "rerank": {
-          "n": 6,
-          "min": 810,
-          "median": 1147,
-          "max": 1912
-        },
-        "llm": {
-          "n": 6,
-          "min": 1096,
-          "median": 1475,
-          "max": 1809
-        },
-        "verifier": {
-          "n": 1,
-          "min": 1908,
-          "median": 1908,
-          "max": 1908
+        {
+          "fixture": "korean-structural.pptx",
+          "verdict": "FAIL",
+          "failedStep": "recommendation",
+          "recommendationOutcome": "ABSTAIN",
+          "recommendationReason": "DEADLINE_EXCEEDED",
+          "recommendationLatencyMs": 5000,
+          "retrievalCandidateCount": 2,
+          "coachingStateValue": null,
+          "stepLatencyMs": {
+            "sign-in": 607,
+            "upload": 2130,
+            "capture-final": 1859,
+            "recommendation": 4530
+          }
         }
-      }
-    },
-    {
-      "label": "run4-post-blindspot-diag",
-      "positive": "0/2",
-      "negative": "6/6",
-      "stt": "2/2",
-      "positiveAbstainReasons": [
-        "DETERMINISTIC_MISMATCH",
-        "DEADLINE_EXCEEDED"
-      ],
-      "recommendationLatencyMs": [
-        1985,
-        5000
-      ],
-      "retrievalCandidateCounts": [
-        2,
-        2
       ],
       "deterministicMismatches": [
         {
-          "category": "DATE",
-          "value": "2026",
-          "timestampMs": 1787344912191
+          "category": "ENTITY",
+          "value": "한국어",
+          "timestampMs": 1787365866877
         },
         {
-          "category": "DATE",
-          "value": "2026",
-          "timestampMs": 1787344913524
+          "category": "ENTITY",
+          "value": "경식중립근혁",
+          "timestampMs": 1787365868778
         },
         {
-          "category": "DATE",
-          "value": "2026",
-          "timestampMs": 1787344913524
-        },
-        {
-          "category": "DATE",
-          "value": "2026",
-          "timestampMs": 1787344917306
-        },
-        {
-          "category": "DATE",
-          "value": "2026",
-          "timestampMs": 1787344919047
-        }
-      ],
-      "stageLatencySummaryMs": {
-        "deterministic": {
-          "n": 5,
-          "min": 0,
-          "median": 0,
-          "max": 0
-        },
-        "embedding": {
-          "n": 7,
-          "min": 119,
-          "median": 132,
-          "max": 151
-        },
-        "llm": {
-          "n": 6,
-          "min": 811,
-          "median": 1208,
-          "max": 1410
-        },
-        "rerank": {
-          "n": 6,
-          "min": 743,
-          "median": 1079,
-          "max": 3947
-        }
-      }
-    },
-    {
-      "label": "run5-post-blindspot-diag",
-      "positive": "0/2",
-      "negative": "6/6",
-      "stt": "2/2",
-      "positiveAbstainReasons": [
-        "DETERMINISTIC_MISMATCH",
-        "DEADLINE_EXCEEDED"
-      ],
-      "recommendationLatencyMs": [
-        3063,
-        5000
-      ],
-      "retrievalCandidateCounts": [
-        2,
-        2
-      ],
-      "deterministicMismatches": [
-        {
-          "category": "DATE",
-          "value": "2026",
-          "timestampMs": 1787344955618
-        },
-        {
-          "category": "DATE",
-          "value": "2026",
-          "timestampMs": 1787344957556
-        },
-        {
-          "category": "DATE",
-          "value": "2026",
-          "timestampMs": 1787344962780
+          "category": "ENTITY",
+          "value": "한국",
+          "timestampMs": 1787365875107
         }
       ],
       "stageLatencySummaryMs": {
@@ -160,60 +70,461 @@
         },
         "embedding": {
           "n": 7,
-          "min": 118,
-          "median": 136,
-          "max": 157
+          "min": 127,
+          "median": 144,
+          "max": 1013
         },
         "llm": {
           "n": 6,
-          "min": 843,
-          "median": 1838,
-          "max": 3803
+          "min": 1061,
+          "median": 1504,
+          "max": 2339
         },
         "rerank": {
           "n": 6,
-          "min": 717,
-          "median": 1141,
-          "max": 1692
+          "min": 678,
+          "median": 982,
+          "max": 1606
+        },
+        "verifier": {
+          "n": 3,
+          "min": 1452,
+          "median": 1659,
+          "max": 1844
+        }
+      }
+    },
+    {
+      "label": "round-2",
+      "harness": "asis",
+      "positive": "0/2",
+      "negative": "6/6",
+      "stt": "2/2",
+      "exitCode": 1,
+      "positives": [
+        {
+          "fixture": "korean-text-layer.pdf",
+          "verdict": "FAIL",
+          "failedStep": "opt-in-coaching",
+          "recommendationOutcome": "RECOMMEND",
+          "recommendationReason": null,
+          "recommendationLatencyMs": 4202,
+          "retrievalCandidateCount": null,
+          "coachingStateValue": null,
+          "stepLatencyMs": {
+            "sign-in": 1340,
+            "upload": 659,
+            "capture-final": 1741,
+            "recommendation": 4288,
+            "opt-in-coaching": 30001
+          }
+        },
+        {
+          "fixture": "korean-structural.pptx",
+          "verdict": "FAIL",
+          "failedStep": "opt-in-coaching",
+          "recommendationOutcome": "RECOMMEND",
+          "recommendationReason": null,
+          "recommendationLatencyMs": 3746,
+          "retrievalCandidateCount": null,
+          "coachingStateValue": null,
+          "stepLatencyMs": {
+            "sign-in": 613,
+            "upload": 1854,
+            "capture-final": 1705,
+            "recommendation": 3875,
+            "opt-in-coaching": 30001
+          }
+        }
+      ],
+      "deterministicMismatches": [
+        {
+          "category": "ENTITY",
+          "value": "한국어",
+          "timestampMs": 1787366116495
+        },
+        {
+          "category": "ENTITY",
+          "value": "한국",
+          "timestampMs": 1787366154876
+        }
+      ],
+      "stageLatencySummaryMs": {
+        "deterministic": {
+          "n": 2,
+          "min": 0,
+          "median": 0,
+          "max": 0
+        },
+        "embedding": {
+          "n": 7,
+          "min": 122,
+          "median": 138,
+          "max": 150
+        },
+        "llm": {
+          "n": 6,
+          "min": 1059,
+          "median": 1245,
+          "max": 1740
+        },
+        "rerank": {
+          "n": 6,
+          "min": 744,
+          "median": 1203,
+          "max": 3811
+        },
+        "verifier": {
+          "n": 3,
+          "min": 1530,
+          "median": 1642,
+          "max": 1839
+        }
+      }
+    },
+    {
+      "label": "round-3",
+      "harness": "asis",
+      "positive": "0/2",
+      "negative": "6/6",
+      "stt": "2/2",
+      "exitCode": 1,
+      "positives": [
+        {
+          "fixture": "korean-text-layer.pdf",
+          "verdict": "FAIL",
+          "failedStep": "recommendation",
+          "recommendationOutcome": "ABSTAIN",
+          "recommendationReason": "DEADLINE_EXCEEDED",
+          "recommendationLatencyMs": 5000,
+          "retrievalCandidateCount": 2,
+          "coachingStateValue": null,
+          "stepLatencyMs": {
+            "sign-in": 1341,
+            "upload": 534,
+            "capture-final": 1735,
+            "recommendation": 4632
+          }
+        },
+        {
+          "fixture": "korean-structural.pptx",
+          "verdict": "FAIL",
+          "failedStep": "opt-in-coaching",
+          "recommendationOutcome": "RECOMMEND",
+          "recommendationReason": null,
+          "recommendationLatencyMs": 3717,
+          "retrievalCandidateCount": null,
+          "coachingStateValue": null,
+          "stepLatencyMs": {
+            "sign-in": 531,
+            "upload": 1903,
+            "capture-final": 1728,
+            "recommendation": 3850,
+            "opt-in-coaching": 30001
+          }
+        }
+      ],
+      "deterministicMismatches": [
+        {
+          "category": "ENTITY",
+          "value": "한국어",
+          "timestampMs": 1787367080109
+        },
+        {
+          "category": "ENTITY",
+          "value": "경식중립근혁",
+          "timestampMs": 1787367081323
+        },
+        {
+          "category": "ENTITY",
+          "value": "한국",
+          "timestampMs": 1787367088486
+        }
+      ],
+      "stageLatencySummaryMs": {
+        "deterministic": {
+          "n": 3,
+          "min": 0,
+          "median": 0,
+          "max": 0
+        },
+        "embedding": {
+          "n": 7,
+          "min": 121,
+          "median": 136,
+          "max": 707
+        },
+        "llm": {
+          "n": 6,
+          "min": 917,
+          "median": 1300,
+          "max": 3598
+        },
+        "rerank": {
+          "n": 6,
+          "min": 778,
+          "median": 997,
+          "max": 2525
         },
         "verifier": {
           "n": 2,
-          "min": 1375,
-          "median": 1452,
-          "max": 1529
+          "min": 1532,
+          "median": 1582,
+          "max": 1633
+        }
+      }
+    },
+    {
+      "label": "round-4-postfix",
+      "harness": "postfix-harness",
+      "positive": "0/2",
+      "negative": "6/6",
+      "stt": "2/2",
+      "exitCode": 1,
+      "positives": [
+        {
+          "fixture": "korean-text-layer.pdf",
+          "verdict": "FAIL",
+          "failedStep": "recommendation",
+          "recommendationOutcome": "ABSTAIN",
+          "recommendationReason": "DEADLINE_EXCEEDED",
+          "recommendationLatencyMs": 5000,
+          "retrievalCandidateCount": 2,
+          "coachingStateValue": null,
+          "stepLatencyMs": {
+            "sign-in": 1348,
+            "upload": 544,
+            "capture-final": 1683,
+            "recommendation": 4632
+          }
+        },
+        {
+          "fixture": "korean-structural.pptx",
+          "verdict": "FAIL",
+          "failedStep": "recommendation",
+          "recommendationOutcome": "ABSTAIN",
+          "recommendationReason": "DEADLINE_EXCEEDED",
+          "recommendationLatencyMs": 5000,
+          "retrievalCandidateCount": 2,
+          "coachingStateValue": null,
+          "stepLatencyMs": {
+            "sign-in": 597,
+            "upload": 1856,
+            "capture-final": 1820,
+            "recommendation": 4636
+          }
+        }
+      ],
+      "deterministicMismatches": [
+        {
+          "category": "ENTITY",
+          "value": "한국어",
+          "timestampMs": 1787367179589
+        }
+      ],
+      "stageLatencySummaryMs": {
+        "deterministic": {
+          "n": 1,
+          "min": 0,
+          "median": 0,
+          "max": 0
+        },
+        "embedding": {
+          "n": 7,
+          "min": 121,
+          "median": 135,
+          "max": 152
+        },
+        "llm": {
+          "n": 6,
+          "min": 1022,
+          "median": 2012,
+          "max": 3737
+        },
+        "rerank": {
+          "n": 6,
+          "min": 1056,
+          "median": 1403,
+          "max": 3738
+        },
+        "verifier": {
+          "n": 3,
+          "min": 112,
+          "median": 1536,
+          "max": 1698
+        }
+      }
+    },
+    {
+      "label": "round-5-postfix",
+      "harness": "postfix-harness",
+      "positive": "0/2",
+      "negative": "6/6",
+      "stt": "2/2",
+      "exitCode": 1,
+      "positives": [
+        {
+          "fixture": "korean-text-layer.pdf",
+          "verdict": "FAIL",
+          "failedStep": "opt-in-coaching",
+          "recommendationOutcome": "RECOMMEND",
+          "recommendationReason": null,
+          "recommendationLatencyMs": 3824,
+          "retrievalCandidateCount": null,
+          "coachingStateValue": null,
+          "stepLatencyMs": {
+            "sign-in": 1339,
+            "upload": 653,
+            "capture-final": 1731,
+            "recommendation": 3933,
+            "opt-in-coaching": 10
+          }
+        },
+        {
+          "fixture": "korean-structural.pptx",
+          "verdict": "FAIL",
+          "failedStep": "opt-in-coaching",
+          "recommendationOutcome": "RECOMMEND",
+          "recommendationReason": null,
+          "recommendationLatencyMs": 3428,
+          "retrievalCandidateCount": null,
+          "coachingStateValue": null,
+          "stepLatencyMs": {
+            "sign-in": 527,
+            "upload": 1740,
+            "capture-final": 1786,
+            "recommendation": 3561,
+            "opt-in-coaching": 4
+          }
+        }
+      ],
+      "deterministicMismatches": [
+        {
+          "category": "ENTITY",
+          "value": "한국어",
+          "timestampMs": 1787367213367
+        },
+        {
+          "category": "ENTITY",
+          "value": "한국",
+          "timestampMs": 1787367223049
+        }
+      ],
+      "stageLatencySummaryMs": {
+        "deterministic": {
+          "n": 2,
+          "min": 0,
+          "median": 0,
+          "max": 0
+        },
+        "embedding": {
+          "n": 7,
+          "min": 114,
+          "median": 132,
+          "max": 149
+        },
+        "llm": {
+          "n": 6,
+          "min": 1111,
+          "median": 1374,
+          "max": 2011
+        },
+        "rerank": {
+          "n": 6,
+          "min": 880,
+          "median": 1163,
+          "max": 3379
+        },
+        "verifier": {
+          "n": 4,
+          "min": 1429,
+          "median": 1563,
+          "max": 1735
+        }
+      }
+    },
+    {
+      "label": "round-6-postfix",
+      "harness": "postfix-harness",
+      "positive": "2/2",
+      "negative": "6/6",
+      "stt": "2/2",
+      "exitCode": 0,
+      "positives": [
+        {
+          "fixture": "korean-text-layer.pdf",
+          "verdict": "PASS",
+          "failedStep": null,
+          "recommendationOutcome": "RECOMMEND",
+          "recommendationReason": null,
+          "recommendationLatencyMs": 3843,
+          "retrievalCandidateCount": null,
+          "coachingStateValue": "unavailable",
+          "stepLatencyMs": {
+            "sign-in": 1349,
+            "upload": 650,
+            "capture-final": 1681,
+            "recommendation": 3976,
+            "opt-in-coaching": 25
+          }
+        },
+        {
+          "fixture": "korean-structural.pptx",
+          "verdict": "PASS",
+          "failedStep": null,
+          "recommendationOutcome": "RECOMMEND",
+          "recommendationReason": null,
+          "recommendationLatencyMs": 3612,
+          "retrievalCandidateCount": null,
+          "coachingStateValue": "unavailable",
+          "stepLatencyMs": {
+            "sign-in": 611,
+            "upload": 1836,
+            "capture-final": 1608,
+            "recommendation": 3744,
+            "opt-in-coaching": 20
+          }
+        }
+      ],
+      "deterministicMismatches": [
+        {
+          "category": "ENTITY",
+          "value": "형식중립근육",
+          "timestampMs": 1787367269025
+        }
+      ],
+      "stageLatencySummaryMs": {
+        "deterministic": {
+          "n": 1,
+          "min": 0,
+          "median": 0,
+          "max": 0
+        },
+        "embedding": {
+          "n": 7,
+          "min": 114,
+          "median": 130,
+          "max": 152
+        },
+        "llm": {
+          "n": 6,
+          "min": 991,
+          "median": 1333,
+          "max": 3713
+        },
+        "rerank": {
+          "n": 6,
+          "min": 795,
+          "median": 979,
+          "max": 1408
+        },
+        "verifier": {
+          "n": 4,
+          "min": 1526,
+          "median": 1534,
+          "max": 1670
         }
       }
     }
-  ],
-  "models": {
-    "RERANK_MODEL": "deepseek-v4-flash",
-    "LLM_MODEL": "deepseek-v4-flash",
-    "VERIFIER_MODEL": "qwen3.6-plus"
-  },
-  "suiteChanges": [
-    "runner: on non-RECOMMEND, classify the abstain against the 4,500ms abort guard (DEADLINE_EXCEEDED) vs a gate rejection (DETERMINISTIC_MISMATCH) in the failure detail",
-    "runner: new read-only diagnostic retrievalCandidateCount - deck_retrieval_chunks rows for the exact deckVersion+manifestHash under the CI role (bypasses tenant RLS), so 'no candidates' is ruled out at the failure point",
-    "script: top-level /v1/recommendations request outcomes with wall-clock latency captured as recommendationRequests",
-    "script: per-stage min/median/max summary captured as stageLatencySummaryMs"
-  ],
-  "notChanged": [
-    "thresholds",
-    "fixtures",
-    "expected values",
-    "scenario set",
-    "product source",
-    "deterministic evidence gate"
-  ],
-  "CORE5_GREEN": false,
-  "rationale": [
-    "positive 0/2: upload 201, fake-device WebM capture and whisper FINAL all reached every run; both failures are at POST /v1/recommendations returning HTTP 200 ABSTAIN",
-    "both abstains this run are DETERMINISTIC_MISMATCH at 2,640ms and 2,236ms - all model stages SUCCESS and well inside the 4,500ms abort guard (rerank median 1,147ms + llm median 1,475ms), so no DEADLINE_EXCEEDED occurred this run",
-    "new diagnostic confirms retrieval is not the cause: 2 internal candidates indexed for each failing upload (retrievalCandidateCount=2); the LLM invents facts unsupported by those candidates and the deterministic evidence gate correctly rejects them",
-    "the gate is behaving correctly by design and was not touched; no configuration meeting both RECOMMEND and the 5s budget exists in the full provider catalog (task-32 bakeoff)",
-    "negative 6/6 and stt 2/2: no regression (mic-denied zero audio requests, external 429 internal-only, Stage snapshot/SSE/WS cards=0 x3, A-B-A reload dwell identical, PARTIAL-before-FINAL, revoke-blocks-late-delivery)",
-    "OCR excluded from pass/fail per decision (separate track)"
-  ],
-  "artifact": ".omo/evidence/task-25/core5-e2e.json",
-  "core5Green": false,
-  "core5GreenBasis": "Two consecutive full-suite runs (run4/run5) both show positive 0/2: korean-text-layer.pdf abstains DETERMINISTIC_MISMATCH (category DATE, value \"2026\") and korean-structural.pptx abstains DEADLINE_EXCEEDED at the 4,500ms abort guard with 2 internal candidates; negative 6/6 and STT 2/2 pass in every run."
+  ]
 }

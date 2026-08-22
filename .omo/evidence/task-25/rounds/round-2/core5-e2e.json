@@ -1,27 +1,29 @@
 {
   "command": "python3 scripts/verify-five-private-presentation-features.py",
-  "exitCode": 0,
+  "exitCode": 1,
   "scenarios": [
     {
       "name": "positive-korean-text-layer.pdf",
       "command": "Console upload + fake-device WebM capture + private HTTP recommendation",
-      "exitCode": 0,
-      "verdict": "PASS",
+      "exitCode": 1,
+      "verdict": "FAIL",
       "assertions": [
         "upload-201",
         "fake-device-webm-final",
         "hybrid-rrf-recommend",
         "opt-in-coaching"
       ],
+      "detail": "check: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('checkbox', { name: /coaching/i })\u001b[22m\n",
       "stepLatencyMs": {
-        "sign-in": 1349,
-        "upload": 650,
-        "capture-final": 1681,
-        "recommendation": 3976,
-        "opt-in-coaching": 25
+        "sign-in": 1340,
+        "upload": 659,
+        "capture-final": 1741,
+        "recommendation": 4288,
+        "opt-in-coaching": 30001
       },
       "diagnostics": {
-        "presentationSessionId": "ps_634ef9e9e55321fa7b28220232766f17",
+        "failedStep": "opt-in-coaching",
+        "presentationSessionId": "ps_65f712c8bd67bce56d42409ced671c94",
         "deckVersion": "deck_34eac2a55addb409359febc4ec28e911f10c719abd28ce7b427421ab9a985c86",
         "finalKind": "FINAL",
         "finalSequence": 1,
@@ -31,7 +33,7 @@
         "recommendationStatus": 200,
         "recommendationOutcome": "RECOMMEND",
         "recommendationReason": null,
-        "recommendationLatencyMs": 3843,
+        "recommendationLatencyMs": 4202,
         "recommendationEvidenceCount": 1,
         "recommendationResponseBody": {
           "outcome": "RECOMMEND",
@@ -70,43 +72,43 @@
               "authorizationVersion": "acl-1"
             }
           ],
-          "completedAtMs": 1787367262889,
-          "latencyMs": 3843
-        },
-        "coachingActiveNodes": 1,
-        "coachingStateValue": "unavailable"
+          "completedAtMs": 1787366119975,
+          "latencyMs": 4202
+        }
       }
     },
     {
       "name": "positive-korean-structural.pptx",
       "command": "Console upload + fake-device WebM capture + private HTTP recommendation",
-      "exitCode": 0,
-      "verdict": "PASS",
+      "exitCode": 1,
+      "verdict": "FAIL",
       "assertions": [
         "upload-201",
         "fake-device-webm-final",
         "hybrid-rrf-recommend",
         "opt-in-coaching"
       ],
+      "detail": "check: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('checkbox', { name: /coaching/i })\u001b[22m\n",
       "stepLatencyMs": {
-        "sign-in": 611,
-        "upload": 1836,
-        "capture-final": 1608,
-        "recommendation": 3744,
-        "opt-in-coaching": 20
+        "sign-in": 613,
+        "upload": 1854,
+        "capture-final": 1705,
+        "recommendation": 3875,
+        "opt-in-coaching": 30001
       },
       "diagnostics": {
-        "presentationSessionId": "ps_7cdba0f3d984ab596e0f37a727442c77",
+        "failedStep": "opt-in-coaching",
+        "presentationSessionId": "ps_3b5cd715d13480b12ddc953fae7224d1",
         "deckVersion": "deck_a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d",
         "finalKind": "FINAL",
         "finalSequence": 1,
-        "transcriptCharacters": 6,
-        "transcriptWordCount": 1,
+        "transcriptCharacters": 15,
+        "transcriptWordCount": 2,
         "transcriptDurationMs": 960,
         "recommendationStatus": 200,
         "recommendationOutcome": "RECOMMEND",
         "recommendationReason": null,
-        "recommendationLatencyMs": 3612,
+        "recommendationLatencyMs": 3746,
         "recommendationEvidenceCount": 1,
         "recommendationResponseBody": {
           "outcome": "RECOMMEND",
@@ -145,11 +147,9 @@
               "authorizationVersion": "acl-1"
             }
           ],
-          "completedAtMs": 1787367270764,
-          "latencyMs": 3612
-        },
-        "coachingActiveNodes": 1,
-        "coachingStateValue": "unavailable"
+          "completedAtMs": 1787366158067,
+          "latencyMs": 3746
+        }
       }
     },
     {
@@ -225,7 +225,7 @@
       ]
     }
   ],
-  "positive": "2/2",
+  "positive": "0/2",
   "negative": "6/6",
   "stt": "2/2",
   "models": {
@@ -237,207 +237,212 @@
     {
       "stage": "embedding",
       "outcome": "SUCCESS",
-      "durationMs": 152,
-      "timestampMs": 1787367257510
+      "durationMs": 150,
+      "timestampMs": 1787366114226
     },
     {
       "stage": "embedding",
       "outcome": "SUCCESS",
-      "durationMs": 129,
-      "timestampMs": 1787367259047
+      "durationMs": 135,
+      "timestampMs": 1787366115827
     },
     {
       "stage": "embedding",
       "outcome": "SUCCESS",
-      "durationMs": 114,
-      "timestampMs": 1787367259161
+      "durationMs": 122,
+      "timestampMs": 1787366115896
     },
     {
       "stage": "rerank",
       "outcome": "SUCCESS",
-      "durationMs": 1117,
-      "timestampMs": 1787367259506
+      "durationMs": 1314,
+      "timestampMs": 1787366116399
     },
     {
       "stage": "llm",
       "outcome": "SUCCESS",
-      "durationMs": 1457,
-      "timestampMs": 1787367259846
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 841,
-      "timestampMs": 1787367260403
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 1185,
-      "timestampMs": 1787367261148
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 1784,
-      "timestampMs": 1787367261347
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 1386,
-      "timestampMs": 1787367261349
-    },
-    {
-      "stage": "verifier",
-      "outcome": "SUCCESS",
-      "durationMs": 1670,
-      "timestampMs": 1787367261518
-    },
-    {
-      "stage": "verifier",
-      "outcome": "SUCCESS",
-      "durationMs": 1536,
-      "timestampMs": 1787367262883
-    },
-    {
-      "stage": "verifier",
-      "outcome": "SUCCESS",
-      "durationMs": 1533,
-      "timestampMs": 1787367262884
-    },
-    {
-      "stage": "embedding",
-      "outcome": "SUCCESS",
-      "durationMs": 142,
-      "timestampMs": 1787367265610
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 836,
-      "timestampMs": 1787367267096
-    },
-    {
-      "stage": "embedding",
-      "outcome": "SUCCESS",
-      "durationMs": 130,
-      "timestampMs": 1787367267152
-    },
-    {
-      "stage": "embedding",
-      "outcome": "SUCCESS",
-      "durationMs": 116,
-      "timestampMs": 1787367267270
-    },
-    {
-      "stage": "rerank",
-      "outcome": "SUCCESS",
-      "durationMs": 795,
-      "timestampMs": 1787367268610
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 991,
-      "timestampMs": 1787367268817
-    },
-    {
-      "stage": "llm",
-      "outcome": "SUCCESS",
-      "durationMs": 1210,
-      "timestampMs": 1787367269025
+      "durationMs": 1407,
+      "timestampMs": 1787366116493
     },
     {
       "stage": "deterministic",
-      "outcome": "ENTITY:형식중립근육",
+      "outcome": "ENTITY:한국어",
       "durationMs": 0,
-      "timestampMs": 1787367269025
+      "timestampMs": 1787366116495
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1059,
+      "timestampMs": 1787366117501
     },
     {
       "stage": "rerank",
       "outcome": "SUCCESS",
-      "durationMs": 1408,
-      "timestampMs": 1787367269234
+      "durationMs": 1092,
+      "timestampMs": 1787366117680
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1481,
+      "timestampMs": 1787366117923
     },
     {
       "stage": "llm",
-      "outcome": "FAILED:cancelled",
-      "durationMs": 3713,
-      "timestampMs": 1787367269974
+      "outcome": "SUCCESS",
+      "durationMs": 1740,
+      "timestampMs": 1787366118328
     },
     {
       "stage": "verifier",
       "outcome": "SUCCESS",
-      "durationMs": 1526,
-      "timestampMs": 1787367270760
+      "durationMs": 1530,
+      "timestampMs": 1787366119454
+    },
+    {
+      "stage": "verifier",
+      "outcome": "SUCCESS",
+      "durationMs": 1642,
+      "timestampMs": 1787366119970
     },
     {
       "stage": "embedding",
       "outcome": "SUCCESS",
-      "durationMs": 142,
-      "timestampMs": 1787367272213
+      "durationMs": 141,
+      "timestampMs": 1787366152681
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 138,
+      "timestampMs": 1787366154334
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 744,
+      "timestampMs": 1787366154356
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 123,
+      "timestampMs": 1787366154445
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1262,
+      "timestampMs": 1787366154876
+    },
+    {
+      "stage": "deterministic",
+      "outcome": "ENTITY:한국",
+      "durationMs": 0,
+      "timestampMs": 1787366154876
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 907,
+      "timestampMs": 1787366156014
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1229,
+      "timestampMs": 1787366156120
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1116,
+      "timestampMs": 1787366156223
+    },
+    {
+      "stage": "verifier",
+      "outcome": "SUCCESS",
+      "durationMs": 1839,
+      "timestampMs": 1787366158062
+    },
+    {
+      "stage": "rerank",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 3811,
+      "timestampMs": 1787366158703
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 149,
+      "timestampMs": 1787366189443
     }
   ],
   "stageLatencySummaryMs": {
     "deterministic": {
-      "n": 1,
+      "n": 2,
       "min": 0,
       "median": 0,
       "max": 0
     },
     "embedding": {
       "n": 7,
-      "min": 114,
-      "median": 130,
-      "max": 152
+      "min": 122,
+      "median": 138,
+      "max": 150
     },
     "llm": {
       "n": 6,
-      "min": 991,
-      "median": 1333,
-      "max": 3713
+      "min": 1059,
+      "median": 1245,
+      "max": 1740
     },
     "rerank": {
       "n": 6,
-      "min": 795,
-      "median": 979,
-      "max": 1408
+      "min": 744,
+      "median": 1203,
+      "max": 3811
     },
     "verifier": {
-      "n": 4,
-      "min": 1526,
-      "median": 1534,
-      "max": 1670
+      "n": 3,
+      "min": 1530,
+      "median": 1642,
+      "max": 1839
     }
   },
   "recommendationRequests": [
     {
-      "outcome": "RECOMMEND",
-      "durationMs": 4167,
-      "timestampMs": 1787367261522
+      "outcome": "ABSTAIN:DETERMINISTIC_MISMATCH",
+      "durationMs": 2423,
+      "timestampMs": 1787366116495
     },
     {
       "outcome": "RECOMMEND",
-      "durationMs": 3844,
-      "timestampMs": 1787367262889
+      "durationMs": 4203,
+      "timestampMs": 1787366119976
     },
     {
-      "outcome": "ABSTAIN:DEADLINE_EXCEEDED",
-      "durationMs": 4504,
-      "timestampMs": 1787367269969
+      "outcome": "ABSTAIN:DETERMINISTIC_MISMATCH",
+      "durationMs": 2338,
+      "timestampMs": 1787366154876
     },
     {
       "outcome": "RECOMMEND",
-      "durationMs": 3613,
-      "timestampMs": 1787367270764
+      "durationMs": 3747,
+      "timestampMs": 1787366158067
     }
   ],
   "deterministicMismatches": [
     {
       "category": "ENTITY",
-      "value": "형식중립근육",
-      "timestampMs": 1787367269025
+      "value": "한국어",
+      "timestampMs": 1787366116495
+    },
+    {
+      "category": "ENTITY",
+      "value": "한국",
+      "timestampMs": 1787366154876
     }
   ]
 }

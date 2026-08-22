@@ -198,9 +198,21 @@ def stop(process: subprocess.Popen[str]) -> None:
 
 
 def available_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
-        listener.bind(("127.0.0.1", 0))
-        return int(listener.getsockname()[1])
+    """Picks an ephemeral port free on both wildcard stacks.
+
+    Binding only 127.0.0.1 misses a port held by an IPv6 wildcard listener, which
+    then makes service startup collide with an unrelated dev-stack process.
+    """
+    while True:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as v4:
+            v4.bind(("", 0))
+            port = int(v4.getsockname()[1])
+        try:
+            with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as v6:
+                v6.bind(("::", port))
+        except OSError:
+            continue
+        return port
 
 
 def main() -> int:

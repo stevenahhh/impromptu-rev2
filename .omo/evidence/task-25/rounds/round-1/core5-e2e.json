@@ -1,0 +1,395 @@
+{
+  "command": "python3 scripts/verify-five-private-presentation-features.py",
+  "exitCode": 1,
+  "scenarios": [
+    {
+      "name": "positive-korean-text-layer.pdf",
+      "command": "Console upload + fake-device WebM capture + private HTTP recommendation",
+      "exitCode": 1,
+      "verdict": "FAIL",
+      "assertions": [
+        "upload-201",
+        "fake-device-webm-final",
+        "hybrid-rrf-recommend",
+        "opt-in-coaching"
+      ],
+      "detail": "hybrid retrieval did not recommend: {\"outcome\":\"ABSTAIN\",\"reason\":\"CONFLICTING_EVIDENCE\",\"completedAtMs\":1787365870418,\"latencyMs\":4304}",
+      "stepLatencyMs": {
+        "sign-in": 1420,
+        "upload": 994,
+        "capture-final": 1860,
+        "recommendation": 4428
+      },
+      "diagnostics": {
+        "failedStep": "recommendation",
+        "presentationSessionId": "ps_73ed004cb4e296c78cc3373cb89a48f9",
+        "deckVersion": "deck_34eac2a55addb409359febc4ec28e911f10c719abd28ce7b427421ab9a985c86",
+        "finalKind": "FINAL",
+        "finalSequence": 1,
+        "transcriptCharacters": 6,
+        "transcriptWordCount": 1,
+        "transcriptDurationMs": 960,
+        "recommendationStatus": 200,
+        "recommendationOutcome": "ABSTAIN",
+        "recommendationReason": "CONFLICTING_EVIDENCE",
+        "recommendationLatencyMs": 4304,
+        "recommendationEvidenceCount": 0,
+        "recommendationResponseBody": {
+          "outcome": "ABSTAIN",
+          "reason": "CONFLICTING_EVIDENCE",
+          "completedAtMs": 1787365870418,
+          "latencyMs": 4304
+        },
+        "retrievalCandidateCount": 2
+      }
+    },
+    {
+      "name": "positive-korean-structural.pptx",
+      "command": "Console upload + fake-device WebM capture + private HTTP recommendation",
+      "exitCode": 1,
+      "verdict": "FAIL",
+      "assertions": [
+        "upload-201",
+        "fake-device-webm-final",
+        "hybrid-rrf-recommend",
+        "opt-in-coaching"
+      ],
+      "detail": "hybrid retrieval abstained DEADLINE_EXCEEDED at 5000ms (abort guard 4,500ms) with 2 internal candidates: {\"outcome\":\"ABSTAIN\",\"reason\":\"DEADLINE_EXCEEDED\",\"completedAtMs\":1787365880109,\"latencyMs\":5000}",
+      "stepLatencyMs": {
+        "sign-in": 607,
+        "upload": 2130,
+        "capture-final": 1859,
+        "recommendation": 4530
+      },
+      "diagnostics": {
+        "failedStep": "recommendation",
+        "presentationSessionId": "ps_097853a76e9d408e875e5a4552f25faa",
+        "deckVersion": "deck_a4fb699fa9061999852b49452ab975d0ff55eacf10c2675b9b8f986a9c5d230d",
+        "finalKind": "FINAL",
+        "finalSequence": 1,
+        "transcriptCharacters": 5,
+        "transcriptWordCount": 1,
+        "transcriptDurationMs": 960,
+        "recommendationStatus": 200,
+        "recommendationOutcome": "ABSTAIN",
+        "recommendationReason": "DEADLINE_EXCEEDED",
+        "recommendationLatencyMs": 5000,
+        "recommendationEvidenceCount": 0,
+        "recommendationResponseBody": {
+          "outcome": "ABSTAIN",
+          "reason": "DEADLINE_EXCEEDED",
+          "completedAtMs": 1787365880109,
+          "latencyMs": 5000
+        },
+        "retrievalCandidateCount": 2,
+        "abstainBudget": {
+          "abortGuardMs": 4500,
+          "latencyMs": 5000
+        }
+      }
+    },
+    {
+      "name": "negative-mic-denied-audio-request-zero",
+      "command": "Console denied getUserMedia + request observer",
+      "exitCode": 0,
+      "verdict": "PASS",
+      "assertions": [
+        "audio-request-count=0"
+      ]
+    },
+    {
+      "name": "negative-external-429-internal-only",
+      "command": "bun test services/private-backend/test/recommendation-pipeline.test.ts",
+      "exitCode": 0,
+      "verdict": "PASS",
+      "assertions": [
+        "HTTP_429 retains internal RECOMMEND"
+      ]
+    },
+    {
+      "name": "negative-stage-snapshot-cards-zero",
+      "command": "bun test tests/security/release-security.test.ts",
+      "exitCode": 0,
+      "verdict": "PASS",
+      "assertions": [
+        "snapshot cards=0"
+      ]
+    },
+    {
+      "name": "negative-stage-sse-cards-zero",
+      "command": "bun test services/projection-gateway/test/prepared-evidence.test.ts",
+      "exitCode": 0,
+      "verdict": "PASS",
+      "assertions": [
+        "SSE CARD dropped"
+      ]
+    },
+    {
+      "name": "negative-stage-ws-cards-zero",
+      "command": "bun test apps/stage/src/stage-client.test.ts",
+      "exitCode": 0,
+      "verdict": "PASS",
+      "assertions": [
+        "WS CARD dropped"
+      ]
+    },
+    {
+      "name": "negative-aba-reload-dwell-identical",
+      "command": "bun test services/private-backend/test/session-report-finalizer.test.ts",
+      "exitCode": 0,
+      "verdict": "PASS",
+      "assertions": [
+        "A-B-A report dwell byte-equivalent after reload"
+      ]
+    },
+    {
+      "name": "stt-partial-before-final",
+      "command": "bun test services/private-backend/test/stt-whisper-cpp.test.ts",
+      "exitCode": 0,
+      "verdict": "PASS",
+      "assertions": [
+        "PARTIAL precedes exactly-one FINAL"
+      ]
+    },
+    {
+      "name": "stt-revoke-stops-and-blocks-late-delivery",
+      "command": "bun test services/private-backend/test/audio-ingest-http.test.ts",
+      "exitCode": 0,
+      "verdict": "PASS",
+      "assertions": [
+        "revoke terminal blocks late delivery"
+      ]
+    }
+  ],
+  "positive": "0/2",
+  "negative": "6/6",
+  "stt": "2/2",
+  "models": {
+    "RERANK_MODEL": "deepseek-v4-flash",
+    "LLM_MODEL": "deepseek-v4-flash",
+    "VERIFIER_MODEL": "qwen3.6-plus"
+  },
+  "recommendationStageLatencyMs": [
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 1013,
+      "timestampMs": 1787365865324
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 133,
+      "timestampMs": 1787365866126
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 127,
+      "timestampMs": 1787365866242
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1076,
+      "timestampMs": 1787365866440
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1508,
+      "timestampMs": 1787365866872
+    },
+    {
+      "stage": "deterministic",
+      "outcome": "ENTITY:한국어",
+      "durationMs": 0,
+      "timestampMs": 1787365866877
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 889,
+      "timestampMs": 1787365867650
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1501,
+      "timestampMs": 1787365868469
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1606,
+      "timestampMs": 1787365868574
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 2017,
+      "timestampMs": 1787365868778
+    },
+    {
+      "stage": "deterministic",
+      "outcome": "ENTITY:경식중립근혁",
+      "durationMs": 0,
+      "timestampMs": 1787365868778
+    },
+    {
+      "stage": "verifier",
+      "outcome": "SUCCESS",
+      "durationMs": 1844,
+      "timestampMs": 1787365870418
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 145,
+      "timestampMs": 1787365873423
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 678,
+      "timestampMs": 1787365874724
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1061,
+      "timestampMs": 1787365875107
+    },
+    {
+      "stage": "deterministic",
+      "outcome": "ENTITY:한국",
+      "durationMs": 0,
+      "timestampMs": 1787365875107
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 144,
+      "timestampMs": 1787365875227
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 128,
+      "timestampMs": 1787365875238
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 725,
+      "timestampMs": 1787365876561
+    },
+    {
+      "stage": "rerank",
+      "outcome": "SUCCESS",
+      "durationMs": 1124,
+      "timestampMs": 1787365876945
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 1315,
+      "timestampMs": 1787365877151
+    },
+    {
+      "stage": "llm",
+      "outcome": "SUCCESS",
+      "durationMs": 2339,
+      "timestampMs": 1787365878160
+    },
+    {
+      "stage": "verifier",
+      "outcome": "SUCCESS",
+      "durationMs": 1659,
+      "timestampMs": 1787365878811
+    },
+    {
+      "stage": "verifier",
+      "outcome": "FAILED:cancelled",
+      "durationMs": 1452,
+      "timestampMs": 1787365879614
+    },
+    {
+      "stage": "embedding",
+      "outcome": "SUCCESS",
+      "durationMs": 147,
+      "timestampMs": 1787365881126
+    }
+  ],
+  "stageLatencySummaryMs": {
+    "deterministic": {
+      "n": 3,
+      "min": 0,
+      "median": 0,
+      "max": 0
+    },
+    "embedding": {
+      "n": 7,
+      "min": 127,
+      "median": 144,
+      "max": 1013
+    },
+    "llm": {
+      "n": 6,
+      "min": 1061,
+      "median": 1504,
+      "max": 2339
+    },
+    "rerank": {
+      "n": 6,
+      "min": 678,
+      "median": 982,
+      "max": 1606
+    },
+    "verifier": {
+      "n": 3,
+      "min": 1452,
+      "median": 1659,
+      "max": 1844
+    }
+  },
+  "recommendationRequests": [
+    {
+      "outcome": "ABSTAIN:DETERMINISTIC_MISMATCH",
+      "durationMs": 2570,
+      "timestampMs": 1787365866878
+    },
+    {
+      "outcome": "ABSTAIN:CONFLICTING_EVIDENCE",
+      "durationMs": 4305,
+      "timestampMs": 1787365870418
+    },
+    {
+      "outcome": "ABSTAIN:DETERMINISTIC_MISMATCH",
+      "durationMs": 1832,
+      "timestampMs": 1787365875107
+    },
+    {
+      "outcome": "ABSTAIN:DEADLINE_EXCEEDED",
+      "durationMs": 4503,
+      "timestampMs": 1787365879611
+    }
+  ],
+  "deterministicMismatches": [
+    {
+      "category": "ENTITY",
+      "value": "한국어",
+      "timestampMs": 1787365866877
+    },
+    {
+      "category": "ENTITY",
+      "value": "경식중립근혁",
+      "timestampMs": 1787365868778
+    },
+    {
+      "category": "ENTITY",
+      "value": "한국",
+      "timestampMs": 1787365875107
+    }
+  ]
+}
