@@ -83,6 +83,19 @@ function LandingPage({ client }: { readonly client: StageSessionClient }) {
   );
   const deckVersion = new URL(window.location.href).searchParams.get("deck") ?? "deck_alpha";
   const mode = windowsDisplayMode(new URL(window.location.href).searchParams.get("mode"));
+  // When the Console opened this window, the join is handed straight back to it and approval
+  // happens over there. Without an opener (second device, blocked popup) the manual connection
+  // code below remains the path.
+  const consoleOrigin = useMemo(() => {
+    try {
+      const origin = new URL(document.referrer, window.location.href).origin;
+      return origin === window.location.origin ? null : origin;
+    } catch {
+      return null;
+    }
+  }, []);
+  const openedByConsole =
+    consoleOrigin !== null && window.opener !== null && window.opener !== undefined;
   const [join, setJoin] = useState<DisplayJoinView | null>(null);
   const [message, setMessage] = useState("Creating a short-lived display code...");
   const connectionCode =
@@ -106,6 +119,12 @@ function LandingPage({ client }: { readonly client: StageSessionClient }) {
         if (active) {
           setJoin(created);
           publishStageEvent("impromptu:display-join", created);
+          if (openedByConsole) {
+            (window.opener as Window)?.postMessage(
+              { kind: "impromptu:display-join", join: created },
+              consoleOrigin,
+            );
+          }
           setMessage(copy.waitingApproval);
         }
       })
@@ -115,7 +134,7 @@ function LandingPage({ client }: { readonly client: StageSessionClient }) {
     return () => {
       active = false;
     };
-  }, [client, deckVersion, identity]);
+  }, [client, consoleOrigin, deckVersion, identity, openedByConsole]);
 
   const claim = async () => {
     if (join === null) return;
@@ -148,34 +167,43 @@ function LandingPage({ client }: { readonly client: StageSessionClient }) {
   return (
     <Shell className="stage-shell" focused header={<StageHeader />}>
       <section className="stage-welcome ui-reveal" aria-labelledby={titleId}>
-        <p className="ui-eyebrow">{copy.displaySetup}</p>
         <h1 id={titleId}>{copy.cleanScreenTitle}</h1>
         <p className="stage-lead">{copy.cleanScreenLead}</p>
-        <Panel className="stage-join" tone="inset">
-          <div>
-            <p className="ui-eyebrow">{copy.joinCode}</p>
-            <p className="stage-code">
-              {join === null ? "----" : join.displayJoinId.slice(-8).toUpperCase()}
+        {openedByConsole ? (
+          <Panel className="stage-join" tone="inset">
+            <p className="stage-waiting" aria-live="polite">
+              {copy.pairWaitingWithConsole}
             </p>
-          </div>
-          <Button data-display-claim disabled={join === null} onClick={() => void claim()}>
-            {copy.continueAfterApproval}
-          </Button>
-        </Panel>
-        {join === null ? null : (
-          <Panel title={copy.connectTitle}>
-            <p>{copy.copyLead}</p>
-            <label className="stage-connection-code">
-              <span>{copy.connectionCode}</span>
-              <input readOnly value={connectionCode} />
-            </label>
-            <Button
-              variant="quiet"
-              onClick={() => void navigator.clipboard.writeText(connectionCode)}
-            >
-              {copy.copyConnectionCode}
-            </Button>
           </Panel>
+        ) : (
+          <>
+            <Panel className="stage-join" tone="inset">
+              <div>
+                <p className="ui-eyebrow">{copy.joinCode}</p>
+                <p className="stage-code">
+                  {join === null ? "----" : join.displayJoinId.slice(-8).toUpperCase()}
+                </p>
+              </div>
+              <Button data-display-claim disabled={join === null} onClick={() => void claim()}>
+                {copy.continueAfterApproval}
+              </Button>
+            </Panel>
+            {join === null ? null : (
+              <Panel title={copy.fallbackTitle}>
+                <p>{copy.fallbackLead}</p>
+                <label className="stage-connection-code">
+                  <span>{copy.connectionCode}</span>
+                  <input readOnly value={connectionCode} />
+                </label>
+                <Button
+                  variant="quiet"
+                  onClick={() => void navigator.clipboard.writeText(connectionCode)}
+                >
+                  {copy.copyConnectionCode}
+                </Button>
+              </Panel>
+            )}
+          </>
         )}
         <Panel
           data-topology-instructions={mode}

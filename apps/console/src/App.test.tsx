@@ -1247,3 +1247,138 @@ describe("Console route boundary", () => {
     expect(within(document.body).queryByText("ps_active")).toBeNull();
   });
 });
+
+describe("Console-led audience screen pairing", () => {
+  const stageOrigin = "http://localhost:4174";
+
+  function handshakeJoin(deckVersion: string, displayId = "display_room") {
+    return {
+      displayJoinId: `join_${"a".repeat(32)}`,
+      displayId,
+      displayFingerprint: "stage-browser-fingerprint",
+      deckVersion,
+      expiresAtMs: Date.now() + 60_000,
+    };
+  }
+
+  function pairingClient(approvals: string[]): ConsoleSessionClient {
+    return {
+      async signUp() {
+        throw new Error("not used");
+      },
+      async signIn() {
+        throw new Error("not used");
+      },
+      async readSession() {
+        return null;
+      },
+      async signOut() {},
+      async createPresentation() {
+        throw new Error("not used");
+      },
+      async recommend() {
+        throw new Error("not used");
+      },
+      async readLiveCandidates() {
+        throw new Error("not used");
+      },
+      async approveLiveCandidate() {
+        throw new Error("not used");
+      },
+      async approveDisplay(_csrfToken, presentation, join) {
+        approvals.push(
+          `${presentation.presentationSessionId}:${join.displayId}:${join.displayJoinId}`,
+        );
+        return { displayBindingEpoch: "dbe_1" };
+      },
+      async setSlide() {
+        return { acceptedControlRevision: "cr_1" };
+      },
+    };
+  }
+
+  function renderWorkspace(client: ConsoleSessionClient) {
+    return render(
+      <MemoryRouter initialEntries={["/session"]}>
+        <AuthProvider
+          initialAuthenticated
+          initialPresentation={{
+            presentationSessionId: "ps_active",
+            presentationSessionEpoch: "pse_1",
+            deckVersion: "deck_active",
+            slides: [],
+          }}
+          client={client}
+        >
+          <ConsoleRoutes />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  test("opens the audience screen carrying the session deck and pairs its handshake without a typed code", async () => {
+    const approvals: string[] = [];
+    const openedUrls: string[] = [];
+    const originalOpen = window.open;
+    window.open = ((url?: string | URL) => {
+      openedUrls.push(String(url));
+      return {} as Window;
+    }) as typeof window.open;
+    renderWorkspace(pairingClient(approvals));
+
+    try {
+      await act(async () => {
+        fireEvent.click(within(document.body).getByRole("button", { name: "청중 화면 열기" }));
+      });
+      expect(openedUrls).toEqual([`${stageOrigin}/?deck=deck_active`]);
+
+      // The opened screen reports its join back to the opener; one explicit approval follows.
+      await act(async () => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            origin: stageOrigin,
+            data: { kind: "impromptu:display-join", join: handshakeJoin("deck_active") },
+          }),
+        );
+      });
+      const pairing = document.querySelector("[data-stage-pairing='DETECTED']");
+      expect(pairing?.getAttribute("data-join-display-id")).toBe("display_room");
+
+      await act(async () => {
+        fireEvent.click(within(document.body).getByRole("button", { name: "연결 요청 승인" }));
+      });
+      expect(approvals).toEqual(["ps_active:display_room:join_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]);
+    } finally {
+      window.open = originalOpen;
+    }
+  });
+
+  test("never approves an audience screen without an explicit presenter action", async () => {
+    const approvals: string[] = [];
+    renderWorkspace(pairingClient(approvals));
+
+    // A forged message from another origin must not register as the audience screen.
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          origin: "https://evil.example",
+          data: { kind: "impromptu:display-join", join: handshakeJoin("deck_active") },
+        }),
+      );
+    });
+    // Even a genuine handshake only surfaces a request; approval stays behind the button.
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          origin: stageOrigin,
+          data: { kind: "impromptu:display-join", join: handshakeJoin("deck_active") },
+        }),
+      );
+    });
+    await act(async () => {});
+    expect(approvals).toEqual([]);
+    expect(document.querySelector("[data-stage-pairing]")?.getAttribute("data-stage-pairing")).toBe(
+      "DETECTED",
+    );
+  });
+});

@@ -82,6 +82,13 @@
   letter-spacing: var(--tracking-wide);
 }
 
+.stage-waiting {
+  margin: var(--space-0);
+  color: var(--text-secondary);
+  font-size: var(--text-lead);
+  line-height: var(--line-body);
+}
+
 .stage-welcome .stage-note {
   max-width: var(--size-copy);
   margin: var(--space-0);

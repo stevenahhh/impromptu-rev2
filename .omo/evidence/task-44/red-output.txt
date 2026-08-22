@@ -1,0 +1,156 @@
+bun test v1.4.0 (1381054db)
+
+apps/stage/src/App.test.tsx:
+(pass) slide-only public Stage > renders no evidence or source DOM even when a malicious snapshot object carries cards [6.32ms]
+(pass) slide-only public Stage > applies contiguous slide playback and does not apply a revision gap [2.88ms]
+(pass) slide-only public Stage > keeps applied playback when a reconnect snapshot still lags the recorded receipt [1.66ms]
+(pass) slide-only public Stage > recovers automatically after a revision gap by re-fetching the authoritative snapshot [2.45ms]
+An update to DisplayPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to DisplayPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to DisplayPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+(pass) slide-only public Stage > bounds automatic recovery refetches when the snapshot never becomes usable [1.82ms]
+An update to LandingPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to LandingPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+463 |     try {
+464 |       const { handshake } = renderLanding(landingClient(approved));
+465 |       await handshake;
+466 |       await act(async () => {});
+467 | 
+468 |       expect(posted.length).toBe(1);
+                                  ^
+error: expect(received).toBe(expected)
+
+Expected: 1
+Received: 0
+
+      at <anonymous> (/Users/gahn/Projects/impromptu-rev2/apps/stage/src/App.test.tsx:468:29)
+(fail) console-led pairing > hands the display join to the console window that opened it [2.06ms]
+An update to LandingPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to LandingPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+(pass) console-led pairing > keeps the presenter approval gate and the manual code fallback without an opener [2.57ms]
+
+apps/console/src/App.test.tsx:
+(pass) Console route boundary > gates neutral coaching metrics by explicit opt-in, mute, words, and capability [3.40ms]
+(pass) Console route boundary > keeps locale catalogs structurally complete [0.03ms]
+(pass) Console route boundary > renders the exact finalized report after owner end and routes without a GET [8.23ms]
+(pass) Console route boundary > reload GET reproduces identical A-B-A report DOM and exact dwell totals [3.80ms]
+(pass) Console route boundary > renders zero report data when the same-tenant non-owner receives 403 [0.82ms]
+(pass) Console route boundary > translates sign-in, navigation, and evidence approval pages without English gaps [2.83ms]
+(pass) Console route boundary > switches locale from the compact language control [7.53ms]
+(pass) Console route boundary > opens with an upload-first workspace and accepts a dropped deck [4.94ms]
+(pass) Console route boundary > renders an uploaded slide through the same-origin asset path [2.05ms]
+(pass) Console route boundary > adds evidence as each slide finishes without blocking presentation readiness [3.47ms]
+(pass) Console route boundary > keeps an approved internal card when external fetch produces no safe card [2.07ms]
+(pass) Console route boundary > offers display choices and starts from one primary action [4.20ms]
+(pass) Console route boundary > redirects a signed-out visitor away from every private route [1.41ms]
+(pass) Console route boundary > keeps the sign-in route public-only once authenticated [1.59ms]
+(pass) Console route boundary > renders an explicit private navigation landmark [1.48ms]
+(pass) Console route boundary > disables co-resident convenience after the public surface observes a private pixel [0.79ms]
+(pass) Console route boundary > observes controller background through the real visibility listener [1.19ms]
+(pass) Console route boundary > creates an account through the typed client and signs in without storage [1.70ms]
+(pass) Console route boundary > shows a duplicate-username failure without signing in [3.65ms]
+(pass) Console route boundary > passes username and password through the typed session client without storage [1.66ms]
+(pass) Console route boundary > approves a live candidate only from the loaded authoritative snapshot [1.68ms]
+(pass) Console route boundary > uses the active presentation without asking for a session id [1.32ms]
+(pass) Console route boundary > approves an audience screen and controls slides without internal ids [5.45ms]
+1340 |             data: { kind: "impromptu:display-join", join: handshakeJoin("deck_active") },
+1341 |           }),
+1342 |         );
+1343 |       });
+1344 |       const pairing = document.querySelector("[data-stage-pairing='DETECTED']");
+1345 |       expect(pairing?.getAttribute("data-join-display-id")).toBe("display_room");
+                                                                   ^
+error: expect(received).toBe(expected)
+
+Expected: "display_room"
+Received: undefined
+
+      at <anonymous> (/Users/gahn/Projects/impromptu-rev2/apps/console/src/App.test.tsx:1345:61)
+(fail) Console-led audience screen pairing > opens the audience screen carrying the session deck and pairs its handshake without a typed code [2.23ms]
+1378 |       );
+1379 |     });
+1380 |     await act(async () => {});
+1381 |     expect(approvals).toEqual([]);
+1382 |     expect(document.querySelector("[data-stage-pairing]")?.getAttribute("data-stage-pairing"))
+1383 |       .toBe("DETECTED");
+              ^
+error: expect(received).toBe(expected)
+
+Expected: "DETECTED"
+Received: undefined
+
+      at <anonymous> (/Users/gahn/Projects/impromptu-rev2/apps/console/src/App.test.tsx:1383:8)
+(fail) Console-led audience screen pairing > never approves an audience screen without an explicit presenter action [1.41ms]
+
+3 tests failed:
+(fail) console-led pairing > hands the display join to the console window that opened it [2.06ms]
+(fail) Console-led audience screen pairing > opens the audience screen carrying the session deck and pairs its handshake without a typed code [2.23ms]
+(fail) Console-led audience screen pairing > never approves an audience screen without an explicit presenter action [1.41ms]
+
+ 29 pass
+ 3 fail
+ 178 expect() calls
+Ran 32 tests across 2 files. [232.00ms]

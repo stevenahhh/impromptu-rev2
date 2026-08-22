@@ -656,6 +656,10 @@ function LivePublicationPage() {
  */
 const STAGE_ORIGIN = process.env.NEXT_PUBLIC_STAGE_ORIGIN ?? "http://localhost:4174";
 
+function stageUrl(deckVersion: string): string {
+  return `${STAGE_ORIGIN}/?deck=${encodeURIComponent(deckVersion)}`;
+}
+
 function SessionUploadPanel({
   client,
   csrfToken,
@@ -937,8 +941,7 @@ function PresentationWorkspacePage() {
               key={`${activePresentation.presentationSessionId}:${activePresentation.deckVersion}:${activePresentation.manifestHash ?? ""}`}
             />
             <SlideWorkspace activeIndex={activeIndex} onSelect={setActiveIndex} />
-            <StageSetupPanel />
-            <DisplayPairingPanel />
+            <AudienceScreenPanel />
           </div>
         </div>
       )}
@@ -1122,29 +1125,6 @@ function EvidencePreparationPanel() {
   );
 }
 
-function StageSetupPanel() {
-  const { activePresentation, locale } = useAuth();
-  if (activePresentation === null) return null;
-  const text = messages(locale);
-  const stageUrl = `${STAGE_ORIGIN}/?deck=${encodeURIComponent(activePresentation.deckVersion)}`;
-  const openStage = () => window.open(stageUrl, "impromptu-stage", "popup");
-  return (
-    <Panel className="console-stage-setup" title={text.stageTitle} tone="inset">
-      <div className="console-stage-actions">
-        <Button data-stage-open onClick={openStage}>
-          {text.openStage}
-        </Button>
-        <Button variant="quiet" onClick={() => void navigator.clipboard?.writeText(stageUrl)}>
-          {text.copyStage}
-        </Button>
-        <Button variant="quiet" onClick={openStage}>
-          {text.externalDisplay}
-        </Button>
-      </div>
-    </Panel>
-  );
-}
-
 function decodeDisplayJoin(value: string): DisplayJoinView | null {
   try {
     const decoded = JSON.parse(atob(value.trim())) as Record<string, unknown>;
@@ -1160,7 +1140,28 @@ function decodeDisplayJoin(value: string): DisplayJoinView | null {
   }
 }
 
-function DisplayPairingPanel() {
+/** Closed shape for the join a freshly opened audience screen reports back to this window. */
+function handshakeDisplayJoin(value: unknown): DisplayJoinView | null {
+  const envelope = record(value);
+  const join = record(envelope?.join);
+  if (envelope?.kind !== "impromptu:display-join" || join === null) return null;
+  const { displayJoinId, displayId, displayFingerprint, deckVersion, expiresAtMs } = join;
+  return typeof displayJoinId === "string" &&
+    typeof displayId === "string" &&
+    typeof displayFingerprint === "string" &&
+    typeof deckVersion === "string" &&
+    typeof expiresAtMs === "number"
+    ? { displayJoinId, displayId, displayFingerprint, deckVersion, expiresAtMs }
+    : null;
+}
+
+/**
+ * The Console owns audience-screen setup: it opens the screen (carrying the session's deck
+ * version), receives that window's join request over postMessage, and approves with one
+ * explicit action. The manual connection code stays as the fallback for another device or a
+ * blocked popup. Approval itself is never implied — it always requires this panel's button.
+ */
+function AudienceScreenPanel() {
   const {
     activePresentation,
     client,
@@ -1170,27 +1171,45 @@ function DisplayPairingPanel() {
     setDisplayBindingEpoch,
   } = useAuth();
   const text = messages(locale);
+  const [handshake, setHandshake] = useState<DisplayJoinView | null>(null);
   const [connectionCode, setConnectionCode] = useState("");
+  const [openBlocked, setOpenBlocked] = useState(false);
   const [message, setMessage] = useState("");
 
-  const approve = async () => {
-    const join = decodeDisplayJoin(connectionCode);
+  useEffect(() => {
+    if (activePresentation === null) return;
+    const stageOrigin = new URL(STAGE_ORIGIN).origin;
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== stageOrigin) return;
+      const join = handshakeDisplayJoin(event.data);
+      if (join !== null) setHandshake(join);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [activePresentation]);
+
+  if (activePresentation === null) return null;
+
+  const openStage = () => {
+    setOpenBlocked(false);
+    const child = window.open(stageUrl(activePresentation.deckVersion), "impromptu-stage", "popup");
+    if (child === null) setOpenBlocked(true);
+  };
+
+  const approve = async (join: DisplayJoinView | null) => {
     if (
       join === null ||
-      activePresentation === null ||
       session === null ||
-      client.approveDisplay === undefined
+      client.approveDisplay === undefined ||
+      join.deckVersion !== activePresentation.deckVersion
     ) {
-      setMessage(text.invalidCode);
-      return;
-    }
-    if (join.deckVersion !== activePresentation.deckVersion) {
-      setMessage(text.wrongPresentation);
+      setMessage(join === null ? text.invalidCode : text.wrongPresentation);
       return;
     }
     try {
       const binding = await client.approveDisplay(session.csrfToken, activePresentation, join);
       setDisplayBindingEpoch(binding.displayBindingEpoch);
+      setHandshake(null);
       setMessage(text.screenApproved);
     } catch {
       setMessage(text.approvalFailed);
@@ -1198,20 +1217,68 @@ function DisplayPairingPanel() {
   };
 
   return (
-    <Panel title={text.connectDisplay} tone="inset">
+    <Panel
+      className="console-stage-setup"
+      title={text.stageTitle}
+      tone="inset"
+      data-audience-screen-panel={displayBindingEpoch === null ? "PENDING" : "CONNECTED"}
+    >
+      <div className="console-stage-actions">
+        <Button data-stage-open onClick={openStage}>
+          {text.openStage}
+        </Button>
+        <Button
+          variant="quiet"
+          onClick={() =>
+            void navigator.clipboard?.writeText(stageUrl(activePresentation.deckVersion))
+          }
+        >
+          {text.copyStage}
+        </Button>
+        <Button variant="quiet" onClick={openStage}>
+          {text.externalDisplay}
+        </Button>
+      </div>
       {displayBindingEpoch === null ? (
         <>
-          <p>{text.connectLead}</p>
-          <label className="console-field">
-            <span>{text.connectionCode}</span>
-            <input
-              value={connectionCode}
-              onChange={(event) => setConnectionCode(event.currentTarget.value)}
-            />
-          </label>
-          <Button disabled={connectionCode.length === 0} onClick={() => void approve()}>
-            {text.approveDisplay}
-          </Button>
+          {openBlocked ? (
+            <p className="console-caption console-caption--error" role="alert">
+              {text.stageOpenBlocked}
+            </p>
+          ) : null}
+          <div
+            className="console-stage-pairing"
+            data-stage-pairing={handshake === null ? "WAITING" : "DETECTED"}
+            data-join-display-id={handshake?.displayId}
+          >
+            {handshake === null ? (
+              <p className="console-caption">{text.stageHandshakeWaiting}</p>
+            ) : (
+              <>
+                <p>{text.stagePairPending}</p>
+                <Button data-display-approve onClick={() => void approve(handshake)}>
+                  {text.approveHandshake}
+                </Button>
+              </>
+            )}
+          </div>
+          <details className="console-stage-manual">
+            <summary>{text.manualPairing}</summary>
+            <p className="console-caption">{text.connectLead}</p>
+            <label className="console-field">
+              <span>{text.connectionCode}</span>
+              <input
+                value={connectionCode}
+                onChange={(event) => setConnectionCode(event.currentTarget.value)}
+              />
+            </label>
+            <Button
+              disabled={connectionCode.length === 0}
+              onClick={() => void approve(decodeDisplayJoin(connectionCode))}
+            >
+              {text.approveDisplay}
+            </Button>
+          </details>
         </>
       ) : (
         <Badge tone="success">{text.audienceConnected}</Badge>

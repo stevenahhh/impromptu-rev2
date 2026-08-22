@@ -4,7 +4,7 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register();
 afterAll(() => GlobalRegistrator.unregister());
 
-const { act, cleanup, render, within } = await import("@testing-library/react");
+const { act, cleanup, fireEvent, render, within } = await import("@testing-library/react");
 const { MemoryRouter } = await import("react-router-dom");
 const { RECONCILE_RECOVERY_LIMIT, StageRoutes } = await import("./App");
 
@@ -396,5 +396,114 @@ describe("slide-only public Stage", () => {
     expect(document.querySelector(".stage-display")?.getAttribute("data-audience-readiness")).toBe(
       "RECOVERING",
     );
+  });
+});
+
+describe("console-led pairing", () => {
+  const consoleOrigin = "http://localhost:4173";
+
+  function landingClient(approved: { value: boolean }): StageSessionClient {
+    return {
+      async createJoin(identity, deckVersion) {
+        return {
+          ...identity,
+          displayJoinId: "join_console_led",
+          deckVersion,
+          expiresAtMs: Date.now() + 60_000,
+        };
+      },
+      async claim() {
+        if (!approved.value) throw new Error("PENDING_APPROVAL");
+      },
+      async snapshot() {
+        throw new Error("not used");
+      },
+      async subscribe() {
+        throw new Error("not used");
+      },
+      async recordApplied() {
+        return { status: "STAGE_APPLIED" };
+      },
+    };
+  }
+
+  /**
+   * Renders the landing page and deterministically drains the join-creation microtasks inside
+   * an act scope, so the resulting state commit is flushed before the assertions below.
+   */
+  async function renderLanding(client: StageSessionClient) {
+    const view = render(
+      <MemoryRouter initialEntries={["/?deck=deck_alpha"]}>
+        <StageRoutes client={client} />
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    });
+    return view;
+  }
+
+  function installOpener(postMessage: (data: unknown, origin: string) => void): () => void {
+    const referrerDescriptor = Object.getOwnPropertyDescriptor(document, "referrer");
+    Object.defineProperty(document, "referrer", {
+      value: `${consoleOrigin}/session`,
+      configurable: true,
+    });
+    const openerDescriptor = Object.getOwnPropertyDescriptor(window, "opener");
+    Object.defineProperty(window, "opener", { value: { postMessage }, configurable: true });
+    return () => {
+      if (referrerDescriptor === undefined) delete (document as { referrer?: string }).referrer;
+      else Object.defineProperty(document, "referrer", referrerDescriptor);
+      if (openerDescriptor === undefined) delete (window as { opener?: unknown }).opener;
+      else Object.defineProperty(window, "opener", openerDescriptor);
+    };
+  }
+
+  test("hands the display join to the console window that opened it", async () => {
+    const posted: Array<{ data: unknown; origin: string }> = [];
+    const removeOpener = installOpener((data, origin) => posted.push({ data, origin }));
+    const approved = { value: false };
+    try {
+      await renderLanding(landingClient(approved));
+
+      // The join handoff must reach the opener without any presenter interaction.
+      expect(posted.length).toBe(1);
+      expect(posted[0]?.origin).toBe(consoleOrigin);
+      const data = posted[0]?.data as Record<string, unknown> | undefined;
+      expect(data?.kind).toBe("impromptu:display-join");
+      const join = data?.join as Record<string, unknown> | undefined;
+      expect(join?.displayJoinId).toBe("join_console_led");
+      expect(join?.displayId).toBeTruthy();
+    } finally {
+      removeOpener();
+    }
+  });
+
+  test("keeps the presenter approval gate and the manual code fallback without an opener", async () => {
+    const approved = { value: false };
+    await renderLanding(landingClient(approved));
+
+    // Fallback for another device stays available: the connection code and its copy action.
+    const codeInput = document.querySelector<HTMLInputElement>(".stage-connection-code input");
+    expect(codeInput).toBeInstanceOf(HTMLInputElement);
+    expect(codeInput?.readOnly).toBe(true);
+    expect(codeInput?.value.length).toBeGreaterThan(0);
+    expect(document.body.textContent).not.toContain("join_console_led");
+
+    // Approval gate: entering the display is impossible while the claim is unapproved.
+    const continueButton = document.querySelector<HTMLButtonElement>("[data-display-claim]");
+    expect(continueButton).toBeInstanceOf(HTMLButtonElement);
+    await act(async () => {
+      fireEvent.click(continueButton as HTMLButtonElement);
+      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    });
+    expect(document.querySelector(".stage-display")).toBeNull();
+
+    // Once approval exists, claiming continues into the display page.
+    approved.value = true;
+    await act(async () => {
+      fireEvent.click(continueButton as HTMLButtonElement);
+      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    });
   });
 });
