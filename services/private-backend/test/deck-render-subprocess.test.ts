@@ -244,6 +244,9 @@ describe("deck render subprocess adapter", () => {
       join(root, "my deck.pptx"),
       "--output-dir",
       join(root, "render out"),
+      // Renderer geometry legitimately disagrees with OOXML on real decks; without this the
+      // whole upload is rejected instead of publishing static slides with animation withheld.
+      "--allow-mapping-mismatch",
     ]);
     expect(renderer.spawnCalls[1]?.cmd).toEqual([
       "uv",

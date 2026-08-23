@@ -283,6 +283,7 @@ describe("deck upload service", () => {
       expect.stringContaining("upload"),
       "--output-dir",
       expect.any(String),
+      "--allow-mapping-mismatch",
     ]);
     expect(subprocess.spawnCalls[1]?.cmd).toEqual([
       "uv",

@@ -4,7 +4,7 @@
  * Owns the single subprocess boundary between the private backend and the
  * ingestion CLI. Runs
  *
- *   uv run --project <ingestionProject> impromptu-ingestion render <source> --output-dir <dir>
+ *   uv run --project <ingestionProject> impromptu-ingestion render <source> --output-dir <dir> --allow-mapping-mismatch
  *   uv run --project <ingestionProject> impromptu-ingestion ingest <source> --output <dir>/ingestion.json
  *
  * as argv arrays (never shell strings), under one caller-owned AbortSignal. It
@@ -565,6 +565,13 @@ export function createDeckRenderSubprocess(
         request.sourcePath,
         "--output-dir",
         request.outputDir,
+        // LibreOffice legitimately lays a real deck out slightly differently from its OOXML
+        // geometry — a picture comes back as a CustomShape, an autofit text box shifts a few
+        // hundred EMU. Without this flag any of that rejects the entire upload, which is why
+        // ordinary decks failed to upload at all. The pipeline already degrades correctly on its
+        // own: it records every disagreement, withholds the animation timeline for the deck
+        // (`animation_eligible: false`), and still publishes the verified static slides.
+        "--allow-mapping-mismatch",
       ],
       signal,
       "render",
