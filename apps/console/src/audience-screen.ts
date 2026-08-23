@@ -95,6 +95,20 @@ export function useAudienceScreen(input: UseAudienceScreenInput): AudienceScreen
       void (async () => {
         try {
           const binding = await inputRef.current.approveJoin(join);
+          // A screen this Console opened has no other way to learn the approval landed, so it
+          // would otherwise sit out its retry interval while the deck is already projectable.
+          // This is only a prompt to retry: the screen still has to claim, and the gateway still
+          // only honours a claim for a join this Console actually approved. The binding already
+          // exists server-side at this point, so a screen that has since been closed must not be
+          // able to turn a successful approval into a failed one.
+          try {
+            openedScreenRef.current?.postMessage(
+              { kind: "impromptu:display-bound", displayJoinId: join.displayJoinId },
+              inputRef.current.stageOrigin,
+            );
+          } catch {
+            // The screen converges through its own retry instead.
+          }
           if (!mountedRef.current) {
             // The panel went away mid-handshake; the binding exists server-side but this
             // surface must no longer touch its own state or the parent's callbacks.

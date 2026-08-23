@@ -386,6 +386,68 @@ describe("useAudienceScreen", () => {
     }
   });
 
+  test("tells the screen it opened that the binding landed", async () => {
+    const posted: Array<{ data: unknown; origin: string }> = [];
+    const child = {
+      postMessage: (data: unknown, origin: string) => {
+        posted.push({ data, origin });
+      },
+    } as unknown as Window;
+    const stub = stubWindowOpen(() => child);
+    try {
+      const { controller } = renderProbe(makeInput({ joinTimeoutMs: 20 }));
+      const pendingBox: { current: Promise<AudienceScreenOutcome> | null } = { current: null };
+      await act(async () => {
+        pendingBox.current = controller().openAndBind();
+      });
+      const pending = pendingBox.current;
+      if (pending === null) throw new Error("openAndBind did not start");
+      await act(async () => {
+        dispatchDisplayJoin({ source: child });
+        await pending;
+      });
+
+      // Without this the screen only discovers the approval on its own next retry, which is dead
+      // time on a projector while the deck is already projectable.
+      expect(posted.length).toBe(1);
+      expect(posted[0]?.origin).toBe(STAGE_ORIGIN);
+      const data = posted[0]?.data as Record<string, unknown> | undefined;
+      expect(data?.kind).toBe("impromptu:display-bound");
+      expect(data?.displayJoinId).toBe("join_1");
+    } finally {
+      stub.restore();
+    }
+  });
+
+  test("a screen that can no longer be messaged does not fail a landed binding", async () => {
+    const child = {
+      postMessage: () => {
+        throw new Error("the screen was closed");
+      },
+    } as unknown as Window;
+    const stub = stubWindowOpen(() => child);
+    try {
+      const { controller } = renderProbe(makeInput({ joinTimeoutMs: 20 }));
+      const pendingBox: { current: Promise<AudienceScreenOutcome> | null } = { current: null };
+      await act(async () => {
+        pendingBox.current = controller().openAndBind();
+      });
+      const pending = pendingBox.current;
+      if (pending === null) throw new Error("openAndBind did not start");
+      let outcome: AudienceScreenOutcome | undefined;
+      await act(async () => {
+        dispatchDisplayJoin({ source: child });
+        outcome = await pending;
+      });
+
+      // The binding exists server-side by then; a notification is not allowed to retract it.
+      expect(outcome?.kind).toBe("CONNECTED");
+      expect(controller().status).toBe("CONNECTED");
+    } finally {
+      stub.restore();
+    }
+  });
+
   test("approve rejects a null or mismatched join without calling approveJoin", async () => {
     const approvals: DisplayJoinView[] = [];
     const { controller } = renderProbe(
