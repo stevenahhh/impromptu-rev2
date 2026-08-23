@@ -18,10 +18,14 @@ RUN bun install --frozen-lockfile --filter @impromptu/stage
 
 FROM dependencies AS builder
 ARG IMPROMPTU_RELEASE_COHORT=stable
-ARG STAGE_PUBLIC_API_ORIGIN=https://projection-gateway.invalid
+# Deliberately no STAGE_PUBLIC_API_ORIGIN: the bundle addresses the origin it was served from and
+# the runtime stage below proxies /v1 to the gateway. The audience session arrives as a
+# SameSite=Strict cookie, which a browser discards when it comes back on a cross-SITE response, so
+# any deployment that puts the gateway on a different registrable domain than Stage would lose the
+# session on arrival. Serving both from one origin removes that dependency on deployment DNS, and
+# collapses the CSP, WebSocket-origin and deck-asset URL configuration along with it.
 ENV NODE_ENV=production \
-    IMPROMPTU_RELEASE_COHORT=${IMPROMPTU_RELEASE_COHORT} \
-    STAGE_PUBLIC_API_ORIGIN=${STAGE_PUBLIC_API_ORIGIN}
+    IMPROMPTU_RELEASE_COHORT=${IMPROMPTU_RELEASE_COHORT}
 COPY apps/stage apps/stage
 COPY packages/contracts packages/contracts
 COPY packages/slide-runtime packages/slide-runtime
@@ -35,6 +39,11 @@ FROM nginxinc/nginx-unprivileged:1.29.5-alpine AS runtime
 COPY --from=builder --chown=nginx:nginx /app/apps/stage/dist /usr/share/nginx/html
 USER root
 RUN cat > /etc/nginx/conf.d/default.conf <<'EOF'
+map $http_upgrade $connection_upgrade {
+  default upgrade;
+  ''      close;
+}
+
 server {
   listen 8080;
   server_name _;
@@ -44,6 +53,25 @@ server {
     access_log off;
     add_header Content-Type text/plain;
     try_files /health =503;
+  }
+
+  # Serving the gateway from the Stage origin is what keeps the audience session cookie same-site.
+  # The upstream name is the compose service; it resolves at startup because Stage waits for the
+  # gateway to report healthy.
+  location /v1/ {
+    proxy_pass http://projection-gateway:3002;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    # /v1/realtime is a WebSocket upgrade and /v1/events is an event stream. Buffering would hold
+    # slide changes back until a buffer filled, which on a projector reads as a frozen screen.
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_read_timeout 1h;
+    proxy_send_timeout 1h;
   }
 
   location / {

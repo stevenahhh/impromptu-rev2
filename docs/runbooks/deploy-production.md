@@ -80,9 +80,23 @@ docker compose --env-file .env -f compose.production.yaml build --pull
 The private-backend image includes Bun 1.3.14, Node 26 for isolated model adapters, Python 3.14,
 uv, and LibreOffice Impress. The Console image uses Next.js standalone output and its generated
 `server.js` launcher, which is the production equivalent of `next start` for standalone builds.
-The Stage image serves immutable Vite output through unprivileged Nginx. Its production bundle
-uses `STAGE_PUBLIC_API_ORIGIN` for API, SSE, asset, and WebSocket traffic; that origin must terminate
-TLS and forward to the loopback-published projection gateway.
+The Stage image serves immutable Vite output through unprivileged Nginx, which also proxies `/v1`
+to the projection gateway. API, SSE, asset, and WebSocket traffic therefore all reach the browser
+on `STAGE_PUBLIC_ORIGIN` itself, and `STAGE_PUBLIC_API_ORIGIN` is left unset.
+
+This is a correctness requirement, not a preference. The gateway issues the audience display its
+session as a `SameSite=Strict` cookie, and a browser discards such a cookie when it arrives on a
+cross-site response, so a Stage bundle pointed at a gateway on a different registrable domain
+loses its session the moment it is issued and every later snapshot and event request is rejected —
+with no error on the presenter's side. Any edge or CDN placed in front of Stage must keep `/v1` on
+the same host as the page, forward the WebSocket upgrade headers, leave `text/event-stream`
+responses unbuffered and uncompressed, and allow an idle read of at least 60 seconds. The gateway
+emits a comment ping every 20 seconds so a quiet stretch of the talk does not look idle.
+
+Terminate HTTP/2 for `STAGE_PUBLIC_ORIGIN` at that edge. Serving Stage from one origin puts the
+page, its assets, the event stream and the WebSocket in a single connection pool, and HTTP/1.1
+caps a pool at six connections per origin while the event stream holds one open for the length of
+the talk.
 
 ## Deploy
 

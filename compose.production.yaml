@@ -185,7 +185,6 @@ services:
       dockerfile: apps/stage/Dockerfile
       args:
         IMPROMPTU_RELEASE_COHORT: ${IMPROMPTU_RELEASE_COHORT:-stable}
-        STAGE_PUBLIC_API_ORIGIN: ${STAGE_PUBLIC_API_ORIGIN:?Set STAGE_PUBLIC_API_ORIGIN}
     image: impromptu/stage:${IMAGE_TAG:-latest}
     restart: unless-stopped
     depends_on:
