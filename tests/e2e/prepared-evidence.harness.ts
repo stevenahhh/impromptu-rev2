@@ -497,16 +497,42 @@ async function runPreparedEvidenceE2EWithWorkspace({
     if (context === null) throw new Error("Chrome did not expose its clean profile context");
     trace("chrome-ready");
     await installStageEventBuffer(context);
-    const page = context.pages()[0] ?? (await context.newPage());
+    // Product contract: a Stage window the Console did not open stays completely inert — no
+    // display join, no join code, no claim affordance. So the Stage window is opened FROM a
+    // controller-origin page inside a trusted user gesture instead of navigating straight to the
+    // Stage URL. The Stage derives the console origin from document.referrer, and this harness
+    // has no Console UI, so the private backend's root document plays the opener role.
+    const opener = context.pages()[0] ?? (await context.newPage());
+    await opener.goto(`${privateOrigin}/`, { waitUntil: "domcontentloaded" });
+    // Browsers only honour window.open inside a user gesture, so run it from a one-shot click
+    // handler on a harness button rather than from a bare evaluate, which gets popup-blocked.
+    await opener.evaluate(
+      (url) => {
+        const gesture = document.createElement("button");
+        gesture.type = "button";
+        gesture.setAttribute("data-harness-open-stage", "");
+        gesture.style.cssText =
+          "position:fixed;left:0;top:0;width:8px;height:8px;opacity:0;z-index:2147483647";
+        gesture.addEventListener(
+          "click",
+          () => {
+            Reflect.set(window, "__harnessStageWindow", window.open(url));
+          },
+          { once: true },
+        );
+        document.body.appendChild(gesture);
+      },
+      `${stageOrigin}/?deck=${encodeURIComponent(deckVersion)}`,
+    );
+    const stageShown = context.waitForEvent("page");
+    await opener.locator("[data-harness-open-stage]").click();
+    const page = await stageShown;
     if (process.env.DEBUG_WP3_E2E === "true") {
       page.on("console", (message) => trace(`browser-console:${message.type()}:${message.text()}`));
       page.on("pageerror", (error) => trace(`browser-error:${error.message}`));
       page.on("requestfailed", (request) => trace(`request-failed:${request.url()}`));
       page.on("response", (response) => trace(`response:${response.status()}:${response.url()}`));
     }
-    await page.goto(`${stageOrigin}/?deck=${encodeURIComponent(deckVersion)}`, {
-      waitUntil: "domcontentloaded",
-    });
     trace("stage-dom-ready");
     const waitJoin = await prepareBrowserEvent(page, { name: "impromptu:display-join" });
     const join = await waitJoin();
@@ -526,12 +552,28 @@ async function runPreparedEvidenceE2EWithWorkspace({
       cookie,
     );
 
+    // The approval happened over the controller channel, so deliver the same nudge the Console
+    // sends on approval: the display claims itself immediately and navigates to /display/:id,
+    // falling back to its own retry interval if this message were ever lost. There is no manual
+    // [data-display-claim] click anymore — an unopened Stage window has no such affordance.
+    await opener.evaluate(
+      ({ displayJoinId, target }) => {
+        const stage = Reflect.get(window, "__harnessStageWindow") as Window | null;
+        if (stage === null || stage.closed) throw new Error("Stage window closed before binding");
+        stage.postMessage({ kind: "impromptu:display-bound", displayJoinId }, target);
+      },
+      {
+        displayJoinId: requireString(join, "displayJoinId"),
+        target: stageOrigin,
+      },
+    );
     const eventChannel = page.waitForResponse(
       (response) => response.url().endsWith("/v1/events") && response.status() === 200,
       { timeout: 5_000 },
     );
-    await page.locator("[data-display-claim]").click();
     await eventChannel;
+    // The handshake is complete and the retry interval never touches the opener again.
+    await opener.close();
     trace("event-channel-ready");
     const waitApplied = await prepareBrowserEvent(page, {
       name: "impromptu:playback-applied",

@@ -419,6 +419,7 @@ async function waitForStageReveal(page: Page): Promise<void> {
 
 async function openStage(options: {
   readonly context: BrowserContext;
+  readonly consolePage: Page;
   readonly stageOrigin: string;
   readonly privateOrigin: string;
   readonly consoleOrigin: string;
@@ -431,7 +432,35 @@ async function openStage(options: {
   const slides = arrayField(publicDeck, "slides").map((slide) => record(slide, "slide"));
   const firstSlide = slides[0];
   if (firstSlide === undefined) throw new Error("uploaded deck has no first slide");
-  const page = await options.context.newPage();
+  // Product contract: a Stage window the Console did not open stays completely inert — no
+  // display join, no join code, no claim affordance — so the harness must open the Stage FROM
+  // the Console page the way a presenter does. Browsers only honour window.open inside a trusted
+  // user gesture, so arm a one-shot opener on a harness-owned button and deliver a real click;
+  // a bare page.evaluate would have its popup blocked.
+  const stageUrl = `${options.stageOrigin}/?deck=${encodeURIComponent(
+    stringField(options.upload, "deckVersion"),
+  )}`;
+  await options.consolePage.evaluate((url) => {
+    const gesture = document.createElement("button");
+    gesture.type = "button";
+    gesture.setAttribute("data-harness-open-stage", "");
+    // Invisible and pinned above every product layer so the click cannot miss, without the
+    // harness ever painting into the evidence screenshots.
+    gesture.style.cssText =
+      "position:fixed;left:0;top:0;width:8px;height:8px;opacity:0;z-index:2147483647";
+    gesture.addEventListener(
+      "click",
+      () => {
+        Reflect.set(window, "__harnessStageWindow", window.open(url));
+      },
+      { once: true },
+    );
+    document.body.appendChild(gesture);
+  }, stageUrl);
+  const pageShown = options.context.waitForEvent("page");
+  await options.consolePage.locator("[data-harness-open-stage]").click();
+  const page = await pageShown;
+  options.actions.push("Console opened the Stage window inside a user gesture");
   if (process.env.DEBUG_CUSTOM_DECK_E2E === "true") {
     page.on("console", (message) => console.log(`[stage:${message.type()}] ${message.text()}`));
     page.on("pageerror", (error) => console.log(`[stage:error] ${error.message}`));
@@ -444,10 +473,6 @@ async function openStage(options: {
   }
   const joinResponse = page.waitForResponse(
     (response) => response.url().endsWith("/v1/display-joins") && response.status() === 201,
-  );
-  await page.goto(
-    `${options.stageOrigin}/?deck=${encodeURIComponent(stringField(options.upload, "deckVersion"))}`,
-    { waitUntil: "domcontentloaded" },
   );
   await joinResponse;
   const join = record(
@@ -490,10 +515,23 @@ async function openStage(options: {
     201,
   );
   options.actions.push("Controller approved display binding");
+  // Approval happened over the controller channel, so deliver the same nudge the Console sends:
+  // the display claims itself immediately on this message and otherwise converges through its
+  // own retry interval — no manual [data-display-claim] affordance exists on this path anymore.
+  await options.consolePage.evaluate(
+    ({ displayJoinId, target }) => {
+      const stage = Reflect.get(window, "__harnessStageWindow") as Window | null;
+      if (stage === null || stage.closed) throw new Error("Stage window closed before binding");
+      stage.postMessage({ kind: "impromptu:display-bound", displayJoinId }, target);
+    },
+    {
+      displayJoinId: stringField(join, "displayJoinId"),
+      target: options.stageOrigin,
+    },
+  );
   const snapshotResponse = page.waitForResponse(
     (response) => response.url().includes("/v1/snapshot") && response.status() === 200,
   );
-  await page.locator("[data-display-claim]").click();
   await snapshotResponse;
   const appliedResponse = page.waitForResponse(
     (response) => response.url().endsWith("/v1/stage-applied") && response.status() === 200,
@@ -775,6 +813,7 @@ export async function runCustomDeckUploadE2e(): Promise<CustomDeckUploadEvidence
           };
     const pptxStage = await openStage({
       context,
+      consolePage,
       stageOrigin,
       privateOrigin,
       consoleOrigin,
@@ -903,6 +942,7 @@ export async function runCustomDeckUploadE2e(): Promise<CustomDeckUploadEvidence
     const pdfSlides = arrayField(pdfDeck, "slides").map((slide) => record(slide, "pdf slide"));
     const pdfStage = await openStage({
       context,
+      consolePage,
       stageOrigin,
       privateOrigin,
       consoleOrigin,
