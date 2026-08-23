@@ -403,6 +403,8 @@ export function createPrivateBackendHandler(
         displayBindingEpoch: String(body.displayBindingEpoch ?? ""),
       });
       if (result.outcome === "APPLIED") await dependencies.persist?.();
+      // A refused receipt stalls the public playback revision, so the reason has to be legible
+      // from outside: it is returned in the 409 body below, alongside the request log's status.
       return json(
         result.outcome === "APPLIED" ? result.value : { error: result.reason },
         result.outcome === "APPLIED" ? 200 : 409,
