@@ -1,115 +1,20 @@
-.stage-shell {
+.stage-console-only {
   display: grid;
   height: var(--size-viewport);
-  grid-template-rows: auto var(--track-fluid);
-  overflow: hidden;
+  place-items: center;
 }
 
-.stage-shell .ui-shell__header {
-  padding-block-end: var(--space-stage);
-}
-
-.stage-shell .ui-shell__body {
-  min-height: var(--space-0);
-}
-
-.stage-welcome {
-  display: grid;
-  height: var(--size-full);
-  grid-template-columns: repeat(2, minmax(var(--space-0), var(--fraction-full)));
-  align-content: center;
-  gap: var(--space-stage);
-  overflow: hidden;
-  padding-block: var(--space-0);
-}
-
-.stage-welcome > .ui-eyebrow,
-.stage-welcome > h1,
-.stage-welcome > .stage-lead,
-.stage-welcome > .stage-placement-hint,
-.stage-welcome > .stage-join,
-.stage-welcome > .stage-note {
-  grid-column: 1 / -1;
-}
-
-/* A line of running text left in a single grid column would displace the panels beside it. */
-.stage-welcome .stage-placement-hint {
-  max-width: var(--size-copy);
-  margin: var(--space-0);
-  color: var(--text-secondary);
-}
-
-.stage-welcome > .ui-panel {
-  min-height: min-content;
-  padding: var(--space-3);
-}
-
-.stage-welcome > .ui-panel:not(.stage-join) .ui-panel__header {
-  margin-block-end: var(--space-3);
-}
-
-.stage-welcome > .ui-panel:not(.stage-join) .ui-panel__title {
-  font-size: var(--text-lead);
-}
-
-.stage-welcome > .ui-panel:not(.stage-join) p {
-  margin-block: var(--space-0) var(--space-3);
-}
-
-.stage-welcome h1,
-.stage-claim h1 {
-  margin: var(--space-0);
-  font-family: var(--font-display);
-  font-size: var(--text-stage-display);
-  font-weight: var(--weight-regular);
-  line-height: var(--line-tight);
-  letter-spacing: var(--tracking-tight);
-}
-
-.stage-welcome .stage-lead {
-  max-width: var(--size-copy);
+.stage-console-only p {
   margin: var(--space-0);
   color: var(--text-secondary);
   font-size: var(--text-lead);
 }
 
-.stage-welcome .stage-join {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-6);
-  align-items: center;
-  justify-content: space-between;
-  margin-block-start: var(--space-2);
-}
-
-.stage-code {
-  margin: var(--space-0);
-  font-family: var(--font-mono);
-  font-size: var(--text-title);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-wide);
-}
-
-.stage-waiting {
-  margin: var(--space-0);
-  color: var(--text-secondary);
-  font-size: var(--text-lead);
-  line-height: var(--line-body);
-}
-
-.stage-welcome .stage-note {
+.stage-note {
   max-width: var(--size-copy);
   margin: var(--space-0);
   color: var(--text-secondary);
   font-size: var(--text-small);
-}
-
-.stage-setup-list {
-  display: grid;
-  gap: var(--space-2);
-  margin: var(--space-0);
-  padding-inline-start: var(--space-6);
-  color: var(--text-secondary);
 }
 
 .stage-display {
@@ -121,8 +26,7 @@
   padding: var(--space-stage);
 }
 
-.stage-display__bar,
-.stage-display__actions {
+.stage-display__bar {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
@@ -149,6 +53,15 @@
   overflow: hidden;
 }
 
+.stage-claim h1 {
+  margin: var(--space-0);
+  font-family: var(--font-display);
+  font-size: var(--text-stage-display);
+  font-weight: var(--weight-regular);
+  line-height: var(--line-tight);
+  letter-spacing: var(--tracking-tight);
+}
+
 .stage-display__content--slide {
   grid-template-columns: minmax(var(--space-0), 1fr);
   align-items: stretch;
@@ -163,6 +76,12 @@
   place-items: center;
   overflow: hidden;
   background: var(--surface-inset);
+}
+
+/* The inlined vector slide must sit exactly where the raster <img> sat, so its host contributes
+   no box of its own and the slide itself keeps the rules below. */
+.stage-slide-host {
+  display: contents;
 }
 
 .stage-slide,
@@ -205,39 +124,29 @@
   }
 }
 
-.stage-placement-message,
-.stage-fullscreen-message {
+.stage-placement-message {
   position: fixed;
   inset-block-end: var(--space-4);
+  inset-inline-start: var(--space-4);
   margin: var(--space-0);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-pill);
-  color: var(--text-secondary);
   background: var(--surface-panel);
-  font-size: var(--text-caption);
   box-shadow: var(--shadow-panel);
 }
 
+.stage-display__bar,
 .stage-placement-message {
-  display: flex;
-  max-width: calc(var(--size-full) * 0.65);
-  gap: var(--space-2);
-  align-items: center;
-  inset-inline-start: var(--space-4);
+  transition: opacity var(--duration-reveal) var(--ease-out);
 }
 
-.stage-fullscreen-message {
-  inset-inline-end: var(--space-4);
-}
-
-@media (max-width: 40rem) {
-  .stage-welcome {
-    grid-template-columns: minmax(var(--space-0), var(--fraction-full));
-  }
-
-  .stage-welcome > * {
-    grid-column: 1;
-  }
+/* Visual hiding only: the controls stay in the accessibility tree and clickable so local input
+   (or automation) can still drive them; pixels are what must disappear from the projector. */
+.stage-display[data-stage-chrome="hidden"] .stage-display__bar,
+.stage-display[data-stage-chrome="hidden"] .stage-placement-message,
+.stage-display[data-blackout="true"] .stage-display__bar,
+.stage-display[data-blackout="true"] .stage-placement-message {
+  opacity: var(--opacity-none);
 }
 
 @media (max-height: 540px) {
@@ -245,23 +154,13 @@
     --space-stage: var(--space-2);
   }
 
-  .stage-display__bar,
-  .stage-display__actions {
+  .stage-display__bar {
     gap: var(--space-2);
   }
 
   .stage-claim {
     gap: var(--space-2);
   }
-}
-.stage-connection-code {
-  display: grid;
-  gap: var(--space-2);
-}
-
-.stage-connection-code input {
-  width: var(--size-full);
-  font-family: var(--font-mono);
 }
 
 .stage-display[data-blackout="true"] .stage-display__content {
@@ -270,10 +169,4 @@
 
 .stage-display[data-blackout="true"] .stage-display__content > * {
   visibility: hidden;
-}
-
-.stage-display:fullscreen .stage-display__bar,
-.stage-display:fullscreen .stage-placement-message,
-.stage-display:fullscreen .stage-fullscreen-message {
-  display: none;
 }

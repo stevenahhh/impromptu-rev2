@@ -1,5 +1,5 @@
 import { type PublishedSlideRuntime, PublishedSlideRuntimeSchema } from "@impromptu/contracts";
-import { Badge, Brand, Button, Panel, rebaseDeckAssetUrl, Shell, StatusDot } from "@impromptu/ui";
+import { Button, loadVerifiedSvg, rebaseDeckAssetUrl } from "@impromptu/ui";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import copy from "./locales/ko.json";
@@ -20,7 +20,6 @@ import {
   recoverTargetScreenLoss,
   type ScreenDetailsLike,
   type ScreenLike,
-  topologyInstructions,
   windowsDisplayMode,
 } from "./windows-topology";
 
@@ -33,14 +32,22 @@ const STAGE_PUBLIC_API_ORIGIN = import.meta.env.STAGE_PUBLIC_API_ORIGIN ?? "";
  */
 export const RECONCILE_RECOVERY_LIMIT = 3;
 
+/**
+ * How many times the display re-attempts a channel that will not open before it stops trying and
+ * says so on screen. Attempts are already spaced by the channel's own open timeout, so this is a
+ * bound on attempts rather than a delay schedule.
+ */
+export const CONNECT_ATTEMPT_LIMIT = 3;
+
+/**
+ * How long the drive controls stay on screen after the last local pointer move or key press
+ * before the surface returns to slide-only. Long enough to aim, short enough that a projector
+ * never sits on visible chrome.
+ */
+export const CHROME_HIDE_IDLE_MS = 2_000;
+
 function publishStageEvent(name: string, detail: unknown): void {
   window.dispatchEvent(new CustomEvent(name, { detail }));
-}
-
-function displayModeLabel(mode: "extend" | "duplicate" | "single"): string {
-  if (mode === "duplicate") return copy.modeDuplicate;
-  if (mode === "single") return copy.modeSingle;
-  return copy.modeExtend;
 }
 
 export function normalizeDeckAssetUrl(url: string) {
@@ -59,20 +66,7 @@ function renderedSlideRuntime(
     : null;
 }
 
-function StageHeader() {
-  return (
-    <>
-      <Brand eyebrow={copy.brandEyebrow} />
-      <Badge tone="accent">
-        <StatusDot label={copy.audienceSafeLabel} />
-        {copy.audienceScreen}
-      </Badge>
-    </>
-  );
-}
-
 function LandingPage({ client }: { readonly client: StageSessionClient }) {
-  const titleId = useId();
   const navigate = useNavigate();
   const identity = useMemo(
     () => ({
@@ -82,7 +76,6 @@ function LandingPage({ client }: { readonly client: StageSessionClient }) {
     [],
   );
   const deckVersion = new URL(window.location.href).searchParams.get("deck") ?? "deck_alpha";
-  const mode = windowsDisplayMode(new URL(window.location.href).searchParams.get("mode"));
   // When the Console opened this window, the join is handed straight back to it and approval
   // happens over there. Without an opener (second device, blocked popup) the manual connection
   // code below remains the path.
@@ -97,21 +90,14 @@ function LandingPage({ client }: { readonly client: StageSessionClient }) {
   const openedByConsole =
     consoleOrigin !== null && window.opener !== null && window.opener !== undefined;
   const [join, setJoin] = useState<DisplayJoinView | null>(null);
-  const [message, setMessage] = useState("Creating a short-lived display code...");
-  const connectionCode =
-    join === null
-      ? ""
-      : btoa(
-          JSON.stringify({
-            displayJoinId: join.displayJoinId,
-            displayId: join.displayId,
-            displayFingerprint: join.displayFingerprint,
-            deckVersion: join.deckVersion,
-            expiresAtMs: join.expiresAtMs,
-          }),
-        );
+  const [failed, setFailed] = useState(false);
+  const [message, setMessage] = useState(copy.waitingApproval);
 
   useEffect(() => {
+    // Product decision: a Stage window the Console did not open must stay completely inert — no
+    // join creation, no codes, no claim affordance — because otherwise anyone holding the bare
+    // URL could put a screen into the pairing flow. Binding only ever starts console-led.
+    if (!openedByConsole) return;
     let active = true;
     void client
       .createJoin(identity, deckVersion)
@@ -129,22 +115,49 @@ function LandingPage({ client }: { readonly client: StageSessionClient }) {
         }
       })
       .catch((error: unknown) => {
-        if (active) setMessage(error instanceof Error ? error.message : copy.joinFailed);
+        if (!active) return;
+        setMessage(error instanceof Error ? error.message : copy.joinFailed);
+        setFailed(true);
       });
     return () => {
       active = false;
     };
   }, [client, consoleOrigin, deckVersion, identity, openedByConsole]);
 
-  const claim = async () => {
-    if (join === null) return;
-    try {
-      await client.claim(join);
-      navigate(`/display/${identity.displayId}`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : copy.approvalFailed);
-    }
-  };
+  // The console tells the window it opened the moment approval lands, so this display claims at
+  // once instead of waiting out the interval below. It is only a nudge: the claim is still what
+  // the gateway authorises, and it only succeeds for a join the presenter actually approved. The
+  // interval stays armed on this path too, because the console tab can be closed, reloaded, or
+  // frozen by a phone before it ever gets to send this.
+  useEffect(() => {
+    if (join === null || consoleOrigin === null) return;
+    let active = true;
+    const onMessage = (event: MessageEvent) => {
+      if (!active || event.origin !== consoleOrigin || event.source !== window.opener) return;
+      const data = event.data as { readonly kind?: unknown; readonly displayJoinId?: unknown };
+      if (
+        typeof data !== "object" ||
+        data === null ||
+        data.kind !== "impromptu:display-bound" ||
+        data.displayJoinId !== join.displayJoinId
+      ) {
+        return;
+      }
+      void client
+        .claim(join)
+        .then(() => {
+          if (active) navigate(`/display/${identity.displayId}`);
+        })
+        .catch(() => {
+          // Not yet claimable; the interval below keeps trying.
+        });
+    };
+    window.addEventListener("message", onMessage);
+    return () => {
+      active = false;
+      window.removeEventListener("message", onMessage);
+    };
+  }, [client, consoleOrigin, identity.displayId, join, navigate]);
 
   useEffect(() => {
     if (join === null) return;
@@ -164,63 +177,33 @@ function LandingPage({ client }: { readonly client: StageSessionClient }) {
     };
   }, [client, identity.displayId, join, navigate]);
 
-  return (
-    <Shell className="stage-shell" focused header={<StageHeader />}>
-      <section className="stage-welcome ui-reveal" aria-labelledby={titleId}>
-        <h1 id={titleId}>{copy.cleanScreenTitle}</h1>
-        <p className="stage-lead">{copy.cleanScreenLead}</p>
-        <p className="stage-placement-hint">{copy.placementGuidance}</p>
-        {openedByConsole ? (
-          <Panel className="stage-join" tone="inset">
-            <p className="stage-waiting" aria-live="polite">
-              {copy.pairWaitingWithConsole}
-            </p>
-          </Panel>
-        ) : (
-          <>
-            <Panel className="stage-join" tone="inset">
-              <div>
-                <p className="ui-eyebrow">{copy.joinCode}</p>
-                <p className="stage-code">
-                  {join === null ? "----" : join.displayJoinId.slice(-8).toUpperCase()}
-                </p>
-              </div>
-              <Button data-display-claim disabled={join === null} onClick={() => void claim()}>
-                {copy.continueAfterApproval}
-              </Button>
-            </Panel>
-            {join === null ? null : (
-              <Panel title={copy.fallbackTitle}>
-                <p>{copy.fallbackLead}</p>
-                <label className="stage-connection-code">
-                  <span>{copy.connectionCode}</span>
-                  <input readOnly value={connectionCode} />
-                </label>
-                <Button
-                  variant="quiet"
-                  onClick={() => void navigator.clipboard.writeText(connectionCode)}
-                >
-                  {copy.copyConnectionCode}
-                </Button>
-              </Panel>
-            )}
-          </>
-        )}
-        <Panel
-          data-topology-instructions={mode}
-          title={`${mode[0]?.toUpperCase()}${mode.slice(1)} setup`}
-        >
-          <ol className="stage-setup-list">
-            {topologyInstructions(mode).map((instruction) => (
-              <li key={instruction}>{instruction}</li>
-            ))}
-          </ol>
-        </Panel>
+  // A window the console opened is already facing the room, so this page's setup scaffolding is
+  // something an audience should never be shown. Stay blank until the validated snapshot paints,
+  // and break that silence only when the handshake actually failed — from the back of a room a
+  // blank screen that is never coming back looks exactly like one that is.
+  if (openedByConsole) {
+    return (
+      <div className="stage-display" data-audience-readiness="PAIRING" data-blackout="false">
+        <main className="stage-display__content">
+          {failed ? (
+            <section className="stage-claim ui-reveal">
+              <h1>{message}</h1>
+            </section>
+          ) : null}
+        </main>
         <p className="stage-note ui-sr-only" aria-live="polite">
-          {message} The code grants no controller access by itself.
+          {message}
         </p>
-      </section>
-    </Shell>
+      </div>
+    );
+  }
+
+  // Product decision: without a Console opener this window must not self-serve pairing — no join,
+  // no codes, no claim button. One neutral line is all it shows.
+  return (
+    <main className="stage-console-only">
+      <p>{copy.consoleOnlyNotice}</p>
+    </main>
   );
 }
 
@@ -237,10 +220,7 @@ function useStageFullscreen() {
       setState({ active: document.fullscreenElement !== null, error: null });
     };
     const reportError = () => {
-      setState((current) => ({
-        ...current,
-        error: "Fullscreen was blocked. Use the browser menu.",
-      }));
+      setState((current) => ({ ...current, error: copy.fullscreenBlocked }));
     };
 
     document.addEventListener("fullscreenchange", syncFullscreen);
@@ -260,20 +240,60 @@ function useStageFullscreen() {
       } else if (document.documentElement.requestFullscreen) {
         await document.documentElement.requestFullscreen();
       } else {
-        setState((current) => ({
-          ...current,
-          error: copy.fullscreenUnavailable,
-        }));
+        setState((current) => ({ ...current, error: copy.fullscreenBlocked }));
       }
     } catch {
-      setState((current) => ({
-        ...current,
-        error: "Fullscreen was blocked. Use the browser menu.",
-      }));
+      setState((current) => ({ ...current, error: copy.fullscreenBlocked }));
     }
   };
 
   return { ...state, toggle };
+}
+
+/**
+ * A slide with no animation timeline still has to reach the projector intact.
+ *
+ * An SVG shown through `<img src>` renders in a restricted mode where the browser refuses every
+ * external reference, and the render pipeline externalizes slide backgrounds into separate asset
+ * files that each slide references relatively — so an `<img>`-displayed slide arrives in front of
+ * the audience with its background missing. Measured on a real deck: zero of two background assets
+ * requested through `<img>`, both of two when the same bytes are inlined. The animated path
+ * already inlines; this is the static path, which became the normal one once animation started
+ * being withheld for decks whose renderer geometry disagrees with their OOXML.
+ *
+ * Raster slides (PDF decks render to PNG) keep the `<img>` path, which has no such restriction.
+ */
+function StaticSlide({ slide }: { readonly slide: StageSnapshotView["deckSlides"][number] }) {
+  const hostRef = useRef<HTMLDivElement>(null);
+  const { imageUrl, imageContentHash, accessibilityLabel } = slide;
+  // String-only on purpose: a resolution failure would silently degrade the slide to the raster
+  // path, which is what drops its background.
+  const vector = (imageUrl.split(/[?#]/)[0] ?? "").toLowerCase().endsWith(".svg");
+
+  useEffect(() => {
+    if (!vector) return;
+    const controller = new AbortController();
+    let active = true;
+    void loadVerifiedSvg({ imageUrl, imageContentHash, accessibilityLabel }, controller.signal)
+      .then((svg) => {
+        svg.setAttribute("class", "stage-slide");
+        svg.setAttribute("data-slide-fit", "contain");
+        if (active) hostRef.current?.replaceChildren(svg);
+      })
+      .catch(() => {
+        // The surface stays empty rather than showing a room a slide whose bytes did not verify.
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [vector, imageUrl, imageContentHash, accessibilityLabel]);
+
+  return vector ? (
+    <div className="stage-slide-host" ref={hostRef} />
+  ) : (
+    <img className="stage-slide" data-slide-fit="contain" src={imageUrl} alt={accessibilityLabel} />
+  );
 }
 
 function playbackRevisionValue(revision: string): number {
@@ -310,19 +330,36 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
   const fullscreen = useStageFullscreen();
   const requestedMode = windowsDisplayMode(new URL(window.location.href).searchParams.get("mode"));
   const [mode, setMode] = useState(requestedMode);
-  const [screenCount, setScreenCount] = useState(1);
   const [placementMessage, setPlacementMessage] = useState(manualPlacementSummary(requestedMode));
   const detailsRef = useRef<ScreenDetailsLike | null>(null);
   const targetRef = useRef<ScreenLike | null>(null);
   const renderedSlidePlayerRef = useRef<RenderedSlidePlayerHandle>(null);
   const [snapshot, setSnapshot] = useState<StageSnapshotView | null>(null);
+  const [unavailable, setUnavailable] = useState<string | null>(null);
+  // The projector surface is bare by default; the drive controls exist only for a local user
+  // gesture, so they surface on local input and sink again once the presenter stops moving.
+  const [chromeVisible, setChromeVisible] = useState(false);
+
+  useEffect(() => {
+    let hideHandle: ReturnType<typeof setTimeout> | undefined;
+    const reveal = () => {
+      setChromeVisible(true);
+      clearTimeout(hideHandle);
+      hideHandle = setTimeout(() => setChromeVisible(false), CHROME_HIDE_IDLE_MS);
+    };
+    const inputs = ["pointermove", "pointerdown", "keydown"] as const;
+    for (const type of inputs) window.addEventListener(type, reveal);
+    return () => {
+      clearTimeout(hideHandle);
+      for (const type of inputs) window.removeEventListener(type, reveal);
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
     const windowManager = window as unknown as Parameters<typeof observeWindowsTopology>[0];
     const apply = (observedMode: ReturnType<typeof windowsDisplayMode>, count: number) => {
       setMode(observedMode);
-      setScreenCount(Math.max(1, count));
       publishStageEvent("impromptu:topology-change", {
         requestedMode,
         observedMode,
@@ -431,6 +468,10 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
     let latestSnapshot: StageSnapshotView | null = null;
     let realtimeReconnectAttempts = 0;
     let reconcileRecoveryAttempts = 0;
+    let connectAttempts = 0;
+    // Playback that arrived before this display held an authoritative snapshot to apply it to.
+    let queuedPlayback: Array<Parameters<StageEventObserver["onPlayback"]>[0]> = [];
+    let drainQueuedPlayback: (() => void) | null = null;
 
     /**
      * A revision gap means this display missed causally ordered commands, so the only safe
@@ -455,6 +496,7 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
           stateHash: next.stateHash,
           publicPlaybackRevision: next.publicPlaybackRevision,
         });
+        drainQueuedPlayback?.();
       } catch {
         // Stay RECOVERING; the attempt counter above bounds repeated failures.
       }
@@ -462,59 +504,82 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
 
     const connect = async (pins?: StageSnapshotView): Promise<void> => {
       try {
+        const applyPlayback = (
+          event: Parameters<StageEventObserver["onPlayback"]>[0],
+          current: StageSnapshotView,
+        ): void => {
+          if (
+            event.presentationSessionEpoch !== current.presentationSessionEpoch ||
+            event.displayBindingEpoch !== current.displayBindingEpoch
+          ) {
+            setSnapshot(null);
+            latestSnapshot = null;
+            publishStageEvent("impromptu:reconcile-required", { reason: "EPOCH_CHANGED" });
+            void recoverFromReconcile();
+            return;
+          }
+          const currentRevision = playbackRevisionValue(current.publicPlaybackRevision);
+          const nextRevision = playbackRevisionValue(event.publicPlaybackRevision);
+          if (nextRevision === currentRevision + 1) {
+            const next = {
+              ...current,
+              publicPlaybackRevision: event.publicPlaybackRevision,
+              occurrence: event.occurrence,
+              blackout: event.blackout,
+            };
+            latestSnapshot = next;
+            setSnapshot(next);
+            reconcileRecoveryAttempts = 0;
+            publishStageEvent("impromptu:visible-playback", {
+              commandId: event.commandId,
+              occurrence: event.occurrence,
+            });
+          } else if (nextRevision !== currentRevision) {
+            setSnapshot(null);
+            latestSnapshot = null;
+            publishStageEvent("impromptu:reconcile-required", { reason: "REVISION_GAP" });
+            void recoverFromReconcile();
+            return;
+          }
+          const recordOverHttp = () =>
+            client
+              .recordApplied(event)
+              .then((receipt) => publishStageEvent("impromptu:playback-applied", receipt))
+              .catch(() =>
+                publishStageEvent("impromptu:channel-close", { reason: "RECEIPT_REJECTED" }),
+              );
+          if (subscription?.recordApplied !== undefined) {
+            try {
+              subscription.recordApplied(event);
+            } catch {
+              // The verified HTTP receipt remains authoritative when WSS closes mid-frame.
+            }
+          }
+          void recordOverHttp();
+        };
+        drainQueuedPlayback = () => {
+          const queued = queuedPlayback;
+          queuedPlayback = [];
+          for (const queuedEvent of queued) {
+            const base = latestSnapshot;
+            if (base !== null) applyPlayback(queuedEvent, base);
+          }
+        };
         const observer: StageEventObserver = {
           onPlayback(event) {
             if (!active) return;
             const current = latestSnapshot;
-            if (current === null) return;
-            if (
-              event.presentationSessionEpoch !== current.presentationSessionEpoch ||
-              event.displayBindingEpoch !== current.displayBindingEpoch
-            ) {
-              setSnapshot(null);
-              latestSnapshot = null;
-              publishStageEvent("impromptu:reconcile-required", { reason: "EPOCH_CHANGED" });
-              void recoverFromReconcile();
+            if (current === null) {
+              // The subscription is deliberately opened before the snapshot is fetched, so
+              // playback can land in between. Discarding it here also discarded its receipt, and
+              // the controller then held that command pending forever: every later receipt came
+              // back OUT_OF_ORDER, the public playback revision never advanced, and the audience
+              // display froze one slide later while the console still reported every command as
+              // delivered. Hold it until there is a snapshot to apply it against.
+              queuedPlayback.push(event);
               return;
             }
-            const currentRevision = playbackRevisionValue(current.publicPlaybackRevision);
-            const nextRevision = playbackRevisionValue(event.publicPlaybackRevision);
-            if (nextRevision === currentRevision + 1) {
-              const next = {
-                ...current,
-                publicPlaybackRevision: event.publicPlaybackRevision,
-                occurrence: event.occurrence,
-                blackout: event.blackout,
-              };
-              latestSnapshot = next;
-              setSnapshot(next);
-              reconcileRecoveryAttempts = 0;
-              publishStageEvent("impromptu:visible-playback", {
-                commandId: event.commandId,
-                occurrence: event.occurrence,
-              });
-            } else if (nextRevision !== currentRevision) {
-              setSnapshot(null);
-              latestSnapshot = null;
-              publishStageEvent("impromptu:reconcile-required", { reason: "REVISION_GAP" });
-              void recoverFromReconcile();
-              return;
-            }
-            const recordOverHttp = () =>
-              client
-                .recordApplied(event)
-                .then((receipt) => publishStageEvent("impromptu:playback-applied", receipt))
-                .catch(() =>
-                  publishStageEvent("impromptu:channel-close", { reason: "RECEIPT_REJECTED" }),
-                );
-            if (subscription?.recordApplied !== undefined) {
-              try {
-                subscription.recordApplied(event);
-              } catch {
-                // The verified HTTP receipt remains authoritative when WSS closes mid-frame.
-              }
-            }
-            void recordOverHttp();
+            applyPlayback(event, current);
           },
           onProtocolError(code) {
             publishStageEvent("impromptu:channel-close", { reason: code });
@@ -547,11 +612,14 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
         const next = reconnectedSnapshot(latestSnapshot, fetched);
         latestSnapshot = next;
         setSnapshot(next);
+        connectAttempts = 0;
+        setUnavailable(null);
         publishStageEvent("impromptu:stage-ready", { requestedMode, observedMode: mode });
         publishStageEvent("impromptu:snapshot-applied", {
           stateHash: next.stateHash,
           publicPlaybackRevision: next.publicPlaybackRevision,
         });
+        drainQueuedPlayback();
         if (client.subscribeRealtime !== undefined) {
           subscription = await client.subscribeRealtime(observer);
           if (!active) subscription.close();
@@ -559,12 +627,24 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
       } catch (error) {
         subscription?.close();
         subscription = null;
-        if (active && error instanceof Error && error.message === "RECONCILE_REQUIRED") {
+        if (!active) return;
+        if (error instanceof Error && error.message === "RECONCILE_REQUIRED") {
           setSnapshot(null);
           latestSnapshot = null;
           publishStageEvent("impromptu:reconcile-required", { reason: "PIN_MISMATCH" });
           void recoverFromReconcile();
+          return;
         }
+        // Every other failure used to land here and stop, which is how a display that never
+        // opened its channel sat in front of a room showing a waiting screen and telling nobody.
+        const reason = error instanceof Error ? error.message : "UNKNOWN";
+        publishStageEvent("impromptu:stage-unavailable", { reason, attempt: connectAttempts + 1 });
+        if (connectAttempts < CONNECT_ATTEMPT_LIMIT) {
+          connectAttempts += 1;
+          void connect(latestSnapshot ?? undefined);
+          return;
+        }
+        setUnavailable(reason);
       }
     };
     const reconnectWhenOnline = () => {
@@ -657,25 +737,13 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
       className="stage-display"
       data-audience-readiness={snapshot === null ? "RECOVERING" : "READY"}
       data-blackout={snapshot?.blackout === true ? "true" : "false"}
+      data-stage-chrome={chromeVisible ? "visible" : "hidden"}
     >
+      {/* Only gesture-driven controls remain; every decorative chip and status prose is gone. */}
       <header className="stage-display__bar">
-        <Brand eyebrow={copy.brandEyebrow} />
-        <div className="stage-display__actions">
-          <Badge tone={snapshot !== null ? "success" : "accent"}>
-            <StatusDot label={snapshot !== null ? copy.publicReady : copy.awaitingPresentation} />
-            {snapshot !== null ? copy.publicOnly : copy.awaitingPresentation}
-          </Badge>
-          <Badge tone="success">
-            <StatusDot label={copy.previewVisible} />
-            {copy.preview}
-          </Badge>
-          <Badge tone="accent">
-            {displayModeLabel(mode)} / {copy.screenCount} {screenCount}개
-          </Badge>
-          <Button data-stage-fullscreen variant="quiet" onClick={() => void fullscreen.toggle()}>
-            {fullscreen.active ? copy.exitFullscreen : copy.enterFullscreen}
-          </Button>
-        </div>
+        <Button data-stage-fullscreen variant="quiet" onClick={() => void fullscreen.toggle()}>
+          {fullscreen.active ? copy.exitFullscreen : copy.enterFullscreen}
+        </Button>
       </header>
       <main
         className={`stage-display__content${currentSlide === undefined ? "" : " stage-display__content--slide"}`}
@@ -683,7 +751,9 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
       >
         {currentSlide === undefined ? (
           <section className="stage-claim ui-reveal">
-            <h1 id={titleId}>{copy.awaitingPresentation}</h1>
+            <h1 id={titleId}>
+              {unavailable === null ? copy.awaitingPresentation : copy.audienceUnavailable}
+            </h1>
           </section>
         ) : (
           <section
@@ -700,21 +770,12 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
                 occurrenceSeq={snapshot?.occurrence.occurrenceSeq ?? 0}
               />
             ) : (
-              <img
-                className="stage-slide"
-                data-slide-fit="contain"
-                src={currentSlide.imageUrl}
-                alt={currentSlide.accessibilityLabel}
-              />
+              <StaticSlide slide={currentSlide} />
             )}
           </section>
         )}
       </main>
-      <aside
-        className="stage-placement-message"
-        data-manual-placement-mode={mode}
-        aria-live="polite"
-      >
+      <aside className="stage-placement-message" data-manual-placement-mode={mode}>
         <Button
           data-stage-placement
           variant="quiet"
@@ -722,11 +783,17 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
         >
           {copy.placeTarget}
         </Button>
-        <span>{placementMessage}</span>
       </aside>
-      <p className="stage-fullscreen-message" aria-live="polite">
-        {fullscreen.error ?? (fullscreen.active ? copy.fullscreenActive : copy.fullscreenReady)}
+      {/* Placement outcome and fullscreen failures stay reachable for assistive tech without
+          painting status prose onto the room-facing screen. */}
+      <p className="ui-sr-only" aria-live="polite">
+        {placementMessage}
       </p>
+      {fullscreen.error === null ? null : (
+        <p className="ui-sr-only" aria-live="assertive">
+          {fullscreen.error}
+        </p>
+      )}
     </div>
   );
 }

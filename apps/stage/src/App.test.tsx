@@ -1,4 +1,4 @@
-import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, jest, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 
 GlobalRegistrator.register();
@@ -6,7 +6,7 @@ afterAll(() => GlobalRegistrator.unregister());
 
 const { act, cleanup, fireEvent, render, within } = await import("@testing-library/react");
 const { MemoryRouter } = await import("react-router-dom");
-const { RECONCILE_RECOVERY_LIMIT, StageRoutes } = await import("./App");
+const { CHROME_HIDE_IDLE_MS, RECONCILE_RECOVERY_LIMIT, StageRoutes } = await import("./App");
 const copy = (await import("./locales/ko.json")).default;
 
 import type {
@@ -333,6 +333,55 @@ describe("slide-only public Stage", () => {
     expect(within(document.body).getByRole("img", { name: "Slide one" })).toBeTruthy();
   });
 
+  test("projects a bare slide and reveals controls only while the presenter interacts", async () => {
+    const observerSignal = deferred<StageEventObserver>();
+    const snapshotApplied = nextStageEvent("impromptu:snapshot-applied");
+    render(
+      <MemoryRouter initialEntries={["/display/display_alpha"]}>
+        <StageRoutes client={stageClient(observerSignal)} />
+      </MemoryRouter>,
+    );
+    await act(async () => snapshotApplied);
+    expect(within(document.body).getByRole("img", { name: "Slide one" })).toBeTruthy();
+
+    // Audience-only chrome is gone from the DOM outright — not merely styled away — so it can
+    // never reappear on a projector.
+    const display = document.querySelector(".stage-display");
+    const visibleText = document.body.textContent ?? "";
+    for (const noise of ["청중 전용", "미리보기", "확장", "복제", "청중 화면"]) {
+      expect(visibleText).not.toContain(noise);
+    }
+
+    // The drive controls stay mounted for gesture-driven use, but hidden until local input.
+    expect(display?.getAttribute("data-stage-chrome")).toBe("hidden");
+    expect(document.querySelector("[data-stage-fullscreen]")).toBeInstanceOf(HTMLElement);
+    expect(document.querySelector("[data-stage-placement]")).toBeInstanceOf(HTMLElement);
+
+    // Fake timers must already govern the clock when the input lands, so the idle timeout the
+    // reveal schedules is one we can advance deterministically.
+    // bun-types@1.2.20 omits the fake-clock controls from its jest typing even though the
+    // runtime implements them, hence the structural cast.
+    const fakeClock = jest as unknown as {
+      useFakeTimers(): void;
+      advanceTimersByTime(milliseconds: number): void;
+      useRealTimers(): void;
+    };
+    fakeClock.useFakeTimers();
+    try {
+      await act(async () => {
+        fireEvent.keyDown(window, { key: "b" });
+      });
+      expect(display?.getAttribute("data-stage-chrome")).toBe("visible");
+
+      await act(async () => {
+        fakeClock.advanceTimersByTime(CHROME_HIDE_IDLE_MS + 1_000);
+      });
+      expect(display?.getAttribute("data-stage-chrome")).toBe("hidden");
+    } finally {
+      fakeClock.useRealTimers();
+    }
+  });
+
   test("bounds automatic recovery refetches when the snapshot never becomes usable", async () => {
     const observers: StageEventObserver[] = [];
     const pendingRefetches: ReturnType<typeof deferred<StageSnapshotView>>[] = [];
@@ -480,65 +529,41 @@ describe("console-led pairing", () => {
     }
   });
 
-  test("shows placement guidance while waiting and hides it once slides are presented", async () => {
-    const observerSignal = deferred<StageEventObserver>();
-    const approved = { value: false };
-    const client: StageSessionClient = {
-      ...landingClient(approved),
-      async snapshot() {
-        return snapshot;
-      },
-      async subscribe(observer) {
-        observerSignal.resolve(observer);
-        return { close() {} };
-      },
-    };
-    const snapshotApplied = nextStageEvent("impromptu:snapshot-applied");
-    await renderLanding(client);
+  // Both of these encode the current product decision: the bare Stage URL is NOT self-service.
+  // A window the Console did not open stays inert, so the security property still holds — a
+  // screen can only attach itself through a join the presenter's Console created and approved.
+  test("shows only a neutral notice when no console window opened it", async () => {
+    await renderLanding(landingClient({ value: false }));
 
-    // While the window is still waiting to be bound, the viewer must be told to move this
-    // window onto the audience display themselves.
-    const hint = document.querySelector(".stage-placement-hint");
-    expect(hint).toBeInstanceOf(HTMLElement);
-    expect(hint?.textContent).toBe(copy.placementGuidance);
-
-    approved.value = true;
-    const continueButton = document.querySelector<HTMLButtonElement>("[data-display-claim]");
-    await act(async () => {
-      fireEvent.click(continueButton as HTMLButtonElement);
-    });
-    await act(async () => snapshotApplied);
-
-    // Once presentation slides are shown, the guidance must be gone.
-    expect(within(document.body).getByRole("img", { name: "Slide one" })).toBeTruthy();
+    expect(document.body.textContent).toContain(copy.consoleOnlyNotice);
     expect(document.querySelector(".stage-placement-hint")).toBeNull();
+    expect(document.querySelector("[data-display-claim]")).toBeNull();
+    expect(document.querySelector(".stage-connection-code")).toBeNull();
+    expect(document.querySelector("[data-topology-instructions]")).toBeNull();
+    expect(document.body.textContent).not.toContain("join_console_led");
   });
 
-  test("keeps the presenter approval gate and the manual code fallback without an opener", async () => {
-    const approved = { value: false };
-    await renderLanding(landingClient(approved));
-
-    // Fallback for another device stays available: the connection code and its copy action.
-    const codeInput = document.querySelector<HTMLInputElement>(".stage-connection-code input");
-    expect(codeInput).toBeInstanceOf(HTMLInputElement);
-    expect(codeInput?.readOnly).toBe(true);
-    expect(codeInput?.value.length).toBeGreaterThan(0);
-    expect(document.body.textContent).not.toContain("join_console_led");
-
-    // Approval gate: entering the display is impossible while the claim is unapproved.
-    const continueButton = document.querySelector<HTMLButtonElement>("[data-display-claim]");
-    expect(continueButton).toBeInstanceOf(HTMLButtonElement);
+  test("never creates a join or offers any way to attach itself without an opener", async () => {
+    let joinsCreated = 0;
+    let claimsAttempted = 0;
+    const inertClient: StageSessionClient = {
+      ...landingClient({ value: true }),
+      async createJoin(identity, deckVersion) {
+        joinsCreated += 1;
+        return landingClient({ value: true }).createJoin(identity, deckVersion);
+      },
+      async claim() {
+        claimsAttempted += 1;
+      },
+    };
+    await renderLanding(inertClient);
+    // Drain every effect/microtask the page could possibly schedule before judging it inert.
     await act(async () => {
-      fireEvent.click(continueButton as HTMLButtonElement);
-      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+      for (let tick = 0; tick < 32; tick += 1) await Promise.resolve();
     });
-    expect(document.querySelector(".stage-display")).toBeNull();
 
-    // Once approval exists, claiming continues into the display page.
-    approved.value = true;
-    await act(async () => {
-      fireEvent.click(continueButton as HTMLButtonElement);
-      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-    });
+    expect(joinsCreated).toBe(0);
+    expect(claimsAttempted).toBe(0);
+    expect(document.querySelectorAll("button, input").length).toBe(0);
   });
 });
