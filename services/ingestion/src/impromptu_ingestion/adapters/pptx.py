@@ -129,7 +129,15 @@ def _extract_shape(shape: BaseShape) -> StructuralElement | None:
         )
 
     if shape.shape_type is MSO_SHAPE_TYPE.PICTURE:
-        image = cast(_ImageShape, shape).image
+        try:
+            image = cast(_ImageShape, shape).image
+        except ValueError:
+            # A picture linked to an external file carries no embedded bytes, so there is nothing
+            # to hash or measure; python-pptx raises rather than returning None. Linked pictures
+            # are ordinary in decks authored against a shared drive, and one of them must not cost
+            # the whole deck. Fall through so the caller records an unsupported-shape warning and
+            # keeps every other element on the slide.
+            return None
         pixel_width, pixel_height = image.size
         return ImageElement(
             element_id=element_id,
@@ -214,8 +222,12 @@ class PptxStructuralAdapter(StructuralAdapter):
                 for index, slide in enumerate(slides, start=1)
             )
         except Exception as error:
+            # The code stays stable for callers, but the cause has to survive: this blanket catch
+            # previously reduced every structural failure to four identical words, which meant a
+            # rejected upload could only be diagnosed by re-running the extraction by hand.
             raise StructuralExtractionError(
-                "invalid_document", "PPTX structure could not be parsed"
+                "invalid_document",
+                f"PPTX structure could not be parsed: {type(error).__name__}: {error}",
             ) from error
 
         if not manifests:

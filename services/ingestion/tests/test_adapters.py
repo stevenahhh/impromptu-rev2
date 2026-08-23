@@ -4,7 +4,7 @@ import shutil
 import subprocess
 from contextlib import AbstractContextManager
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -277,3 +277,30 @@ def test_malformed_pdf_fails_with_a_typed_extraction_error(tmp_path: Path) -> No
         PdfStructuralAdapter().extract(staged)
 
     assert raised.value.code == "invalid_document"
+
+
+def test_a_picture_linked_to_an_external_file_is_skipped_not_fatal() -> None:
+    from pptx.enum.shapes import MSO_SHAPE_TYPE
+
+    from impromptu_ingestion.adapters.pptx import _extract_shape
+
+    class _LinkedPicture:
+        shape_id = 7
+        left = 914400
+        top = 914400
+        width = 914400
+        height = 914400
+        has_table = False
+        has_chart = False
+        has_text_frame = False
+        shape_type = MSO_SHAPE_TYPE.PICTURE
+
+        @property
+        def image(self) -> object:
+            # What python-pptx raises for a picture whose bytes live outside the package.
+            raise ValueError("no embedded image")
+
+    # There are no bytes to hash, so the shape cannot become an element — but it must be skipped
+    # and warned about, not raised. One linked picture on one slide used to reduce an entire
+    # 21-slide deck to `invalid_document` and fail the upload outright.
+    assert _extract_shape(cast(Any, _LinkedPicture())) is None
