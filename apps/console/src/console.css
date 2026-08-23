@@ -502,6 +502,13 @@ html[data-surface="console"] .ui-shell__body--focused {
   font-size: var(--text-body);
 }
 
+/* The control and its wording ran together as one unbroken string without this. */
+.console-consent-check {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
 .console-slide-list {
   display: grid;
   gap: var(--space-2);
@@ -512,9 +519,10 @@ html[data-surface="console"] .ui-shell__body--focused {
 
 .console-slide-list button {
   display: grid;
-  grid-template-columns: var(--space-8) minmax(0, 1fr);
+  grid-template-columns: var(--space-8);
   gap: var(--space-3);
   align-items: center;
+  justify-content: start;
   inline-size: var(--size-full);
   padding: var(--space-3);
   border: var(--size-hairline) solid var(--border-subtle);
