@@ -261,6 +261,12 @@ function serverEvent(kind: "PLAYBACK" | "CLOSE", payload: unknown): Uint8Array {
   return new TextEncoder().encode(`data: ${JSON.stringify({ kind, payload })}\n\n`);
 }
 
+/**
+ * Comment-ping cadence for the audience event stream. Chosen below the shortest idle timeout a
+ * default proxy applies (nginx and common load balancers reap at 60s).
+ */
+export const STAGE_EVENT_HEARTBEAT_INTERVAL_MS = 20_000;
+
 function eventStream(
   dependencies: ProjectionGatewayHttpDependencies,
   audienceDisplaySessionId: string,
@@ -269,7 +275,13 @@ function eventStream(
   let socket: StageSocket | null = null;
   let cancelled = false;
   let measured = false;
+  let heartbeat: ReturnType<typeof setInterval> | null = null;
+  const stopHeartbeat = () => {
+    if (heartbeat !== null) clearInterval(heartbeat);
+    heartbeat = null;
+  };
   const finish = () => {
+    stopHeartbeat();
     if (measured) dependencies.metrics?.addRealtimeConnections(-1);
     measured = false;
   };
@@ -295,6 +307,20 @@ function eventStream(
       } else {
         measured = true;
         dependencies.metrics?.addRealtimeConnections(1);
+        // A presentation is silent for most of its length, and an idle proxy hop reaps a stream
+        // that sends nothing. Without this comment ping a quiet stretch of slides looks to every
+        // intermediary like a dead connection, and the audience display drops into reconnect and
+        // reconcile in the middle of the talk.
+        const timer = setInterval(() => {
+          try {
+            controller.enqueue(new TextEncoder().encode(": keep-alive\n\n"));
+          } catch {
+            stopHeartbeat();
+          }
+        }, STAGE_EVENT_HEARTBEAT_INTERVAL_MS);
+        // The ping must never be the reason a process stays alive.
+        (timer as { unref?: () => void }).unref?.();
+        heartbeat = timer;
       }
     },
     cancel() {
@@ -306,6 +332,10 @@ function eventStream(
   headers.set("content-type", "text/event-stream; charset=utf-8");
   headers.set("cache-control", "no-store");
   headers.set("connection", "keep-alive");
+  // Instructs proxies that buffer by default to pass each event straight through; a buffered
+  // stream holds slide changes back until the buffer fills, which on a projector reads as a
+  // frozen screen.
+  headers.set("x-accel-buffering", "no");
   return new Response(body, { status: socket === null ? 401 : 200, headers });
 }
 
