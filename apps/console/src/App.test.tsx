@@ -4,7 +4,7 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register();
 afterAll(() => GlobalRegistrator.unregister());
 
-const { act, cleanup, fireEvent, render, within } = await import("@testing-library/react");
+const { act, cleanup, fireEvent, render, waitFor, within } = await import("@testing-library/react");
 const { MemoryRouter } = await import("react-router-dom");
 
 const { AuthProvider, ConsoleRoutes } = await import("./App");
@@ -332,6 +332,87 @@ describe("Console route boundary", () => {
     expect(document.querySelectorAll("[data-report-slide-visit]")).toHaveLength(3);
   });
 
+  test("still reaches the report when the finalization signal lapses", async () => {
+    let readCount = 0;
+    const client = workspaceClient({
+      async setSlide() {
+        return { acceptedControlRevision: "cr_1" };
+      },
+      async endPresentationAndAwaitReport() {
+        // The live signal is bounded at ten seconds; the presentation ends server-side regardless.
+        throw new Error("Finalized report signal did not arrive in time.");
+      },
+      async readFinalizedReport() {
+        readCount += 1;
+        return { status: "FINALIZED", report: finalizedReport };
+      },
+    });
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AuthProvider
+          initialAuthenticated
+          initialDisplayBindingEpoch="dbe_1"
+          initialPresentation={{ ...workspacePresentation, presentationSessionId: "ps_report" }}
+          client={client}
+        >
+          <ConsoleRoutes />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: "발표 시작" }));
+    });
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: "발표 종료" }));
+      for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+    });
+
+    // A lapsed signal used to strand the presenter on the playback screen in front of a room,
+    // even though the report was readable the whole time.
+    expect(readCount).toBe(1);
+    expect(document.querySelector("[data-presentation-report='ready']")).toBeTruthy();
+  });
+
+  test("stays on the presentation when the end itself did not take", async () => {
+    const client = workspaceClient({
+      async setSlide() {
+        return { acceptedControlRevision: "cr_1" };
+      },
+      async endPresentationAndAwaitReport() {
+        throw new Error("Private report stream did not open in time.");
+      },
+      async readFinalizedReport() {
+        throw new Error("the report cannot be read");
+      },
+    });
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <AuthProvider
+          initialAuthenticated
+          initialDisplayBindingEpoch="dbe_1"
+          initialPresentation={{ ...workspacePresentation, presentationSessionId: "ps_unended" }}
+          client={client}
+        >
+          <ConsoleRoutes />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: "발표 시작" }));
+    });
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: "발표 종료" }));
+      for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+    });
+
+    // An unreadable report means the presentation is still live, so navigating away would hide a
+    // running presentation from its own controller.
+    expect(document.querySelector("[data-presentation-report='ready']")).toBeNull();
+    expect(within(document.body).getByRole("button", { name: "발표 종료" })).toBeTruthy();
+  });
+
   test("reload GET reproduces identical A-B-A report DOM and exact dwell totals", async () => {
     const client = workspaceClient({
       async readFinalizedReport() {
@@ -504,36 +585,44 @@ describe("Console route boundary", () => {
     expect(
       within(document.body).getByRole("heading", { name: "Presentation workspace" }),
     ).toBeTruthy();
-    expect(within(document.body).getAllByText("Opening slide").length).toBeGreaterThan(0);
+    // Asserted through the rail's accessible name rather than its visible text: the row shows
+    // only the slide number, because every label repeats the same deck name.
+    expect(
+      within(document.body).getAllByRole("button", { name: "Opening slide" }).length,
+    ).toBeGreaterThan(0);
   });
 
-  test("renders an uploaded slide through the same-origin asset path", async () => {
-    const presentation: ActivePresentationView = {
+  function uploadedSlidePresentation(url: string, contentHash: string): ActivePresentationView {
+    return {
       ...workspacePresentation,
       slides: [
         {
           publicSlideKey: "slide_one",
           ordinal: 1,
           accessibilityLabel: "Opening slide",
-          image: {
-            url: "http://127.0.0.1:3002/v1/deck-assets/manifest/slides/slide-1.svg",
-            contentHash: "a".repeat(64),
-            width: 1600,
-            height: 900,
-          },
+          image: { url, contentHash, width: 1600, height: 900 },
         },
       ],
     };
+  }
+
+  test("renders an uploaded slide through the same-origin asset path", async () => {
     render(
       <MemoryRouter initialEntries={["/"]}>
-        <AuthProvider initialAuthenticated initialPresentation={presentation}>
+        <AuthProvider
+          initialAuthenticated
+          initialPresentation={uploadedSlidePresentation(
+            "http://127.0.0.1:3002/v1/deck-assets/manifest/slides/slide-1.png",
+            "a".repeat(64),
+          )}
+        >
           <ConsoleRoutes />
         </AuthProvider>
       </MemoryRouter>,
     );
 
     const image = document.querySelector("[data-rendered-slide] img");
-    expect(image?.getAttribute("src")).toBe("/v1/deck-assets/manifest/slides/slide-1.svg");
+    expect(image?.getAttribute("src")).toBe("/v1/deck-assets/manifest/slides/slide-1.png");
     await act(async () => fireEvent.load(image as Element));
     expect(document.querySelector("[data-rendered-slide='active'] img")).toBeTruthy();
     expect(image?.getAttribute("alt")).toBe("Opening slide");

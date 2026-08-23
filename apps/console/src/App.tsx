@@ -1002,11 +1002,15 @@ function SlideWorkspace({
             <button
               type="button"
               aria-current={index === activeIndex}
+              // Every slide's label is the deck name followed by its number, so printing it in
+              // each row repeated the same words down the whole rail and pushed the only part
+              // that differs into a chip. The number carries the rail; the full label stays as
+              // the accessible name so nothing is lost to a screen reader.
+              aria-label={slide.accessibilityLabel}
               data-slide-thumb={slide.publicSlideKey}
               onClick={() => onSelect(index)}
             >
               <span>{slide.ordinal}</span>
-              <strong>{slide.accessibilityLabel}</strong>
             </button>
           </li>
         ))}
@@ -1281,7 +1285,14 @@ function PlaybackPanel({
   const { activePresentation, client, displayBindingEpoch, locale, session } = useAuth();
   const navigate = useNavigate();
   const text = messages(locale);
-  const [controlRevision, setControlRevision] = useState("cr_0");
+  // The accepted control revision is the CAS base for the next command, so it must be readable
+  // synchronously. Held in React state it was read from a stale render: a presenter clicking
+  // through slides issues the next command before the previous receipt has re-rendered, so the
+  // command went out with a superseded baseRevision and came back REVISION_MISMATCH. A failed
+  // command never advances the revision either, so once that happened every later slide change
+  // failed the same way and the audience display stayed frozen for the rest of the talk.
+  const controlRevisionRef = useRef("cr_0");
+  const commandQueueRef = useRef<Promise<unknown>>(Promise.resolve());
   const [presentationStarted, setPresentationStarted] = useState(false);
   const [starting, setStarting] = useState(false);
   const [ending, setEnding] = useState(false);
@@ -1292,25 +1303,32 @@ function PlaybackPanel({
 
   // The binding can be passed in because a screen bound during this very click has not
   // reached context state yet.
-  const show = async (nextIndex: number, binding?: string): Promise<boolean> => {
-    const slide = slides[nextIndex];
-    const epoch = binding ?? displayBindingEpoch;
-    if (slide === undefined || epoch === null || client.setSlide === undefined) return false;
-    try {
-      const receipt = await client.setSlide(session.csrfToken, {
-        presentationSessionId: activePresentation.presentationSessionId,
-        publicSlideKey: slide.publicSlideKey,
-        displayBindingEpoch: epoch,
-        baseRevision: controlRevision,
-      });
-      onIndexChange(nextIndex);
-      setControlRevision(receipt.acceptedControlRevision);
-      setMessage(text.slideChanged);
-      return true;
-    } catch {
-      setMessage(text.slideFailed);
-      return false;
-    }
+  // Commands are serialized so a second click cannot read the revision the first one is still
+  // in the middle of superseding. Clicking faster than the network stays correct; it just queues.
+  const show = (nextIndex: number, binding?: string): Promise<boolean> => {
+    const run = async (): Promise<boolean> => {
+      const slide = slides[nextIndex];
+      const epoch = binding ?? displayBindingEpoch;
+      if (slide === undefined || epoch === null || client.setSlide === undefined) return false;
+      try {
+        const receipt = await client.setSlide(session.csrfToken, {
+          presentationSessionId: activePresentation.presentationSessionId,
+          publicSlideKey: slide.publicSlideKey,
+          displayBindingEpoch: epoch,
+          baseRevision: controlRevisionRef.current,
+        });
+        controlRevisionRef.current = receipt.acceptedControlRevision;
+        onIndexChange(nextIndex);
+        setMessage(text.slideChanged);
+        return true;
+      } catch {
+        setMessage(text.slideFailed);
+        return false;
+      }
+    };
+    const next = commandQueueRef.current.then(run, run);
+    commandQueueRef.current = next.catch(() => undefined);
+    return next;
   };
 
   const startPresentation = async () => {
@@ -1338,17 +1356,43 @@ function PlaybackPanel({
     if (client.endPresentationAndAwaitReport === undefined) return;
     setEnding(true);
     setMessage(text.reportFinalizing);
+    const reportPath = `/reports/${encodeURIComponent(activePresentation.presentationSessionId)}`;
+    const stayWithFailure = () => {
+      setMessage(text.reportFinalizeFailed);
+      setEnding(false);
+    };
     try {
       const report = await client.endPresentationAndAwaitReport(
         session.csrfToken,
         activePresentation.presentationSessionId,
       );
-      navigate(`/reports/${encodeURIComponent(activePresentation.presentationSessionId)}`, {
-        state: { report },
-      });
+      navigate(reportPath, { state: { report } });
+      return;
     } catch {
-      setMessage(text.reportFinalizeFailed);
-      setEnding(false);
+      // The live REPORT_READY signal is the fast path, not the authority: it is bounded at ten
+      // seconds, and when it lapsed this left the presenter standing in front of a room on the
+      // playback screen with nothing but an error line, even though the presentation had already
+      // ended server-side and the report was readable the whole time.
+    }
+
+    if (client.readFinalizedReport === undefined) {
+      stayWithFailure();
+      return;
+    }
+    try {
+      // Reading the report is the discriminator, rather than inspecting the failure: it answers
+      // the only question that matters here, which is whether the end actually took.
+      const finalized = await client.readFinalizedReport(activePresentation.presentationSessionId);
+      // PENDING means the end was accepted and finalization is still running, so the report route
+      // is exactly where the presenter should wait — that page re-reads on its own.
+      navigate(
+        reportPath,
+        finalized.status === "FINALIZED" ? { state: { report: finalized.report } } : {},
+      );
+    } catch {
+      // The report cannot be read at all, so the end never took. Staying put is correct: the
+      // presentation is still live and the presenter can end it again.
+      stayWithFailure();
     }
   };
 
