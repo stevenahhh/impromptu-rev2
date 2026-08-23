@@ -36,6 +36,7 @@ import { ProjectionHttpPort } from "./projection-http-port.ts";
 import { createTokenBucketRateLimiter } from "./rate-limit.ts";
 import { createSessionReportRouteHandler } from "./report/http.ts";
 import { createPostgresSessionReportRepository } from "./report/postgres-session-report-repository.ts";
+import { createProvisionedSessionReportRepository } from "./report/provisioned-session-report-repository.ts";
 import {
   createPreparedEvidenceReportObserver,
   SessionReportFinalizer,
@@ -180,7 +181,10 @@ const persistence = await createPostgresPreparedEvidencePersistence(preparedEvid
   ...(privateStateKey === undefined ? {} : { stateKey: privateStateKey }),
 });
 const store = persistence.store;
-const sessionReports = createPostgresSessionReportRepository(privateSql);
+const sessionReports = createProvisionedSessionReportRepository(
+  privateSql,
+  createPostgresSessionReportRepository(privateSql),
+);
 const sessionReportFinalizer = new SessionReportFinalizer(sessionReports);
 const reportObserver = createPreparedEvidenceReportObserver(sessionReportFinalizer, (error) => {
   logger.error({
