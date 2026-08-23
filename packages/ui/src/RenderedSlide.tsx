@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export interface RenderedSlideSource {
   readonly imageUrl: string;
@@ -165,21 +165,68 @@ export async function loadVerifiedSvg(
   return svg;
 }
 
+// Deliberately string-only: resolving against `window.location` makes the answer depend on a
+// document existing, and a failure to resolve silently degrades a vector slide to the raster path
+// that drops its background — the exact defect this distinction exists to prevent.
+export function isVectorSlide(url: string): boolean {
+  const [path = ""] = url.split(/[?#]/);
+  return path.toLowerCase().endsWith(".svg");
+}
+
+/**
+ * An SVG displayed through `<img src>` renders in a restricted mode where the browser refuses
+ * every external reference. The render pipeline externalizes slide backgrounds into separate
+ * asset files that each slide references relatively, so an `<img>`-displayed slide silently loses
+ * its background while its vector content survives — measured on a real deck: zero of two
+ * background assets requested through `<img>`, both of two when the same bytes are inlined.
+ *
+ * Vector slides are therefore fetched, hash-verified, sanitized and inlined. Raster slides (PDF
+ * decks render to PNG) keep the far cheaper `<img>` path, which has no such restriction.
+ */
 export function RenderedSlide({ slide, loadingLabel, errorLabel }: RenderedSlideProps) {
-  const { imageUrl, accessibilityLabel } = slide;
+  const { imageUrl, imageContentHash, accessibilityLabel } = slide;
   const [status, setStatus] = useState<RenderedSlideStatus>("loading");
+  const hostRef = useRef<HTMLDivElement>(null);
+  const vector = isVectorSlide(imageUrl);
+
+  // Keyed on the source's fields rather than the object: callers build the source inline on every
+  // render, and an object dependency would refetch the slide for as long as it is on screen.
+  useEffect(() => {
+    if (!vector) return;
+    const controller = new AbortController();
+    let active = true;
+    setStatus("loading");
+    void loadVerifiedSvg({ imageUrl, imageContentHash, accessibilityLabel }, controller.signal)
+      .then((svg) => {
+        const host = hostRef.current;
+        if (!active || host === null) return;
+        host.replaceChildren(svg);
+        setStatus("active");
+      })
+      .catch(() => {
+        if (active) setStatus("error");
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [vector, imageUrl, imageContentHash, accessibilityLabel]);
 
   return (
     <div className="ui-rendered-slide" data-rendered-slide={status}>
       {status === "error" ? null : (
         <div className="ui-rendered-slide__canvas">
-          <img
-            className="ui-rendered-slide__image"
-            src={imageUrl}
-            alt={accessibilityLabel}
-            onLoad={() => setStatus("active")}
-            onError={() => setStatus("error")}
-          />
+          {vector ? (
+            <div className="ui-rendered-slide__image" ref={hostRef} />
+          ) : (
+            <img
+              className="ui-rendered-slide__image"
+              src={imageUrl}
+              alt={accessibilityLabel}
+              onLoad={() => setStatus("active")}
+              onError={() => setStatus("error")}
+            />
+          )}
         </div>
       )}
       {status === "loading" ? (
