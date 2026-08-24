@@ -22,6 +22,9 @@ export const developmentServices = [
       DECK_ARTIFACT_ROOT: "/tmp",
       DECK_STAGING_ROOT: "/tmp",
       FFMPEG_BINARY_PATH: process.env.FFMPEG_BINARY_PATH ?? "/opt/homebrew/bin/ffmpeg",
+      // Scanned decks reach the ingestion CLI's OCR path, which refuses to run until a pinned
+      // tessdata directory exists. Without this the whole upload fails with error[ocr_unavailable].
+      TESSDATA_PREFIX: process.env.TESSDATA_PREFIX ?? "/opt/homebrew/share/tessdata",
       WHISPER_CPP_BINARY_PATH:
         process.env.WHISPER_CPP_BINARY_PATH ?? "/opt/homebrew/bin/whisper-cli",
       WHISPER_CPP_MODEL_PATH:
