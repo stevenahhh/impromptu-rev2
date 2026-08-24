@@ -12,15 +12,25 @@ export type DeterministicEvidenceVerdict =
       value: string;
     }>;
 
+/**
+ * Korean decks write units as words, and a model reports them in normalized notation: evidence
+ * saying "92퍼센트" against a claim of "92%" is the same fact. Without these aliases every
+ * Korean deck abstained with UNIT:%, exactly as the calendar-date gap below once did.
+ * Existence is still enforced — a unit the evidence never states stays rejected.
+ */
 const UNIT_ALIASES: Readonly<Record<string, string>> = Object.freeze({
   "%": "%",
   percent: "%",
   percentage: "%",
+  퍼센트: "%",
+  프로: "%",
   usd: "usd",
   dollar: "usd",
   dollars: "usd",
+  달러: "usd",
   krw: "krw",
   won: "krw",
+  원: "krw",
   million: "million",
   billion: "billion",
   thousand: "thousand",
@@ -101,6 +111,9 @@ export function extractFacts(text: string): EvidenceFactSet {
       ...text.matchAll(
         /%|\b(?:percent(?:age)?|usd|dollars?|krw|won|million|billion|thousand|kg|km|cm|gb|mb|m)\b/gi,
       ),
+      // Hangul has no Latin word boundary, and bare 원/프로 are ordinary words, so a Korean
+      // unit counts only where it follows the quantity it measures.
+      ...text.matchAll(/(?<=\d\s?)(?:퍼센트|프로|달러|원)/gu),
     ].map((match) => normalizeUnit(match[0])),
   );
   const entities = unique(

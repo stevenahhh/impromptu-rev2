@@ -108,3 +108,51 @@ describe("deterministic evidence reconciliation", () => {
     ).toEqual({ outcome: "MISMATCH", category: "DATE", value: "1200" });
   });
 });
+
+describe("Korean unit notation", () => {
+  const koreanContent = "시설 점유율 예측 정확도의 2026년 목표치는 92퍼센트다.";
+  const koreanHash = new Bun.CryptoHasher("sha256").update(koreanContent).digest("hex");
+  const koreanEvidence = RetrievedEvidenceSchema.parse({
+    evidenceId: "ev_ko",
+    sourceId: "s",
+    sourceRevision: "r",
+    sourceHash: koreanHash,
+    deckVersion: "deck_v1",
+    manifestHash: "a".repeat(64),
+    title: "t",
+    content: koreanContent,
+    quote: "q",
+    anchor: "a",
+    canonicalUrl: null,
+    sourceDate: null,
+    rights: "APPROVED",
+    containsPii: false,
+    authorizationVersion: "acl-v1",
+  });
+
+  function reconcileKorean(units: readonly string[]) {
+    return reconcileEvidence(
+      {
+        claim: "시설 점유율 예측 정확도 목표는 92%입니다.",
+        evidenceIds: [koreanEvidence.evidenceId],
+        facts: { numbers: ["92"], units: [...units], dates: [], entities: [] },
+      },
+      [koreanEvidence],
+    );
+  }
+
+  test("reconciles a model's normalized % against Korean evidence written as 퍼센트", () => {
+    // The product's default language is Korean, and this file already teaches the extractor
+    // Korean calendar dates. Units were the remaining gap: evidence saying "92퍼센트" made the
+    // gate reject a correct "92%" claim, so every Korean deck abstained with UNIT:%.
+    expect(reconcileKorean(["%"])).toEqual({ outcome: "SUPPORTED" });
+  });
+
+  test("still rejects a unit the Korean evidence never states", () => {
+    expect(reconcileKorean(["kg"])).toEqual({
+      outcome: "MISMATCH",
+      category: "UNIT",
+      value: "kg",
+    });
+  });
+});
