@@ -1,0 +1,164 @@
+/* Debug overlay: fixed-position, zero layout impact on the presentation surface. */
+
+.debug-overlay {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.debug-overlay__toggle {
+  pointer-events: auto;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-family: monospace;
+  color: #d7dde6;
+  background: rgba(24, 28, 34, 0.85);
+  border: 1px solid rgba(215, 221, 230, 0.25);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.debug-overlay__toggle:hover {
+  background: rgba(24, 28, 34, 0.95);
+}
+
+.debug-overlay__panel {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  width: min(560px, calc(100vw - 24px));
+  max-height: 60vh;
+  overflow: hidden;
+  font-family: monospace;
+  font-size: 11px;
+  color: #d7dde6;
+  background: rgba(18, 21, 26, 0.96);
+  border: 1px solid rgba(215, 221, 230, 0.25);
+  border-radius: 8px;
+}
+
+.debug-overlay__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(215, 221, 230, 0.15);
+}
+
+.debug-overlay__title {
+  font-weight: bold;
+}
+
+.debug-overlay__actions {
+  display: flex;
+  gap: 6px;
+}
+
+.debug-overlay__button {
+  padding: 2px 8px;
+  font-size: 11px;
+  font-family: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid rgba(215, 221, 230, 0.3);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.debug-overlay__button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.debug-overlay__filters {
+  display: flex;
+  gap: 12px;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(215, 221, 230, 0.15);
+}
+
+.debug-overlay__filter-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.debug-overlay__select {
+  font-size: 11px;
+  font-family: inherit;
+  color: #d7dde6;
+  background: rgba(24, 28, 34, 0.9);
+  border: 1px solid rgba(215, 221, 230, 0.3);
+  border-radius: 4px;
+}
+
+.debug-overlay__list {
+  flex: 1;
+  margin: 0;
+  padding: 4px 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.debug-overlay__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 3px 10px;
+}
+
+.debug-overlay__row--error {
+  background: rgba(140, 30, 30, 0.35);
+}
+
+.debug-overlay__row--warn {
+  background: rgba(140, 110, 20, 0.25);
+}
+
+.debug-overlay__seq,
+.debug-overlay__time {
+  opacity: 0.55;
+}
+
+.debug-overlay__badge {
+  min-width: 42px;
+  text-align: center;
+}
+
+.debug-overlay__badge--error {
+  color: #ff8f8f;
+}
+
+.debug-overlay__badge--warn {
+  color: #ffd479;
+}
+
+.debug-overlay__badge--info {
+  color: #8fd0ff;
+}
+
+.debug-overlay__badge--debug {
+  color: #b9c2ce;
+}
+
+.debug-overlay__source {
+  color: #9be3b8;
+}
+
+.debug-overlay__corr {
+  color: #e0b0ff;
+}
+
+.debug-overlay__detail {
+  flex-basis: 100%;
+  word-break: break-all;
+  white-space: pre-wrap;
+  opacity: 0.75;
+}
