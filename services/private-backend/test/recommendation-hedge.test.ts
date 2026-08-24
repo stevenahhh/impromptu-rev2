@@ -56,7 +56,7 @@ function bounded<Value>(promise: Promise<Value>, label: string): Promise<Value> 
   return Promise.race([
     promise,
     new Promise<never>((_resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(label + " never happened")), 2_000);
+      const timer = setTimeout(() => reject(new Error(`${label} never happened`)), 2_000);
       void promise.finally(() => clearTimeout(timer));
     }),
   ]);
@@ -65,7 +65,7 @@ function bounded<Value>(promise: Promise<Value>, label: string): Promise<Value> 
 function metadataFor(capability: ModelCapability) {
   return {
     capability,
-    adapterId: "fake-" + capability,
+    adapterId: `fake-${capability}`,
     provider: "fake",
     model: "fake",
     modelVersion: "1",
