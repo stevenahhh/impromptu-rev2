@@ -163,15 +163,24 @@ def _page_manifest(
 
     warnings: list[ExtractionWarning] = []
     if has_image and not has_text:
-        ocr_elements = extract_ocr_text(typed_page, timeout_seconds=timeout_seconds)
-        elements.extend(ocr_elements)
-        resource_bytes += sum(len(element.text.encode("utf-8")) for element in ocr_elements)
-        warnings.append(
-            ExtractionWarning(
-                code="ocr_applied",
-                message="local Tesseract OCR was applied to this raster-only page",
+        try:
+            ocr_elements = extract_ocr_text(typed_page, timeout_seconds=timeout_seconds)
+        except StructuralExtractionError as error:
+            if error.code != "ocr_unavailable":
+                raise
+            # OCR absence degrades this page to its image structure; it never blocks
+            # ingestion of an otherwise readable deck. Hard failures stay reserved for
+            # unreadable inputs such as encrypted documents.
+            warnings.append(ExtractionWarning(code="ocr_unavailable", message=str(error)))
+        else:
+            elements.extend(ocr_elements)
+            resource_bytes += sum(len(element.text.encode("utf-8")) for element in ocr_elements)
+            warnings.append(
+                ExtractionWarning(
+                    code="ocr_applied",
+                    message="local Tesseract OCR was applied to this raster-only page",
+                )
             )
-        )
     elif not elements:
         warnings.append(
             ExtractionWarning(

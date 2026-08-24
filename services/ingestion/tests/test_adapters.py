@@ -6,6 +6,7 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Any, cast
 
+import pymupdf
 import pytest
 
 from impromptu_ingestion.adapters import (
@@ -183,6 +184,27 @@ def test_frozen_scanned_pdf_uses_ocr_only_for_the_raster_page(
         for slide in manifest.slides
         for warning in slide.warnings
     } == {"ocr_applied"}
+
+
+def test_scanned_page_ingests_with_warning_when_ocr_is_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("TESSDATA_PREFIX", raising=False)
+    scanned = tmp_path / "scanned.pdf"
+    document = pymupdf.open()
+    page = document.new_page(width=720, height=405)
+    raster = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 16, 16))
+    page.insert_image(pymupdf.Rect(0, 0, 720, 405), stream=raster.tobytes("png"))
+    document.save(scanned)
+
+    with _staged(scanned) as source:
+        manifest = PdfStructuralAdapter().extract(source)
+
+    assert len(manifest.slides) == 1
+    assert any(element.kind == "image" for element in manifest.slides[0].elements)
+    assert not any(element.kind == "text" for element in manifest.slides[0].elements)
+    warning_codes = {warning.code for warning in manifest.slides[0].warnings}
+    assert "ocr_unavailable" in warning_codes
 
 
 def test_fixture_hash_registry_accepts_frozen_binaries() -> None:
