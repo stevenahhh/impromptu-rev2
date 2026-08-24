@@ -189,6 +189,12 @@ html[data-surface="console"] .ui-shell__body--focused {
 .console-stack {
   display: grid;
   gap: var(--space-6);
+  /* This grid doubles as the scroll container below, so its height is fixed by the flex
+     parent. Without min-content rows the tracks shrink to share that fixed height and every
+     panel is clipped by .ui-panel's overflow, which left the report as a stack of empty
+     title bars. Content-sized rows overflow into the scroller instead. */
+  grid-auto-rows: min-content;
+  align-content: start;
 }
 
 .console-content > .console-stack {
@@ -659,6 +665,20 @@ html[data-surface="console"] .ui-shell__body--focused {
 
 .console-evidence-preparation {
   flex: 0 0 auto;
+}
+
+/* The report is a reading surface, not a cockpit rail: the shell's display title scale made
+   every panel heading larger than the numbers it labels. */
+[data-presentation-report] .ui-panel {
+  padding: var(--space-5);
+}
+
+[data-presentation-report] .ui-panel__title {
+  font-size: var(--text-lead);
+}
+
+[data-presentation-report] .ui-panel__header {
+  margin-block-end: var(--space-4);
 }
 
 .console-evidence-list {

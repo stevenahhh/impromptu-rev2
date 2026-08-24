@@ -751,3 +751,71 @@ test("reload GET parses finalized reports and exposes owner denial without repor
     globalThis.fetch = originalFetch;
   }
 });
+
+test("uploadReferenceDocuments posts every file as one credentialed multipart request", async () => {
+  const originalFetch = globalThis.fetch;
+  type CapturedUpload = { url: string; method: string; csrf: string | null; names: string[] };
+  const captured: CapturedUpload[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const body = init?.body as FormData;
+    captured.push({
+      url: String(input),
+      method: init?.method ?? "GET",
+      csrf: new Headers(init?.headers).get("x-csrf-token"),
+      names: body.getAll("files").map((entry) => (entry as File).name),
+    });
+    return new Response(
+      JSON.stringify({
+        outcome: "ACCEPTED",
+        documents: [
+          {
+            documentId: "a".repeat(64),
+            presentationSessionId: "ps_1",
+            filename: "brief.md",
+            contentType: "text/markdown",
+            byteLength: 12,
+            chunkCount: 2,
+            status: "INDEXED",
+          },
+        ],
+      }),
+      { status: 201, headers: { "content-type": "application/json" } },
+    );
+  }) as unknown as typeof fetch;
+  try {
+    const { uploadReferenceDocuments } = createConsoleSessionClient("https://private.example.test");
+    if (uploadReferenceDocuments === undefined) throw new Error("client lacks reference uploads");
+    const outcome = await uploadReferenceDocuments("csrf_1", "ps_1", [
+      new File(["hello world!"], "brief.md", { type: "text/markdown" }),
+      new File(["second"], "notes.txt", { type: "text/plain" }),
+    ]);
+    expect(captured).toHaveLength(1);
+    expect(captured[0]?.url).toBe("https://private.example.test/v1/reference-documents");
+    expect(captured[0]?.method).toBe("POST");
+    expect(captured[0]?.csrf).toBe("csrf_1");
+    expect(captured[0]?.names).toEqual(["brief.md", "notes.txt"]);
+    expect(outcome.outcome).toBe("ACCEPTED");
+    expect(outcome.outcome === "ACCEPTED" ? outcome.documents[0]?.filename : null).toBe("brief.md");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("uploadReferenceDocuments surfaces a closed rejection reason instead of throwing raw", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response(JSON.stringify({ outcome: "REJECTED", reason: "UNSUPPORTED_TYPE" }), {
+      status: 415,
+      headers: { "content-type": "application/json" },
+    })) as unknown as typeof fetch;
+  try {
+    const { uploadReferenceDocuments } = createConsoleSessionClient("https://private.example.test");
+    if (uploadReferenceDocuments === undefined) throw new Error("client lacks reference uploads");
+    const outcome = await uploadReferenceDocuments("csrf_1", "ps_1", [
+      new File(["x"], "virus.exe", { type: "application/octet-stream" }),
+    ]);
+    expect(outcome).toEqual({ outcome: "REJECTED", reason: "UNSUPPORTED_TYPE" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

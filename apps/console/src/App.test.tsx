@@ -4,7 +4,7 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 GlobalRegistrator.register();
 afterAll(() => GlobalRegistrator.unregister());
 
-const { act, cleanup, fireEvent, render, waitFor, within } = await import("@testing-library/react");
+const { act, cleanup, fireEvent, render, within } = await import("@testing-library/react");
 const { MemoryRouter } = await import("react-router-dom");
 
 const { AuthProvider, ConsoleRoutes } = await import("./App");
@@ -585,11 +585,11 @@ describe("Console route boundary", () => {
     expect(
       within(document.body).getByRole("heading", { name: "Presentation workspace" }),
     ).toBeTruthy();
-    // Asserted through the rail's accessible name rather than its visible text: the row shows
-    // only the slide number, because every label repeats the same deck name.
-    expect(
-      within(document.body).getAllByRole("button", { name: "Opening slide" }).length,
-    ).toBeGreaterThan(0);
+    // The slide rail was removed, so the uploaded deck is asserted through the surfaces that
+    // replaced it: the preview region and the navigation controls that drive the same index.
+    expect(within(document.body).getByLabelText("Slide preview")).toBeTruthy();
+    expect(within(document.body).getByRole("button", { name: "Next slide" })).toBeTruthy();
+    expect(within(document.body).queryByRole("button", { name: "Opening slide" })).toBeNull();
   });
 
   function uploadedSlidePresentation(url: string, contentHash: string): ActivePresentationView {

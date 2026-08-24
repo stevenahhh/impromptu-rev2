@@ -37,6 +37,8 @@ import {
 } from "./audience-screen";
 import { CoachingDisplay } from "./coaching-display";
 import { CockpitAudioCapture } from "./cockpit-audio-capture";
+import { createCorrelationId, getDebugLogger } from "./debug-log";
+import { DebugOverlay } from "./debug-overlay";
 import { EvidenceCard } from "./evidence-card";
 import { type Locale, messages } from "./i18n";
 import { PresentationReport } from "./presentation-report";
@@ -51,6 +53,7 @@ import {
   type DisplayJoinView,
   type LiveCandidateSnapshotView,
   type PrivateEvidenceCardView,
+  type ReferenceDocumentSummaryView,
   type SessionReportView,
 } from "./session-client";
 
@@ -837,6 +840,9 @@ function PresentationWorkspacePage() {
   } = useAuth();
   const text = messages(locale);
   const [activeIndex, setActiveIndex] = useState(0);
+  // Newly indexed reference material changes what evidence can be grounded in, so preparation
+  // has to run again instead of leaving the presenter with the pre-upload result.
+  const [referenceRevision, setReferenceRevision] = useState(0);
   // Pairing lives here because the primary action and the connection options are two views of
   // the same handshake: the presenter should never have to drive them separately.
   const audience = useAudienceScreen({
@@ -965,9 +971,11 @@ function PresentationWorkspacePage() {
               }}
             />
             <EvidencePreparationPanel
-              key={`${activePresentation.presentationSessionId}:${activePresentation.deckVersion}:${activePresentation.manifestHash ?? ""}`}
+              key={`${activePresentation.presentationSessionId}:${activePresentation.deckVersion}:${activePresentation.manifestHash ?? ""}:${referenceRevision}`}
             />
-            <SlideWorkspace activeIndex={activeIndex} onSelect={setActiveIndex} />
+            <ReferenceDocumentPanel
+              onIndexed={() => setReferenceRevision((current) => current + 1)}
+            />
             <AudienceScreenPanel audience={audience} />
           </div>
         </div>
@@ -978,45 +986,6 @@ function PresentationWorkspacePage() {
 
 function orderedSlides(presentation: ActivePresentationView): ActivePresentationView["slides"] {
   return [...presentation.slides].sort((left, right) => left.ordinal - right.ordinal);
-}
-
-function SlideWorkspace({
-  activeIndex,
-  onSelect,
-}: {
-  readonly activeIndex: number;
-  readonly onSelect: (index: number) => void;
-}) {
-  const { activePresentation, locale } = useAuth();
-  if (activePresentation === null) return null;
-  const text = messages(locale);
-  const slides = orderedSlides(activePresentation);
-  return (
-    <section className="console-slides" aria-label={text.slideRail}>
-      <div className="console-slides__header">
-        <h2>{text.slidesCount.replace("{count}", String(slides.length))}</h2>
-      </div>
-      <ol className="console-slide-list">
-        {slides.map((slide, index) => (
-          <li key={slide.publicSlideKey}>
-            <button
-              type="button"
-              aria-current={index === activeIndex}
-              // Every slide's label is the deck name followed by its number, so printing it in
-              // each row repeated the same words down the whole rail and pushed the only part
-              // that differs into a chip. The number carries the rail; the full label stays as
-              // the accessible name so nothing is lost to a screen reader.
-              aria-label={slide.accessibilityLabel}
-              data-slide-thumb={slide.publicSlideKey}
-              onClick={() => onSelect(index)}
-            >
-              <span>{slide.ordinal}</span>
-            </button>
-          </li>
-        ))}
-      </ol>
-    </section>
-  );
 }
 
 function SlidePreview({ index }: { readonly index: number }) {
@@ -1058,6 +1027,148 @@ type PreparedEvidenceCard = PrivateEvidenceCardView &
     summary: string;
   }>;
 
+/**
+ * Presenter-uploaded reference documents: a project folder's worth of context attached to the
+ * live session. Their text is indexed into the same retrieval store the deck uses, which is
+ * what lets prepared evidence cite something other than the slides themselves.
+ */
+function ReferenceDocumentPanel({ onIndexed }: { readonly onIndexed: () => void }) {
+  const { activePresentation, client, locale, session } = useAuth();
+  const text = messages(locale);
+  const [documents, setDocuments] = useState<readonly ReferenceDocumentSummaryView[]>([]);
+  const [phase, setPhase] = useState<"IDLE" | "UPLOADING" | "ERROR">("IDLE");
+  const [message, setMessage] = useState("");
+  const folderInput = useRef<HTMLInputElement | null>(null);
+
+  const presentationSessionId = activePresentation?.presentationSessionId;
+
+  useEffect(() => {
+    if (presentationSessionId === undefined || client.listReferenceDocuments === undefined) return;
+    let active = true;
+    void client
+      .listReferenceDocuments(presentationSessionId)
+      .then((current) => {
+        if (active) setDocuments(current);
+      })
+      .catch(() => {
+        // An unreadable listing leaves the panel empty; uploading still reports its own outcome.
+      });
+    return () => {
+      active = false;
+    };
+  }, [client, presentationSessionId]);
+
+  const upload = async (selected: readonly File[]) => {
+    if (
+      selected.length === 0 ||
+      session === null ||
+      presentationSessionId === undefined ||
+      client.uploadReferenceDocuments === undefined
+    ) {
+      return;
+    }
+    const log = getDebugLogger();
+    const correlationId = createCorrelationId();
+    setPhase("UPLOADING");
+    setMessage(text.referenceUploading);
+    try {
+      const outcome = await log.timed(
+        "upload",
+        "reference-documents.upload",
+        () =>
+          // biome-ignore lint/style/noNonNullAssertion: guarded by the capability check above.
+          client.uploadReferenceDocuments!(session.csrfToken, presentationSessionId, selected),
+        { correlationId, detail: { fileCount: selected.length } },
+      );
+      if (outcome.outcome === "REJECTED") {
+        log.warn("upload", "reference-documents.rejected", {
+          correlationId,
+          detail: { reason: outcome.reason },
+        });
+        setPhase("ERROR");
+        setMessage(text.referenceRejected.replace("{reason}", outcome.reason));
+        return;
+      }
+      setDocuments(outcome.documents);
+      setPhase("IDLE");
+      setMessage(text.referenceIndexed.replace("{count}", String(outcome.documents.length)));
+      onIndexed();
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      log.error("upload", "reference-documents.failed", { correlationId, detail: { reason } });
+      setPhase("ERROR");
+      setMessage(text.referenceRejected.replace("{reason}", reason));
+    }
+  };
+
+  if (activePresentation === null) return null;
+  return (
+    <Panel className="console-reference-documents" title={text.referenceTitle} tone="inset">
+      <div data-reference-documents-status={phase}>
+        <p className="console-evidence-caption">{text.referenceLead}</p>
+        <label className="ui-button ui-button--quiet console-file-button" data-reference-pick-files>
+          <span>{phase === "UPLOADING" ? text.referenceUploading : text.referenceChooseFiles}</span>
+          <input
+            accept=".pdf,.pptx,.md,.txt,.docx"
+            multiple
+            type="file"
+            onChange={(event) => {
+              const selected = [...(event.target.files ?? [])];
+              event.target.value = "";
+              void upload(selected);
+            }}
+          />
+        </label>
+        <button
+          className="ui-button ui-button--quiet"
+          data-reference-pick-folder
+          type="button"
+          onClick={() => folderInput.current?.click()}
+        >
+          {text.referenceChooseFolder}
+        </button>
+        <input
+          hidden
+          multiple
+          ref={(node) => {
+            folderInput.current = node;
+            // A folder picker is an attribute React does not model, so it is set directly.
+            if (node !== null) node.setAttribute("webkitdirectory", "");
+          }}
+          type="file"
+          onChange={(event) => {
+            const selected = [...(event.target.files ?? [])];
+            event.target.value = "";
+            void upload(selected);
+          }}
+        />
+        {documents.length === 0 ? null : (
+          <ul className="console-evidence-list" data-reference-document-list>
+            {documents.map((document) => (
+              <li key={document.documentId}>
+                <article
+                  className="console-evidence-card"
+                  data-reference-document={document.filename}
+                >
+                  <h3>{document.filename}</h3>
+                  <Badge tone="neutral">
+                    {document.status === "INDEXED"
+                      ? text.referenceChunks.replace("{count}", String(document.chunkCount))
+                      : text.referenceEmptyDocument}
+                  </Badge>
+                </article>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="console-evidence-caption" data-reference-documents-message>
+          {message || text.referenceNone}
+        </p>
+      </div>
+    </Panel>
+  );
+}
+
 function EvidencePreparationPanel() {
   const { activePresentation, client, locale, session } = useAuth();
   const text = messages(locale);
@@ -1067,12 +1178,14 @@ function EvidencePreparationPanel() {
     session !== null &&
     activePresentation.slides.length > 0;
   const [preparedEvidence, setPreparedEvidence] = useState<readonly PreparedEvidenceCard[]>([]);
+  const [failures, setFailures] = useState<readonly string[]>([]);
   const [pendingCount, setPendingCount] = useState(
     canPrepare && activePresentation !== null ? activePresentation.slides.length : 0,
   );
 
   useEffect(() => {
     setPreparedEvidence([]);
+    setFailures([]);
     if (activePresentation === null || session === null) {
       setPendingCount(0);
       return;
@@ -1083,31 +1196,57 @@ function EvidencePreparationPanel() {
       return;
     }
 
+    // The logger is a process-wide singleton, so reading it inside the effect keeps it out
+    // of the dependency list without pinning a stale reference.
+    const log = getDebugLogger();
     let active = true;
     const controller = new AbortController();
     setPendingCount(activePresentation.slides.length);
     for (const slide of activePresentation.slides) {
       void (async () => {
+        const correlationId = createCorrelationId();
         try {
-          const result = await client.recommend(
-            session.csrfToken,
-            {
-              query: slide.accessibilityLabel,
-              deckVersion: activePresentation.deckVersion,
-              manifestHash,
-              maxResults: 3,
-            },
-            controller.signal,
+          const result = await log.timed(
+            "ai",
+            "evidence.recommend",
+            () =>
+              client.recommend(
+                session.csrfToken,
+                {
+                  query: slide.accessibilityLabel,
+                  deckVersion: activePresentation.deckVersion,
+                  manifestHash,
+                  maxResults: 3,
+                },
+                controller.signal,
+              ),
+            { correlationId, detail: { publicSlideKey: slide.publicSlideKey } },
           );
-          if (!active || result.outcome !== "RECOMMEND") return;
+          if (!active) return;
+          if (result.outcome !== "RECOMMEND") {
+            // A non-RECOMMEND outcome used to vanish here, so the panel claimed there was
+            // simply no evidence while the backend was actually refusing every slide.
+            log.warn("ai", "evidence.refused", {
+              correlationId,
+              detail: { publicSlideKey: slide.publicSlideKey, outcome: result.outcome },
+            });
+            setFailures((current) => [...current, result.outcome]);
+            return;
+          }
           const cards = result.evidence.map((evidence) => ({
             ...evidence,
             id: `${slide.publicSlideKey}:${evidence.evidenceId}`,
             summary: result.recommendation.claim,
           }));
           setPreparedEvidence((current) => [...current, ...cards]);
-        } catch {
-          // Individual evidence failures stay quiet and never interrupt presentation controls.
+        } catch (error) {
+          if (controller.signal.aborted) return;
+          const reason = error instanceof Error ? error.message : String(error);
+          log.error("ai", "evidence.failed", {
+            correlationId,
+            detail: { publicSlideKey: slide.publicSlideKey, reason },
+          });
+          if (active) setFailures((current) => [...current, reason]);
         } finally {
           if (active) setPendingCount((current) => Math.max(0, current - 1));
         }
@@ -1119,7 +1258,15 @@ function EvidencePreparationPanel() {
     };
   }, [activePresentation, client, session]);
 
-  const status = pendingCount > 0 ? "PREPARING" : preparedEvidence.length > 0 ? "READY" : "EMPTY";
+  const firstFailure = failures[0];
+  const status =
+    pendingCount > 0
+      ? "PREPARING"
+      : preparedEvidence.length > 0
+        ? "READY"
+        : failures.length > 0
+          ? "FAILED"
+          : "EMPTY";
   return (
     <Panel className="console-evidence-preparation" title={text.preparedEvidence} tone="inset">
       <div data-evidence-status={status}>
@@ -1144,13 +1291,20 @@ function EvidencePreparationPanel() {
             ))}
           </ul>
         )}
-        <p className="console-evidence-caption">
+        <p className="console-evidence-caption" data-evidence-caption={status}>
           {pendingCount > 0
             ? text.evidencePreparingQuietly
             : preparedEvidence.length > 0
               ? text.evidencePrepared
-              : text.evidenceEmpty}
+              : failures.length > 0
+                ? text.evidenceFailed.replace("{count}", String(failures.length))
+                : text.evidenceEmpty}
         </p>
+        {status === "FAILED" && firstFailure !== undefined ? (
+          <p className="console-evidence-caption" data-evidence-failure-reason>
+            {text.evidenceFailedReason.replace("{reason}", firstFailure)}
+          </p>
+        ) : null}
       </div>
     </Panel>
   );
@@ -1567,20 +1721,23 @@ function PresentationReportPage() {
 
 export function ConsoleRoutes({ coResident = false }: { readonly coResident?: boolean }) {
   return (
-    <Routes>
-      <Route element={<PublicOnly />}>
-        <Route path="/sign-in" element={<SignInPage />} />
-        <Route path="/sign-up" element={<SignUpPage />} />
-      </Route>
-      <Route element={<RequireAuth />}>
-        <Route element={<PrivateLayout coResident={coResident} />}>
-          <Route index element={<PresentationWorkspacePage />} />
-          <Route path="/session" element={<PresentationWorkspacePage />} />
-          <Route path="/live-publication" element={<LivePublicationPage />} />
-          <Route path="/reports/:presentationSessionId" element={<PresentationReportPage />} />
+    <>
+      <DebugOverlay logger={getDebugLogger()} />
+      <Routes>
+        <Route element={<PublicOnly />}>
+          <Route path="/sign-in" element={<SignInPage />} />
+          <Route path="/sign-up" element={<SignUpPage />} />
         </Route>
-      </Route>
-      <Route path="*" element={<Navigate to="/sign-in" replace />} />
-    </Routes>
+        <Route element={<RequireAuth />}>
+          <Route element={<PrivateLayout coResident={coResident} />}>
+            <Route index element={<PresentationWorkspacePage />} />
+            <Route path="/session" element={<PresentationWorkspacePage />} />
+            <Route path="/live-publication" element={<LivePublicationPage />} />
+            <Route path="/reports/:presentationSessionId" element={<PresentationReportPage />} />
+          </Route>
+        </Route>
+        <Route path="*" element={<Navigate to="/sign-in" replace />} />
+      </Routes>
+    </>
   );
 }
