@@ -380,3 +380,20 @@ describe("OpenAI-compatible isolated adapters", () => {
     expect(result).toMatchObject({ ok: false, error: { code: "provider_error" } });
   });
 });
+
+test("the embedding adapter accepts a full retrieval chunk, not just a short query", async () => {
+  // Deck and reference indexing embed chunks produced by postgres-deck-retrieval's
+  // MAX_CHUNK_CHARACTERS = 2_000 splitter. A tighter bound here silently failed every real
+  // deck with `invalid_request`, which surfaced to the presenter as "no prepared evidence".
+  const registry = new ModelRoutingRegistry();
+  const bindings = registerOpenAiCompatibleAdapters(registry, adapterConfig());
+  const requests: ProviderEgressTransportRequest[] = [];
+  const result = await router(registry, bindings, requests).invoke(
+    {
+      capability: "embedding",
+      input: { task: "EMBED_RETRIEVAL_QUERY", query: "\uac00".repeat(2_000) },
+    },
+    context(),
+  );
+  expect(result).toMatchObject({ ok: true });
+});

@@ -3,8 +3,19 @@ import { StructuredRecommendationSchema } from "@impromptu/contracts/retrieval";
 import type { ModelCapability, ModelRoutingRegistry } from "@impromptu/model-router";
 import { z } from "zod";
 
+/**
+ * Indexing embeds whole retrieval chunks, not just presenter queries, so this bound must cover
+ * the chunk splitter's MAX_CHUNK_CHARACTERS in
+ * `src/retrieval/postgres-deck-retrieval.ts`. While it was 500 every real deck failed to index
+ * with `invalid_request`, and the Console could only ever report that no evidence was ready.
+ */
+const MAX_EMBEDDING_INPUT_CHARACTERS = 2_000;
+
 const embeddingInputSchema = z
-  .object({ task: z.literal("EMBED_RETRIEVAL_QUERY"), query: z.string().min(1).max(500) })
+  .object({
+    task: z.literal("EMBED_RETRIEVAL_QUERY"),
+    query: z.string().min(1).max(MAX_EMBEDDING_INPUT_CHARACTERS),
+  })
   .strict();
 const untrustedEvidenceSchema = z
   .object({
