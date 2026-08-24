@@ -5,4 +5,5 @@ export * from "./private-deck.ts";
 export * from "./private-evidence.ts";
 export * from "./private-identifiers.ts";
 export * from "./private-protocol.ts";
+export * from "./private-reference-documents.ts";
 export * from "./session-identifiers.ts";

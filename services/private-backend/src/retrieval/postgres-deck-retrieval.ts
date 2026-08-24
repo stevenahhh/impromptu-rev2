@@ -20,6 +20,8 @@ import type {
 import type { TenantScopedPostgresRepository } from "./tenant-scoped-postgres-repository.ts";
 
 const AUTHORIZATION_VERSION = "acl-1";
+export const DECK_CORPUS_KIND = "DECK_SLIDE";
+export const REFERENCE_DOCUMENT_CORPUS_KIND = "REFERENCE_DOCUMENT";
 const MAX_CHUNK_CHARACTERS = 2_000;
 const MAX_RETRIEVER_CANDIDATES = 20;
 export const RRF_K = 60;
@@ -37,6 +39,8 @@ type RetrievalRow = Readonly<{
   content: string;
   embedding: number[];
   authorization_version: string;
+  /** Absent on rows persisted before reference documents existed; those are deck slides. */
+  readonly corpus_kind?: string;
 }>;
 
 type RetrievalRowWithoutEmbedding = Omit<RetrievalRow, "embedding">;
@@ -77,6 +81,12 @@ export type DeckIndexLogEvent = Readonly<{
   skippedArtifactCount: number;
   skippedSlideCount: number;
   errorType?: string;
+  /**
+   * The failure's own message. Without it a broken indexing run is indistinguishable from any
+   * other `Error`, which is exactly what hid a schema mismatch behind twenty identical
+   * `FAILED:PREPARATION_FAILED` lines.
+   */
+  errorMessage?: string;
 }>;
 
 export interface DeckIndexLogger {
@@ -132,8 +142,12 @@ export class PostgresDeckRetrievalStore
     const log = (
       outcome: DeckIndexLogEvent["outcome"],
       reason: DeckIndexLogEvent["reason"],
-      errorType?: string,
+      error?: unknown,
     ) => {
+      const errorType =
+        error === undefined ? undefined : error instanceof Error ? error.name : "UnknownError";
+      const errorMessage =
+        error === undefined ? undefined : error instanceof Error ? error.message : String(error);
       this.#logger?.log({
         outcome,
         reason,
@@ -143,6 +157,7 @@ export class PostgresDeckRetrievalStore
         skippedArtifactCount,
         skippedSlideCount,
         ...(errorType === undefined ? {} : { errorType }),
+        ...(errorMessage === undefined ? {} : { errorMessage }),
       });
     };
 
@@ -150,7 +165,7 @@ export class PostgresDeckRetrievalStore
     try {
       authorized = await this.#access.authorize(principal, request);
     } catch (error) {
-      log("FAILED", "ACCESS_CHECK_FAILED", error instanceof Error ? error.name : "UnknownError");
+      log("FAILED", "ACCESS_CHECK_FAILED", error);
       throw error;
     }
     if (!authorized) {
@@ -253,6 +268,8 @@ export class PostgresDeckRetrievalStore
         return;
       }
 
+      // Reference-document chunks share this table but are owned by the upload flow; deck
+      // preparation must reconcile and replace only its own slide-derived rows.
       const existingRows = await this.#repository.transaction(
         principal.tenantId,
         async (sql) =>
@@ -263,6 +280,7 @@ export class PostgresDeckRetrievalStore
             AND deck_version = ${request.deckVersion}
             AND manifest_hash = ${request.manifestHash}
             AND authorization_version = ${AUTHORIZATION_VERSION}
+            AND corpus_kind = ${DECK_CORPUS_KIND}
         `,
       );
       const unchanged =
@@ -288,32 +306,51 @@ export class PostgresDeckRetrievalStore
         rows.push({ ...pending, embedding });
       }
 
-      await this.#repository.transaction(principal.tenantId, async (sql) => {
-        if (existingRows.length > 0) {
+      // Every slide of a freshly uploaded deck asks for a recommendation at once, so this
+      // preparation runs concurrently for the same scope. Without a lock each racer saw an
+      // empty table and they collided on the primary key, failing the first upload for
+      // everyone but the winner. The lock is transaction-scoped, so it releases on commit.
+      const written = await this.#repository.transaction(principal.tenantId, async (sql) => {
+        await sql`
+          SELECT pg_advisory_xact_lock(
+            hashtextextended(
+              ${`${principal.tenantId}:${request.deckVersion}:${request.manifestHash}:${DECK_CORPUS_KIND}`},
+              0
+            )
+          )
+        `;
+        const current = await sql<readonly Pick<RetrievalRow, "object_id">[]>`
+          SELECT object_id
+          FROM private_app.deck_retrieval_chunks
+          WHERE tenant_id = ${principal.tenantId}
+            AND deck_version = ${request.deckVersion}
+            AND manifest_hash = ${request.manifestHash}
+            AND authorization_version = ${AUTHORIZATION_VERSION}
+            AND corpus_kind = ${DECK_CORPUS_KIND}
+        `;
+        // A racer that already wrote this exact scope while we were embedding wins; repeating
+        // its work would only rewrite identical rows.
+        if (existingRows.length === 0 && current.length > 0) return false;
+        if (current.length > 0) {
           await sql`
             DELETE FROM private_app.deck_retrieval_chunks
             WHERE tenant_id = ${principal.tenantId}
               AND deck_version = ${request.deckVersion}
+              AND corpus_kind = ${DECK_CORPUS_KIND}
           `;
         }
         for (const row of rows) {
-          await sql`
-            INSERT INTO private_app.deck_retrieval_chunks (
-              tenant_id, object_id, source_id, source_revision, source_hash,
-              deck_version, manifest_hash, title, anchor, content, embedding,
-              authorization_version
-            ) VALUES (
-              ${row.tenant_id}, ${row.object_id}, ${row.source_id}, ${row.source_revision},
-              ${row.source_hash}, ${row.deck_version}, ${row.manifest_hash}, ${row.title},
-              ${row.anchor}, ${row.content}, ${sql.array(row.embedding)}::double precision[],
-              ${row.authorization_version}
-            )
-          `;
+          await insertChunkRow(sql, { ...row, corpus_kind: DECK_CORPUS_KIND });
         }
+        return true;
       });
+      if (!written) {
+        log("SKIPPED", "ALREADY_INDEXED");
+        return;
+      }
       indexedChunkCount = rows.length;
     } catch (error) {
-      log("FAILED", "PREPARATION_FAILED", error instanceof Error ? error.name : "UnknownError");
+      log("FAILED", "PREPARATION_FAILED", error);
       throw error;
     }
 
@@ -333,8 +370,8 @@ export class PostgresDeckRetrievalStore
     const rows = await this.#repository.transaction(
       principal.tenantId,
       async (sql) =>
-        sql<readonly { object_id: string; source_revision: string }[]>`
-        SELECT object_id, source_revision
+        sql<readonly { object_id: string; source_revision: string; corpus_kind?: string }[]>`
+        SELECT object_id, source_revision, corpus_kind
         FROM private_app.deck_retrieval_chunks
         WHERE tenant_id = ${principal.tenantId}
           AND deck_version = ${request.deckVersion}
@@ -345,9 +382,11 @@ export class PostgresDeckRetrievalStore
     const sourceRevisions = Object.fromEntries(
       rows.map((row) => [row.object_id, row.source_revision] as const),
     );
-    const revisionsAreCurrent = rows.every(
-      (row) => request.deckVersion === `deck_${row.source_revision}`,
-    );
+    // Only deck slides carry a deck-derived source revision; uploaded reference documents are
+    // current whenever their rows exist for this scope.
+    const revisionsAreCurrent = rows
+      .filter((row) => row.corpus_kind !== REFERENCE_DOCUMENT_CORPUS_KIND)
+      .every((row) => request.deckVersion === `deck_${row.source_revision}`);
     return {
       version: AUTHORIZATION_VERSION,
       current: revisionsAreCurrent,
@@ -495,9 +534,9 @@ export class PostgresDeckRetrievalStore
   }
 }
 
-type StructuralElement = IngestionJson["manifest"]["slides"][number]["elements"][number];
+export type StructuralElement = IngestionJson["manifest"]["slides"][number]["elements"][number];
 
-function extractStructuralText(elements: readonly StructuralElement[]): string {
+export function extractStructuralText(elements: readonly StructuralElement[]): string {
   const values = elements.flatMap((element) => {
     if (element.kind === "text") return [element.text];
     if (element.kind === "table") return element.rows.map((row) => row.join(" "));
@@ -519,7 +558,24 @@ function extractStructuralText(elements: readonly StructuralElement[]): string {
     .trim();
 }
 
-function chunkText(text: string): readonly string[] {
+type ChunkInsertRow = RetrievalRow & Readonly<{ corpus_kind?: string }>;
+
+export async function insertChunkRow(sql: Sql, row: ChunkInsertRow): Promise<void> {
+  await sql`
+    INSERT INTO private_app.deck_retrieval_chunks (
+      tenant_id, object_id, source_id, source_revision, source_hash,
+      deck_version, manifest_hash, title, anchor, content, embedding,
+      authorization_version, corpus_kind
+    ) VALUES (
+      ${row.tenant_id}, ${row.object_id}, ${row.source_id}, ${row.source_revision},
+      ${row.source_hash}, ${row.deck_version}, ${row.manifest_hash}, ${row.title},
+      ${row.anchor}, ${row.content}, ${sql.array(row.embedding)}::double precision[],
+      ${row.authorization_version}, ${row.corpus_kind ?? DECK_CORPUS_KIND}
+    )
+  `;
+}
+
+export function chunkText(text: string): readonly string[] {
   if (text.length === 0) return [];
   const chunks: string[] = [];
   for (let start = 0; start < text.length; start += MAX_CHUNK_CHARACTERS) {

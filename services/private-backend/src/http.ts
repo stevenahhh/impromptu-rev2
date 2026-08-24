@@ -1,4 +1,14 @@
 import type { PrivateDeckContext } from "@impromptu/contracts/private";
+import {
+  ReferenceDocumentListResponseSchema,
+  type ReferenceDocumentRejectionReason,
+  type ReferenceDocumentSummary,
+  type ReferenceDocumentUploadOutcome,
+  ReferenceDocumentUploadOutcomeSchema,
+} from "@impromptu/contracts/private";
+
+export type { ReferenceDocumentSummary };
+
 import type { PublishedDeckArtifact } from "@impromptu/contracts/public";
 import type { RecommendationOutcome } from "@impromptu/contracts/retrieval";
 import type { AccountDirectory } from "./account-directory.ts";
@@ -58,6 +68,39 @@ export type DeckUploadRejectedResponse = Readonly<{
   code: DeckUploadRejectionCode;
 }>;
 
+export interface RawReferenceDocument {
+  readonly filename: string;
+  readonly contentType: string;
+  readonly bytes: Uint8Array;
+}
+
+export interface ReferenceDocumentServiceInput {
+  readonly accountId: string;
+  readonly actorId: string;
+  readonly presentationSessionId: string;
+}
+
+/**
+ * The service returns deeply readonly outcomes, which the schema-inferred type does not
+ * express; widening here keeps the boundary parse authoritative without forcing the
+ * implementation to hand out mutable arrays.
+ */
+export type ReferenceDocumentUploadResult =
+  | Readonly<{ outcome: "ACCEPTED"; documents: readonly ReferenceDocumentSummary[] }>
+  | Readonly<{ outcome: "REJECTED"; reason: ReferenceDocumentRejectionReason }>;
+
+export interface ReferenceDocumentService {
+  acceptReferenceDocuments(
+    input: ReferenceDocumentServiceInput & {
+      readonly documents: readonly RawReferenceDocument[];
+    },
+  ): Promise<ReferenceDocumentUploadResult>;
+  listReferenceDocuments(input: {
+    readonly accountId: string;
+    readonly presentationSessionId: string;
+  }): Promise<readonly ReferenceDocumentSummary[]>;
+}
+
 const DECK_UPLOAD_REJECTION_STATUS = {
   empty_input: 400,
   unsupported_extension: 400,
@@ -66,6 +109,17 @@ const DECK_UPLOAD_REJECTION_STATUS = {
   unsafe_filename: 400,
   size_mismatch: 400,
 } as const satisfies Record<DeckUploadRejectionCode, 400 | 413>;
+
+const REFERENCE_REJECTION_STATUS = {
+  EMPTY_INPUT: 400,
+  MALFORMED_INPUT: 400,
+  UNSUPPORTED_TYPE: 400,
+  UNSAFE_FILENAME: 400,
+  TOO_MANY_FILES: 400,
+  TOO_LARGE: 413,
+  EXTRACTION_FAILED: 422,
+  PRESENTATION_UNKNOWN: 404,
+} as const satisfies Record<ReferenceDocumentRejectionReason, number>;
 
 export interface DeckUploadService {
   acceptRawDeck(input: {
@@ -89,6 +143,7 @@ export interface PrivateBackendHttpDependencies {
   readonly sessionReportRead?: SessionReportReadRouteHandler;
   readonly persist?: () => Promise<void>;
   readonly uploads?: DeckUploadService;
+  readonly referenceDocuments?: ReferenceDocumentService;
   readonly logger?: JsonLogger;
   readonly metrics?: MetricsRegistry;
   readonly readiness?: {
@@ -291,6 +346,58 @@ function accountCredentials(
 
 function isMultipartFormData(value: string | null): boolean {
   return value?.split(";", 1)[0]?.trim().toLowerCase() === "multipart/form-data";
+}
+
+const MAX_REFERENCE_UPLOAD_BODY_BYTES = 24 * 1024 * 1024;
+
+type BoundedFormBody =
+  | Readonly<{ outcome: "READ"; form: FormData }>
+  | Readonly<{ outcome: "REJECTED"; reason: "TOO_LARGE" | "MALFORMED_INPUT" }>;
+
+/** Reads a multipart reference upload strictly inside one bounded buffer before parsing it. */
+async function boundedReferenceUploadForm(request: Request): Promise<BoundedFormBody> {
+  if (request.body === null) return { outcome: "REJECTED", reason: "MALFORMED_INPUT" };
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  while (true) {
+    const next = await reader.read();
+    if (next.done) break;
+    totalBytes += next.value.byteLength;
+    if (totalBytes > MAX_REFERENCE_UPLOAD_BODY_BYTES) {
+      await reader.cancel("reference upload exceeds the request limit");
+      return { outcome: "REJECTED", reason: "TOO_LARGE" };
+    }
+    chunks.push(next.value);
+  }
+  const body = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    const contentType = request.headers.get("content-type") ?? "";
+    const envelope = new Request("https://reference-documents.local/upload", {
+      method: "POST",
+      headers: { "content-type": contentType },
+      body: body.buffer as ArrayBuffer,
+    });
+    return { outcome: "READ", form: await envelope.formData() };
+  } catch {
+    return { outcome: "REJECTED", reason: "MALFORMED_INPUT" };
+  }
+}
+
+function referenceUploadRejection(
+  outcome: Extract<ReferenceDocumentUploadOutcome, { outcome: "REJECTED" }>,
+  headers: Headers,
+): Response {
+  return json(
+    ReferenceDocumentUploadOutcomeSchema.parse(outcome),
+    REFERENCE_REJECTION_STATUS[outcome.reason],
+    headers,
+  );
 }
 
 async function controllerEventStream(
@@ -754,6 +861,56 @@ export function createPrivateBackendHandler(
         201,
         origin,
       );
+    }
+
+    if (request.method === "POST" && url.pathname === "/v1/reference-documents") {
+      if (dependencies.referenceDocuments === undefined) {
+        return json({ error: "reference_documents_unavailable" }, 503, origin);
+      }
+      if (!isMultipartFormData(request.headers.get("content-type"))) {
+        return json({ error: "unsupported_content_type" }, 400, origin);
+      }
+      const form = await boundedReferenceUploadForm(request);
+      if (form.outcome === "REJECTED") {
+        return referenceUploadRejection({ outcome: "REJECTED", reason: form.reason }, origin);
+      }
+      const presentationSessionId = form.form.get("presentationSessionId");
+      if (typeof presentationSessionId !== "string" || presentationSessionId.length === 0) {
+        return json({ error: "presentation_session_required" }, 400, origin);
+      }
+      const documents: RawReferenceDocument[] = [];
+      for (const entry of form.form.getAll("files")) {
+        if (!(entry instanceof File)) continue;
+        documents.push({
+          filename: entry.name,
+          contentType: entry.type,
+          bytes: new Uint8Array(await entry.arrayBuffer()),
+        });
+      }
+      const outcome = await dependencies.referenceDocuments.acceptReferenceDocuments({
+        accountId: account.value.accountId,
+        actorId: account.value.actorId,
+        presentationSessionId,
+        documents,
+      });
+      return outcome.outcome === "ACCEPTED"
+        ? json(ReferenceDocumentUploadOutcomeSchema.parse(outcome), 201, origin)
+        : referenceUploadRejection(outcome, origin);
+    }
+
+    if (request.method === "GET" && url.pathname === "/v1/reference-documents") {
+      if (dependencies.referenceDocuments === undefined) {
+        return json({ error: "reference_documents_unavailable" }, 503, origin);
+      }
+      const presentationSessionId = url.searchParams.get("presentationSessionId");
+      if (presentationSessionId === null || presentationSessionId.length === 0) {
+        return json({ error: "presentation_session_required" }, 400, origin);
+      }
+      const documents = await dependencies.referenceDocuments.listReferenceDocuments({
+        accountId: account.value.accountId,
+        presentationSessionId,
+      });
+      return json(ReferenceDocumentListResponseSchema.parse({ documents }), 200, origin);
     }
 
     const body = await requestBody(request);

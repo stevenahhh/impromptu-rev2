@@ -34,6 +34,10 @@ import { PreparedEvidenceCoordinator } from "./prepared-evidence.ts";
 import { createPostgresPreparedEvidencePersistence } from "./prepared-evidence-store-postgres.ts";
 import { ProjectionHttpPort } from "./projection-http-port.ts";
 import { createTokenBucketRateLimiter } from "./rate-limit.ts";
+import {
+  createIngestionBackedReferenceTextExtractor,
+  PostgresReferenceDocumentLibrary,
+} from "./reference-documents.ts";
 import { createSessionReportRouteHandler } from "./report/http.ts";
 import { createPostgresSessionReportRepository } from "./report/postgres-session-report-repository.ts";
 import { createProvisionedSessionReportRepository } from "./report/provisioned-session-report-repository.ts";
@@ -50,6 +54,7 @@ import {
   externalSearchCredentialsFromEnvironment,
   KeylessFirstExternalSearchBoundary,
 } from "./retrieval/external-search.ts";
+import type { RetrievalPrincipal } from "./retrieval/internal-retrieval.ts";
 import { InternalRetrievalService } from "./retrieval/internal-retrieval.ts";
 import { PostgresDeckRetrievalStore } from "./retrieval/postgres-deck-retrieval.ts";
 import { createTenantScopedPostgresRepository } from "./retrieval/tenant-scoped-postgres-repository.ts";
@@ -265,6 +270,53 @@ const modelRouter = new ServerModelRouter({
 });
 const logger = createJsonLogger();
 const retrievalRepository = createTenantScopedPostgresRepository(privateSql);
+const deckEmbedding = {
+  async embed(text: string, principal: RetrievalPrincipal): Promise<readonly number[]> {
+    const startedAtMs = Date.now();
+    const signal = AbortSignal.timeout(15_000);
+    const result = await modelRouter.invoke(
+      { capability: "embedding", input: { task: "EMBED_RETRIEVAL_QUERY", query: text } },
+      createTrustedModelContext({
+        tenantId: principal.tenantId,
+        principalId: principal.principalId,
+        policyVersion: "model-policy-v1",
+        requestId: `deck-index:${crypto.randomUUID()}`,
+        traceId: `deck-index:${principal.tenantId}:${startedAtMs}`,
+        deadlineAtMs: startedAtMs + 15_000,
+        signal,
+      }),
+    );
+    if (!result.ok) throw new Error(`Deck embedding failed: ${result.error.code}`);
+    return z
+      .object({ vector: z.array(z.number().finite()).min(1).max(8_192) })
+      .strict()
+      .parse(result.output).vector;
+  },
+};
+// Presenter-uploaded reference documents are extracted (reusing services/ingestion for
+// PDF/PPTX), chunked and embedded with the same port as deck slides so both corpora share
+// one vector space and one retrieval table.
+const referenceDocuments = new PostgresReferenceDocumentLibrary({
+  repository: retrievalRepository,
+  extractor: createIngestionBackedReferenceTextExtractor({ ingestionProject }),
+  embedding: deckEmbedding,
+  presentations: {
+    async resolveOwnedPresentation({ accountId, presentationSessionId }) {
+      const presentation = store.presentations.get(presentationSessionId);
+      if (
+        presentation === undefined ||
+        String(presentation.lifecycle.ownerAccountId ?? presentation.privateDeck.ownerAccountId) !==
+          accountId
+      ) {
+        return null;
+      }
+      return {
+        deckVersion: presentation.privateDeck.deckVersion,
+        manifestHash: presentation.privateDeck.manifestHash,
+      };
+    },
+  },
+});
 const retrievalStore = new PostgresDeckRetrievalStore({
   repository: retrievalRepository,
   artifactRoot: deckArtifactRoot,
@@ -290,33 +342,16 @@ const retrievalStore = new PostgresDeckRetrievalStore({
         outcome: `${event.outcome}:${event.reason}`,
       });
       if (event.errorType !== undefined) {
-        logger.error({ requestId, path: "/internal/deck-retrieval", errorType: event.errorType });
+        logger.error({
+          requestId,
+          path: "/internal/deck-retrieval",
+          errorType: event.errorType,
+          ...(event.errorMessage === undefined ? {} : { errorMessage: event.errorMessage }),
+        });
       }
     },
   },
-  embedding: {
-    async embed(text, principal) {
-      const startedAtMs = Date.now();
-      const signal = AbortSignal.timeout(15_000);
-      const result = await modelRouter.invoke(
-        { capability: "embedding", input: { task: "EMBED_RETRIEVAL_QUERY", query: text } },
-        createTrustedModelContext({
-          tenantId: principal.tenantId,
-          principalId: principal.principalId,
-          policyVersion: "model-policy-v1",
-          requestId: `deck-index:${crypto.randomUUID()}`,
-          traceId: `deck-index:${principal.tenantId}:${startedAtMs}`,
-          deadlineAtMs: startedAtMs + 15_000,
-          signal,
-        }),
-      );
-      if (!result.ok) throw new Error(`Deck embedding failed: ${result.error.code}`);
-      return z
-        .object({ vector: z.array(z.number().finite()).min(1).max(8_192) })
-        .strict()
-        .parse(result.output).vector;
-    },
-  },
+  embedding: deckEmbedding,
 });
 const internalRetrieval = new InternalRetrievalService({
   principals: {
@@ -560,6 +595,7 @@ const server = Bun.serve({
     sessionReportRead,
     persist: persistence.persist,
     uploads: deckUploadService,
+    referenceDocuments,
     logger,
     metrics,
     loginRateLimiters,

@@ -81,6 +81,10 @@ function fakeSql() {
         rows.filter((row) => row.tenant_id === values[0] && row.object_id === values[1]),
       );
     }
+    if (query.startsWith("SELECT pg_advisory_xact_lock")) {
+      // Serializes concurrent preparers of the same deck scope; the fake has one connection.
+      return Promise.resolve([]);
+    }
     throw new Error(`Unexpected SQL: ${query}`);
   };
   Object.assign(sql, { array: (value: unknown) => value });
