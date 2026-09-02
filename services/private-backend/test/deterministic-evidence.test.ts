@@ -155,4 +155,123 @@ describe("Korean unit notation", () => {
       value: "kg",
     });
   });
+
+  test("reconciles a spaced 억 원 report against evidence written as 52억 원", () => {
+    // Korean money puts a scale counter between the figure and 원, often with spaces around it
+    // (52억 원). The unit extractor only saw 단일 원/퍼센트 counters, so evidence stating the
+    // exact amount abstained every claim that reported its scale.
+    const content = "총 사업비는 52억 원이 투입된다.";
+    const budgetEvidence = RetrievedEvidenceSchema.parse({
+      evidenceId: "ev_budget",
+      sourceId: "s",
+      sourceRevision: "r",
+      sourceHash: new Bun.CryptoHasher("sha256").update(content).digest("hex"),
+      deckVersion: "deck_v1",
+      manifestHash: "a".repeat(64),
+      title: "Slide 9",
+      content,
+      quote: "q",
+      anchor: "a",
+      canonicalUrl: null,
+      sourceDate: null,
+      rights: "APPROVED",
+      containsPii: false,
+      authorizationVersion: "acl-v1",
+    });
+    expect(
+      reconcileEvidence(
+        {
+          claim: "총 사업비는 52억 원이다.",
+          evidenceIds: [budgetEvidence.evidenceId],
+          facts: { numbers: ["52"], units: ["억 원"], dates: [], entities: [] },
+        },
+        [budgetEvidence],
+      ),
+    ).toEqual({ outcome: "SUPPORTED" });
+  });
+
+  test("still rejects a money scale the Korean evidence never states", () => {
+    const content = "총 사업비는 52억 원이 투입된다.";
+    const budgetEvidence = RetrievedEvidenceSchema.parse({
+      evidenceId: "ev_budget2",
+      sourceId: "s",
+      sourceRevision: "r",
+      sourceHash: new Bun.CryptoHasher("sha256").update(content).digest("hex"),
+      deckVersion: "deck_v1",
+      manifestHash: "a".repeat(64),
+      title: "Slide 9",
+      content,
+      quote: "q",
+      anchor: "a",
+      canonicalUrl: null,
+      sourceDate: null,
+      rights: "APPROVED",
+      containsPii: false,
+      authorizationVersion: "acl-v1",
+    });
+    expect(
+      reconcileEvidence(
+        {
+          claim: "총 사업비는 52조 원이다.",
+          evidenceIds: [budgetEvidence.evidenceId],
+          facts: { numbers: ["52"], units: ["조 원"], dates: [], entities: [] },
+        },
+        [budgetEvidence],
+      ),
+    ).toEqual({ outcome: "MISMATCH", category: "UNIT", value: "조 원" });
+  });
+});
+
+describe("evidence title as a fact source", () => {
+  // Ingestion titles every deck chunk "Slide N" from the manifest's source index, and the
+  // Console queries each slide with a label ending in "— slide N", so the model echoes that
+  // ordinal into its claim. The chunk CONTENT almost never contains the ordinal, so the gate
+  // rejected a slide reference the evidence itself genuinely carries — in its title.
+  const content = "AI 기반 스마트 캠퍼스 에너지 환경 디지털 트윈 플랫폼 개요.";
+  const titled = (title: string) =>
+    RetrievedEvidenceSchema.parse({
+      evidenceId: `ev_${title}`,
+      sourceId: "s",
+      sourceRevision: "r",
+      sourceHash: new Bun.CryptoHasher("sha256").update(content).digest("hex"),
+      deckVersion: "deck_v1",
+      manifestHash: "a".repeat(64),
+      title,
+      content,
+      quote: "q",
+      anchor: "a",
+      canonicalUrl: null,
+      sourceDate: null,
+      rights: "APPROVED",
+      containsPii: false,
+      authorizationVersion: "acl-v1",
+    });
+
+  test("accepts a slide-number fact carried by the cited evidence's own title", () => {
+    const slide3 = titled("Slide 3");
+    expect(
+      reconcileEvidence(
+        {
+          claim: "슬라이드 3은 AI 기반 스마트 캠퍼스 개요를 설명합니다.",
+          evidenceIds: [slide3.evidenceId],
+          facts: { numbers: ["3"], units: [], dates: [], entities: [] },
+        },
+        [slide3],
+      ),
+    ).toEqual({ outcome: "SUPPORTED" });
+  });
+
+  test("still rejects a slide number no cited evidence title carries", () => {
+    const slide3 = titled("Slide 3");
+    expect(
+      reconcileEvidence(
+        {
+          claim: "슬라이드 4는 AI 기반 스마트 캠퍼스 개요를 설명합니다.",
+          evidenceIds: [slide3.evidenceId],
+          facts: { numbers: ["4"], units: [], dates: [], entities: [] },
+        },
+        [slide3],
+      ),
+    ).toEqual({ outcome: "MISMATCH", category: "NUMBER", value: "4" });
+  });
 });

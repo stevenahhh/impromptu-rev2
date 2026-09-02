@@ -46,13 +46,19 @@ export function reconcileEvidence(
   recommendation: StructuredRecommendation,
   evidence: readonly RetrievedEvidence[],
 ): DeterministicEvidenceVerdict {
-  const selected = recommendation.evidenceIds.map((id) =>
-    evidence.find((item) => item.evidenceId === id),
-  );
-  if (selected.some((item) => item === undefined)) {
-    return { outcome: "MISMATCH", category: "SOURCE", value: "unknown evidence id" };
+  const selected: RetrievedEvidence[] = [];
+  for (const id of recommendation.evidenceIds) {
+    const match = evidence.find((item) => item.evidenceId === id);
+    if (match === undefined) {
+      return { outcome: "MISMATCH", category: "SOURCE", value: "unknown evidence id" };
+    }
+    selected.push(match);
   }
-  const evidenceText = selected.map((item) => item?.content ?? "").join("\n");
+  // The chunk title is part of the evidence record: ingestion titles every deck chunk
+  // "Slide N" from the manifest's source index. Console slide queries carry that ordinal and
+  // models echo it into claims, so a fact must be checkable against the title as well as the
+  // content — a claim of "slide 3" is supported when the cited evidence IS Slide 3.
+  const evidenceText = selected.map((item) => `${item.title}\n${item.content}`).join("\n");
   const claimFacts = extractFacts(recommendation.claim);
   const declared = normalizeFacts(recommendation.facts);
   const asserted = {
@@ -114,6 +120,11 @@ export function extractFacts(text: string): EvidenceFactSet {
       // Hangul has no Latin word boundary, and bare 원/프로 are ordinary words, so a Korean
       // unit counts only where it follows the quantity it measures.
       ...text.matchAll(/(?<=\d\s?)(?:퍼센트|프로|달러|원)/gu),
+      // Korean money writes the counter between the figure and 원 - 52억 원, 3만원 - and
+      // scale alone attaches directly to a figure (482억). Without these, evidence stating the
+      // amount was invisible to a claim that reported the same amount's unit.
+      ...text.matchAll(/(?<=\d)(?:억|만|천)\s*원/gu),
+      ...text.matchAll(/(?<=\d)억/gu),
     ].map((match) => normalizeUnit(match[0])),
   );
   const entities = unique(
@@ -145,7 +156,10 @@ function normalizeNumber(value: string): string {
 
 function normalizeUnit(value: string): string {
   const normalized = fold(value);
-  return UNIT_ALIASES[normalized] ?? normalized;
+  // Money counters may carry a space on either side (억 원 / 억원); one canonical form keeps a
+  // model's spaced report reconcilable against unspaced evidence and vice versa.
+  const compactKoreanMoney = normalized.replace(/^(억|만|천)\s*원$/, "$1원");
+  return UNIT_ALIASES[compactKoreanMoney] ?? compactKoreanMoney;
 }
 
 /**
