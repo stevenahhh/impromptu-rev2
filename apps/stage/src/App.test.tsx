@@ -1,4 +1,4 @@
-import { afterAll, afterEach, describe, expect, jest, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 
 GlobalRegistrator.register();
@@ -6,7 +6,7 @@ afterAll(() => GlobalRegistrator.unregister());
 
 const { act, cleanup, fireEvent, render, within } = await import("@testing-library/react");
 const { MemoryRouter } = await import("react-router-dom");
-const { CHROME_HIDE_IDLE_MS, RECONCILE_RECOVERY_LIMIT, StageRoutes } = await import("./App");
+const { RECONCILE_RECOVERY_LIMIT, StageRoutes } = await import("./App");
 const copy = (await import("./locales/ko.json")).default;
 
 import type {
@@ -333,7 +333,7 @@ describe("slide-only public Stage", () => {
     expect(within(document.body).getByRole("img", { name: "Slide one" })).toBeTruthy();
   });
 
-  test("projects a bare slide and reveals controls only while the presenter interacts", async () => {
+  test("projects a bare slide and renders no interactive control of any kind", async () => {
     const observerSignal = deferred<StageEventObserver>();
     const snapshotApplied = nextStageEvent("impromptu:snapshot-applied");
     render(
@@ -352,34 +352,23 @@ describe("slide-only public Stage", () => {
       expect(visibleText).not.toContain(noise);
     }
 
-    // The drive controls stay mounted for gesture-driven use, but hidden until local input.
+    // The audience surface offers nothing clickable: no buttons, links, form fields, or anything
+    // masquerading as a button — fullscreen and placement controls included.
+    const interactive = () =>
+      document.querySelectorAll(
+        "button, a[href], input, select, textarea, [role='button'], [tabindex]",
+      );
+    expect(interactive().length).toBe(0);
+    expect(document.querySelector("[data-stage-fullscreen]")).toBeNull();
+    expect(document.querySelector("[data-stage-placement]")).toBeNull();
+
+    // Local input must not resurrect any chrome either.
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "b" });
+      fireEvent.pointerMove(window);
+    });
+    expect(interactive().length).toBe(0);
     expect(display?.getAttribute("data-stage-chrome")).toBe("hidden");
-    expect(document.querySelector("[data-stage-fullscreen]")).toBeInstanceOf(HTMLElement);
-    expect(document.querySelector("[data-stage-placement]")).toBeInstanceOf(HTMLElement);
-
-    // Fake timers must already govern the clock when the input lands, so the idle timeout the
-    // reveal schedules is one we can advance deterministically.
-    // bun-types@1.2.20 omits the fake-clock controls from its jest typing even though the
-    // runtime implements them, hence the structural cast.
-    const fakeClock = jest as unknown as {
-      useFakeTimers(): void;
-      advanceTimersByTime(milliseconds: number): void;
-      useRealTimers(): void;
-    };
-    fakeClock.useFakeTimers();
-    try {
-      await act(async () => {
-        fireEvent.keyDown(window, { key: "b" });
-      });
-      expect(display?.getAttribute("data-stage-chrome")).toBe("visible");
-
-      await act(async () => {
-        fakeClock.advanceTimersByTime(CHROME_HIDE_IDLE_MS + 1_000);
-      });
-      expect(display?.getAttribute("data-stage-chrome")).toBe("hidden");
-    } finally {
-      fakeClock.useRealTimers();
-    }
   });
 
   test("bounds automatic recovery refetches when the snapshot never becomes usable", async () => {

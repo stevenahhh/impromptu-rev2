@@ -1,3 +1,6 @@
+/* The audience display is a bare projector surface: one flat background, the current slide, and
+   nothing else. Every rule here serves filling the viewport with an undistorted slide. */
+
 .stage-console-only {
   display: grid;
   height: var(--size-viewport);
@@ -10,72 +13,53 @@
   font-size: var(--text-lead);
 }
 
-.stage-note {
-  max-width: var(--size-copy);
-  margin: var(--space-0);
-  color: var(--text-secondary);
-  font-size: var(--text-small);
-}
-
 .stage-display {
   display: grid;
   width: var(--size-full);
   height: var(--size-viewport);
-  grid-template-rows: auto var(--track-fluid);
   overflow: hidden;
-  padding: var(--space-stage);
-}
-
-.stage-display__bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-  align-items: center;
-  justify-content: space-between;
+  padding: var(--space-0);
+  background: var(--surface-canvas);
 }
 
 .stage-display__content {
   display: grid;
-  grid-template-columns: repeat(
-      auto-fit,
-      minmax(min(var(--size-full), var(--size-card-min)), var(--fraction-full))
-    );
+  width: var(--size-full);
   min-height: var(--space-0);
-  gap: var(--space-stage);
-  align-items: center;
   overflow: hidden;
-  padding-block: var(--space-stage);
+}
+
+.stage-display__content--slide {
+  align-items: stretch;
 }
 
 .stage-claim {
   display: grid;
   gap: var(--space-5);
   overflow: hidden;
+  align-content: center;
 }
 
 .stage-claim h1 {
   margin: var(--space-0);
+  padding-inline: var(--space-stage);
+  color: var(--text-secondary);
   font-family: var(--font-display);
   font-size: var(--text-stage-display);
   font-weight: var(--weight-regular);
   line-height: var(--line-tight);
   letter-spacing: var(--tracking-tight);
-}
-
-.stage-display__content--slide {
-  grid-template-columns: minmax(var(--space-0), 1fr);
-  align-items: stretch;
+  text-align: center;
 }
 
 .stage-slide-surface {
   display: grid;
   width: var(--size-full);
-  height: auto;
+  height: var(--size-full);
   min-width: var(--space-0);
   min-height: var(--space-0);
   place-items: center;
   overflow: hidden;
-  background: var(--surface-inset);
 }
 
 /* The inlined vector slide must sit exactly where the raster <img> sat, so its host contributes
@@ -121,45 +105,6 @@
 
   to {
     opacity: var(--opacity-full);
-  }
-}
-
-.stage-placement-message {
-  position: fixed;
-  inset-block-end: var(--space-4);
-  inset-inline-start: var(--space-4);
-  margin: var(--space-0);
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-pill);
-  background: var(--surface-panel);
-  box-shadow: var(--shadow-panel);
-}
-
-.stage-display__bar,
-.stage-placement-message {
-  transition: opacity var(--duration-reveal) var(--ease-out);
-}
-
-/* Visual hiding only: the controls stay in the accessibility tree and clickable so local input
-   (or automation) can still drive them; pixels are what must disappear from the projector. */
-.stage-display[data-stage-chrome="hidden"] .stage-display__bar,
-.stage-display[data-stage-chrome="hidden"] .stage-placement-message,
-.stage-display[data-blackout="true"] .stage-display__bar,
-.stage-display[data-blackout="true"] .stage-placement-message {
-  opacity: var(--opacity-none);
-}
-
-@media (max-height: 540px) {
-  .stage-display {
-    --space-stage: var(--space-2);
-  }
-
-  .stage-display__bar {
-    gap: var(--space-2);
-  }
-
-  .stage-claim {
-    gap: var(--space-2);
   }
 }
 

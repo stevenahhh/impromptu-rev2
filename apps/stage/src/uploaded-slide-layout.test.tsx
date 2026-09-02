@@ -125,4 +125,29 @@ describe("uploaded Stage slide layout", () => {
     expect(stageCss).toMatch(/\.stage-slide-runtime\s*\{[^}]*position:\s*(?:relative|static);/s);
     expect(stageCss).toMatch(/\.stage-slide-runtime\s*>\s*svg\s*\{[^}]*object-fit:\s*contain;/s);
   });
+
+  test("fills the viewport with the slide at full size and carries no chrome", async () => {
+    const ready = nextStageEvent("impromptu:snapshot-applied");
+    render(
+      <MemoryRouter initialEntries={["/display/layout"]}>
+        <StageRoutes client={clientWithSlide("https://public.test/wide-slide.png")} />
+      </MemoryRouter>,
+    );
+    await act(async () => ready);
+
+    // Nothing but the slide surface lives on the audience display.
+    expect(document.querySelector(".stage-display__bar")).toBeNull();
+    expect(document.querySelector(".stage-placement-message")).toBeNull();
+    expect(document.querySelectorAll("button, a[href], input, [role='button']").length).toBe(0);
+
+    const stageCss = readFileSync(new URL("./stage.css", import.meta.url), "utf8");
+    // The display owns the whole viewport with no inset padding, so contain-fit can use every
+    // pixel; the browser then scales the slide to the largest ratio-true fit via object-fit.
+    expect(stageCss).toMatch(
+      /\.stage-display\s*\{[^}]*height:\s*var\(--size-viewport\);[^}]*padding:\s*var\(--space-0\);/s,
+    );
+    expect(stageCss).toMatch(
+      /\.stage-slide-surface\s*\{[^}]*width:\s*var\(--size-full\);[^}]*height:\s*var\(--size-full\);/s,
+    );
+  });
 });
