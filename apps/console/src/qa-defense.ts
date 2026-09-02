@@ -12,6 +12,19 @@ import {
 
 export type QaDefenseLifecycle = PresentationSessionView["lifecycle"];
 
+export const QUESTION_CLIP_MIME_TYPE = "audio/webm;codecs=opus" as const;
+const QUESTION_CLIP_TRANSCRIPTION_URL = "/v1/question-clips/transcription";
+// Mirror of contracts' SpokenQuestionTranscriptionRejectionSchema without pulling zod into
+// the browser bundle — an unknown reason fails loudly instead of rendering as success.
+const CLIP_REJECTION_REASONS: ReadonlySet<string> = new Set([
+  "EMPTY_AUDIO",
+  "TOO_LARGE",
+  "TOO_LONG",
+  "UNSUPPORTED_CODEC",
+  "STT_UNAVAILABLE",
+  "TRANSCRIPTION_FAILED",
+]);
+
 export interface QaDefenseQuestionRequest {
   readonly presentationSessionId: string;
   readonly questionText: string;
@@ -59,6 +72,14 @@ export type QaDefenseAnswer =
 
 /** Questions are rejected until the presenter explicitly opened this session's Q&A. */
 export class QaDefenseNotOpenError extends Error {}
+
+/**
+ * Closed view of ONE spoken-question clip transcription. TRANSCRIBED carries the presenter-
+ * editable transcript; REJECTED preserves the typed reason so failure copy can be honest.
+ */
+export type SpokenQuestionTranscription =
+  | Readonly<{ outcome: "TRANSCRIBED"; text: string }>
+  | Readonly<{ outcome: "REJECTED"; reason: string }>;
 
 function citation(value: unknown): QaDefenseCitation | null {
   if (typeof value !== "object" || value === null) return null;
@@ -187,4 +208,46 @@ export async function submitQaDefenseQuestion(
     throw new Error("The Q&A defense request failed.");
   }
   return parsed;
+}
+
+/**
+ * Uploads one bounded question clip for server-side STT via the private backend's pinned
+ * local adapter. Rejections arrive as a typed outcome (HTTP 200) — an honest rejection is a
+ * result, not a transport error; only a non-2xx or unreadable body throws.
+ */
+export async function transcribeQuestionClip(
+  context: PrivateClientContext,
+  csrfToken: string,
+  audio: Blob,
+  durationMs: number,
+): Promise<SpokenQuestionTranscription> {
+  const response = await fetch(`${context.baseUrl}${QUESTION_CLIP_TRANSCRIPTION_URL}`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "x-csrf-token": csrfToken,
+      "content-type": QUESTION_CLIP_MIME_TYPE,
+      "x-audio-duration-ms": String(Math.max(0, Math.floor(durationMs))),
+    },
+    body: audio,
+  });
+  if (!response.ok) throw new Error("The question clip could not be transcribed.");
+  const body = await responseBody(response);
+  if (typeof body !== "object" || body === null) {
+    throw new Error("The question clip transcription was unreadable.");
+  }
+  const outcome = Reflect.get(body, "outcome");
+  if (outcome === "TRANSCRIBED") {
+    const text = Reflect.get(body, "text");
+    if (typeof text === "string" && text.trim().length > 0) return { outcome, text };
+    throw new Error("The question clip transcription was unreadable.");
+  }
+  if (outcome === "REJECTED") {
+    const reason = Reflect.get(body, "reason");
+    // Closed at this end too: an unknown reason cannot render fabricated success, it fails loudly.
+    if (typeof reason === "string" && CLIP_REJECTION_REASONS.has(reason)) {
+      return { outcome, reason };
+    }
+  }
+  throw new Error("The question clip transcription was unreadable.");
 }

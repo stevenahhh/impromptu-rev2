@@ -26,7 +26,9 @@ import {
   type QaDefenseAnswer,
   type QaDefenseLifecycle,
   type QaDefenseQuestionRequest,
+  type SpokenQuestionTranscription,
   submitQaDefenseQuestion,
+  transcribeQuestionClip,
 } from "./qa-defense";
 import {
   type RecommendationOutcome,
@@ -111,6 +113,12 @@ export interface ConsoleSessionClient {
     request: QaDefenseQuestionRequest,
     signal?: AbortSignal,
   ): Promise<QaDefenseAnswer>;
+  // One spoken-question clip (WebM/Opus) transcribed server-side by the pinned local STT.
+  transcribeQuestionClip?(
+    csrfToken: string,
+    audio: Blob,
+    durationMs: number,
+  ): Promise<SpokenQuestionTranscription>;
   readFinalizedReport?(presentationSessionId: string): Promise<SessionReportReadView>;
 }
 
@@ -154,6 +162,8 @@ export function createConsoleSessionClient(
       openQaDefense(context, csrfToken, presentationSessionId),
     submitQaDefenseQuestion: (csrfToken, request) =>
       submitQaDefenseQuestion(context, csrfToken, request),
+    transcribeQuestionClip: (csrfToken, audio, durationMs) =>
+      transcribeQuestionClip(context, csrfToken, audio, durationMs),
     uploadDeck: (csrfToken, file, uploadOptions) =>
       uploadDeck(context, csrfToken, file, uploadOptions),
   };

@@ -6,6 +6,7 @@ import { messages } from "./i18n";
 import { AnswerCard } from "./qa-answer-cards";
 import type { QaDefenseAnswer, QaDefenseQuestionRequest } from "./session-client";
 import { QaDefenseNotOpenError } from "./session-client";
+import { type QuestionClipSeams, SpokenQuestionControl } from "./spoken-question-control";
 
 type Phase = "IDLE" | "OPENING" | "READY" | "ASKING";
 
@@ -16,8 +17,11 @@ type Phase = "IDLE" | "OPENING" | "READY" | "ASKING";
  */
 export function QaDefensePanel({
   presentationSessionId,
+  recorderSeams,
 }: Readonly<{
   presentationSessionId: string;
+  /** Test-only capture seams, forwarded untouched to the push-to-talk control. */
+  recorderSeams?: QuestionClipSeams;
 }>) {
   const { client, locale, session } = useAuth();
   const text: Messages = messages(locale);
@@ -92,6 +96,20 @@ export function QaDefensePanel({
     setDraft(value);
   };
 
+  const transcribeMethod = client.transcribeQuestionClip;
+  const transcribeClip =
+    session === null || transcribeMethod === undefined
+      ? undefined
+      : (audio: Blob, durationMs: number) => transcribeMethod(session.csrfToken, audio, durationMs);
+
+  const onTranscript = (transcript: string) => {
+    // REPLACE, never append: a half-typed fragment stitched to a fresh transcript produces a
+    // question nobody asked deliberately, while a visible replace keeps exactly one editable
+    // transcript the presenter can review before submitting. Typed text is not silently
+    // destroyed — the transcript lands in the field for review BEFORE anything is sent.
+    enteredBySpeechRef.current = true;
+    setDraft(transcript);
+  };
 
   return (
     <Panel className="console-qa" title={text.qaTitle} tone="inset">
@@ -121,6 +139,15 @@ export function QaDefensePanel({
               >
                 {phase === "ASKING" ? text.qaAsking : text.qaSubmit}
               </Button>
+              {transcribeClip === undefined ? null : (
+                <SpokenQuestionControl
+                  disabled={false}
+                  onTranscript={onTranscript}
+                  text={text}
+                  transcribe={transcribeClip}
+                  {...(recorderSeams === undefined ? {} : { seams: recorderSeams })}
+                />
+              )}
             </div>
             {answer === null ? null : (
               <AnswerCard
