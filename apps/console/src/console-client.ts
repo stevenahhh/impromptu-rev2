@@ -22,6 +22,13 @@ import {
 } from "./presentation-lifecycle";
 import type { PrivateClientContext, ReportEventSource } from "./private-transport";
 import {
+  openQaDefense,
+  type QaDefenseAnswer,
+  type QaDefenseLifecycle,
+  type QaDefenseQuestionRequest,
+  submitQaDefenseQuestion,
+} from "./qa-defense";
+import {
   type RecommendationOutcome,
   type RecommendationRequest,
   recommend,
@@ -97,6 +104,13 @@ export interface ConsoleSessionClient {
     csrfToken: string,
     presentationSessionId: string,
   ): Promise<SessionReportView>;
+  // Post-talk Q&A defense, mounted on the report surface the end action navigates to.
+  openQaDefense?(csrfToken: string, presentationSessionId: string): Promise<QaDefenseLifecycle>;
+  submitQaDefenseQuestion?(
+    csrfToken: string,
+    request: QaDefenseQuestionRequest,
+    signal?: AbortSignal,
+  ): Promise<QaDefenseAnswer>;
   readFinalizedReport?(presentationSessionId: string): Promise<SessionReportReadView>;
 }
 
@@ -136,6 +150,10 @@ export function createConsoleSessionClient(
       endPresentationAndAwaitReport(context, csrfToken, presentationSessionId),
     readFinalizedReport: (presentationSessionId) =>
       readFinalizedReport(context, presentationSessionId),
+    openQaDefense: (csrfToken, presentationSessionId) =>
+      openQaDefense(context, csrfToken, presentationSessionId),
+    submitQaDefenseQuestion: (csrfToken, request) =>
+      submitQaDefenseQuestion(context, csrfToken, request),
     uploadDeck: (csrfToken, file, uploadOptions) =>
       uploadDeck(context, csrfToken, file, uploadOptions),
   };

@@ -876,3 +876,90 @@ html[data-surface="console"] [contenteditable="true"] {
   -webkit-user-select: text;
   user-select: text;
 }
+
+/* Post-talk Q&A defense: sources lead the answer card because what backs an answer is the
+   feature's point; abstention cards are honest notices, not error surfaces. */
+.console-qa__body {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.console-qa__question {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.console-qa__question span {
+  color: var(--text-secondary);
+  font-size: var(--text-caption);
+}
+
+/* Push-to-talk question capture: the record control sits beside submit, never replacing it. */
+.console-qa__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.console-qa__spoken {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.console-qa__card {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.console-qa__card p {
+  margin: var(--space-0);
+  font-size: var(--text-small);
+  line-height: var(--line-body);
+}
+
+.console-qa__sources {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-0);
+  padding: var(--space-0);
+  list-style: none;
+}
+
+.console-qa__source {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: var(--size-hairline) solid var(--border-emphasis);
+  border-radius: var(--radius-md);
+  background: var(--surface-inset);
+}
+
+.console-qa__source h3 {
+  margin: var(--space-0);
+  font-size: var(--text-body);
+  line-height: var(--line-body);
+}
+
+.console-qa__source h3 a {
+  color: inherit;
+  overflow-wrap: anywhere;
+}
+
+.console-qa__meta,
+.console-qa .console-caption {
+  margin: var(--space-0);
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: var(--text-caption);
+}
+
+.console-qa__quote {
+  margin: var(--space-0);
+  padding-inline-start: var(--space-3);
+  border-inline-start: var(--size-hairline) solid var(--border-subtle);
+}
+
+.console-qa__quote p {
+  -webkit-user-select: text;
+  user-select: text;
+}

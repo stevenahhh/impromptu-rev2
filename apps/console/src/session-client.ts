@@ -23,6 +23,14 @@ export type { LiveCandidateSnapshotView } from "./live-publication";
 export type { ActivePresentationView, PresentationSessionView } from "./presentation-lifecycle";
 export type { ReportEventSource } from "./private-transport";
 export type {
+  QaDefenseAnswer,
+  QaDefenseCitation,
+  QaDefenseLifecycle,
+  QaDefenseQuestionRequest,
+  SpokenQuestionTranscription,
+} from "./qa-defense";
+export { QaDefenseNotOpenError } from "./qa-defense";
+export type {
   PrivateEvidenceCardView,
   RecommendationOutcome,
   RecommendationRequest,

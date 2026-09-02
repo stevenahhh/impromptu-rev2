@@ -5,6 +5,7 @@ import { useAuth } from "./auth-session";
 import { messages } from "./i18n";
 import { PresentationReport } from "./presentation-report";
 import { presentationReportText } from "./presentation-report-text";
+import { QaDefensePanel } from "./qa-defense-panel";
 import { record } from "./server-payload";
 import type { SessionReportView } from "./session-client";
 import { sessionReport } from "./session-report-view";
@@ -80,6 +81,12 @@ export function PresentationReportPage() {
   }
 
   return (
-    <PresentationReport report={report} text={presentationReportText(text)} slides={slides} />
+    <>
+      <PresentationReport report={report} text={presentationReportText(text)} slides={slides} />
+
+      {/* The end action lands here immediately, so this is where a finished presenter can reach
+          Q&A in one click — before leaving for anywhere else. */}
+      <QaDefensePanel presentationSessionId={presentationSessionId} />
+    </>
   );
 }
