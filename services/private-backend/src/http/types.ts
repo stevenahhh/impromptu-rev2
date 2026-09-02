@@ -13,6 +13,7 @@ import type { PreparedEvidenceCoordinator } from "../prepared-evidence.ts";
 import type { RateLimiter } from "../rate-limit.ts";
 import type { SessionReportReadRouteHandler } from "../report/http.ts";
 import type { QaDefenseRouteDependencies } from "./routes/qa-defense.ts";
+import type { SpokenQuestionRouteDependencies } from "./routes/spoken-question.ts";
 
 export type { ReferenceDocumentSummary };
 
@@ -111,6 +112,7 @@ export interface PrivateBackendHttpDependencies {
   readonly sessionReportRead?: SessionReportReadRouteHandler;
   /** Optional exactly like `recommendations?`: the handler answers Q&A routes with 503 without it. */
   readonly qaDefense?: QaDefenseRouteDependencies;
+  readonly spokenQuestions?: SpokenQuestionRouteDependencies;
   readonly persist?: () => Promise<void>;
   readonly uploads?: DeckUploadService;
   readonly referenceDocuments?: ReferenceDocumentService;

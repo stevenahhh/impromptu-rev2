@@ -7,4 +7,5 @@ export * from "./private-identifiers.ts";
 export * from "./private-protocol.ts";
 export * from "./private-qa-defense.ts";
 export * from "./private-reference-documents.ts";
+export * from "./private-spoken-question.ts";
 export * from "./session-identifiers.ts";

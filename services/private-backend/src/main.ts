@@ -27,6 +27,7 @@ import { PreparedEvidenceCoordinator } from "./prepared-evidence.ts";
 import { createPostgresPreparedEvidencePersistence } from "./prepared-evidence-store-postgres.ts";
 import { ProjectionHttpPort } from "./projection-http-port.ts";
 import { QaExchangeLedger } from "./qa/qa-exchange-ledger.ts";
+import { createSpokenQuestionStt } from "./qa/spoken-question-stt.ts";
 import { createTokenBucketRateLimiter } from "./rate-limit.ts";
 import { createPostgresSessionReportRepository } from "./report/postgres-session-report-repository.ts";
 import { createProvisionedSessionReportRepository } from "./report/provisioned-session-report-repository.ts";
@@ -146,6 +147,11 @@ const qaDefense = createQaDefense({
   qaExchanges: new QaExchangeLedger(sessionReportFinalizer),
   persist: persistence.persist,
 });
+// Spoken Q&A questions: one bounded clip per question, transcribed through the same pinned
+// local whisper.cpp adapter as continuous capture (no second STT runtime, nothing in-browser).
+const spokenQuestions = {
+  transcribe: createSpokenQuestionStt({ router: modelRouter }),
+};
 const metrics = createMetricsRegistry("private_backend");
 const loginRateLimiters = {
   account: createTokenBucketRateLimiter({
@@ -180,6 +186,7 @@ const server = Bun.serve({
     ...(audio === undefined ? {} : { audio }),
     sessionReportRead,
     qaDefense,
+    spokenQuestions,
     persist: persistence.persist,
     uploads: deckUploadService,
     referenceDocuments: retrievalStack.referenceDocuments,
