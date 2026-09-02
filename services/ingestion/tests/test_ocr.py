@@ -14,10 +14,13 @@ _TSV_HEADER = (
     b"level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\t"
     b"height\tconf\ttext\n"
 )
-_VALID_TSV = _TSV_HEADER + (
-    "5\t1\t1\t1\t1\t1\t200\t100\t400\t80\t96\t형식 중립\n"
-    "5\t1\t1\t1\t1\t2\t620\t100\t180\t80\t95\t근거 2026\n"
-).encode()
+_VALID_TSV = (
+    _TSV_HEADER
+    + (
+        "5\t1\t1\t1\t1\t1\t200\t100\t400\t80\t96\t형식 중립\n"
+        "5\t1\t1\t1\t1\t2\t620\t100\t180\t80\t95\t근거 2026\n"
+    ).encode()
+)
 
 
 class _Pixmap:
@@ -99,8 +102,8 @@ def test_ocr_runs_exact_bounded_tesseract_tsv_command_and_maps_line_bbox(
         )
     ]
     assert page.matrix is not None
-    assert page.matrix.a == pytest.approx(200 / 72)
-    assert page.matrix.d == pytest.approx(200 / 72)
+    assert page.matrix.a == pytest.approx(300 / 72)
+    assert page.matrix.d == pytest.approx(300 / 72)
     assert page.alpha is False
     assert page.colorspace is pymupdf.csRGB
     assert [element.model_dump() for element in elements] == [
@@ -114,6 +117,88 @@ def test_ocr_runs_exact_bounded_tesseract_tsv_command_and_maps_line_bbox(
             "height": 28.8,
         }
     ]
+
+
+def _tsv(rows: str) -> bytes:
+    return _TSV_HEADER + rows.encode()
+
+
+def test_ocr_rasterizes_at_300_dpi_for_tesseract_accuracy() -> None:
+    page = _Page()
+    _rasterize(page)
+
+    assert page.matrix is not None
+    assert page.matrix.a == pytest.approx(300 / 72)
+
+
+def test_ocr_tsv_quote_word_does_not_swallow_following_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _available(monkeypatch)
+    tsv = _tsv(
+        "5\t1\t1\t1\t1\t1\t100\t100\t40\t50\t90\t국립\n"
+        '5\t1\t1\t1\t1\t2\t200\t100\t40\t50\t31\t"\n'
+        "5\t1\t1\t1\t1\t3\t300\t100\t40\t50\t92\t순천\n"
+    )
+
+    def runner(command: list[str], **options: object) -> subprocess.CompletedProcess[bytes]:
+        return subprocess.CompletedProcess(command, 0, stdout=tsv, stderr=b"")
+
+    elements = extract_ocr_text(_Page(), timeout_seconds=5, runner=runner)
+
+    assert [element.text for element in elements] == ["국립 순천"]
+    assert all("\t" not in element.text and "\n" not in element.text for element in elements)
+
+
+def test_ocr_joins_spurious_hangul_letter_spacing_by_geometry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _available(monkeypatch)
+    # Same glyph height throughout: intra-word letter-spacing gaps are tiny
+    # relative to the glyph, real word spaces are wide.
+    tsv = _tsv(
+        "5\t1\t1\t1\t1\t1\t100\t100\t40\t50\t95\t코\n"
+        "5\t1\t1\t1\t1\t2\t150\t100\t40\t50\t95\t립\n"
+        "5\t1\t1\t1\t1\t3\t200\t100\t40\t50\t95\t순\n"
+        "5\t1\t1\t1\t1\t4\t250\t100\t40\t50\t95\t천\n"
+        "5\t1\t1\t1\t1\t5\t400\t100\t40\t50\t95\t대\n"
+        "5\t1\t1\t1\t1\t6\t450\t100\t40\t50\t95\t학교\n"
+        "5\t1\t1\t1\t2\t1\t500\t200\t120\t60\t95\t자려고\n"
+        "5\t1\t1\t1\t2\t2\t650\t200\t40\t60\t95\t누\n"
+        "5\t1\t1\t1\t2\t3\t690\t200\t40\t60\t95\t웠\n"
+        "5\t1\t1\t1\t2\t4\t720\t200\t40\t60\t95\t는데\n"
+    )
+
+    def runner(command: list[str], **options: object) -> subprocess.CompletedProcess[bytes]:
+        return subprocess.CompletedProcess(command, 0, stdout=tsv, stderr=b"")
+
+    elements = extract_ocr_text(_Page(), timeout_seconds=5, runner=runner)
+
+    assert [(element.element_id, element.text) for element in elements] == [
+        ("ocr:text:1", "코립순천 대학교"),
+        ("ocr:text:2", "자려고 누웠는데"),
+    ]
+
+
+def test_ocr_drops_symbol_only_and_low_confidence_noise_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _available(monkeypatch)
+    tsv = _tsv(
+        "5\t1\t1\t1\t1\t1\t100\t100\t40\t50\t85\t|\n"
+        "5\t1\t1\t1\t1\t2\t160\t100\t40\t50\t30\t—\n"
+        "5\t1\t1\t1\t1\t3\t220\t100\t40\t50\t0\tu!\n"
+        "5\t1\t1\t1\t1\t4\t280\t100\t40\t50\t14\t_\n"
+        "5\t1\t1\t1\t1\t5\t340\t100\t40\t50\t33\tㄴㄴ\n"
+        "5\t1\t1\t1\t1\t6\t400\t100\t120\t50\t93\t에너지\n"
+    )
+
+    def runner(command: list[str], **options: object) -> subprocess.CompletedProcess[bytes]:
+        return subprocess.CompletedProcess(command, 0, stdout=tsv, stderr=b"")
+
+    elements = extract_ocr_text(_Page(), timeout_seconds=5, runner=runner)
+
+    assert [element.text for element in elements] == ["에너지"]
 
 
 def test_ocr_caps_the_longest_raster_edge_at_4096() -> None:
@@ -151,9 +236,7 @@ def test_ocr_missing_binary_or_model_is_unavailable(
         extract_ocr_text(_Page(), timeout_seconds=1)
     assert "binary is missing" in str(_raised(missing_binary.value))
 
-    monkeypatch.setattr(
-        "impromptu_ingestion.ocr.shutil.which", lambda _: "/usr/bin/tesseract"
-    )
+    monkeypatch.setattr("impromptu_ingestion.ocr.shutil.which", lambda _: "/usr/bin/tesseract")
     with pytest.raises(StructuralExtractionError) as missing_model:
         extract_ocr_text(_Page(), timeout_seconds=1)
     assert "pinned kor model is missing" in str(_raised(missing_model.value))
@@ -182,9 +265,7 @@ def test_ocr_timeout_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.parametrize("tsv", [b"", _TSV_HEADER])
-def test_ocr_empty_tsv_is_unavailable(
-    tsv: bytes, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_ocr_empty_tsv_is_unavailable(tsv: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
     _available(monkeypatch)
 
     def runner(command: list[str], **_: object) -> subprocess.CompletedProcess[bytes]:
