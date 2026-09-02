@@ -3,11 +3,16 @@ import { PublishedDeckArtifactSchema } from "@impromptu/contracts/public";
 import { PreparedEvidenceProjectionGateway } from "@impromptu/projection-gateway";
 import { parsePrivateBackendConfig } from "../src/config.ts";
 import { createPrivateBackendHandler } from "../src/http.ts";
+import type { PrivateBackendHandler } from "../src/http/types.ts";
 import { PreparedEvidenceCoordinator } from "../src/prepared-evidence.ts";
+import { PreparedEvidenceStateConflictError } from "../src/prepared-evidence-store-postgres.ts";
 
 const origin = "https://console.example.test";
 const config = parsePrivateBackendConfig({ CONSOLE_ORIGIN: origin });
 
+// Returns null through a call so the assertions below still see `string | null`: a bare `null`
+// initializer lets control-flow analysis narrow the variable to `null`, because the assignment
+// happens inside a callback TypeScript cannot track, and `expect(x).toBe("...")` then rejects.
 function emptyCredential(): string | null {
   return null;
 }
@@ -184,5 +189,66 @@ describe("account session HTTP boundary", () => {
     expect(deck.slides[0]?.image.url).toBe(
       "https://public.example.test/rendered/deck/slides/slide-1.svg",
     );
+  });
+});
+
+describe("sign-in under prepared-evidence state conflict", () => {
+  // Two devices signing in at the same moment both touch the prepared-evidence snapshot; when
+  // the compare-and-swap loses, the loser used to surface as an unhandled 500 on the login
+  // path. A conflict must be surfaced deliberately (503, retryable) - never as an internal
+  // error - and the other concurrent sign-in must still succeed.
+  function conflictingHandler(persist: () => Promise<void>) {
+    return createPrivateBackendHandler(config, {
+      coordinator: new PreparedEvidenceCoordinator(new PreparedEvidenceProjectionGateway()),
+      identityVerifier: {
+        async verifyCredentials() {
+          return { accountId: "account_alpha", actorId: "actor_alpha" };
+        },
+      },
+      internalAuthToken: "internal-test-token-alpha",
+      now: () => 1_000,
+      persist,
+    });
+  }
+
+  test("two concurrent sign-ins survive one losing the state compare-and-swap", async () => {
+    let persistCalls = 0;
+    const handler = conflictingHandler(async () => {
+      persistCalls += 1;
+      if (persistCalls === 1) throw new PreparedEvidenceStateConflictError("test conflict");
+    });
+    const signIn = () =>
+      handler(
+        request("/v1/account-sessions", {
+          method: "POST",
+          body: JSON.stringify({ username: "alpha@example.test", password: "alpha-password" }),
+        }),
+      );
+    const [first, second] = await Promise.all([signIn(), signIn()]);
+    const statuses = [first.status, second.status].sort((left, right) => left - right);
+
+    expect(persistCalls).toBe(2);
+    expect(statuses).toEqual([201, 503]);
+    const conflicted = first.status === 503 ? first : second;
+    expect(await conflicted.json()).toEqual({ error: "state_write_conflict" });
+  });
+
+  test("both concurrent sign-ins surface a deliberate conflict when every write loses", async () => {
+    const handler = conflictingHandler(async () => {
+      throw new PreparedEvidenceStateConflictError("test conflict");
+    });
+    const signIn = () =>
+      handler(
+        request("/v1/account-sessions", {
+          method: "POST",
+          body: JSON.stringify({ username: "alpha@example.test", password: "alpha-password" }),
+        }),
+      );
+    const responses = await Promise.all([signIn(), signIn()]);
+
+    for (const response of responses) {
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({ error: "state_write_conflict" });
+    }
   });
 });
