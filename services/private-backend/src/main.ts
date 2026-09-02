@@ -105,6 +105,7 @@ const retrievalStack = createRetrievalStack({
 });
 const recommendations = createRecommendations({
   modelRouter,
+  slideText: retrievalStack.retrievalStore,
   internalRetrieval: retrievalStack.internalRetrieval,
   externalSearch: retrievalStack.externalSearch,
   externalFetcher: retrievalStack.externalFetcher,

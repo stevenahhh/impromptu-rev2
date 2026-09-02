@@ -4,11 +4,13 @@ import type { PreparedEvidenceCoordinator } from "../prepared-evidence.ts";
 import type { SafeExternalEvidenceFetcher } from "../retrieval/external-fetch.ts";
 import type { KeylessFirstExternalSearchBoundary } from "../retrieval/external-search.ts";
 import type { InternalRetrievalService } from "../retrieval/internal-retrieval.ts";
+import type { PostgresDeckRetrievalStore } from "../retrieval/postgres-deck-retrieval.ts";
 import { PrivateRecommendationPipeline } from "../verifier/recommendation-pipeline.ts";
 
 /** Wires the recommendation pipeline with its stage/hedge/reconciliation observers. */
 export function createRecommendations(options: {
   readonly modelRouter: ServerModelRouter;
+  readonly slideText: PostgresDeckRetrievalStore;
   readonly internalRetrieval: InternalRetrievalService;
   readonly externalSearch: KeylessFirstExternalSearchBoundary;
   readonly externalFetcher: SafeExternalEvidenceFetcher;
@@ -19,6 +21,7 @@ export function createRecommendations(options: {
   const { logger } = options;
   return new PrivateRecommendationPipeline({
     router: options.modelRouter,
+    slideText: options.slideText,
     contexts: {
       async resolve(accountSessionId) {
         const session = await options

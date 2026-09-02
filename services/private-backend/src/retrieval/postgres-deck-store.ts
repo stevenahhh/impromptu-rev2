@@ -4,10 +4,12 @@ import { prepareDeckCorpus } from "./deck-corpus-preparation.ts";
 import { searchAuthorizedCandidates } from "./deck-hybrid-search.ts";
 import {
   AUTHORIZATION_VERSION,
+  DECK_CORPUS_KIND,
   type DeckAccessAuthority,
   type DeckEmbeddingPort,
   type DeckIndexLogger,
   type HybridRetrievalDiagnosticObserver,
+  MAX_CHUNK_CHARACTERS,
   REFERENCE_DOCUMENT_CORPUS_KIND,
   type RetrievalRow,
 } from "./deck-retrieval-model.ts";
@@ -73,6 +75,38 @@ export class PostgresDeckRetrievalStore
       principal,
       request,
     );
+  }
+
+  /**
+   * The text this deck actually carries on one slide, joined in chunk order. A browser can only
+   * name a slide by its ordinal and its accessible name, and asking for evidence with that name
+   * made the model assert the ordinal as a fact the deck never states. Grounding the request in
+   * the slide's own words is what the presenter is asking for in the first place. Returns null
+   * when the slide carries no extractable text, so the caller keeps its own query.
+   */
+  async readSlideText(
+    principal: RetrievalPrincipal,
+    request: Readonly<{ deckVersion: string; manifestHash: string; slideOrdinal: number }>,
+  ): Promise<string | null> {
+    const rows = await this.#repository.transaction(
+      principal.tenantId,
+      async (sql) =>
+        await sql<readonly { content: string; anchor: string }[]>`
+          SELECT content, anchor
+          FROM private_app.deck_retrieval_chunks
+          WHERE tenant_id = ${principal.tenantId}
+            AND deck_version = ${request.deckVersion}
+            AND manifest_hash = ${request.manifestHash}
+            AND corpus_kind = ${DECK_CORPUS_KIND}
+            AND anchor LIKE ${`slide=${request.slideOrdinal}&%`}
+          ORDER BY anchor
+        `,
+    );
+    const text = rows
+      .map((row) => row.content)
+      .join(" ")
+      .trim();
+    return text.length === 0 ? null : text.slice(0, MAX_CHUNK_CHARACTERS);
   }
 
   async prefilter(principal: RetrievalPrincipal, request: RetrievalRequest) {

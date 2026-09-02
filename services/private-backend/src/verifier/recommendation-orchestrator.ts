@@ -29,6 +29,15 @@ import {
   startExternalEvidenceBranch,
 } from "./recommendation-retrieval.ts";
 
+/** Reads what a slide actually says, so a request anchored to a slide is grounded in the
+ * deck's own words instead of the accessible name a browser can see. */
+export interface SlideTextReader {
+  readSlideText(
+    principal: Readonly<{ tenantId: string; principalId: string }>,
+    request: Readonly<{ deckVersion: string; manifestHash: string; slideOrdinal: number }>,
+  ): Promise<string | null>;
+}
+
 export interface RecommendationPrincipalContext {
   readonly tenantId: string;
   readonly principalId: string;
@@ -42,6 +51,7 @@ export interface RecommendationContextAuthority {
 export class PrivateRecommendationPipeline {
   readonly #contexts: RecommendationContextAuthority;
   readonly #internal: InternalRetrievalService;
+  readonly #slideText: SlideTextReader | undefined;
   readonly #externalSearch: ExternalSearchBoundary | undefined;
   readonly #externalFetch: Pick<SafeExternalEvidenceFetcher, "fetchCandidate"> | undefined;
   readonly #now: () => number;
@@ -54,6 +64,9 @@ export class PrivateRecommendationPipeline {
     readonly router: Pick<ServerModelRouter, "invoke">;
     readonly contexts: RecommendationContextAuthority;
     readonly internal: InternalRetrievalService;
+    /** Reads what a slide actually says, so a request anchored to a slide is grounded in the
+     * deck's own words instead of the accessible name a browser can see. */
+    readonly slideText?: SlideTextReader;
     readonly externalSearch?: ExternalSearchBoundary;
     readonly externalFetch?: Pick<SafeExternalEvidenceFetcher, "fetchCandidate">;
     readonly now?: () => number;
@@ -62,6 +75,7 @@ export class PrivateRecommendationPipeline {
   }) {
     this.#contexts = dependencies.contexts;
     this.#internal = dependencies.internal;
+    this.#slideText = dependencies.slideText;
     this.#externalSearch = dependencies.externalSearch;
     this.#externalFetch = dependencies.externalFetch;
     this.#now = dependencies.now ?? Date.now;
@@ -110,6 +124,21 @@ export class PrivateRecommendationPipeline {
     // UNAUTHORIZED; the run never proceeds without an authorized principal context.
     const principal = await this.#contexts.resolve(accountSessionId).catch(() => null);
     if (principal === null) return abstain("UNAUTHORIZED", startedAtMs, this.#now());
+    // A slide-anchored request arrives with the accessible name a browser can read, which is
+    // the deck title and an ordinal. Grounding it in the slide's own indexed words keeps the
+    // model from asserting that ordinal as a fact the deck never states. A slide with no
+    // extractable text keeps the caller's query.
+    const slideOrdinal = request.data.slideOrdinal;
+    if (slideOrdinal !== undefined && this.#slideText !== undefined) {
+      const slideText = await this.#slideText
+        .readSlideText(principal, {
+          deckVersion: request.data.deckVersion,
+          manifestHash: request.data.manifestHash,
+          slideOrdinal,
+        })
+        .catch(() => null);
+      if (slideText !== null) request.data.query = slideText;
+    }
     const trustedContext = createTrustedModelContext({
       tenantId: principal.tenantId,
       principalId: principal.principalId,

@@ -25,6 +25,15 @@ export const RetrievalRequestSchema = z
     query: z.string().trim().min(1).max(2_000),
     deckVersion: DeckVersionIdSchema,
     manifestHash: Sha256Schema,
+    /**
+     * Anchors the request to one slide. A browser only knows a slide's public key and its
+     * accessible name, which is the deck title followed by an ordinal — asking for evidence
+     * with that as the query made the model assert the ordinal as a fact the deck never
+     * states, and the deterministic gate rightly refused every slide. Given the key, the
+     * private side substitutes the slide's own indexed text, which is what the presenter
+     * actually wants evidence for.
+     */
+    slideOrdinal: z.number().int().min(1).max(10_000).optional(),
     maxResults: z.number().int().min(1).max(3).default(3),
   })
   .strict();
