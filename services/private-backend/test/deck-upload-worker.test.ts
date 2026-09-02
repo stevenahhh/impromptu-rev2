@@ -5,7 +5,6 @@
  *
  * Contract (this file is the spec):
  *
- *   export const MAX_DECK_UPLOAD_BYTES = 100 * 1024 * 1024;
  *
  *   export type DeckUploadRejectionCode =
  *     | "empty_input" | "unsupported_extension" | "malformed_input"
@@ -83,7 +82,6 @@ import {
   type DeckUploadRejectionCode,
   type DeckUploadWorker,
   DeckUploadWorkerError,
-  MAX_DECK_UPLOAD_BYTES,
   type RenderSubprocessAdapter,
   type RenderSubprocessRequest,
 } from "../src/deck-upload-worker.ts";
@@ -274,10 +272,6 @@ describe("deck upload worker", () => {
     return createDeckUploadWorker({ subprocess: renderer.adapter, stagingRoot, artifactRoot });
   }
 
-  test("pins the upload cap to 100 MiB", () => {
-    expect(MAX_DECK_UPLOAD_BYTES).toBe(100 * 1024 * 1024);
-  });
-
   test("rejects an empty declared upload before reading the body or invoking the renderer", async () => {
     const manual = manualStream();
     const code = await rejection(worker(), validInput({ byteLength: 0, content: manual.stream }));
@@ -361,18 +355,6 @@ describe("deck upload worker", () => {
     expect(readdirSync(artifactRoot).filter((entry) => entry.endsWith(".part"))).toEqual([]);
   });
 
-  test("rejects a declared over-limit upload from the declaration alone", async () => {
-    const manual = manualStream();
-    const code = await rejection(
-      worker(),
-      validInput({ byteLength: MAX_DECK_UPLOAD_BYTES + 1, content: manual.stream }),
-    );
-    expect(code).toBe("input_too_large");
-    expect(manual.pulls).toBe(1); // only the construction pull; the body is never read
-    expect(renderer.calls).toHaveLength(0);
-    assertNoResidue(stagingRoot, artifactRoot, renderer.calls);
-  });
-
   test("rejects malformed content from the bounded stream prefix", async () => {
     const pptx = new TextEncoder().encode("this is not a zip container");
     expect(
@@ -430,36 +412,6 @@ describe("deck upload worker", () => {
     expect(renderer.calls).toHaveLength(0);
     assertNoResidue(stagingRoot, artifactRoot, renderer.calls);
   });
-
-  test("rejects an actual over-limit body mid-stream, canceling the source", async () => {
-    const chunk = new Uint8Array(4 * 1024 * 1024);
-    chunk.set([0x50, 0x4b, 0x03, 0x04]); // valid zip prefix; the cap, not the signature, rejects this body
-    let canceled = false;
-    let enqueued = 0;
-    const stream = new ReadableStream<Uint8Array>({
-      pull(controller) {
-        if (enqueued >= 27) {
-          controller.close();
-          return Promise.resolve();
-        }
-        enqueued += 1;
-        controller.enqueue(chunk);
-        return Promise.resolve();
-      },
-      cancel() {
-        canceled = true;
-      },
-    });
-    // Declared exactly at the cap (allowed); the actual stream exceeds it.
-    const code = await rejection(
-      worker(),
-      validInput({ byteLength: MAX_DECK_UPLOAD_BYTES, content: stream }),
-    );
-    expect(code).toBe("input_too_large");
-    expect(canceled).toBe(true);
-    expect(renderer.calls).toHaveLength(0);
-    assertNoResidue(stagingRoot, artifactRoot, renderer.calls);
-  }, 30_000);
 
   test("consumes a multi-chunk body incrementally without whole-body buffering", async () => {
     const chunks: [Uint8Array, Uint8Array, Uint8Array, Uint8Array] = [

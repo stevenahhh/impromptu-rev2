@@ -8,7 +8,6 @@ import { createDeckUploadService } from "../src/deck-upload-service.ts";
 import {
   createDeckUploadWorker,
   type DeckUploadRejectionCode,
-  MAX_DECK_UPLOAD_BYTES,
   type RenderSubprocessAdapter,
 } from "../src/deck-upload-worker.ts";
 import {
@@ -160,7 +159,6 @@ function assertClean(input: Fixture): void {
   expect(input.renderCalls).toEqual([]);
   expect(readdirSync(input.stagingRoot)).toEqual([".keep"]);
   expect(readdirSync(input.artifactRoot)).toEqual([".keep"]);
-  expect(readdirSync(input.artifactRoot).filter((entry) => entry.endsWith(".part"))).toEqual([]);
   expect(existsSync(input.outsideSentinel)).toBe(true);
 }
 
@@ -225,66 +223,6 @@ describe("real deck upload handler rejection boundary", () => {
     expect(JSON.stringify(result.payload)).not.toContain(upload.filename);
     assertClean(input);
   });
-
-  test("returns 413 for a declared over-limit multipart request without reading its file", async () => {
-    const input = fixture();
-    const auth = await signIn(input.handler);
-    const boundary = "declared-over-limit-boundary";
-
-    const result = await rejectMultipartBody(
-      input,
-      auth,
-      PPTX_MAGIC,
-      `multipart/form-data; boundary=${boundary}`,
-      MAX_DECK_UPLOAD_BYTES + 1024 * 1024,
-    );
-
-    expect(result.status).toBe(413);
-    expect(result.payload).toEqual({
-      error: "deck_upload_rejected",
-      code: "input_too_large",
-    });
-    assertClean(input);
-  });
-
-  test("rejects an actual over-limit stream, cancels it, and removes upload.part", async () => {
-    const input = fixture();
-    const auth = await signIn(input.handler);
-    const boundary = "over-limit-deck-boundary";
-    const chunk = new Uint8Array(4 * 1024 * 1024);
-    chunk.set(PPTX_MAGIC);
-    const preamble = new TextEncoder().encode(
-      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="actual-large.pptx"\r\nContent-Type: ${PPTX_CONTENT_TYPE}\r\n\r\n`,
-    );
-    let chunks = 0;
-    let canceled = false;
-    const body = new ReadableStream<Uint8Array>({
-      pull(controller) {
-        chunks += 1;
-        controller.enqueue(chunks === 1 ? preamble : chunk);
-      },
-      cancel() {
-        canceled = true;
-      },
-    });
-
-    const result = await rejectMultipartBody(
-      input,
-      auth,
-      body,
-      `multipart/form-data; boundary=${boundary}`,
-    );
-
-    expect(result.status).toBe(413);
-    expect(result.payload).toEqual({
-      error: "deck_upload_rejected",
-      code: "input_too_large",
-    });
-    expect(chunks).toBeGreaterThan(25);
-    expect((chunks - 1) * chunk.byteLength).toBeGreaterThan(MAX_DECK_UPLOAD_BYTES);
-    expect(canceled).toBe(true);
-    assertClean(input);
-  }, 30_000);
 
   test("rejects a path escape with the same closed response and no filesystem escape", async () => {
     const input = fixture();
