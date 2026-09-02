@@ -63,7 +63,7 @@ def _kind_for_path(path: Path) -> InputKind:
             )
 
 
-def _initial_identity(source: Path, max_input_bytes: int) -> _FileIdentity:
+def _initial_identity(source: Path, max_input_bytes: int | None) -> _FileIdentity:
     try:
         metadata = source.lstat()
     except FileNotFoundError as error:
@@ -79,19 +79,21 @@ def _initial_identity(source: Path, max_input_bytes: int) -> _FileIdentity:
         raise InputValidationError("not_regular_file", "input must be a regular file")
     if metadata.st_size <= 0:
         raise InputValidationError("empty_input", "input file is empty")
-    if metadata.st_size > max_input_bytes:
+    if max_input_bytes is not None and metadata.st_size > max_input_bytes:
         raise InputValidationError(
             "input_too_large", f"input exceeds the configured {max_input_bytes}-byte limit"
         )
     return _identity(metadata)
 
 
-def _copy_stream(source: BinaryIO, destination: BinaryIO, max_input_bytes: int) -> tuple[int, str]:
+def _copy_stream(
+    source: BinaryIO, destination: BinaryIO, max_input_bytes: int | None
+) -> tuple[int, str]:
     digest = hashlib.sha256()
     size = 0
     while chunk := source.read(_CHUNK_SIZE):
         size += len(chunk)
-        if size > max_input_bytes:
+        if max_input_bytes is not None and size > max_input_bytes:
             raise InputValidationError(
                 "input_too_large", f"input exceeds the configured {max_input_bytes}-byte limit"
             )
@@ -100,7 +102,7 @@ def _copy_stream(source: BinaryIO, destination: BinaryIO, max_input_bytes: int) 
     return size, digest.hexdigest()
 
 
-def _copy_source_to_stage(source_path: Path, staged_path: Path, limit: int) -> _StagedCopy:
+def _copy_source_to_stage(source_path: Path, staged_path: Path, limit: int | None) -> _StagedCopy:
     try:
         with source_path.open("rb") as source, staged_path.open("xb") as destination:
             opened_identity = _identity(os.fstat(source.fileno()))

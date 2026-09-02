@@ -36,7 +36,8 @@ class IngestionJob(ContractModel):
     job_id: JobId
     source: Path
     expected_kind: InputKind | None = None
-    max_input_bytes: Annotated[int, Field(gt=0, le=1_073_741_824)] = 104_857_600
+    # None leaves the deck size uncapped; a caller may still set an explicit ceiling.
+    max_input_bytes: Annotated[int, Field(gt=0)] | None = None
     limits: IngestionLimits = Field(default_factory=IngestionLimits)
 
     @model_validator(mode="after")
