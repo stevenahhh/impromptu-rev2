@@ -58,6 +58,17 @@ const HEDGE_TYPICAL_CALL_MS = { rerank: 967, llm: 1_284, verifier: 1_644 } as co
  * every single run, which is exactly that situation.
  */
 const HEDGE_FAST_PATH_MS = { rerank: 750, llm: 1_000, verifier: 1_200 } as const;
+/**
+ * Above this many in-flight model calls on this pipeline, slot duplicates stop being started.
+ * A duplicate only rescues a run when it settles while the primary is an isolated straggler;
+ * when the provider is already saturated - measured on a twenty-slide burst, where nearly
+ * every slot spawned a duplicate and the cancelled arms outnumbered the survivors - both arms
+ * queue equally, so the duplicate adds provider load and deepens everyone's latency instead of
+ * rescuing anything. Solo and small multi-viewer sessions stay far below the limit and keep
+ * the full tuned schedule.
+ */
+const HEDGE_SATURATION_LIMIT = 8;
+
 /** The verifier model sees at most this many evidence entries. */
 export const MAX_MODEL_EVIDENCE = 2;
 
@@ -172,6 +183,7 @@ export function createRecommendationModelSlots(dependencies: {
   readonly stageObserver?: RecommendationStageObserver | undefined;
 }): RecommendationModelSlots {
   const { router, scheduler, stageObserver } = dependencies;
+  let inFlightModelCalls = 0;
 
   async function invokeSlot<Output>(
     capability: "embedding" | "rerank" | "llm" | "verifier",
@@ -183,7 +195,12 @@ export function createRecommendationModelSlots(dependencies: {
       stageObserver?.observe({ stage: capability, outcome: "FAILED", latencyMs, errorCode });
       return { ok: false, errorCode };
     };
-    const result = await router.invoke({ capability, input }, context);
+    inFlightModelCalls += 1;
+    // `finally` releases the in-flight slot on both settle paths and passes the router's own
+    // result through untouched, so the count stays honest without an untyped binding.
+    const result = await router.invoke({ capability, input }, context).finally(() => {
+      inFlightModelCalls -= 1;
+    });
     if (!result.ok) return fail(result.metadata.latencyMs, result.error.code);
     const parsed = schema.safeParse(result.output);
     if (!parsed.success) return fail(result.metadata.latencyMs, "provider_error");
@@ -204,6 +221,11 @@ export function createRecommendationModelSlots(dependencies: {
       context: TrustedModelContext,
       hedgeAtMs: number | null,
     ): Promise<ModelSlotResult<Output>> {
+      // Under saturation a duplicate cannot settle ahead of its primary - they queue together -
+      // so starting one only doubles provider demand. Run the slot unduplicated instead.
+      if (hedgeAtMs !== null && inFlightModelCalls >= HEDGE_SATURATION_LIMIT) {
+        hedgeAtMs = null;
+      }
       const primary = invokeSlot(capability, input, schema, context);
       if (hedgeAtMs === null) return await primary;
 

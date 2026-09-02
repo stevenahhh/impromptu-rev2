@@ -173,6 +173,114 @@ describe("recommendation slot hedging", () => {
     expect(flow.calls.filter((capability) => capability === "llm").length).toBe(1);
     expect(flow.calls.filter((capability) => capability === "rerank").length).toBe(1);
   });
+
+  test("stops starting duplicates once the pipeline is saturated with in-flight calls", async () => {
+    // Measured on a twenty-slide burst: nearly every slot spawned a duplicate, cancelled
+    // duplicate arms outnumbered survivors, and the duplicated provider demand pushed primary
+    // latency past the terminal budget. Above the saturation limit a duplicate cannot settle
+    // ahead of its primary - they queue together - so it must not be started at all.
+    const saturationFixture = () => {
+      const llmCalls: number[] = [];
+      const scheduled: Array<{ atMs: number; run: () => void }> = [];
+      let llmInvocations = 0;
+      const pairStarted = deferred<void>();
+      const pairRelease = deferred<void>();
+      let started = 0;
+      const router = {
+        async invoke(untrusted: unknown): Promise<ModelResult<unknown>> {
+          const modelRequest = untrusted as { capability: ModelCapability };
+          if (modelRequest.capability === "llm") {
+            llmInvocations += 1;
+            llmCalls.push(llmInvocations);
+          }
+          if (modelRequest.capability === "rerank" || modelRequest.capability === "llm") {
+            started += 1;
+            if (started === 2) pairStarted.resolve();
+            await pairRelease.promise;
+          }
+          const output =
+            modelRequest.capability === "embedding"
+              ? { vector: [0.5] }
+              : modelRequest.capability === "rerank"
+                ? { orderedEvidenceIds: ["e1"] }
+                : modelRequest.capability === "llm"
+                  ? {
+                      claim: "Revenue was 42 million USD in 2025.",
+                      evidenceIds: ["e1"],
+                      facts: { numbers: [], units: [], dates: [], entities: [] },
+                    }
+                  : { verdict: "SUPPORTED", rationaleCode: "ok" };
+          return {
+            ok: true,
+            output,
+            metadata: metadataFor(modelRequest.capability),
+          } as unknown as ModelResult<unknown>;
+        },
+      };
+      const internal = {
+        async retrieve() {
+          return [{ objectId: "object-1" }];
+        },
+        async materialize() {
+          return { outcome: "MATERIALIZED", evidence };
+        },
+        async authorizeForPublication() {
+          return true;
+        },
+      } as unknown as InternalRetrievalService;
+      const pipeline = new PrivateRecommendationPipeline({
+        router,
+        contexts: {
+          async resolve() {
+            return {
+              tenantId: "tenant-a",
+              principalId: "actor-a",
+              policyVersion: "model-policy-v1",
+            };
+          },
+        },
+        internal,
+        now: () => 0,
+        scheduler: {
+          schedule(atMs: number, run: () => void) {
+            scheduled.push({ atMs, run });
+            return () => undefined;
+          },
+        },
+      });
+      return { pipeline, llmCalls, scheduled, pairStarted, pairRelease };
+    };
+
+    const flow = saturationFixture();
+    // Eight saturated requests hold rerank+llm pairs open: sixteen in-flight model calls.
+    const saturated = Array.from({ length: 8 }, (_, index) =>
+      flow.pipeline.recommend(`session-${index}`, request),
+    );
+    await bounded(flow.pairStarted.promise, "saturated pairs");
+
+    // A ninth recommendation starts while the pipeline is saturated. Its hedge triggers fire,
+    // but no duplicate may be started.
+    const scheduledBefore = flow.scheduled.length;
+    const ninth = flow.pipeline.recommend("session-late", request);
+    for (let spins = 0; spins < 100 && flow.llmCalls.length < 9; spins += 1) await Bun.sleep(0);
+    expect(flow.llmCalls.length).toBe(9);
+    const lateTriggers = flow.scheduled
+      .slice(scheduledBefore)
+      .filter((entry) => entry.atMs !== DEADLINE_CALLBACK_AT_MS);
+    for (const trigger of lateTriggers) trigger.run();
+    for (let spins = 0; spins < 100 && flow.llmCalls.length > 9; spins += 1) await Bun.sleep(0);
+    expect(flow.llmCalls.length).toBe(9);
+
+    // Draining the queue restores the full tuned hedge schedule for later recommendations.
+    flow.pairRelease.resolve();
+    await Promise.all([...saturated, ninth]);
+    const drained = flow.pipeline.recommend("session-after", request);
+    for (let spins = 0; spins < 100 && flow.llmCalls.length < 10; spins += 1) await Bun.sleep(0);
+    const drainTriggers = flow.scheduled.filter((entry) => entry.atMs !== DEADLINE_CALLBACK_AT_MS);
+    for (const trigger of drainTriggers) trigger.run();
+    await bounded(drained, "post-saturation recommendation with hedge schedule restored");
+    expect(flow.llmCalls.length).toBeGreaterThanOrEqual(10);
+  });
 });
 
 /** A pipeline whose verifier slot stays pending until the test releases it. */
