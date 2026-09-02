@@ -7,6 +7,7 @@ afterAll(() => GlobalRegistrator.unregister());
 const { act, cleanup, fireEvent, render, within } = await import("@testing-library/react");
 const { MemoryRouter } = await import("react-router-dom");
 
+const { StrictMode } = await import("react");
 const { AuthProvider, ConsoleRoutes } = await import("./App");
 const { CoachingDisplay } = await import("./coaching-display");
 const { messages } = await import("./i18n");
@@ -724,6 +725,82 @@ describe("Console route boundary", () => {
     expect(document.querySelectorAll("[data-evidence-card]")).toHaveLength(0);
   });
 
+  test("dispatches exactly one recommendation per slide when StrictMode double-invokes the preparation effect", async () => {
+    const recommendQueries: string[] = [];
+    const requestSignals: AbortSignal[] = [];
+    let signalAllStarted: () => void = () => {
+      throw new Error("request signal was not installed");
+    };
+    const allStarted = new Promise<void>((resolve) => {
+      signalAllStarted = resolve;
+    });
+    const deck = new File(["deck"], "rehearsal.pptx", {
+      type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    });
+    const client = workspaceClient({
+      async uploadDeck(_csrfToken, selected) {
+        expect(selected.name).toBe("rehearsal.pptx");
+        return {
+          presentationSessionId: "ps_strict",
+          presentationSessionEpoch: "pse_1",
+          deckVersion: "deck_strict",
+          publicDeck: {
+            manifestHash: "a".repeat(64),
+            slides: [
+              {
+                publicSlideKey: "slide_one",
+                ordinal: 1,
+                accessibilityLabel: "Opening slide",
+              },
+              {
+                publicSlideKey: "slide_two",
+                ordinal: 2,
+                accessibilityLabel: "Results slide",
+              },
+            ],
+          },
+        };
+      },
+      recommend(_csrfToken, request, signal) {
+        if (signal !== undefined) requestSignals.push(signal);
+        recommendQueries.push(request.query);
+        if (recommendQueries.length >= 2) signalAllStarted();
+        return new Promise<RecommendationOutcome>(() => {});
+      },
+    });
+    const view = render(
+      <MemoryRouter initialEntries={["/"]}>
+        <StrictMode>
+          <AuthProvider initialAuthenticated client={client}>
+            <ConsoleRoutes />
+          </AuthProvider>
+        </StrictMode>
+      </MemoryRouter>,
+    );
+
+    // The cockpit (and its preparation panel) mounts only once a deck has been uploaded,
+    // exactly as it does in production.
+    const input = document.querySelector("[data-deck-file-input]") as HTMLInputElement;
+    Object.defineProperty(input, "files", { configurable: true, value: [deck] });
+    await act(async () => {
+      fireEvent.change(input);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    await act(async () => {
+      await allStarted;
+    });
+    // Let every macrotask-dispatched request land before counting.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(recommendQueries.sort()).toEqual(["Opening slide", "Results slide"]);
+
+    view.unmount();
+    expect(requestSignals.length).toBeGreaterThan(0);
+    expect(requestSignals.every((signal) => signal.aborted)).toBe(true);
+  });
+
   test("keeps an approved internal card when external fetch produces no safe card", async () => {
     let signalRecommended: () => void = () => {
       throw new Error("recommendation signal was not installed");
@@ -1041,9 +1118,6 @@ describe("Console route boundary", () => {
     const usernameInput = document.querySelector("[data-sign-in-username]");
     const passwordInput = document.querySelector("[data-sign-in-password]");
     const submit = document.querySelector("[data-sign-in-submit]");
-    expect(usernameInput).toBeInstanceOf(HTMLInputElement);
-    expect(passwordInput).toBeInstanceOf(HTMLInputElement);
-    expect(submit).toBeInstanceOf(HTMLButtonElement);
     if (
       !(usernameInput instanceof HTMLInputElement) ||
       !(passwordInput instanceof HTMLInputElement) ||
