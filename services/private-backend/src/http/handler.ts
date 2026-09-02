@@ -8,7 +8,9 @@ import { audioRoutes } from "./routes/audio.ts";
 import { coordinatorCommandRoutes } from "./routes/coordinator-commands.ts";
 import { deckUploadRoutes } from "./routes/deck-uploads.ts";
 import { playbackReadRoutes } from "./routes/playback-read.ts";
+import { qaDefenseRoutes } from "./routes/qa-defense.ts";
 import { referenceDocumentRoutes } from "./routes/reference-documents.ts";
+import { spokenQuestionRoutes } from "./routes/spoken-question.ts";
 import { systemRoutes } from "./routes/system.ts";
 import { accountCookie, csrfToken } from "./session-cookies.ts";
 import type { PrivateBackendHandler, PrivateBackendHttpDependencies } from "./types.ts";
@@ -52,9 +54,11 @@ export function createPrivateBackendHandler(
       }
     }
 
+    // The end branch needs the account session id to move the lifecycle as the caller.
     const reportResponse = await dependencies.sessionReportRead?.(
       request,
       account.value.accountId,
+      accountSessionId,
     );
     if (reportResponse !== undefined && reportResponse !== null) return reportResponse;
 
@@ -84,6 +88,16 @@ export function createPrivateBackendHandler(
 
     const referenceDocuments = await referenceDocumentRoutes(ctx);
     if (referenceDocuments !== null) return referenceDocuments;
+
+    // Q&A defense must dispatch BEFORE the coordinator-command fallthrough so a browser can
+    // reach it at all. It sits inside the same cookie + CSRF boundary as every route above.
+    const qaDefense = await qaDefenseRoutes(ctx, dependencies.qaDefense);
+    if (qaDefense !== null) return qaDefense;
+
+    // Spoken-question clip transcription shares that boundary; like qaDefense its dependency
+    // is optional and answers a typed STT_UNAVAILABLE when the deployment runs without local STT.
+    const spokenQuestion = await spokenQuestionRoutes(ctx, dependencies.spokenQuestions);
+    if (spokenQuestion !== null) return spokenQuestion;
 
     return coordinatorCommandRoutes(ctx);
   };

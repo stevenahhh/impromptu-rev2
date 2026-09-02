@@ -132,6 +132,7 @@ const audio = createAudio({
 const sessionReportRead = createSessionReportRead({
   store,
   sessionReportFinalizer,
+  coordinator,
 });
 const metrics = createMetricsRegistry("private_backend");
 const loginRateLimiters = {

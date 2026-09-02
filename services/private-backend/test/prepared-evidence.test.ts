@@ -921,4 +921,41 @@ describe("prepared evidence private coordinator", () => {
       ),
     ).toEqual({ outcome: "REJECTED", reason: "PUBLICATION_DISABLED" });
   });
+
+  test("a retried end by the same owner is distinguishable from a non-owner or missing presentation", async () => {
+    const flow = await createBoundFlow();
+    const ended = await flow.coordinator.endPresentation(
+      flow.account.accountSessionId,
+      flow.created.lifecycle.presentationSessionId,
+      1_005,
+    );
+    expect(ended.outcome).toBe("APPLIED");
+    const ownerRetry = await flow.coordinator.endPresentation(
+      flow.account.accountSessionId,
+      flow.created.lifecycle.presentationSessionId,
+      1_006,
+    );
+    expect(ownerRetry).toEqual({
+      outcome: "REJECTED",
+      reason: "PRESENTATION_ENDED",
+      endedBySameOwner: true,
+    });
+    const otherAccount = await flow.coordinator.createAccountSession(
+      { accountId: "account_beta", actorId: "actor_beta" },
+      1_007,
+    );
+    const outsiderEnd = await flow.coordinator.endPresentation(
+      otherAccount.accountSessionId,
+      flow.created.lifecycle.presentationSessionId,
+      1_008,
+    );
+    expect(outsiderEnd).toEqual({ outcome: "REJECTED", reason: "PRESENTATION_ENDED" });
+    expect(
+      await flow.coordinator.endPresentation(
+        otherAccount.accountSessionId,
+        "ps_does_not_exist",
+        1_009,
+      ),
+    ).toEqual({ outcome: "REJECTED", reason: "PRESENTATION_NOT_FOUND" });
+  });
 });

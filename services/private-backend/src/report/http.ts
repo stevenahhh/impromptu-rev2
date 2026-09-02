@@ -1,3 +1,4 @@
+import type { EndPresentationResult } from "../prepared-evidence.ts";
 import type {
   SessionReportPrincipal,
   SessionReportRepository,
@@ -11,7 +12,20 @@ import type {
 export type SessionReportReadRouteHandler = (
   request: Request,
   accountId: string,
+  /** The authenticated account session id; the end branch needs it to act as the caller. */
+  accountSessionId?: string,
 ) => Promise<Response | null>;
+
+/**
+ * Narrow seam over the prepared-evidence coordinator: the route may move the presentation
+ * lifecycle as the authenticated account session without ever seeing the coordinator itself.
+ */
+export type SessionPresentationEndLifecycle = (
+  input: Readonly<{
+    accountSessionId: string;
+    presentationSessionId: string;
+  }>,
+) => Promise<EndPresentationResult>;
 
 export interface SessionReportOwnerResolver {
   resolve(input: {
@@ -109,9 +123,11 @@ export function createSessionReportRouteHandler(
   owners: SessionReportOwnerResolver,
   preparedEvidence: PreparedEvidenceReportSnapshotResolver,
   endContext: SessionReportEndContextResolver,
+  // Optional so routes wired without the prepared-evidence coordinator keep their exact behavior.
+  endLifecycle?: SessionPresentationEndLifecycle,
 ): SessionReportReadRouteHandler {
   const read = createFinalizedSessionReportReadRouteHandler(reports, owners, preparedEvidence);
-  return async (request, accountId) => {
+  return async (request, accountId, accountSessionId) => {
     const pathname = new URL(request.url).pathname;
     const endMatch = /^\/v1\/presentation-sessions\/([^/]+)\/end$/.exec(pathname);
     const presentationSessionId = endMatch?.[1];
@@ -120,6 +136,19 @@ export function createSessionReportRouteHandler(
     }
     const principal = await owners.resolve({ accountId, presentationSessionId });
     if (principal === null) return response({ error: "report_forbidden" }, 403);
+    if (endLifecycle !== undefined && accountSessionId !== undefined) {
+      const outcome = await endLifecycle({ accountSessionId, presentationSessionId });
+      // The owner retrying an already-ended presentation keeps the idempotent 202 contract;
+      // every other coordinator rejection is surfaced as the existing unresolved-end conflict.
+      const acceptedByOwnerRetry =
+        outcome.outcome === "REJECTED" &&
+        outcome.reason === "PRESENTATION_ENDED" &&
+        "endedBySameOwner" in outcome &&
+        outcome.endedBySameOwner === true;
+      if (outcome.outcome !== "APPLIED" && !acceptedByOwnerRetry) {
+        return response({ error: "presentation_end_conflict" }, 409);
+      }
+    }
     const context = await endContext.resolve(principal);
     if (context === null) return response({ error: "presentation_end_conflict" }, 409);
     await reports.endSession({ principal, ...context });

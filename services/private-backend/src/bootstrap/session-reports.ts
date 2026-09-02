@@ -1,4 +1,4 @@
-import type { PreparedEvidenceStore } from "../prepared-evidence.ts";
+import type { PreparedEvidenceCoordinator, PreparedEvidenceStore } from "../prepared-evidence.ts";
 import { createSessionReportRouteHandler } from "../report/http.ts";
 import type { SessionReportFinalizer } from "../report/session-report-finalizer.ts";
 
@@ -6,10 +6,12 @@ import type { SessionReportFinalizer } from "../report/session-report-finalizer.
 export function createSessionReportRead(options: {
   readonly store: PreparedEvidenceStore;
   readonly sessionReportFinalizer: SessionReportFinalizer;
+  /** Optional; when absent the end route keeps its legacy coordinator-less behavior. */
+  readonly coordinator?: PreparedEvidenceCoordinator;
   /** Clock shared by the end lifecycle and the end context; defaults to the wall clock. */
   readonly now?: () => number;
 }) {
-  const { store, sessionReportFinalizer } = options;
+  const { store, sessionReportFinalizer, coordinator } = options;
   const now = options.now ?? Date.now;
   const reportOwners = {
     async resolve({
@@ -43,6 +45,18 @@ export function createSessionReportRead(options: {
             })),
     };
   };
+  // Narrow seam: the route moves the lifecycle as the authenticated account session without
+  // ever seeing the coordinator itself.
+  const endLifecycle =
+    coordinator === undefined
+      ? undefined
+      : ({
+          accountSessionId,
+          presentationSessionId,
+        }: {
+          accountSessionId: string;
+          presentationSessionId: string;
+        }) => coordinator.endPresentation(accountSessionId, presentationSessionId, now());
   return createSessionReportRouteHandler(
     sessionReportFinalizer,
     reportOwners,
@@ -63,5 +77,6 @@ export function createSessionReportRead(options: {
         };
       },
     },
+    endLifecycle,
   );
 }

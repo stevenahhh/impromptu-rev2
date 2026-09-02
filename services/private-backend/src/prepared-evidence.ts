@@ -386,6 +386,16 @@ export type OperationResult<Value> =
   | Readonly<{ outcome: "APPLIED"; value: Value }>
   | Readonly<{ outcome: "REJECTED"; reason: SessionRejection | string }>;
 
+/**
+ * endPresentation result. A retried end by the owner keeps the REJECTED/PRESENTATION_ENDED
+ * shape but carries `endedBySameOwner: true`, letting an idempotent HTTP route tell
+ * "your own earlier end succeeded" apart from `PRESENTATION_NOT_FOUND` or an ownerless
+ * bare PRESENTATION_ENDED.
+ */
+export type EndPresentationResult =
+  | OperationResult<PresentationSessionLifecycle>
+  | Readonly<{ outcome: "REJECTED"; reason: "PRESENTATION_ENDED"; endedBySameOwner: true }>;
+
 export type ControllerSocketCloseReason = "SUPERSEDED" | "CLIENT_CLOSED";
 
 export interface ControllerSocket {
@@ -617,19 +627,27 @@ export class PreparedEvidenceCoordinator {
     accountSessionId: string,
     presentationSessionId: string,
     nowMs: number,
-  ): Promise<OperationResult<PresentationSessionLifecycle>> {
-    const authorized = await this.#authorizedPresentation(
-      accountSessionId,
-      presentationSessionId,
-      nowMs,
-    );
-    if (authorized.outcome === "REJECTED") return authorized;
-    authorized.value.lifecycle = PresentationSessionLifecycleSchema.parse({
-      ...authorized.value.lifecycle,
+  ): Promise<EndPresentationResult> {
+    // Mirrors #authorizedPresentation, but checks ownership BEFORE the ENDED status so a
+    // retried end by the same owner stays distinguishable from "not yours" / "not found".
+    const account = await this.readAccountSession(accountSessionId, nowMs);
+    if (account.outcome === "REJECTED") return account;
+    const presentation = this.#store.presentations.get(presentationSessionId);
+    if (presentation === undefined)
+      return { outcome: "REJECTED", reason: "PRESENTATION_NOT_FOUND" };
+    const isOwner = presentation.lifecycle.ownerAccountId === account.value.accountId;
+    if (presentation.lifecycle.status !== "ACTIVE") {
+      return isOwner
+        ? { outcome: "REJECTED", reason: "PRESENTATION_ENDED", endedBySameOwner: true }
+        : { outcome: "REJECTED", reason: "PRESENTATION_ENDED" };
+    }
+    if (!isOwner) return { outcome: "REJECTED", reason: "UNAUTHORIZED" };
+    presentation.lifecycle = PresentationSessionLifecycleSchema.parse({
+      ...presentation.lifecycle,
       status: "ENDED",
       endedAtMs: nowMs,
     });
-    return { outcome: "APPLIED", value: authorized.value.lifecycle };
+    return { outcome: "APPLIED", value: presentation.lifecycle };
   }
 
   async approveDisplay(
