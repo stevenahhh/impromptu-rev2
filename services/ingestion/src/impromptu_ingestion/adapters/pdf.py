@@ -1,186 +1,120 @@
-"""Strict, bounded PyMuPDF structural extraction without rendering or OCR."""
+"""Strict, bounded PyMuPDF structural extraction without rendering."""
+
+# Page-structure reading lives in ``pdf_structure``; untrusted-input guards in
+# ``pdf_guards``; the isolated worker subprocess boundary in
+# ``pdf_worker_client``. This module keeps the extraction orchestration: page
+# manifest assembly and the OCR / vision fallback decision per raster-only page.
 
 import hashlib
-import re
-import subprocess
-import sys
-from dataclasses import dataclass
-from typing import Protocol, TypedDict, cast
+import time
+from typing import cast
 
 import pymupdf
-from pydantic import TypeAdapter, ValidationError
 
+from impromptu_ingestion import vision
 from impromptu_ingestion.adapters.base import StructuralAdapter, StructuralExtractionError
+from impromptu_ingestion.adapters.pdf_guards import (
+    check_limit,
+    mupdf_tools,
+    raise_if_mupdf_warned,
+    validate_strict_trailer,
+)
+from impromptu_ingestion.adapters.pdf_structure import (
+    PageExtraction,
+    PdfDocument,
+    PdfTextPage,
+    VisionTranscription,
+    collect_block_elements,
+    open_pdf_document,
+    page_has_text_layer,
+    page_structure,
+)
+from impromptu_ingestion.adapters.pdf_worker_client import (
+    VISION_OPERATION_ALLOWANCE_SECONDS,
+    run_bounded_worker,
+)
 from impromptu_ingestion.canonical import deck_id, slide_key
 from impromptu_ingestion.contracts import (
     DeckManifest,
     ExtractionWarning,
-    ImageElement,
     InputKind,
-    PdfWorkerFailure,
-    PdfWorkerSuccess,
     RenderBoundary,
     SlideManifest,
-    StructuralElement,
     TextElement,
     ValidatedInput,
 )
 from impromptu_ingestion.ocr import OcrPage, extract_ocr_text
-
-_PDF_TRAILER_BYTES = 65_536
-_PDF_WORKER_RESPONSE = TypeAdapter[PdfWorkerSuccess | PdfWorkerFailure](
-    PdfWorkerSuccess | PdfWorkerFailure
+from impromptu_ingestion.vision import (
+    TranscriptionJob,
+    VisionConfig,
+    render_vision_jpeg,
+    transcribe_pages,
+    vision_config,
 )
 
-
-class _PdfSpan(TypedDict):
-    text: str
-    bbox: tuple[float, float, float, float]
-
-
-class _PdfLine(TypedDict):
-    spans: list[_PdfSpan]
+# Wall-clock reserve for the guaranteed Tesseract fallback of every raster page
+# plus manifest serialization, so vision can never starve the deterministic path.
+_TESSERACT_FALLBACK_RESERVE_PER_PAGE_SECONDS = 2.5
+_VISION_MIN_BUDGET_SECONDS = 6.0
 
 
-class _PdfBlock(TypedDict, total=False):
-    type: int
-    bbox: tuple[float, float, float, float]
-    lines: list[_PdfLine]
-    image: bytes
-    ext: str
-    width: int
-    height: int
-
-
-class _PdfTextPage(TypedDict):
-    blocks: list[_PdfBlock]
-
-
-class _PdfPage(OcrPage, Protocol):
-    def get_text(self, option: str, *, sort: bool) -> object: ...
-
-
-class _PdfDocument(Protocol):
-    needs_pass: bool
-    page_count: int
-
-    def load_page(self, page_id: int) -> pymupdf.Page: ...
-
-    def xref_length(self) -> int: ...
-
-    def close(self) -> None: ...
-
-
-class _MuPdfTools(Protocol):
-    def mupdf_warnings(self, reset: int = 1) -> str: ...
-
-
-@dataclass(frozen=True)
-class _PageExtraction:
-    manifest: SlideManifest
-    element_count: int
-    resource_bytes: int
-    image_pixels: int
-
-
-def _position(bbox: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
-    x0, y0, x1, y1 = bbox
-    return (
-        round(max(0.0, x0), 4),
-        round(max(0.0, y0), 4),
-        round(max(0.0, x1 - x0), 4),
-        round(max(0.0, y1 - y0), 4),
+def _raster_page_text(
+    typed_page: OcrPage,
+    *,
+    timeout_seconds: float,
+    vision_transcription: VisionTranscription | None,
+    warnings: list[ExtractionWarning],
+) -> tuple[TextElement, ...]:
+    """Resolve text for a raster-only page: configured vision model first, else local OCR."""
+    if vision_transcription is not None:
+        warnings.append(
+            ExtractionWarning(
+                code="vision_ocr_applied",
+                message="server-side vision transcription by "
+                f"{vision_transcription.model} produced this raster-only page's text",
+            )
+        )
+        return vision_transcription.elements
+    try:
+        ocr_elements = extract_ocr_text(typed_page, timeout_seconds=timeout_seconds)
+    except StructuralExtractionError as error:
+        if error.code != "ocr_unavailable":
+            raise
+        # OCR absence degrades this page to its image structure; it never blocks
+        # ingestion of an otherwise readable deck. Hard failures stay reserved for
+        # unreadable inputs such as encrypted documents.
+        warnings.append(ExtractionWarning(code="ocr_unavailable", message=str(error)))
+        return ()
+    warnings.append(
+        ExtractionWarning(
+            code="ocr_applied",
+            message="local Tesseract OCR was applied to this raster-only page",
+        )
     )
-
-
-def _text_elements(block: _PdfBlock, block_index: int) -> tuple[list[TextElement], int]:
-    elements: list[TextElement] = []
-    resource_bytes = 0
-    for line_index, line in enumerate(block.get("lines", []), start=1):
-        for span_index, span in enumerate(line["spans"], start=1):
-            text = span["text"].strip()
-            if text:
-                resource_bytes += len(text.encode("utf-8"))
-                x, y, width, height = _position(span["bbox"])
-                elements.append(
-                    TextElement(
-                        element_id=f"text:{block_index}:{line_index}:{span_index}",
-                        text=text,
-                        x=x,
-                        y=y,
-                        width=width,
-                        height=height,
-                    )
-                )
-    return elements, resource_bytes
-
-
-def _image_element(block: _PdfBlock, block_index: int) -> ImageElement | None:
-    content = block.get("image")
-    bbox = block.get("bbox")
-    if not content or bbox is None:
-        return None
-    extension = block.get("ext", "unknown").lower()
-    media_type = "image/jpeg" if extension in {"jpg", "jpeg"} else f"image/{extension}"
-    x, y, width, height = _position(bbox)
-    return ImageElement(
-        element_id=f"image:{block_index}",
-        content_sha256=hashlib.sha256(content).hexdigest(),
-        media_type=media_type,
-        pixel_width=block.get("width"),
-        pixel_height=block.get("height"),
-        x=x,
-        y=y,
-        width=width,
-        height=height,
-    )
+    return ocr_elements
 
 
 def _page_manifest(
-    page: pymupdf.Page, index: int, source_sha256: str, timeout_seconds: float
-) -> _PageExtraction:
-    typed_page = cast(_PdfPage, cast(object, page))
-    structure = cast(_PdfTextPage, typed_page.get_text("dict", sort=True))
-    elements: list[StructuralElement] = []
-    resource_bytes = 0
-    image_pixels = 0
-    has_text = False
-    has_image = False
-    for block_index, block in enumerate(structure["blocks"], start=1):
-        if block.get("type") == 0:
-            text, text_bytes = _text_elements(block, block_index)
-            elements.extend(text)
-            resource_bytes += text_bytes
-            has_text = has_text or bool(text)
-        elif block.get("type") == 1:
-            image = _image_element(block, block_index)
-            if image is not None:
-                elements.append(image)
-                content = block.get("image", b"")
-                resource_bytes += len(content)
-                image_pixels += block.get("width", 0) * block.get("height", 0)
-                has_image = True
+    page: pymupdf.Page,
+    index: int,
+    source_sha256: str,
+    timeout_seconds: float,
+    structure: PdfTextPage,
+    vision_transcription: VisionTranscription | None,
+) -> PageExtraction:
+    typed_page = cast(OcrPage, cast(object, page))
+    elements, resource_bytes, image_pixels, has_image = collect_block_elements(structure)
 
     warnings: list[ExtractionWarning] = []
-    if has_image and not has_text:
-        try:
-            ocr_elements = extract_ocr_text(typed_page, timeout_seconds=timeout_seconds)
-        except StructuralExtractionError as error:
-            if error.code != "ocr_unavailable":
-                raise
-            # OCR absence degrades this page to its image structure; it never blocks
-            # ingestion of an otherwise readable deck. Hard failures stay reserved for
-            # unreadable inputs such as encrypted documents.
-            warnings.append(ExtractionWarning(code="ocr_unavailable", message=str(error)))
-        else:
-            elements.extend(ocr_elements)
-            resource_bytes += sum(len(element.text.encode("utf-8")) for element in ocr_elements)
-            warnings.append(
-                ExtractionWarning(
-                    code="ocr_applied",
-                    message="local Tesseract OCR was applied to this raster-only page",
-                )
-            )
+    if has_image and not page_has_text_layer(structure):
+        raster_text = _raster_page_text(
+            typed_page,
+            timeout_seconds=timeout_seconds,
+            vision_transcription=vision_transcription,
+            warnings=warnings,
+        )
+        elements.extend(raster_text)
+        resource_bytes += sum(len(element.text.encode("utf-8")) for element in raster_text)
     elif not elements:
         warnings.append(
             ExtractionWarning(
@@ -199,7 +133,7 @@ def _page_manifest(
         elements=tuple(elements),
         warnings=tuple(warnings),
     )
-    return _PageExtraction(
+    return PageExtraction(
         manifest=manifest,
         element_count=len(elements),
         resource_bytes=resource_bytes,
@@ -207,43 +141,53 @@ def _page_manifest(
     )
 
 
-def _validate_strict_trailer(content: bytes) -> None:
-    trailer = content[-_PDF_TRAILER_BYTES:]
-    if b"startxref" not in trailer:
-        raise StructuralExtractionError("invalid_document", "PDF has no final cross-reference")
-    match = re.search(rb"startxref\s+(\d+)\s+%%EOF\s*\Z", trailer)
-    if match is None:
-        raise StructuralExtractionError(
-            "repair_required", "PDF final cross-reference or EOF marker is incomplete"
-        )
+def _collect_vision_transcriptions(
+    document: PdfDocument,
+    page_count: int,
+    structures: dict[int, PdfTextPage],
+    deadline: float,
+    config: VisionConfig | None,
+) -> dict[int, VisionTranscription]:
+    """Transcribe raster-only pages server-side within the operation deadline.
 
-    offset = int(match.group(1))
-    if offset <= 0 or offset >= len(content):
-        raise StructuralExtractionError("repair_required", "PDF cross-reference offset is invalid")
-    cross_reference = content[offset : offset + 2_048]
-    traditional = cross_reference.startswith(b"xref")
-    xref_stream = bool(
-        re.match(rb"\d+\s+\d+\s+obj\b", cross_reference)
-        and re.search(rb"/Type\s*/XRef\b", cross_reference)
+    The Tesseract fallback always keeps a wall-clock reserve so a slow or failed
+    model call can never push ingestion past its bounded deadline.
+    """
+    if config is None:
+        return {}
+    jobs: dict[int, TranscriptionJob] = {}
+    for offset in range(page_count):
+        structure = structures[offset]
+        if page_has_text_layer(structure):
+            continue
+        if not any(block.get("type") == 1 for block in structure["blocks"]):
+            continue
+        # Rasterization happens on this thread: PyMuPDF documents are not
+        # thread-safe, only the network calls run concurrently.
+        page = document.load_page(offset)
+        jpeg = render_vision_jpeg(cast(vision.RasterizablePage, cast(object, page)))
+        if jpeg is None:
+            continue
+        jobs[offset] = TranscriptionJob(
+            jpeg=jpeg,
+            page_width=float(page.rect.width),
+            page_height=float(page.rect.height),
+        )
+    if not jobs:
+        return {}
+    reserve = _TESSERACT_FALLBACK_RESERVE_PER_PAGE_SECONDS * len(jobs) + 1.0
+    remaining = deadline - time.monotonic()
+    if remaining - reserve < _VISION_MIN_BUDGET_SECONDS:
+        return {}
+    transcriptions = transcribe_pages(
+        jobs,
+        config=config,
+        timeout_seconds=remaining - reserve,
     )
-    if not traditional and not xref_stream:
-        raise StructuralExtractionError(
-            "repair_required", "PDF final cross-reference target is invalid"
-        )
-
-
-def _raise_if_mupdf_warned(tools: _MuPdfTools) -> None:
-    if tools.mupdf_warnings(reset=1).strip():
-        raise StructuralExtractionError(
-            "repair_required", "MuPDF reported format or repair diagnostics"
-        )
-
-
-def _check_limit(actual: int, maximum: int, resource: str) -> None:
-    if actual > maximum:
-        raise StructuralExtractionError(
-            "resource_limit", f"PDF {resource} exceeds the configured limit"
-        )
+    return {
+        index: VisionTranscription(elements=elements, model=config.model)
+        for index, elements in transcriptions.items()
+    }
 
 
 def extract_pdf_in_process(source: ValidatedInput) -> DeckManifest:
@@ -257,24 +201,38 @@ def extract_pdf_in_process(source: ValidatedInput) -> DeckManifest:
         raise StructuralExtractionError(
             "staged_input_changed", "staged PDF no longer matches its validated hash"
         )
-    _validate_strict_trailer(content)
+    validate_strict_trailer(content)
 
-    tools = cast(_MuPdfTools, pymupdf.TOOLS)
+    tools = mupdf_tools()
     _ = tools.mupdf_warnings(reset=1)
-    document: _PdfDocument | None = None
+    document: PdfDocument | None = None
     try:
-        document = cast(
-            _PdfDocument, cast(object, pymupdf.open(stream=content, filetype="pdf"))
-        )
-        _raise_if_mupdf_warned(tools)
+        document = open_pdf_document(content)
+        raise_if_mupdf_warned(tools)
         if document.needs_pass:
             raise StructuralExtractionError(
                 "encrypted_document", "encrypted PDFs are not supported"
             )
 
         limits = source.limits
-        _check_limit(document.page_count, limits.max_pdf_pages, "page count")
-        _check_limit(document.xref_length(), limits.max_pdf_objects, "object count")
+        check_limit(document.page_count, limits.max_pdf_pages, "page count")
+        check_limit(document.xref_length(), limits.max_pdf_objects, "object count")
+
+        configured_vision = vision_config()
+        # A configured vision model opts the operator into server-side latency;
+        # without configuration the budget is exactly what the caller set.
+        deadline = (
+            time.monotonic()
+            + limits.operation_timeout_seconds
+            + (VISION_OPERATION_ALLOWANCE_SECONDS if configured_vision is not None else 0.0)
+        )
+        structures = {
+            offset: page_structure(document.load_page(offset))
+            for offset in range(document.page_count)
+        }
+        vision_transcriptions = _collect_vision_transcriptions(
+            document, document.page_count, structures, deadline, configured_vision
+        )
 
         manifests: list[SlideManifest] = []
         element_count = 0
@@ -286,15 +244,17 @@ def extract_pdf_in_process(source: ValidatedInput) -> DeckManifest:
                 offset + 1,
                 source.source_sha256,
                 limits.operation_timeout_seconds,
+                structures[offset],
+                vision_transcriptions.get(offset),
             )
             manifests.append(extracted.manifest)
             element_count += extracted.element_count
             resource_bytes += extracted.resource_bytes
             image_pixels += extracted.image_pixels
-            _check_limit(element_count, limits.max_pdf_elements, "element count")
-            _check_limit(resource_bytes, limits.max_pdf_resource_bytes, "resource bytes")
-            _check_limit(image_pixels, limits.max_pdf_image_pixels, "image pixels")
-        _raise_if_mupdf_warned(tools)
+            check_limit(element_count, limits.max_pdf_elements, "element count")
+            check_limit(resource_bytes, limits.max_pdf_resource_bytes, "resource bytes")
+            check_limit(image_pixels, limits.max_pdf_image_pixels, "image pixels")
+        raise_if_mupdf_warned(tools)
     except StructuralExtractionError:
         raise
     except Exception as error:
@@ -311,52 +271,18 @@ def extract_pdf_in_process(source: ValidatedInput) -> DeckManifest:
         deck_id=deck_id(source.source_sha256),
         source_sha256=source.source_sha256,
         source_kind=InputKind.PDF,
-        adapter_version="pymupdf-structural-ocr-v3",
+        adapter_version="pymupdf-structural-ocr-v4",
         slides=tuple(manifests),
         render_boundary=RenderBoundary.structural_only(),
     )
-
-
-def _run_bounded_worker(source: ValidatedInput) -> DeckManifest:
-    command = [sys.executable, "-m", "impromptu_ingestion.pdf_worker"]
-    try:
-        completed = subprocess.run(
-            command,
-            input=source.model_dump_json().encode("utf-8"),
-            capture_output=True,
-            check=False,
-            timeout=source.limits.operation_timeout_seconds,
-        )
-    except subprocess.TimeoutExpired as error:
-        raise StructuralExtractionError(
-            "operation_timeout", "PDF extraction exceeded its operation deadline"
-        ) from error
-    except OSError as error:
-        raise StructuralExtractionError(
-            "worker_unavailable", "PDF extraction worker could not be started"
-        ) from error
-
-    if completed.returncode != 0:
-        raise StructuralExtractionError(
-            "worker_failed", "PDF extraction worker exited unexpectedly"
-        )
-    try:
-        response = _PDF_WORKER_RESPONSE.validate_json(completed.stdout)
-    except ValidationError as error:
-        raise StructuralExtractionError(
-            "worker_failed", "PDF extraction worker returned an invalid response"
-        ) from error
-    if isinstance(response, PdfWorkerFailure):
-        raise StructuralExtractionError(response.code, response.message)
-    return response.manifest
 
 
 class PdfStructuralAdapter(StructuralAdapter):
     """Extract PDF structure in an isolated process with strict limits and timeout."""
 
     kind = InputKind.PDF
-    adapter_version = "pymupdf-structural-ocr-v3"
+    adapter_version = "pymupdf-structural-ocr-v4"
 
     def extract(self, source: ValidatedInput) -> DeckManifest:
         self._require_kind(source)
-        return _run_bounded_worker(source)
+        return run_bounded_worker(source)

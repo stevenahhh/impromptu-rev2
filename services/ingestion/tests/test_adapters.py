@@ -9,6 +9,7 @@ from typing import Any, cast
 import pymupdf
 import pytest
 
+from impromptu_ingestion import vision
 from impromptu_ingestion.adapters import (
     PdfStructuralAdapter,
     PptxStructuralAdapter,
@@ -53,6 +54,16 @@ def _staged(
             limits=limits or IngestionLimits(),
         )
     )
+
+
+def _write_raster_only_pdf(path: Path) -> None:
+    """One full-page image, no text layer: the canonical scanned-page fixture."""
+
+    document = pymupdf.open()
+    page = document.new_page(width=720, height=405)
+    raster = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 16, 16))
+    page.insert_image(pymupdf.Rect(0, 0, 720, 405), stream=raster.tobytes("png"))
+    document.save(path)
 
 
 def test_pptx_extracts_text_table_image_and_chart_without_private_notes(
@@ -144,9 +155,7 @@ def test_frozen_pdf_and_pptx_share_korean_structural_content() -> None:
     assert len(manifests["pptx"].slides) == density["slideCount"]
     assert len(manifests["text-layer-pdf"].slides) == density["slideCount"]
     assert len(texts_by_kind["pptx"]) == density["textElementCount"]
-    assert sum(len(text) for text in texts_by_kind["pptx"]) == density[
-        "totalTextCharacters"
-    ]
+    assert sum(len(text) for text in texts_by_kind["pptx"]) == density["totalTextCharacters"]
 
 
 def test_frozen_scanned_pdf_uses_ocr_only_for_the_raster_page(
@@ -179,11 +188,120 @@ def test_frozen_scanned_pdf_uses_ocr_only_for_the_raster_page(
         [element.text for element in slide.elements if element.kind == "text"]
         for slide in manifest.slides
     ] == [[sentinel]] * registry["density"]["slideCount"]
-    assert {
-        warning.code
-        for slide in manifest.slides
-        for warning in slide.warnings
-    } == {"ocr_applied"}
+    assert {warning.code for slide in manifest.slides for warning in slide.warnings} == {
+        "ocr_applied"
+    }
+
+
+def test_pdf_prefers_embedded_text_layer_over_ocr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A page carrying real text is never routed through OCR, image or not."""
+
+    def fail(page: object, *, timeout_seconds: float) -> tuple[TextElement, ...]:
+        raise AssertionError("OCR must not run on a page with an embedded text layer")
+
+    monkeypatch.setattr("impromptu_ingestion.adapters.pdf.extract_ocr_text", fail)
+    mixed = tmp_path / "mixed.pdf"
+    document = pymupdf.open()
+    page = document.new_page(width=720, height=405)
+    raster = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 16, 16))
+    page.insert_image(pymupdf.Rect(0, 0, 720, 405), stream=raster.tobytes("png"))
+    page.insert_text((72, 72), "임베디드 텍스트 2026", fontname="korea")
+    document.save(mixed)
+
+    with _staged(mixed) as source:
+        manifest = PdfStructuralAdapter().extract(source)
+
+    texts = [element.text for element in manifest.slides[0].elements if element.kind == "text"]
+    assert any("임베디드 텍스트 2026" in text for text in texts)
+    assert manifest.slides[0].warnings == ()
+
+
+def test_raster_page_prefers_vision_transcription_when_configured(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("TESSDATA_PREFIX", raising=False)
+    scanned = tmp_path / "scanned.pdf"
+    _write_raster_only_pdf(scanned)
+
+    def fail(page: object, *, timeout_seconds: float) -> tuple[TextElement, ...]:
+        raise AssertionError("tesseract must not run when vision transcription succeeded")
+
+    monkeypatch.setattr("impromptu_ingestion.adapters.pdf.extract_ocr_text", fail)
+    monkeypatch.setattr(
+        "impromptu_ingestion.adapters.pdf.vision_config",
+        lambda: vision.VisionConfig(
+            base_url="https://vision.example/v1",
+            api_key="secret",
+            model="vision-model-x",
+        ),
+    )
+
+    transcribe_calls: list[object] = []
+
+    def fake_transcribe(jobs, **options):
+        transcribe_calls.append({"jobs": jobs, "options": options})
+        return {
+            index: vision._line_elements(
+                [f"비전 텍스트 {index}"], page_width=720.0, page_height=405.0
+            )
+            for index in jobs
+        }
+
+    monkeypatch.setattr("impromptu_ingestion.adapters.pdf.transcribe_pages", fake_transcribe)
+
+    with _staged(scanned) as source:
+        manifest = extract_pdf_in_process(source)
+
+    assert len(transcribe_calls) == 1
+    assert sorted(transcribe_calls[0]["jobs"].keys()) == [0]
+    texts = [element.text for element in manifest.slides[0].elements if element.kind == "text"]
+    assert texts == ["비전 텍스트 0"]
+    warning_codes = {warning.code for warning in manifest.slides[0].warnings}
+    assert warning_codes == {"vision_ocr_applied"}
+
+
+def test_raster_page_falls_back_to_tesseract_when_vision_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("TESSDATA_PREFIX", "/opt/homebrew/share/tessdata")
+    scanned = tmp_path / "scanned.pdf"
+    _write_raster_only_pdf(scanned)
+
+    monkeypatch.setattr(
+        "impromptu_ingestion.adapters.pdf.vision_config",
+        lambda: vision.VisionConfig(
+            base_url="https://vision.example/v1",
+            api_key="secret",
+            model="vision-model-x",
+        ),
+    )
+    monkeypatch.setattr(
+        "impromptu_ingestion.adapters.pdf.transcribe_pages", lambda jobs, **options: {}
+    )
+
+    def extracted(page: object, *, timeout_seconds: float) -> tuple[TextElement, ...]:
+        return (
+            TextElement(
+                element_id="ocr:text:1",
+                text="테서랙트 텍스트",
+                x=1,
+                y=1,
+                width=10,
+                height=10,
+            ),
+        )
+
+    monkeypatch.setattr("impromptu_ingestion.adapters.pdf.extract_ocr_text", extracted)
+
+    with _staged(scanned) as source:
+        manifest = extract_pdf_in_process(source)
+
+    texts = [element.text for element in manifest.slides[0].elements if element.kind == "text"]
+    assert texts == ["테서랙트 텍스트"]
+    warning_codes = {warning.code for warning in manifest.slides[0].warnings}
+    assert warning_codes == {"ocr_applied"}
 
 
 def test_scanned_page_ingests_with_warning_when_ocr_is_unavailable(
@@ -191,11 +309,7 @@ def test_scanned_page_ingests_with_warning_when_ocr_is_unavailable(
 ) -> None:
     monkeypatch.delenv("TESSDATA_PREFIX", raising=False)
     scanned = tmp_path / "scanned.pdf"
-    document = pymupdf.open()
-    page = document.new_page(width=720, height=405)
-    raster = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 16, 16))
-    page.insert_image(pymupdf.Rect(0, 0, 720, 405), stream=raster.tobytes("png"))
-    document.save(scanned)
+    _write_raster_only_pdf(scanned)
 
     with _staged(scanned) as source:
         manifest = PdfStructuralAdapter().extract(source)
