@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { QaDefenseOutcome, QaExchangeItem } from "../src/qa/qa-exchange-ledger.ts";
 import {
   createFinalizedSessionReportReadRouteHandler,
   createSessionReportRouteHandler,
@@ -17,6 +18,7 @@ import {
 } from "../src/report/postgres-session-report-repository.ts";
 import {
   type PreparedEvidenceReportSnapshot,
+  type SessionReport,
   SessionReportFinalizer,
 } from "../src/report/session-report-finalizer.ts";
 
@@ -51,8 +53,15 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
   };
 }
 
+const answeredDefense: QaDefenseOutcome = {
+  outcome: "ANSWERED",
+  answerText: "슬라이드 3의 지표로 답변했습니다",
+  citations: [{ kind: "DECK_SLIDE", slideOrdinal: 3 }],
+};
+
 class MemoryReportRepository implements SessionReportRepository {
   readonly visits: SlideVisit[] = [];
+  readonly exchanges: QaExchangeItem[] = [];
   state: SessionReportState | null = null;
   finalizedCasGate: Promise<void> | null = null;
   finalizedCasFailure: Error | null = null;
@@ -103,12 +112,31 @@ class MemoryReportRepository implements SessionReportRepository {
       speakingDurationMs: input.speakingDurationMs,
       coachingAggregate: structuredClone(input.coachingAggregate),
       finalizedAtMs: input.finalizedAtMs,
+      reportVersion: input.finalizedAtMs !== null ? 2 : (this.state?.reportVersion ?? 1),
     };
     return structuredClone(this.state);
   }
 
+  async appendQaExchange(input: Parameters<SessionReportRepository["appendQaExchange"]>[0]) {
+    const duplicate = this.exchanges.find((exchange) => exchange.exchangeId === input.exchangeId);
+    if (duplicate !== undefined) return { outcome: "DUPLICATE" as const, exchange: duplicate };
+    const exchange: QaExchangeItem = {
+      exchangeId: input.exchangeId,
+      askedAtMs: input.askedAtMs,
+      question: input.question,
+      origin: input.origin,
+      defense: structuredClone(input.defense),
+    };
+    this.exchanges.push(exchange);
+    return { outcome: "APPENDED" as const, exchange };
+  }
+
   async readSlideVisits() {
     return structuredClone(this.visits);
+  }
+
+  async readQaExchanges(): Promise<readonly QaExchangeItem[]> {
+    return structuredClone(this.exchanges);
   }
 
   async readForOwner() {
@@ -141,6 +169,12 @@ function recordVisits(finalizer: SessionReportFinalizer): void {
     acceptedOffsetMs: 600,
     producerId: "cmd-a-2",
   });
+}
+
+/** Everything a finalized report owns EXCEPT the additive qaDefense section. */
+function talkView(report: SessionReport): Omit<SessionReport, "qaDefense"> {
+  const { qaDefense: _section, ...talk } = report;
+  return talk;
 }
 
 describe("owner-only asynchronous session report finalization", () => {
@@ -283,6 +317,99 @@ describe("owner-only asynchronous session report finalization", () => {
     expect(result.report.speech.wordCount).toBe(1);
   });
 
+  test("a finalized report contains the labeled 질의응답 section with exchanges in ask order", async () => {
+    const repository = new MemoryReportRepository();
+    const finalizer = new SessionReportFinalizer(repository);
+
+    const first = await finalizer.recordQaExchange(principal, {
+      exchangeId: "qa-exchange-first",
+      askedAtMs: 150,
+      question: "경쟁사 대비 차별점은 무엇인가요?",
+      origin: "SPOKEN",
+      defense: answeredDefense,
+    });
+    expect(first.outcome).toBe("APPENDED");
+    // An in-flight retry of the same exchange must not be written twice.
+    const retried = await finalizer.recordQaExchange(principal, {
+      exchangeId: "qa-exchange-first",
+      askedAtMs: 150,
+      question: "경쟁사 대비 차별점은 무엇인가요?",
+      origin: "SPOKEN",
+      defense: answeredDefense,
+    });
+    expect(retried.outcome).toBe("DUPLICATE");
+    const second = await finalizer.recordQaExchange(principal, {
+      exchangeId: "qa-exchange-second",
+      askedAtMs: 90,
+      question: "유지율 근거를 어디서 확인할 수 있나요?",
+      origin: "TYPED",
+      defense: {
+        outcome: "ABSTAINED",
+        abstainReason: "검증된 근거가 없어 답변을 보류했습니다",
+        retryable: false,
+      },
+    });
+    expect(second.outcome).toBe("APPENDED");
+
+    const end = await finalizer.endSession({
+      principal,
+      endedOffsetMs: 1_000,
+      finalizedAtMs: 10_000,
+      preparedEvidence,
+    });
+    const completion = await end.finalization;
+    expect(completion.outcome).toBe("FINALIZED");
+    if (completion.outcome !== "FINALIZED") throw completion.error;
+
+    expect(completion.report.reportVersion).toBe(2);
+    expect(completion.report.qaDefense?.label).toBe("질의응답");
+    // Ask order is arrival order, not asked-at order: first-in wins deterministically.
+    expect(completion.report.qaDefense?.exchanges.map((exchange) => exchange.exchangeId)).toEqual([
+      "qa-exchange-first",
+      "qa-exchange-second",
+    ]);
+    expect(completion.report.qaDefense?.exchanges[1]?.defense).toEqual({
+      outcome: "ABSTAINED",
+      abstainReason: "검증된 근거가 없어 답변을 보류했습니다",
+      retryable: false,
+    });
+
+    const beforeRestart = JSON.stringify(completion.report);
+    const restarted = new SessionReportFinalizer(repository);
+    const afterRestart = await restarted.readFinalizedReport(principal, preparedEvidence);
+    expect(JSON.stringify(afterRestart)).toBe(beforeRestart);
+    expect(beforeRestart).toContain("질의응답");
+  });
+
+  test("a persisted v1 report still reads back without the qaDefense section", async () => {
+    const repository = new MemoryReportRepository();
+    repository.state = {
+      ownerSubject: principal.ownerSubject,
+      revision: 7,
+      speechSummary: "요약",
+      wordCount: 3,
+      speakingDurationMs: 10,
+      coachingAggregate: {
+        timing: { finalCount: 1, measuredFinalCount: 1 },
+        coaching: {
+          cueCount: 0,
+          latestCurrentWordsPerMinute: null,
+          latestPreviousWordsPerMinute: null,
+        },
+      },
+      finalizedAtMs: 5_000,
+      reportVersion: 1,
+    };
+    const finalizer = new SessionReportFinalizer(repository);
+
+    const report = await finalizer.readFinalizedReport(principal, preparedEvidence);
+
+    expect(report).not.toBeNull();
+    if (report === null) throw new Error("report missing");
+    expect(report.reportVersion).toBe(1);
+    expect("qaDefense" in report).toBe(false);
+  });
+
   test("rechecks the presentation owner and rejects a same-tenant non-owner with 403", async () => {
     const repository = new MemoryReportRepository();
     const finalizer = new SessionReportFinalizer(repository);
@@ -318,5 +445,51 @@ describe("owner-only asynchronous session report finalization", () => {
     );
     expect(response?.status).toBe(403);
     expect(await response?.json()).toEqual({ error: "report_forbidden" });
+  });
+
+  test("a post-talk exchange appends after finalization, shows up when the report is read, and leaves the finalized talk data byte-identical", async () => {
+    const repository = new MemoryReportRepository();
+    const finalizer = new SessionReportFinalizer(repository);
+    recordVisits(finalizer);
+    // The presenter presses end; the report lane finalizes synchronously inside that flow.
+    const end = await finalizer.endSession({
+      principal,
+      endedOffsetMs: 1_000,
+      finalizedAtMs: 10_000,
+      preparedEvidence,
+    });
+    const completion = await end.finalization;
+    expect(completion.outcome).toBe("FINALIZED");
+    if (completion.outcome !== "FINALIZED") throw completion.error;
+    const beforeTalk = JSON.stringify(talkView(completion.report));
+
+    const late = await finalizer.recordQaExchange(principal, {
+      exchangeId: "qa-after-end-1",
+      askedAtMs: 12_000,
+      question: "발표가 끝난 뒤의 질문",
+      origin: "TYPED",
+      defense: answeredDefense,
+    });
+    expect(late.outcome).toBe("APPENDED");
+    // Idempotency holds across finalization: same id writes once.
+    const retried = await finalizer.recordQaExchange(principal, {
+      exchangeId: "qa-after-end-1",
+      askedAtMs: 12_000,
+      question: "발표가 끝난 뒤의 질문",
+      origin: "TYPED",
+      defense: answeredDefense,
+    });
+    expect(retried.outcome).toBe("DUPLICATE");
+    expect(repository.exchanges.length).toBe(1);
+
+    const reread = await finalizer.readFinalizedReport(principal, preparedEvidence);
+    expect(reread).not.toBeNull();
+    if (reread === null) throw new Error("finalized report missing after post-talk append");
+    expect(reread.qaDefense?.label).toBe("질의응답");
+    expect(reread.qaDefense?.exchanges.map((exchange) => exchange.exchangeId)).toEqual([
+      "qa-after-end-1",
+    ]);
+    expect(reread.finalizedAtMs).toBe(10_000);
+    expect(JSON.stringify(talkView(reread))).toBe(beforeTalk);
   });
 });

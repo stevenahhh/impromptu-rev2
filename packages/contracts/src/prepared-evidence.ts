@@ -38,6 +38,13 @@ export const PresentationSessionLifecycleSchema = z
     status: z.enum(["ACTIVE", "ENDED"]),
     createdAtMs: TimestampMsSchema,
     endedAtMs: TimestampMsSchema.nullable(),
+    // Additive S1 field: snapshots persisted before Q&A support lack this key, so
+    // `null` is defaulted here rather than in restore side-effects. This keeps
+    // restorePreparedEvidenceStore (services/private-backend/src/prepared-evidence.ts,
+    // which safeParse()s presentation lifecycles against this exact schema) able to
+    // accept its own pre-S1 output while full-fidelity snapshots round-trip the real
+    // timestamp. Parsed output type remains required: number | null.
+    qaStartedAtMs: TimestampMsSchema.nullable().default(null),
   })
   .strict();
 

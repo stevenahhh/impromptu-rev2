@@ -13,6 +13,7 @@ import {
   required,
 } from "./bootstrap/env.ts";
 import { createModelRouter } from "./bootstrap/model-router.ts";
+import { createQaDefense } from "./bootstrap/qa-defense.ts";
 import { createRecommendations } from "./bootstrap/recommendations.ts";
 import { createRetrievalStack } from "./bootstrap/retrieval-stack.ts";
 import { createSessionReportRead } from "./bootstrap/session-reports.ts";
@@ -25,6 +26,7 @@ import { createJsonLogger, createMetricsRegistry } from "./observability.ts";
 import { PreparedEvidenceCoordinator } from "./prepared-evidence.ts";
 import { createPostgresPreparedEvidencePersistence } from "./prepared-evidence-store-postgres.ts";
 import { ProjectionHttpPort } from "./projection-http-port.ts";
+import { QaExchangeLedger } from "./qa/qa-exchange-ledger.ts";
 import { createTokenBucketRateLimiter } from "./rate-limit.ts";
 import { createPostgresSessionReportRepository } from "./report/postgres-session-report-repository.ts";
 import { createProvisionedSessionReportRepository } from "./report/provisioned-session-report-repository.ts";
@@ -134,6 +136,16 @@ const sessionReportRead = createSessionReportRead({
   sessionReportFinalizer,
   coordinator,
 });
+// Post-talk Q&A: opens the question window on an ENDED presentation (owner-checked via the
+// coordinator) and answers audience questions grounded in recommendations, persisting every
+// exchange through the report ledger so no rendered answer goes unrecorded.
+const qaDefense = createQaDefense({
+  store,
+  coordinator,
+  recommendations,
+  qaExchanges: new QaExchangeLedger(sessionReportFinalizer),
+  persist: persistence.persist,
+});
 const metrics = createMetricsRegistry("private_backend");
 const loginRateLimiters = {
   account: createTokenBucketRateLimiter({
@@ -167,6 +179,7 @@ const server = Bun.serve({
     recommendations,
     ...(audio === undefined ? {} : { audio }),
     sessionReportRead,
+    qaDefense,
     persist: persistence.persist,
     uploads: deckUploadService,
     referenceDocuments: retrievalStack.referenceDocuments,

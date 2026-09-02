@@ -922,6 +922,166 @@ describe("prepared evidence private coordinator", () => {
     ).toEqual({ outcome: "REJECTED", reason: "PUBLICATION_DISABLED" });
   });
 
+  test("restores a legacy lifecycle snapshot without qaStartedAtMs as null", () => {
+    return (async () => {
+      const flow = await createBoundFlow();
+      const snapshot = JSON.parse(JSON.stringify(snapshotPreparedEvidenceStore(flow.store))) as {
+        presentations: Array<{ lifecycle: Record<string, unknown> }>;
+      };
+      delete snapshot.presentations[0]?.lifecycle.qaStartedAtMs;
+      const restored = restorePreparedEvidenceStore(snapshot);
+      expect(restored.outcome).toBe("RESTORED");
+      if (restored.outcome !== "RESTORED") throw new Error("restore fixture failed");
+      const lifecycle = restored.store.presentations.get(
+        flow.created.lifecycle.presentationSessionId,
+      );
+      expect(lifecycle?.lifecycle.qaStartedAtMs).toBe(null);
+      expect(lifecycle?.lifecycle.status).toBe("ACTIVE");
+    })();
+  });
+
+  test("beginQuestions while ACTIVE rejects PRESENTATION_NOT_ENDED and mutates nothing", async () => {
+    // Post-talk rule: opening is reserved for after 발표 종료, so an in-progress talk gets its
+    // own typed rejection (not PRESENTATION_ENDED) and the store stays untouched.
+    const flow = await createBoundFlow();
+    const before = JSON.stringify(snapshotPreparedEvidenceStore(flow.store));
+    const begun = await flow.coordinator.beginQuestions(
+      flow.account.accountSessionId,
+      flow.created.lifecycle.presentationSessionId,
+      1_005,
+    );
+    expect(begun).toEqual({ outcome: "REJECTED", reason: "PRESENTATION_NOT_ENDED" });
+    expect(JSON.stringify(snapshotPreparedEvidenceStore(flow.store))).toBe(before);
+  });
+
+  test("beginQuestions is idempotent and repeats the FIRST timestamp with no second write", async () => {
+    const flow = await createBoundFlow();
+    const ended = await flow.coordinator.endPresentation(
+      flow.account.accountSessionId,
+      flow.created.lifecycle.presentationSessionId,
+      1_004,
+    );
+    expect(ended.outcome).toBe("APPLIED");
+    const first = await flow.coordinator.beginQuestions(
+      flow.account.accountSessionId,
+      flow.created.lifecycle.presentationSessionId,
+      1_005,
+    );
+    expect(first.outcome).toBe("APPLIED");
+    const before = JSON.stringify(snapshotPreparedEvidenceStore(flow.store));
+    const second = await flow.coordinator.beginQuestions(
+      flow.account.accountSessionId,
+      flow.created.lifecycle.presentationSessionId,
+      9_999,
+    );
+    expect(second.outcome).toBe("APPLIED");
+    if (first.outcome !== "APPLIED" || second.outcome !== "APPLIED") {
+      throw new Error("beginQuestions fixture failed");
+    }
+    expect(second.value).toEqual(first.value);
+    if (second.outcome !== "APPLIED") throw new Error("second beginQuestions failed");
+    expect(second.value.qaStartedAtMs).toBe(1_005);
+    expect(JSON.stringify(snapshotPreparedEvidenceStore(flow.store))).toBe(before);
+  });
+
+  test("opening Q&A while the talk is still ACTIVE is the typed PRESENTATION_NOT_ENDED rejection", async () => {
+    // Product rule: Q&A opens AFTER the talk ends, so ACTIVE gets its own rejection reason —
+    // distinct from PRESENTATION_ENDED, which other operations keep meaning "too late" by.
+    const flow = await createBoundFlow();
+    expect(
+      await flow.coordinator.beginQuestions(
+        flow.account.accountSessionId,
+        flow.created.lifecycle.presentationSessionId,
+        1_005,
+      ),
+    ).toEqual({ outcome: "REJECTED", reason: "PRESENTATION_NOT_ENDED" });
+  });
+
+  test("beginQuestions after the talk ends succeeds: ENDED opens once and stays idempotent", async () => {
+    const flow = await createBoundFlow();
+    const ended = await flow.coordinator.endPresentation(
+      flow.account.accountSessionId,
+      flow.created.lifecycle.presentationSessionId,
+      1_005,
+    );
+    expect(ended.outcome).toBe("APPLIED");
+    const begun = await flow.coordinator.beginQuestions(
+      flow.account.accountSessionId,
+      flow.created.lifecycle.presentationSessionId,
+      1_006,
+    );
+    expect(begun.outcome).toBe("APPLIED");
+    if (begun.outcome !== "APPLIED") throw new Error("beginQuestions failed");
+    expect(begun.value.status).toBe("ENDED");
+    expect(begun.value.qaStartedAtMs).toBe(1_006);
+    const before = JSON.stringify(snapshotPreparedEvidenceStore(flow.store));
+    const repeat = await flow.coordinator.beginQuestions(
+      flow.account.accountSessionId,
+      flow.created.lifecycle.presentationSessionId,
+      9_999,
+    );
+    expect(repeat).toEqual({ outcome: "APPLIED", value: begun.value });
+    expect(JSON.stringify(snapshotPreparedEvidenceStore(flow.store))).toBe(before);
+  });
+
+  test("an ENDED session keeps its spine locked: slides still rejected, ownership still enforced", async () => {
+    const flow = await createBoundFlow();
+    const ended = await flow.coordinator.endPresentation(
+      flow.account.accountSessionId,
+      flow.created.lifecycle.presentationSessionId,
+      1_005,
+    );
+    expect(ended.outcome).toBe("APPLIED");
+    // Slide-set commands must remain exactly as unreachable on ENDED as before Q&A could
+    // open there; only beginQuestions gains an ENDED authorization path.
+    expect(
+      await flow.coordinator.setSlide(
+        flow.account.accountSessionId,
+        {
+          presentationSessionId: flow.created.lifecycle.presentationSessionId,
+          commandId: "cmd_after_end",
+          publicSlideKey: "slide_two",
+          displayBindingEpoch: "dbe_1",
+          baseRevision: "cr_0",
+        },
+        1_006,
+      ),
+    ).toMatchObject({ outcome: "REJECTED", reason: "PRESENTATION_ENDED" });
+    const otherAccount = await flow.coordinator.createAccountSession(
+      { accountId: "account_beta", actorId: "actor_beta" },
+      1_007,
+    );
+    expect(
+      await flow.coordinator.beginQuestions(
+        otherAccount.accountSessionId,
+        flow.created.lifecycle.presentationSessionId,
+        1_008,
+      ),
+    ).toEqual({ outcome: "REJECTED", reason: "UNAUTHORIZED" });
+  });
+
+  test("opening Q&A after the talk ended preserves the ENDED lifecycle fields it stamps over", async () => {
+    const flow = await createBoundFlow();
+    const ended = await flow.coordinator.endPresentation(
+      flow.account.accountSessionId,
+      flow.created.lifecycle.presentationSessionId,
+      1_010,
+    );
+    expect(ended.outcome).toBe("APPLIED");
+    if (ended.outcome !== "APPLIED") throw new Error("end failed");
+    // qaStartedAtMs exists exactly once the Q&A window opened; ending already happened, so
+    // status/endedAtMs must survive the stamp untouched.
+    const begun = await flow.coordinator.beginQuestions(
+      flow.account.accountSessionId,
+      flow.created.lifecycle.presentationSessionId,
+      1_020,
+    );
+    expect(begun).toMatchObject({ outcome: "APPLIED" });
+    if (begun.outcome !== "APPLIED") throw new Error("beginQuestions failed");
+    expect(begun.value.status).toBe("ENDED");
+    expect(begun.value.endedAtMs).toBe(1_010);
+    expect(begun.value.qaStartedAtMs).toBe(1_020);
+  });
   test("a retried end by the same owner is distinguishable from a non-owner or missing presentation", async () => {
     const flow = await createBoundFlow();
     const ended = await flow.coordinator.endPresentation(
@@ -957,5 +1117,45 @@ describe("prepared evidence private coordinator", () => {
         1_009,
       ),
     ).toEqual({ outcome: "REJECTED", reason: "PRESENTATION_NOT_FOUND" });
+  });
+
+  test("an open Q&A window does NOT reopen slide control on the ended talk", async () => {
+    const flow = await createBoundFlow();
+    const playbackEvents: string[] = [];
+    flow.gateway.connectStage(
+      flow.bound.audienceDisplaySessionId,
+      {
+        onPlayback: (event) => playbackEvents.push(event.commandId),
+        onClose: () => undefined,
+      },
+      1_001,
+    );
+    const ended = await flow.coordinator.endPresentation(
+      flow.account.accountSessionId,
+      flow.created.lifecycle.presentationSessionId,
+      1_002,
+    );
+    expect(ended.outcome).toBe("APPLIED");
+    const begun = await flow.coordinator.beginQuestions(
+      flow.account.accountSessionId,
+      flow.created.lifecycle.presentationSessionId,
+      1_003,
+    );
+    expect(begun.outcome).toBe("APPLIED");
+    // Opening the post-talk Q&A window must not loosen the ACTIVE-only spine for anything
+    // else: slides stay frozen once the talk ended.
+    const moved = await flow.coordinator.setSlide(
+      flow.account.accountSessionId,
+      {
+        presentationSessionId: flow.created.lifecycle.presentationSessionId,
+        commandId: "cmd_after_end",
+        publicSlideKey: "slide_two",
+        displayBindingEpoch: "dbe_1",
+        baseRevision: "cr_0",
+      },
+      1_004,
+    );
+    expect(moved).toMatchObject({ outcome: "REJECTED", reason: "PRESENTATION_ENDED" });
+    expect(playbackEvents).toEqual([]);
   });
 });

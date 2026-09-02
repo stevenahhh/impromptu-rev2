@@ -380,6 +380,7 @@ export type SessionRejection =
   | "ACCOUNT_SESSION_REVOKED"
   | "PRESENTATION_NOT_FOUND"
   | "PRESENTATION_ENDED"
+  | "PRESENTATION_NOT_ENDED"
   | "UNAUTHORIZED";
 
 export type OperationResult<Value> =
@@ -576,6 +577,7 @@ export class PreparedEvidenceCoordinator {
       status: "ACTIVE",
       createdAtMs: nowMs,
       endedAtMs: null,
+      qaStartedAtMs: null,
     });
     const lease = PlaybackControlLeaseSchema.parse({
       leaseId: `lease_${opaqueHex(16)}`,
@@ -621,6 +623,31 @@ export class PreparedEvidenceCoordinator {
       audienceDisplaySession: null,
     });
     return { outcome: "APPLIED", value: { lifecycle, lease, authority } };
+  }
+
+  async beginQuestions(
+    accountSessionId: string,
+    presentationSessionId: string,
+    nowMs: number,
+  ): Promise<OperationResult<PresentationSessionLifecycle>> {
+    const account = await this.readAccountSession(accountSessionId, nowMs);
+    if (account.outcome === "REJECTED") return account;
+    const presentation = this.#store.presentations.get(presentationSessionId);
+    if (presentation === undefined)
+      return { outcome: "REJECTED", reason: "PRESENTATION_NOT_FOUND" };
+    // Deliberate divergence from #authorizedPresentation, whose ACTIVE-only spine every
+    // other operation shares unchanged: Q&A opens only AFTER the talk ends (post-talk rule),
+    // so an in-progress talk gets its own typed rejection instead.
+    if (presentation.lifecycle.status !== "ENDED")
+      return { outcome: "REJECTED", reason: "PRESENTATION_NOT_ENDED" };
+    if (presentation.lifecycle.ownerAccountId !== account.value.accountId)
+      return { outcome: "REJECTED", reason: "UNAUTHORIZED" };
+    const lifecycle = presentation.lifecycle;
+    // Idempotent repeat while Q&A is open: return the ORIGINAL timestamp, write nothing.
+    if (lifecycle.qaStartedAtMs !== null) return { outcome: "APPLIED", value: lifecycle };
+    const opened = PresentationSessionLifecycleSchema.parse({ ...lifecycle, qaStartedAtMs: nowMs });
+    presentation.lifecycle = opened;
+    return { outcome: "APPLIED", value: opened };
   }
 
   async endPresentation(
