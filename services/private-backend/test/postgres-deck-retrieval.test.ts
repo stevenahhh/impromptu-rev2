@@ -390,3 +390,214 @@ describe("PostgreSQL deck corpus retrieval", () => {
     ]);
   });
 });
+
+describe("concurrent deck corpus preparation", () => {
+  function fakeSqlWithTimeline(
+    database: ReturnType<typeof fakeSql>,
+    timeline: string[],
+  ): ReturnType<typeof fakeSql>["sql"] {
+    const inner = database.sql as unknown as (first: unknown, ...values: unknown[]) => unknown;
+    const wrapper = ((first: unknown, ...values: unknown[]) => {
+      if (Array.isArray(first) && Object.hasOwn(first, "raw")) {
+        const query = (first as unknown as TemplateStringsArray)
+          .join("?")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (query.startsWith("SELECT pg_advisory_xact_lock")) timeline.push("advisory-lock");
+        if (query.startsWith("INSERT INTO private_app.deck_retrieval_chunks")) {
+          timeline.push(`insert:${String(values[9]).slice(0, 12)}`);
+        }
+      }
+      return inner(first, ...values);
+    }) as unknown as ReturnType<typeof fakeSql>["sql"];
+    Object.assign(wrapper, { array: (value: unknown) => value });
+    return wrapper;
+  }
+
+  // Minimal render+ingestion fixture: one artifact, one text element per slide.
+  function writeArtifact(root: string, deckHash: string, slideTexts: readonly string[]): string {
+    const artifact = join(root, `artifact-${deckHash.slice(0, 8)}`);
+    mkdirSync(join(artifact, "slides"), { recursive: true });
+    const slides = slideTexts.map((text, index) => ({
+      slide_key: `slide_${createHash("sha256").update(`${deckHash}:${index}`).digest("hex")}`,
+      source_index: index + 1,
+      relative_path: `slides/slide-${index + 1}.png`,
+      content_sha256: createHash("sha256").update(text).digest("hex"),
+      width_points: 960,
+      height_points: 540,
+    }));
+    writeFileSync(
+      join(artifact, "render.json"),
+      JSON.stringify({
+        deck_id: `deck_${deckHash}`,
+        renderer: { name: "libreoffice", version: "7.6" },
+        slides,
+        assets: [],
+        fonts: [],
+        timelines: [],
+        mapping_issues: [],
+        animation_eligible: true,
+        ineligible_reason: null,
+      }),
+    );
+    writeFileSync(
+      join(artifact, "ingestion.json"),
+      JSON.stringify({
+        status: "completed",
+        job_id: "production_ingest",
+        manifest_hash: "d".repeat(64),
+        manifest: {
+          schema_version: "1",
+          deck_id: `deck_${deckHash}`,
+          source_sha256: deckHash,
+          source_kind: "pdf",
+          adapter_version: "pymupdf-structural-v2",
+          slides: slides.map((slide, index) => ({
+            slide_key: slide.slide_key,
+            source_index: slide.source_index,
+            source_id: `page:${index + 1}`,
+            width_points: 960,
+            height_points: 540,
+            elements: [
+              {
+                kind: "text",
+                element_id: `text:${index + 1}:1:1`,
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 20,
+                text: slideTexts[index],
+              },
+            ],
+            warnings: [],
+          })),
+          render_boundary: {
+            status: "not_performed",
+            renderer: null,
+            fidelity_verified: false,
+            reason: "Structural extraction only",
+          },
+        },
+      }),
+    );
+    return createHash("sha256")
+      .update(`render-manifest:deck_${deckHash}:${slides.map((s) => s.content_sha256).join(":")}`)
+      .digest("hex");
+  }
+
+  function principalFor(tenantId: string) {
+    return { tenantId, principalId: "principal-1", groupIds: [], attributes: {} };
+  }
+
+  test("embedding happens inside the advisory-locked critical section", async () => {
+    // Every slide of a freshly uploaded deck asks for a recommendation at once. Embedding
+    // used to run BEFORE the advisory lock, so every concurrent racer duplicated the whole
+    // provider embedding run while waiting for the winner, burning every request deadline on
+    // redundant work. The recorded operation order below pins the contract: the lock is
+    // taken first, embedding follows inside it, and only then are rows written.
+    const root = mkdtempSync(join(tmpdir(), "deck-corpus-race-"));
+    roots.push(root);
+    const deckHash = "1".repeat(64);
+    const manifestHash = writeArtifact(root, deckHash, ["스마트 캠퍼스 개요 슬라이드"]);
+    const database = fakeSql();
+
+    const timeline: string[] = [];
+    const instrumented = fakeSqlWithTimeline(database, timeline);
+
+    const embedded: string[] = [];
+    const events: unknown[] = [];
+    const store = new PostgresDeckRetrievalStore({
+      sql: instrumented as unknown as Sql,
+      artifactRoot: root,
+      access: {
+        async authorize() {
+          return true;
+        },
+      },
+      embedding: {
+        async embed(text) {
+          timeline.push("embed:start");
+          embedded.push(text);
+          timeline.push("embed:end");
+          return [1, 0];
+        },
+      },
+      logger: {
+        log(event) {
+          events.push(event);
+        },
+      },
+    });
+
+    const request = RetrievalRequestSchema.parse({
+      query: "개요",
+      deckVersion: `deck_${deckHash}`,
+      manifestHash,
+      maxResults: 3,
+    });
+
+    await store.prepare(principalFor("tenant-race"), request);
+
+    const lockAt = timeline.indexOf("advisory-lock");
+    const embedAt = timeline.indexOf("embed:start");
+    const insertAt = timeline.findIndex((entry) => entry.startsWith("insert:"));
+    expect(lockAt).toBeGreaterThanOrEqual(0);
+    expect(embedAt).toBeGreaterThan(lockAt);
+    expect(insertAt).toBeGreaterThan(embedAt);
+    expect(embedded).toEqual(["스마트 캠퍼스 개요 슬라이드"]);
+    expect(events).toEqual([
+      expect.objectContaining({ outcome: "INDEXED", reason: "COMPLETED", indexedChunkCount: 1 }),
+    ]);
+  });
+
+  test("embeds a multi-chunk corpus concurrently and keeps row association", async () => {
+    // Serial embedding of 44 chunks took ~13.5 seconds on the dev stack - far beyond a single
+    // recommendation budget - and stretched the critical section every concurrent recommender
+    // waits on. Overlapping provider calls shortens it, and rows must stay tied to their own
+    // chunks regardless of embedding completion order.
+    const root = mkdtempSync(join(tmpdir(), "deck-corpus-parallel-"));
+    roots.push(root);
+    const texts = [
+      "첫 번째 슬라이드 본문입니다.",
+      "두 번째 슬라이드 본문입니다.",
+      "세 번째 슬라이드 본문입니다.",
+    ];
+    const deckHash = "2".repeat(64);
+    const manifestHash = writeArtifact(root, deckHash, texts);
+    const database = fakeSql();
+
+    let active = 0;
+    let maxActive = 0;
+    const store = new PostgresDeckRetrievalStore({
+      sql: database.sql,
+      artifactRoot: root,
+      access: {
+        async authorize() {
+          return true;
+        },
+      },
+      embedding: {
+        async embed() {
+          active += 1;
+          maxActive = Math.max(maxActive, active);
+          await Bun.sleep(0);
+          active -= 1;
+          return [1, 0];
+        },
+      },
+    });
+
+    const request = RetrievalRequestSchema.parse({
+      query: "본문",
+      deckVersion: `deck_${deckHash}`,
+      manifestHash,
+      maxResults: 3,
+    });
+    await store.prepare(principalFor("tenant-parallel"), request);
+
+    expect(maxActive).toBe(texts.length);
+    const contents = database.rows.map((row) => row.content);
+    expect([...contents].sort()).toEqual([...texts].sort());
+    expect(database.rows.every((row) => Array.isArray(row.embedding))).toBe(true);
+  });
+});
