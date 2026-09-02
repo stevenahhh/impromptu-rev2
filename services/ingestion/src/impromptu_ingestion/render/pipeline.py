@@ -23,6 +23,7 @@ from impromptu_ingestion.render.mapping import map_slide
 from impromptu_ingestion.render.source import (
     RenderError,
     normalize_renderer_svg,
+    paint_page_background,
     private_note_fragments,
     slide_parts,
     slide_size_points,
@@ -98,6 +99,7 @@ def render_deck(request: RenderRequest) -> RenderedDeck:
         targets: dict[int, ResolvedTarget] = {target.shape_id: target for target in mapping.targets}
         key = slide_key(source_sha256, part_name)
         svg_text, slide_assets, payloads = externalize_assets(raw_svg)
+        svg_text = paint_page_background(svg_text)
         verified.append(
             _VerifiedSlide(
                 key=key,

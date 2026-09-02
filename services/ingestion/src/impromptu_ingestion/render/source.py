@@ -16,6 +16,8 @@ _MAX_NOTE_FRAGMENTS = 2_000
 _MAX_SLIDE_XML_BYTES = 8_000_000
 _DEFAULT_SLIDE_POINTS = (960.0, 540.0)
 _EMU_PER_POINT = 12_700
+_PAGE_BACKGROUND_ID = "impromptu-page-background"
+_DEFAULT_BACKGROUND_FILL = "#ffffff"
 _IGNORED_SVG_CLASSES = frozenset(
     {"Background", "BackgroundObjects", "DateTime", "Footer", "PageNumber", "Header"}
 )
@@ -154,6 +156,57 @@ def normalize_renderer_svg(svg_text: str) -> str:
             for name, value in normalized:
                 element.set(name, value)
             del element.attrib["style"]
+    return etree.tostring(root, encoding="unicode")
+
+
+def _svg_number(value: float) -> str:
+    return str(int(value)) if value.is_integer() else f"{value:g}"
+
+
+def _declared_background_fill(root: etree._Element) -> str | None:
+    """The fill the deck itself declares for its page, wherever LibreOffice parked it."""
+    for group in root.iter():
+        if not isinstance(group.tag, str) or group.get("class") != "Background":
+            continue
+        for shape in group.iter():
+            fill = shape.get("fill")
+            if fill is not None and fill not in ("none", "") and not fill.startswith("url("):
+                return fill
+    return None
+
+
+def paint_page_background(svg_text: str) -> str:
+    """Paint the deck's page background as geometry the published slide carries itself.
+
+    LibreOffice leaves the background inside a hidden master slide that only its own export
+    script reveals. Stage publishes inert SVG with no script, so that background never
+    appears and a white deck shows the surface behind it instead. A deck that declares no
+    background at all is white, which is PowerPoint's own default.
+    """
+    root = etree.fromstring(
+        svg_text.encode("utf-8"),
+        parser=etree.XMLParser(resolve_entities=False, no_network=True, huge_tree=False),
+    )
+    if any(element.get("id") == _PAGE_BACKGROUND_ID for element in root.iter()):
+        return svg_text
+    box = (root.get("viewBox") or "").replace(",", " ").split()
+    if len(box) != 4:
+        return svg_text
+    try:
+        min_x, min_y, width, height = (float(value) for value in box)
+    except ValueError:
+        return svg_text
+    if width <= 0 or height <= 0:
+        return svg_text
+    rect = etree.Element(f"{{{_SVG_NS}}}rect")
+    rect.set("id", _PAGE_BACKGROUND_ID)
+    rect.set("x", _svg_number(min_x))
+    rect.set("y", _svg_number(min_y))
+    rect.set("width", _svg_number(width))
+    rect.set("height", _svg_number(height))
+    rect.set("fill", _declared_background_fill(root) or _DEFAULT_BACKGROUND_FILL)
+    rect.set("stroke", "none")
+    root.insert(0, rect)
     return etree.tostring(root, encoding="unicode")
 
 

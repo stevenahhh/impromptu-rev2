@@ -16,7 +16,9 @@ _PNG = base64.b64decode(
 )
 
 
-def _two_shape_deck(path: Path) -> tuple[int, int]:
+def _two_shape_deck(
+    path: Path, *, visible: str = "한국어", note: str | None = None
+) -> tuple[int, int]:
     presentation = Presentation()
     presentation.slide_width = Inches(13.333)
     presentation.slide_height = Inches(7.5)
@@ -25,9 +27,11 @@ def _two_shape_deck(path: Path) -> tuple[int, int]:
         MSO_SHAPE.ROUNDED_RECTANGLE, Inches(1), Inches(1), Inches(3), Inches(2)
     )
     first.name = "카드A"
-    first.text_frame.text = "한국어"
+    first.text_frame.text = visible
     second = slide.shapes.add_shape(MSO_SHAPE.OVAL, Inches(6), Inches(4), Inches(3), Inches(2))
     second.name = "카드B"
+    if note is not None:
+        slide.notes_slide.notes_text_frame.text = note
     presentation.save(path)
     return first.shape_id, second.shape_id
 
@@ -190,28 +194,11 @@ def test_libreoffice_doctype_prologue_is_normalized_before_parsing(tmp_path: Pat
     assert len(rendered.slides) == 1
 
 
-def _deck_with_notes(path: Path, note: str, visible: str = "공개 문구") -> tuple[int, int]:
-    presentation = Presentation()
-    presentation.slide_width = Inches(13.333)
-    presentation.slide_height = Inches(7.5)
-    slide = presentation.slides.add_slide(presentation.slide_layouts[6])
-    first = slide.shapes.add_shape(
-        MSO_SHAPE.ROUNDED_RECTANGLE, Inches(1), Inches(1), Inches(3), Inches(2)
-    )
-    first.name = "카드A"
-    first.text_frame.text = visible
-    second = slide.shapes.add_shape(MSO_SHAPE.OVAL, Inches(6), Inches(4), Inches(3), Inches(2))
-    second.name = "카드B"
-    slide.notes_slide.notes_text_frame.text = note
-    presentation.save(path)
-    return first.shape_id, second.shape_id
-
-
 def test_speaker_notes_in_the_render_refuse_publication(tmp_path: Path) -> None:
     """A converter that paints private notes onto the public surface must be refused."""
     note = "PRIVATE-NOTES-MUST-NEVER-LEAK"
     deck_path = tmp_path / "deck.pptx"
-    shape_ids = _deck_with_notes(deck_path, note)
+    shape_ids = _two_shape_deck(deck_path, visible="공개 문구", note=note)
     output_dir = tmp_path / "out"
     leaking_svg = _svg_for(shape_ids).replace(
         "</g></g></svg>", f"<text>{note}</text></g></g></svg>"
@@ -227,7 +214,7 @@ def test_speaker_notes_in_the_render_refuse_publication(tmp_path: Path) -> None:
 def test_notes_that_repeat_visible_slide_text_do_not_block_publication(tmp_path: Path) -> None:
     """Only note content absent from the slide itself can constitute a leak."""
     deck_path = tmp_path / "deck.pptx"
-    shape_ids = _deck_with_notes(deck_path, "공개 문구", visible="공개 문구")
+    shape_ids = _two_shape_deck(deck_path, visible="공개 문구", note="공개 문구")
     output_dir = tmp_path / "out"
 
     rendered = render_deck(_request(deck_path, output_dir, _FakeConverter(_svg_for(shape_ids))))
@@ -247,3 +234,46 @@ def test_render_refuses_to_overwrite_an_existing_output_directory(tmp_path: Path
 
     assert getattr(failure.value, "code", "") == "output_directory_not_empty"
     assert (output_dir / "keep.txt").read_text(encoding="utf-8") == "existing"
+
+
+def test_a_hidden_master_background_is_painted_into_the_published_slide(tmp_path: Path) -> None:
+    """LibreOffice keeps the page background in a hidden master its own script would reveal.
+
+    Stage publishes inert SVG with no script, so that background never appears and a white
+    deck shows the surface color behind it. The published slide must carry the deck's own
+    background as painted geometry.
+    """
+    deck_path = tmp_path / "deck.pptx"
+    shape_ids = _two_shape_deck(deck_path)
+    output_dir = tmp_path / "out"
+    svg = _svg_for(shape_ids).replace(
+        '<g class="Slide" id="slide1">',
+        '<g class="Slide" id="slide1">'
+        '<g class="Master_Slide" id="master1" visibility="hidden">'
+        '<g class="Background" id="bg-master1">'
+        '<path fill="rgb(255,255,255)" stroke="none" d="M 0,0 L 33866,0 33866,19050 0,19050 Z"/>'
+        "</g></g>",
+    )
+
+    rendered = render_deck(_request(deck_path, output_dir, _FakeConverter(svg)))
+
+    written = (output_dir / rendered.slides[0].relative_path).read_text(encoding="utf-8")
+    assert 'id="impromptu-page-background"' in written
+    background = written[written.index('id="impromptu-page-background"') :]
+    background = background[: background.index(">") + 1]
+    assert 'fill="rgb(255,255,255)"' in background
+    assert 'width="33866"' in background and 'height="19050"' in background
+    assert written.index("impromptu-page-background") < written.index('class="Slide"')
+
+
+def test_a_deck_without_any_declared_background_is_painted_white(tmp_path: Path) -> None:
+    """PowerPoint's own default is a white page; a transparent slide would show the shell."""
+    deck_path = tmp_path / "deck.pptx"
+    shape_ids = _two_shape_deck(deck_path)
+    output_dir = tmp_path / "out"
+
+    rendered = render_deck(_request(deck_path, output_dir, _FakeConverter(_svg_for(shape_ids))))
+
+    written = (output_dir / rendered.slides[0].relative_path).read_text(encoding="utf-8")
+    assert 'id="impromptu-page-background"' in written
+    assert 'fill="#ffffff"' in written
