@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { PublishedDeckArtifactSchema } from "@impromptu/contracts/public";
+import type { ExactOrigin } from "../src/config.ts";
 import { PreparedEvidenceProjectionGateway } from "../src/prepared-evidence.ts";
 import {
   createProjectionRealtimeProtocol,
@@ -72,7 +73,7 @@ describe("projection WSS runtime surface", () => {
     if (bound.outcome !== "BOUND") throw new Error("binding failed");
     const protocol = createProjectionRealtimeProtocol({
       gateway,
-      allowedOrigin: "https://stage.example.test",
+      allowedOrigin: "https://stage.example.test" as ExactOrigin,
       now: () => 1_002,
       async recordApplied(input) {
         return {

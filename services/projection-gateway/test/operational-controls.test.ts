@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { parseProjectionGatewayConfig } from "../src/config.ts";
+import { type ExactOrigin, parseProjectionGatewayConfig } from "../src/config.ts";
 import { createProjectionGatewayHandler } from "../src/http.ts";
 import { createMetricsRegistry } from "../src/observability.ts";
 import { PreparedEvidenceProjectionGateway } from "../src/prepared-evidence.ts";
 import { createTokenBucketRateLimiter } from "../src/rate-limit.ts";
 import { createProjectionRealtimeProtocol } from "../src/realtime.ts";
 
-const origin = "https://stage.example.test";
+const origin = "https://stage.example.test" as ExactOrigin;
 const config = parseProjectionGatewayConfig({ STAGE_ORIGIN: origin });
 
 describe("projection gateway operational controls", () => {

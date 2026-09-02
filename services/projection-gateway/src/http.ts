@@ -3,6 +3,11 @@ import {
   PublishedDeckArtifactSchema,
 } from "@impromptu/contracts/public";
 import type { ExactOrigin, ProjectionGatewayConfig } from "./config.ts";
+import {
+  displayCookieAttributes,
+  displayCookieName,
+  readDisplayCookie,
+} from "./display-session-cookie.ts";
 import { httpOutcome, type JsonLogger, type MetricsRegistry } from "./observability.ts";
 import type {
   PlaybackProjectionInput,
@@ -247,14 +252,6 @@ async function requestBody(request: Request): Promise<Record<string, unknown> | 
   } catch {
     return null;
   }
-}
-
-function displayCookie(request: Request): string | null {
-  for (const part of (request.headers.get("cookie") ?? "").split(";")) {
-    const [name, ...value] = part.trim().split("=");
-    if (name === "__Host-display") return value.join("=") || null;
-  }
-  return null;
 }
 
 function serverEvent(kind: "PLAYBACK" | "CLOSE", payload: unknown): Uint8Array {
@@ -546,19 +543,19 @@ export function createProjectionGatewayHandler(
       await dependencies.persist?.();
       origin.append(
         "set-cookie",
-        `__Host-display=${session.audienceDisplaySessionId}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${Math.max(0, Math.floor((session.expiresAtMs - dependencies.now()) / 1_000))}`,
+        `${displayCookieName(config.allowedOrigin)}=${session.audienceDisplaySessionId}; ${displayCookieAttributes(config.allowedOrigin)}; Max-Age=${Math.max(0, Math.floor((session.expiresAtMs - dependencies.now()) / 1_000))}`,
       );
       return json(session, 201, origin);
     }
     if (request.method === "GET" && url.pathname === "/v1/events") {
-      const audienceDisplaySessionId = displayCookie(request);
+      const audienceDisplaySessionId = readDisplayCookie(request, config.allowedOrigin);
       if (audienceDisplaySessionId === null) {
         return json({ error: "display_session_required" }, 401, origin);
       }
       return eventStream(dependencies, audienceDisplaySessionId, origin);
     }
     if (request.method === "POST" && url.pathname === "/v1/stage-applied") {
-      const audienceDisplaySessionId = displayCookie(request);
+      const audienceDisplaySessionId = readDisplayCookie(request, config.allowedOrigin);
       if (audienceDisplaySessionId === null) {
         return json({ error: "display_session_required" }, 401, origin);
       }
@@ -581,7 +578,7 @@ export function createProjectionGatewayHandler(
         : json(receipt, 200, origin);
     }
     if (request.method === "GET" && url.pathname === "/v1/snapshot") {
-      const audienceDisplaySessionId = displayCookie(request);
+      const audienceDisplaySessionId = readDisplayCookie(request, config.allowedOrigin);
       if (audienceDisplaySessionId === null) {
         return json({ error: "display_session_required" }, 401, origin);
       }

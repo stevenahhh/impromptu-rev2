@@ -1,3 +1,5 @@
+import type { ExactOrigin } from "./config.ts";
+import { readDisplayCookie } from "./display-session-cookie.ts";
 import type { MetricsRegistry } from "./observability.ts";
 import type {
   PreparedEvidenceProjectionGateway,
@@ -39,7 +41,7 @@ export type ProjectionRealtimeMessage =
 
 export interface ProjectionRealtimeDependencies {
   readonly gateway: PreparedEvidenceProjectionGateway;
-  readonly allowedOrigin: string;
+  readonly allowedOrigin: ExactOrigin;
   readonly now: () => number;
   readonly recordApplied: (input: {
     readonly audienceDisplaySessionId: string;
@@ -61,14 +63,6 @@ export type RealtimeAuthentication =
 export interface ProjectionRealtimeConnection {
   receive(frame: string | ArrayBuffer | Uint8Array): Promise<void>;
   close(): void;
-}
-
-function displayCookie(request: Request): string | null {
-  for (const part of (request.headers.get("cookie") ?? "").split(";")) {
-    const [name, ...value] = part.trim().split("=");
-    if (name === "__Host-display") return value.join("=") || null;
-  }
-  return null;
 }
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -131,7 +125,7 @@ export function createProjectionRealtimeProtocol(dependencies: ProjectionRealtim
       if (request.headers.get("origin") !== dependencies.allowedOrigin) {
         return { outcome: "REJECTED", reason: "ORIGIN_FORBIDDEN" };
       }
-      const audienceDisplaySessionId = displayCookie(request);
+      const audienceDisplaySessionId = readDisplayCookie(request, dependencies.allowedOrigin);
       if (audienceDisplaySessionId === null) {
         return { outcome: "REJECTED", reason: "DISPLAY_SESSION_REQUIRED" };
       }

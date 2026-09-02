@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { PublishedDeckArtifactSchema } from "@impromptu/contracts/public";
+import type { ExactOrigin } from "../src/config.ts";
 import { PreparedEvidenceProjectionGateway } from "../src/prepared-evidence.ts";
 import { createProjectionRealtimeProtocol } from "../src/realtime.ts";
 
@@ -54,7 +55,7 @@ describe("projection realtime WebSocket protocol", () => {
     const sent: unknown[] = [];
     const protocol = createProjectionRealtimeProtocol({
       gateway,
-      allowedOrigin: "https://stage.example.test",
+      allowedOrigin: "https://stage.example.test" as ExactOrigin,
       now: () => 1_002,
       async recordApplied(input) {
         return {
@@ -134,7 +135,7 @@ describe("projection realtime WebSocket protocol", () => {
     const sent: unknown[] = [];
     const protocol = createProjectionRealtimeProtocol({
       gateway,
-      allowedOrigin: "https://stage.example.test",
+      allowedOrigin: "https://stage.example.test" as ExactOrigin,
       now: () => 1_002,
       async recordApplied() {
         writes += 1;
