@@ -1,8 +1,9 @@
 """Deterministic static PDF page rendering without external converters.
 
-Each validated PDF page is rasterized with PyMuPDF at a deterministic zoom,
-encoded as a PNG, hashed, and published under ``slides/``. PDF sources never
-carry animation timelines, so every PDF render is static-only by construction.
+Each validated PDF page is rasterized with PyMuPDF at a deterministic zoom
+(targeting 192 DPI, capped at a 3840 px longest edge), encoded as a PNG, hashed,
+and published under ``slides/``. PDF sources never carry animation timelines, so
+every PDF render is static-only by construction.
 """
 
 import hashlib
@@ -18,7 +19,15 @@ from impromptu_ingestion.render.source import RenderError
 
 _PDF_SIGNATURE = b"%PDF-"
 _MAX_PDF_PAGES = 500  # matches the default ingestion limit for PDF page counts
-_MAX_RASTER_PIXELS = 4_096  # longest page edge, bounding raster memory deterministically
+# PyMuPDF rasterizes at 72 DPI at zoom 1.0, which leaves a 960x540pt slide at a blurry
+# 960x540 px on a 1080p audience screen. Render at 192 DPI (zoom 192/72) so a standard
+# 16:9 slide lands at 2560x1440 px: supersampled and crisp on 1920x1080, near-native on
+# 2560x1440 panels.
+_RASTER_DPI = 192
+# Longest-edge ceiling bounding raster memory and PNG size for oversized pages (e.g.
+# poster-format PDFs): 4K covers the largest common display, and beyond it file size
+# grows quadratically with no visible gain over an already-downsampled image.
+_MAX_RASTER_PIXELS = 3_840
 
 
 class _PdfRect(Protocol):
@@ -65,10 +74,11 @@ def _open_document(content: bytes) -> _PdfDocument:
 
 
 def _zoom_for(page: _PdfPage) -> float:
+    """Zoom matrix scale rendering the page at the target DPI, capped at the pixel ceiling."""
     longest = max(page.rect.width, page.rect.height)
     if longest <= 0:
         raise RenderError("invalid_page_size", "PDF page has no measurable size")
-    return min(1.0, _MAX_RASTER_PIXELS / longest)
+    return min(_RASTER_DPI / 72.0, _MAX_RASTER_PIXELS / longest)
 
 
 def render_pdf_pages(source: Path, output_dir: Path) -> RenderedDeck:
