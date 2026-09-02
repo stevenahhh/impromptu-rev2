@@ -15,7 +15,7 @@
 import { createHash } from "node:crypto";
 
 import type { Sql } from "postgres";
-
+import type { AppendQaExchangeInput } from "../qa/qa-exchange-ledger.ts";
 import type {
   AppendSlideVisitInput,
   CompareAndSetSessionReportStateInput,
@@ -124,6 +124,14 @@ export function createProvisionedSessionReportRepository(
     async appendSlideVisit(input: AppendSlideVisitInput) {
       await ensureOwningRows(input, input.presentationSessionEpoch);
       return await inner.appendSlideVisit(withUuidIdentity(input));
+    },
+    async appendQaExchange(input: AppendQaExchangeInput) {
+      // An exchange may be the first write of a session, so the owning rows are ensured here too.
+      await ensureOwningRows(input, 1);
+      return await inner.appendQaExchange(withUuidIdentity(input));
+    },
+    async readQaExchanges(principal: SessionReportPrincipal) {
+      return await inner.readQaExchanges(withUuidIdentity(principal));
     },
     async compareAndSetState(input: CompareAndSetSessionReportStateInput) {
       // State can be written for a session that recorded no visits, so the owning rows are

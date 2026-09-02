@@ -1,264 +1,40 @@
+import type { QaExchangeAppendResult } from "../qa/qa-exchange-ledger.ts";
+import {
+  applyFinalTranscript,
+  derivedSpeechSummary,
+  emptyAggregate,
+  type FinalTranscriptAggregateInput,
+  type MutableDerivedAggregate,
+  nonNegativeInteger,
+  parseStoredAggregate,
+  storedAggregate,
+} from "./final-transcript-aggregate.ts";
 import type {
-  ReportAggregateValue,
   SessionReportPrincipal,
   SessionReportRepository,
   SessionReportState,
-  SlideVisit,
 } from "./postgres-session-report-repository.ts";
-import { SessionReportFinalizedError } from "./postgres-session-report-repository.ts";
+import { SerializedQaExchangeRecorder } from "./serialized-qa-recorder.ts";
+import { SessionReportFinalizedError } from "./session-report-access-errors.ts";
+import {
+  clonePreparedEvidence,
+  type PreparedEvidenceReportSnapshot,
+  reportFrom,
+  type SessionReport,
+} from "./session-report-dto.ts";
+import { samePrincipal, sessionKey, type VisitTracker } from "./session-write-trackers.ts";
 
-const SUMMARY_MAX_LENGTH = 4_000;
+export * from "./final-transcript-aggregate.ts";
+export * from "./prepared-evidence-report-observer.ts";
+export * from "./serialized-qa-recorder.ts";
+export * from "./session-report-dto.ts";
+export * from "./session-write-trackers.ts";
 
-export type PreparedEvidenceReportItem = Readonly<{
-  evidenceId: string;
-  sourceId: string;
-  sourceUrl: string | null;
-  provenance: "CURATED_PREAPPROVED" | "LIVE_VERIFIED";
-}>;
-
-export type PreparedEvidenceReportSnapshot = Readonly<{
-  label: "준비된 근거";
-  items: readonly PreparedEvidenceReportItem[];
-}>;
-
-export type FinalTranscriptAggregateInput = Readonly<{
-  finalSegmentId: string;
-  transcript: Readonly<{
-    text: string;
-    durationMs: number;
-    words: readonly Readonly<{ text: string; startMs: number; endMs: number }>[];
-  }>;
-  coaching?: Readonly<{
-    cueCount: number;
-    currentWordsPerMinute: number | null;
-    previousWordsPerMinute: number | null;
-  }>;
-}>;
-
-export type SessionReport = Readonly<{
-  reportVersion: 1;
-  presentationSessionId: string;
-  ownerAccountId: string;
-  finalizedAtMs: number;
-  totalDurationMs: number;
-  slideVisits: readonly Readonly<{
-    sequence: number;
-    publicSlideKey: string;
-    occurrenceSequence: number;
-    enteredOffsetMs: number;
-    leftOffsetMs: number;
-    dwellMs: number;
-    revisit: boolean;
-  }>[];
-  speech: Readonly<{
-    derivedSummary: string;
-    wordCount: number;
-    speakingDurationMs: number;
-    timingAggregate: Readonly<{
-      finalCount: number;
-      measuredFinalCount: number;
-    }>;
-    coachingAggregate: Readonly<{
-      cueCount: number;
-      latestCurrentWordsPerMinute: number | null;
-      latestPreviousWordsPerMinute: number | null;
-    }>;
-  }>;
-  preparedEvidence: PreparedEvidenceReportSnapshot;
-}>;
-
-export type ReportFinalizationResult =
-  | Readonly<{ outcome: "FINALIZED"; report: SessionReport }>
-  | Readonly<{ outcome: "FAILED"; error: Error }>;
-
-export type SessionEndAccepted = Readonly<{
-  status: "accepted";
-  finalization: Promise<ReportFinalizationResult>;
-}>;
-
-type MutableDerivedAggregate = {
-  finalSegmentIds: Set<string>;
-  finalCount: number;
-  measuredFinalCount: number;
-  wordCount: number;
-  speakingDurationMs: number;
-  cueCount: number;
-  latestCurrentWordsPerMinute: number | null;
-  latestPreviousWordsPerMinute: number | null;
-};
-
-type ActiveVisit = Readonly<{
-  principal: SessionReportPrincipal;
-  presentationSessionEpoch: number;
-  sequence: number;
-  publicSlideKey: string;
-  enteredOffsetMs: number;
-  producerId: string;
-}>;
-
-type VisitTracker = {
-  active: ActiveVisit | null;
-  writes: Promise<void>;
-  failure: unknown | null;
-};
-
-type StoredAggregate = Readonly<{
-  timing: Readonly<{ finalCount: number; measuredFinalCount: number }>;
-  coaching: Readonly<{
-    cueCount: number;
-    latestCurrentWordsPerMinute: number | null;
-    latestPreviousWordsPerMinute: number | null;
-  }>;
-}>;
-
-function sessionKey(principal: SessionReportPrincipal): string {
-  return `${principal.tenantId}\u0000${principal.presentationSessionId}\u0000${principal.ownerSubject}`;
-}
-
-function samePrincipal(left: SessionReportPrincipal, right: SessionReportPrincipal): boolean {
-  return (
-    left.tenantId === right.tenantId &&
-    left.presentationSessionId === right.presentationSessionId &&
-    left.ownerSubject === right.ownerSubject
-  );
-}
-
-function nonNegativeInteger(value: number, field: string): void {
-  if (!Number.isSafeInteger(value) || value < 0) {
-    throw new RangeError(`${field} must be a non-negative safe integer`);
-  }
-}
-
-function finiteRate(value: number | null, field: string): void {
-  if (value !== null && (!Number.isFinite(value) || value < 0)) {
-    throw new RangeError(`${field} must be null or a non-negative finite number`);
-  }
-}
-
-function emptyAggregate(): MutableDerivedAggregate {
-  return {
-    finalSegmentIds: new Set(),
-    finalCount: 0,
-    measuredFinalCount: 0,
-    wordCount: 0,
-    speakingDurationMs: 0,
-    cueCount: 0,
-    latestCurrentWordsPerMinute: null,
-    latestPreviousWordsPerMinute: null,
-  };
-}
-
-function storedAggregate(aggregate: MutableDerivedAggregate): StoredAggregate {
-  return {
-    timing: {
-      finalCount: aggregate.finalCount,
-      measuredFinalCount: aggregate.measuredFinalCount,
-    },
-    coaching: {
-      cueCount: aggregate.cueCount,
-      latestCurrentWordsPerMinute: aggregate.latestCurrentWordsPerMinute,
-      latestPreviousWordsPerMinute: aggregate.latestPreviousWordsPerMinute,
-    },
-  };
-}
-
-function parseStoredAggregate(value: unknown): StoredAggregate {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("stored session report aggregate is invalid");
-  }
-  const root = value as Record<string, unknown>;
-  const timing = root.timing;
-  const coaching = root.coaching;
-  if (
-    typeof timing !== "object" ||
-    timing === null ||
-    Array.isArray(timing) ||
-    typeof coaching !== "object" ||
-    coaching === null ||
-    Array.isArray(coaching)
-  ) {
-    throw new Error("stored session report aggregate is invalid");
-  }
-  const timingRecord = timing as Record<string, unknown>;
-  const coachingRecord = coaching as Record<string, unknown>;
-  const finalCount = timingRecord.finalCount;
-  const measuredFinalCount = timingRecord.measuredFinalCount;
-  const cueCount = coachingRecord.cueCount;
-  const current = coachingRecord.latestCurrentWordsPerMinute;
-  const previous = coachingRecord.latestPreviousWordsPerMinute;
-  if (
-    typeof finalCount !== "number" ||
-    typeof measuredFinalCount !== "number" ||
-    typeof cueCount !== "number" ||
-    (current !== null && typeof current !== "number") ||
-    (previous !== null && typeof previous !== "number")
-  ) {
-    throw new Error("stored session report aggregate is invalid");
-  }
-  nonNegativeInteger(finalCount, "finalCount");
-  nonNegativeInteger(measuredFinalCount, "measuredFinalCount");
-  nonNegativeInteger(cueCount, "cueCount");
-  finiteRate(current, "latestCurrentWordsPerMinute");
-  finiteRate(previous, "latestPreviousWordsPerMinute");
-  return {
-    timing: { finalCount, measuredFinalCount },
-    coaching: {
-      cueCount,
-      latestCurrentWordsPerMinute: current,
-      latestPreviousWordsPerMinute: previous,
-    },
-  };
-}
-
-function clonePreparedEvidence(
-  snapshot: PreparedEvidenceReportSnapshot,
-): PreparedEvidenceReportSnapshot {
-  if (snapshot.label !== "준비된 근거") {
-    throw new RangeError("prepared evidence report label must be 준비된 근거");
-  }
-  return {
-    label: "준비된 근거",
-    items: snapshot.items.map((item) => ({ ...item })),
-  };
-}
-
-function reportFrom(
-  principal: SessionReportPrincipal,
-  state: SessionReportState,
-  visits: readonly SlideVisit[],
-  evidence: PreparedEvidenceReportSnapshot,
-): SessionReport {
-  if (state.finalizedAtMs === null) throw new Error("cannot materialize an unfinished report");
-  const aggregate = parseStoredAggregate(state.coachingAggregate);
-  const slideVisits = visits.map((visit) => ({
-    sequence: visit.seq,
-    publicSlideKey: visit.publicSlideKey,
-    occurrenceSequence: visit.occurrenceSeq,
-    enteredOffsetMs: visit.enteredOffsetMs,
-    leftOffsetMs: visit.leftOffsetMs,
-    dwellMs: visit.leftOffsetMs - visit.enteredOffsetMs,
-    revisit: visit.occurrenceSeq > 1,
-  }));
-  return {
-    reportVersion: 1,
-    presentationSessionId: principal.presentationSessionId,
-    ownerAccountId: principal.ownerSubject,
-    finalizedAtMs: state.finalizedAtMs,
-    totalDurationMs: slideVisits.reduce(
-      (maximum, visit) => Math.max(maximum, visit.leftOffsetMs),
-      0,
-    ),
-    slideVisits,
-    speech: {
-      derivedSummary: state.speechSummary,
-      wordCount: state.wordCount,
-      speakingDurationMs: state.speakingDurationMs,
-      timingAggregate: aggregate.timing,
-      coachingAggregate: aggregate.coaching,
-    },
-    preparedEvidence: clonePreparedEvidence(evidence),
-  };
-}
+import type {
+  RecordQaExchangeDraft,
+  ReportFinalizationResult,
+  SessionEndAccepted,
+} from "./session-report-dto.ts";
 
 /**
  * Keeps only derived FINAL metrics in memory. Slide writes are serialized but are not awaited by
@@ -268,38 +44,18 @@ export class SessionReportFinalizer {
   readonly #aggregates = new Map<string, MutableDerivedAggregate>();
   readonly #visits = new Map<string, VisitTracker>();
   readonly #ends = new Map<string, Promise<ReportFinalizationResult>>();
+  readonly #qaRecorder: SerializedQaExchangeRecorder;
 
-  constructor(private readonly reports: SessionReportRepository) {}
+  constructor(private readonly reports: SessionReportRepository) {
+    this.#qaRecorder = new SerializedQaExchangeRecorder((input) =>
+      this.reports.appendQaExchange(input),
+    );
+  }
 
   recordFinal(principal: SessionReportPrincipal, input: FinalTranscriptAggregateInput): void {
-    if (input.finalSegmentId.length === 0) throw new RangeError("finalSegmentId is required");
-    nonNegativeInteger(input.transcript.durationMs, "durationMs");
     const key = sessionKey(principal);
     const aggregate = this.#aggregates.get(key) ?? emptyAggregate();
-    if (aggregate.finalSegmentIds.has(input.finalSegmentId)) return;
-
-    let speakingDurationMs = 0;
-    for (const word of input.transcript.words) {
-      nonNegativeInteger(word.startMs, "word.startMs");
-      nonNegativeInteger(word.endMs, "word.endMs");
-      if (word.endMs < word.startMs || word.endMs > input.transcript.durationMs) {
-        throw new RangeError("word timing is outside the FINAL duration");
-      }
-      speakingDurationMs += word.endMs - word.startMs;
-    }
-    if (input.coaching !== undefined) {
-      nonNegativeInteger(input.coaching.cueCount, "coaching.cueCount");
-      finiteRate(input.coaching.currentWordsPerMinute, "coaching.currentWordsPerMinute");
-      finiteRate(input.coaching.previousWordsPerMinute, "coaching.previousWordsPerMinute");
-      aggregate.cueCount += input.coaching.cueCount;
-      aggregate.latestCurrentWordsPerMinute = input.coaching.currentWordsPerMinute;
-      aggregate.latestPreviousWordsPerMinute = input.coaching.previousWordsPerMinute;
-    }
-    aggregate.finalSegmentIds.add(input.finalSegmentId);
-    aggregate.finalCount += 1;
-    aggregate.wordCount += input.transcript.words.length;
-    aggregate.speakingDurationMs += speakingDurationMs;
-    if (input.transcript.words.length > 0) aggregate.measuredFinalCount += 1;
+    applyFinalTranscript(aggregate, input);
     this.#aggregates.set(key, aggregate);
     // input and its transcript text are deliberately not retained beyond this synchronous method.
   }
@@ -352,6 +108,18 @@ export class SessionReportFinalizer {
     this.#visits.set(key, tracker);
   }
 
+  /**
+   * Serializes one persisted Q&A exchange per session behind the same chained-write discipline as
+   * slide visits. Appends are owner-checked and idempotent; they remain valid after report
+   * finalization because exchanges live in their own durable record, not in the report's CAS row.
+   */
+  async recordQaExchange(
+    principal: SessionReportPrincipal,
+    draft: RecordQaExchangeDraft,
+  ): Promise<QaExchangeAppendResult> {
+    return await this.#qaRecorder.record(principal, draft);
+  }
+
   async endSession(input: {
     readonly principal: SessionReportPrincipal;
     readonly endedOffsetMs: number;
@@ -380,6 +148,10 @@ export class SessionReportFinalizer {
         });
       }
     }
+    // In-flight answers drain before the finalizing CAS so every exchange asked during the talk
+    // is persisted while its report revision is still moving; anything racing afterwards lands
+    // in the exchange log's own table as well.
+    await this.#qaRecorder.drain(input.principal);
 
     const aggregate = this.#aggregates.get(key) ?? emptyAggregate();
     const current = await this.reports.readForOwner(input.principal);
@@ -394,11 +166,7 @@ export class SessionReportFinalizer {
       return { status: "accepted", finalization: result };
     }
 
-    const summary =
-      `${aggregate.finalCount}개 최종 발화에서 ${aggregate.wordCount}개 단어를 집계했습니다.`.slice(
-        0,
-        SUMMARY_MAX_LENGTH,
-      );
+    const summary = derivedSpeechSummary(aggregate.finalCount, aggregate.wordCount);
     const saved =
       current ??
       (await this.reports.compareAndSetState({
@@ -407,9 +175,7 @@ export class SessionReportFinalizer {
         speechSummary: summary,
         wordCount: aggregate.wordCount,
         speakingDurationMs: aggregate.speakingDurationMs,
-        coachingAggregate: storedAggregate(aggregate) as Readonly<
-          Record<string, ReportAggregateValue>
-        >,
+        coachingAggregate: storedAggregate(aggregate),
         finalizedAtMs: null,
       }));
     const evidence = clonePreparedEvidence(input.preparedEvidence);
@@ -423,9 +189,7 @@ export class SessionReportFinalizer {
             speechSummary: saved.speechSummary,
             wordCount: saved.wordCount,
             speakingDurationMs: saved.speakingDurationMs,
-            coachingAggregate: parseStoredAggregate(saved.coachingAggregate) as Readonly<
-              Record<string, ReportAggregateValue>
-            >,
+            coachingAggregate: parseStoredAggregate(saved.coachingAggregate),
             finalizedAtMs: input.finalizedAtMs,
           });
         } catch (error) {
@@ -434,11 +198,8 @@ export class SessionReportFinalizer {
           if (alreadyFinalized?.finalizedAtMs === null || alreadyFinalized === null) throw error;
           finalized = alreadyFinalized;
         }
-        const visits = await this.reports.readSlideVisits(input.principal);
-        return {
-          outcome: "FINALIZED",
-          report: reportFrom(input.principal, finalized, visits, evidence),
-        };
+        const report = await this.materializeReport(input.principal, finalized, evidence);
+        return { outcome: "FINALIZED", report };
       } catch (error) {
         return {
           outcome: "FAILED",
@@ -461,63 +222,17 @@ export class SessionReportFinalizer {
   ): Promise<SessionReport | null> {
     const state = await this.reports.readForOwner(principal);
     if (state?.finalizedAtMs === null || state === null) return null;
-    const visits = await this.reports.readSlideVisits(principal);
-    return reportFrom(principal, state, visits, preparedEvidence);
+    return await this.materializeReport(principal, state, preparedEvidence);
   }
-}
 
-/** Narrow adapter used by PreparedEvidenceCoordinator without adding report work to slide latency. */
-export function createPreparedEvidenceReportObserver(
-  finalizer: SessionReportFinalizer,
-  onFailure: (error: unknown) => void,
-): Readonly<{
-  onAcceptedSlideSet(input: {
-    readonly tenantId: string;
-    readonly presentationSessionId: string;
-    readonly ownerSubject: string;
-    readonly presentationSessionEpoch: number;
-    readonly sequence: number;
-    readonly publicSlideKey: string;
-    readonly acceptedOffsetMs: number;
-    readonly producerId: string;
-  }): void;
-  onPresentationEnded(input: {
-    readonly tenantId: string;
-    readonly presentationSessionId: string;
-    readonly ownerSubject: string;
-    readonly endedOffsetMs: number;
-    readonly finalizedAtMs: number;
-    readonly preparedEvidence: PreparedEvidenceReportSnapshot;
-  }): Promise<void>;
-  onFailure(error: unknown): void;
-}> {
-  return {
-    onAcceptedSlideSet(input) {
-      finalizer.recordAcceptedSlideSet({
-        principal: {
-          tenantId: input.tenantId,
-          presentationSessionId: input.presentationSessionId,
-          ownerSubject: input.ownerSubject,
-        },
-        presentationSessionEpoch: input.presentationSessionEpoch,
-        sequence: input.sequence,
-        publicSlideKey: input.publicSlideKey,
-        acceptedOffsetMs: input.acceptedOffsetMs,
-        producerId: input.producerId,
-      });
-    },
-    async onPresentationEnded(input) {
-      await finalizer.endSession({
-        principal: {
-          tenantId: input.tenantId,
-          presentationSessionId: input.presentationSessionId,
-          ownerSubject: input.ownerSubject,
-        },
-        endedOffsetMs: input.endedOffsetMs,
-        finalizedAtMs: input.finalizedAtMs,
-        preparedEvidence: input.preparedEvidence,
-      });
-    },
-    onFailure,
-  };
+  private async materializeReport(
+    principal: SessionReportPrincipal,
+    state: SessionReportState,
+    preparedEvidence: PreparedEvidenceReportSnapshot,
+  ): Promise<SessionReport> {
+    const visits = await this.reports.readSlideVisits(principal);
+    // A persisted v1 report predates the section entirely and must not grow one on read.
+    const exchanges = state.reportVersion >= 2 ? await this.reports.readQaExchanges(principal) : [];
+    return reportFrom(principal, state, visits, preparedEvidence, exchanges);
+  }
 }
