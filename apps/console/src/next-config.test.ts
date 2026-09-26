@@ -42,6 +42,19 @@ describe("Console Next.js private API boundary", () => {
         NODE_ENV: "production",
       }),
     ).toBe("http://127.0.0.1:3001");
+    // The Compose application network keeps the server-side proxy on the internal service name.
+    expect(
+      consolePrivateApiOrigin({
+        CONSOLE_PRIVATE_API_ORIGIN: "http://private-backend:3001",
+        NODE_ENV: "production",
+      }),
+    ).toBe("http://private-backend:3001");
+    expect(() =>
+      consolePrivateApiOrigin({
+        CONSOLE_PRIVATE_API_ORIGIN: "http://other-service:3001",
+        NODE_ENV: "production",
+      }),
+    ).toThrow("CONSOLE_PRIVATE_API_ORIGIN must use https in production");
   });
 
   test("rejects URLs that are not exact origins", () => {

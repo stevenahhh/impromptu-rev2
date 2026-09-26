@@ -8,10 +8,13 @@ if (production && (privateApiOrigin === undefined || privateApiOrigin.length ===
 if (privateApiOrigin !== undefined && privateApiOrigin.length > 0) {
   const parsed = new URL(privateApiOrigin);
   const loopback = parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]";
+  // The Compose service-name hop is cleartext inside the application network; browser-visible
+  // hops still require HTTPS.
+  const composeInternal = parsed.hostname === "private-backend" && parsed.protocol === "http:";
   if (
     (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
     parsed.origin !== privateApiOrigin ||
-    (production && parsed.protocol !== "https:" && !loopback)
+    (production && parsed.protocol !== "https:" && !loopback && !composeInternal)
   ) {
     throw new Error("CONSOLE_PRIVATE_API_ORIGIN must be an exact HTTPS origin in production");
   }

@@ -4,6 +4,7 @@
     "includes": [
       "**",
       "!.git",
+      "!.tmp-docx",
       "!node_modules",
       "!**/dist",
       "!**/.next",
@@ -14,6 +15,7 @@
       "!.omo/evidence",
       "!.omo/scratch",
       "!.omo/senpi-task",
+      "!.omo/ulw-loop",
       "!.senpi",
       "!**/.venv",
       "!**/.pytest_cache",

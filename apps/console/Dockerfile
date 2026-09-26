@@ -29,6 +29,8 @@ ENV NODE_ENV=production \
     NEXT_PUBLIC_CO_RESIDENT_CONSOLE=${NEXT_PUBLIC_CO_RESIDENT_CONSOLE}
 
 COPY apps/console apps/console
+COPY packages/contracts packages/contracts
+COPY packages/state packages/state
 COPY packages/ui packages/ui
 RUN sed -i '/const config: NextConfig = {/a\  output: "standalone",' apps/console/next.config.ts \
     && printf 'ok\n' > apps/console/public/health \

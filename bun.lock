@@ -109,6 +109,7 @@
       "name": "@impromptu/model-router",
       "version": "0.0.0",
       "dependencies": {
+        "@impromptu/contracts": "workspace:*",
         "zod": "4.0.17",
       },
     },

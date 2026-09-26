@@ -3,8 +3,9 @@
 ## Scope
 
 `compose.production.yaml` deploys one PostgreSQL 17 cluster, the private backend, projection
-gateway, Presenter Console, and public Stage. The private and public browser surfaces expose only
-ports 4173 and 4174 by default. Bun services and PostgreSQL remain on internal Compose networks.
+gateway, Presenter Console, and public Stage. All container host ports bind to loopback; only
+a separately configured HTTPS reverse proxy exposes the two browser surfaces. Bun services and
+PostgreSQL remain on internal Compose networks.
 
 The database migrations preserve the repository's three-way boundary:
 
@@ -21,9 +22,25 @@ at either database.
 ## Prerequisites
 
 - Docker Engine with Compose v2 and at least 8 GiB available for the first build.
-- DNS and TLS termination for Console, Stage, the server-side private API, and the public projection API.
+- DNS and TLS termination for Console, Stage, and the server-side private API.
 - Persistent storage for the PostgreSQL and deck artifact volumes and an encrypted backup destination.
 - Outbound image access to Docker Hub, `ghcr.io`, and Python package indexes during builds.
+- A reachable 768-dimensional HTTPS embedding endpoint. The Compose file does not start one.
+- If microphone transcription is required, an ffmpeg binary, a pinned whisper.cpp CLI, and its
+  model inside the backend container. The current backend image does not include them.
+  The empty paths in `.env.example` disable the audio adapter; audio routes fail closed.
+
+For a single-VM deployment, `infra/deploy/Caddyfile` supplies the missing HTTPS edge. Point
+three DNS names at the VM: Console, Stage, and the authenticated private API. Set
+`CONSOLE_PUBLIC_ORIGIN`, `STAGE_PUBLIC_ORIGIN`, and `CONSOLE_PRIVATE_API_ORIGIN` in `.env` to
+their exact `https://` origins. On the VM, configure Caddy's `CONSOLE_PUBLIC_HOST`,
+`STAGE_PUBLIC_HOST`, `PRIVATE_API_PUBLIC_HOST` (hostnames without a scheme), and
+`ACME_EMAIL`, then validate with `caddy validate --config infra/deploy/Caddyfile --adapter
+caddyfile`. Permit inbound TCP 80 and 443 only; Caddy obtains certificates and proxies
+Console to loopback 4173, Stage to loopback 4174, and the private API to loopback 3001.
+The private API edge denies `/internal/*`; gateway 3002 and PostgreSQL are never public.
+The Stage container keeps `/v1` on the Stage origin for its Strict session cookie,
+unbuffered SSE, and WebSocket. Keep the VM's Caddy certificate state on persistent storage.
 
 ## Secrets and configuration
 
@@ -31,10 +48,13 @@ at either database.
 2. Replace every `change-me` value. Generate independent values; do not reuse a database password.
 3. Restrict database passwords to URL-safe `A-Z`, `a-z`, `0-9`, `_`, and `-`. Compose embeds them in
    PostgreSQL URLs.
-4. Set all four public/API origins to exact HTTPS origins without trailing slashes. Route the
-   private API TLS virtual host to loopback `PRIVATE_BACKEND_PUBLISH_PORT`, and the projection API
-   TLS virtual host to loopback `PROJECTION_GATEWAY_PUBLISH_PORT`. Never route the private backend
-   through the Stage virtual host.
+4. Set the Console and Stage origins to their exact public HTTPS origins. For
+   `CONSOLE_PRIVATE_API_ORIGIN` prefer the internal `http://private-backend:3001` Compose service
+   name, which is allowed only for that server-side hop inside the application network; the
+   externally routed form still requires HTTPS via the private API virtual host, which proxies to
+   loopback `PRIVATE_BACKEND_PUBLISH_PORT` and denies `/internal/*`. The Stage virtual host
+   reaches the projection gateway through the Stage container's same-origin `/v1` proxy; do not
+   publish gateway port 3002.
 5. Rebuild Console or Stage whenever a build-time origin, service-worker cohort, or co-resident
    mode changes.
 6. Keep `LIVE_PUBLICATION_GATE_STATE=BLOCKED` until the release approval gate has passed.
@@ -60,8 +80,10 @@ URLs must remain credential-free HTTPS URLs and the embedding endpoint must prov
 the mkcert endpoint during local macOS development. Do not put that workstation path in
 `compose.production.yaml`; production may use a different embedding HTTPS origin and should use its
 platform trust store. Set `RERANK_MODEL`, `LLM_MODEL`, and `VERIFIER_MODEL` to
-`deepseek-v4-flash`. The backend binds each adapter ID to its exact origin and injects only that
-slot's secret.
+the identifiers provisioned by that provider (`.env.example` pins a separate verifier model).
+The backend binds each adapter ID to its exact origin and injects only that slot's secret.
+OpenCode Go requires a paid subscription; the example credentials and local embedding endpoint
+do not constitute a free, working model setup.
 
 Store `.env` in the deployment host's secret store with owner-only permissions. Never commit it.
 The bootstrap and migration credentials are deployment-only. Application containers receive only
@@ -125,7 +147,8 @@ set -a; . ./.env; set +a
 curl --fail --silent --show-error "${CONSOLE_PUBLIC_ORIGIN}/health"
 curl --fail --silent --show-error "${STAGE_PUBLIC_ORIGIN}/health"
 curl --fail --silent --show-error "${CONSOLE_PRIVATE_API_ORIGIN}/health"
-curl --fail --silent --show-error "${STAGE_PUBLIC_API_ORIGIN}/health"
+# The Stage public API is same-origin at /v1; no STAGE_PUBLIC_API_ORIGIN is configured.
+# The gateway health route is internal, not exposed on a separate browser origin.
 docker compose --env-file .env -f compose.production.yaml exec private-backend \
   bun -e "const r=await fetch('http://127.0.0.1:3001/health'); console.log(r.status); process.exit(r.ok?0:1)"
 docker compose --env-file .env -f compose.production.yaml exec projection-gateway \

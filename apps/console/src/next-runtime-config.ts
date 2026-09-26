@@ -14,7 +14,11 @@ function exactHttpOrigin(name: string, value: string, requireHttps: boolean): st
     throw new Error(`${name} must be an absolute HTTP(S) origin`);
   }
   const loopback = parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]";
-  if (requireHttps && parsed.protocol !== "https:" && !loopback) {
+  // Server-to-server proxy inside the Compose application network reaches the backend by its
+  // service name over cleartext, exactly like Stage -> projection-gateway; only a browser-routed
+  // hop requires HTTPS.
+  const composeInternal = parsed.hostname === "private-backend" && parsed.protocol === "http:";
+  if (requireHttps && parsed.protocol !== "https:" && !loopback && !composeInternal) {
     throw new Error(`${name} must use https in production`);
   }
   return value;

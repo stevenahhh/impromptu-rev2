@@ -128,19 +128,18 @@ services:
       INGESTION_PROJECT_PATH: /app/services/ingestion
       DECK_RENDER_DEADLINE_MS: ${DECK_RENDER_DEADLINE_MS:-60000}
       LIVE_PUBLICATION_GATE_STATE: ${LIVE_PUBLICATION_GATE_STATE:-BLOCKED}
-      FFMPEG_BINARY_PATH: ${FFMPEG_BINARY_PATH:?Set FFMPEG_BINARY_PATH}
-      WHISPER_CPP_BINARY_PATH: ${WHISPER_CPP_BINARY_PATH:?Set WHISPER_CPP_BINARY_PATH}
-      WHISPER_CPP_MODEL_PATH: ${WHISPER_CPP_MODEL_PATH:?Set WHISPER_CPP_MODEL_PATH}
+      FFMPEG_BINARY_PATH: ${FFMPEG_BINARY_PATH:-}
+      WHISPER_CPP_BINARY_PATH: ${WHISPER_CPP_BINARY_PATH:-}
+      WHISPER_CPP_MODEL_PATH: ${WHISPER_CPP_MODEL_PATH:-}
       CHAT_MODEL_API_KEY: ${CHAT_MODEL_API_KEY:?Set CHAT_MODEL_API_KEY}
       CHAT_MODEL_BASE_URL: ${CHAT_MODEL_BASE_URL:-https://opencode.ai/zen/go/v1}
       EMBEDDING_MODEL_API_KEY: ${EMBEDDING_MODEL_API_KEY:?Set EMBEDDING_MODEL_API_KEY}
       EMBEDDING_MODEL_BASE_URL: ${EMBEDDING_MODEL_BASE_URL:?Set EMBEDDING_MODEL_BASE_URL}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:?Set EMBEDDING_MODEL}
-      RERANK_MODEL: ${RERANK_MODEL:-deepseek-v4-flash}
-      LLM_MODEL: ${LLM_MODEL:-deepseek-v4-flash}
-      # Measured in .omo/evidence/task-29/model-configuration.json: at equal verifier latency
-      # this slot returns SUPPORTED for grounded claims that deepseek-v4-flash rejects.
-      VERIFIER_MODEL: ${VERIFIER_MODEL:-qwen3.6-plus}
+      RERANK_MODEL: ${RERANK_MODEL:-swe-2-max}
+      LLM_MODEL: ${LLM_MODEL:-swe-2-max}
+      # Verifier shares the Devin SWE-2 chat slot behind CHAT_MODEL_BASE_URL.
+      VERIFIER_MODEL: ${VERIFIER_MODEL:-swe-2-max}
     healthcheck:
       test: ["CMD", "bun", "-e", "const r=await fetch('http://127.0.0.1:3001/readyz');process.exit(r.ok?0:1)"]
       interval: 10s
@@ -175,7 +174,7 @@ services:
       HOSTNAME: 0.0.0.0
       PORT: "4173"
     ports:
-      - "${CONSOLE_PORT:-4173}:4173"
+      - "127.0.0.1:${CONSOLE_PORT:-4173}:4173"
     networks:
       - application
 
@@ -191,7 +190,7 @@ services:
       projection-gateway:
         condition: service_healthy
     ports:
-      - "${STAGE_PORT:-4174}:8080"
+      - "127.0.0.1:${STAGE_PORT:-4174}:8080"
     networks:
       - application
 

@@ -8,6 +8,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@impromptu/contracts": "workspace:*",
     "zod": "4.0.17"
   }
 }
