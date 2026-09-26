@@ -1,0 +1,20 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$CONSOLE_PUBLIC_HOST} {
+	reverse_proxy 127.0.0.1:4173
+}
+
+{$STAGE_PUBLIC_HOST} {
+	# Stage serves /v1 on its own origin, including unbuffered SSE and WebSocket upgrades.
+	reverse_proxy 127.0.0.1:4174 {
+		flush_interval -1
+	}
+}
+
+{$PRIVATE_API_PUBLIC_HOST} {
+	@internal path /internal /internal/*
+	respond @internal 404
+	reverse_proxy 127.0.0.1:3001
+}
