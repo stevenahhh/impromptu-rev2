@@ -493,3 +493,160 @@ describe("owner-only asynchronous session report finalization", () => {
     expect(JSON.stringify(talkView(reread))).toBe(beforeTalk);
   });
 });
+
+describe("pending report recovery through the read route", () => {
+  const ownerResolver = {
+    async resolve(input: { accountId: string; presentationSessionId: string }) {
+      return input.accountId === principal.ownerSubject &&
+        input.presentationSessionId === principal.presentationSessionId
+        ? principal
+        : null;
+    },
+  };
+  const reportGet = () =>
+    new Request(
+      `https://private.test/v1/presentation-sessions/${principal.presentationSessionId}/report`,
+    );
+  const endPost = () =>
+    new Request(
+      `https://private.test/v1/presentation-sessions/${principal.presentationSessionId}/end`,
+      { method: "POST" },
+    );
+
+  function recoveringRoute(finalizer: SessionReportFinalizer, ended: boolean, withResolver = true) {
+    return createSessionReportRouteHandler(
+      finalizer,
+      ownerResolver,
+      {
+        async resolve() {
+          return preparedEvidence;
+        },
+      },
+      {
+        async resolve() {
+          return { endedOffsetMs: 100, finalizedAtMs: 9_000, preparedEvidence };
+        },
+        ...(withResolver
+          ? {
+              // Mirrors the bootstrap resolver: a context only exists once the lifecycle
+              // actually ended, so a live talk's report can never be finalized by a read.
+              async resolveEnded() {
+                return ended
+                  ? { endedOffsetMs: 100, finalizedAtMs: 9_000, preparedEvidence }
+                  : null;
+              },
+            }
+          : {}),
+      },
+    );
+  }
+
+  test("a read on an ended but unfinalized session re-drives finalization and answers the report", async () => {
+    const repository = new MemoryReportRepository();
+    // The pending row the crashed end left behind: derived state persisted, finalized_at null.
+    repository.state = {
+      ownerSubject: principal.ownerSubject,
+      revision: 4,
+      speechSummary: "요약",
+      wordCount: 3,
+      speakingDurationMs: 10,
+      coachingAggregate: {
+        timing: { finalCount: 1, measuredFinalCount: 1 },
+        coaching: {
+          cueCount: 0,
+          latestCurrentWordsPerMinute: null,
+          latestPreviousWordsPerMinute: null,
+        },
+      },
+      finalizedAtMs: null,
+      reportVersion: 1,
+    };
+    const route = recoveringRoute(new SessionReportFinalizer(repository), true);
+
+    const response = await route(reportGet(), principal.ownerSubject);
+
+    expect(response?.status).toBe(200);
+    const body = (await response?.json()) as { report: SessionReport };
+    expect(body.report.presentationSessionId).toBe(principal.presentationSessionId);
+    expect(body.report.finalizedAtMs).toBe(9_000);
+    expect(body.report.reportVersion).toBe(2);
+    expect(repository.state?.finalizedAtMs).toBe(9_000);
+
+    // The next read is the plain finalized path: no second end mutation, revision untouched.
+    const revision = repository.state?.revision;
+    const again = await route(reportGet(), principal.ownerSubject);
+    expect(again?.status).toBe(200);
+    expect(repository.state?.revision).toBe(revision);
+  });
+
+  test("a read recovers an end whose asynchronous finalization failed", async () => {
+    const repository = new MemoryReportRepository();
+    repository.finalizedCasFailure = new Error("injected crash after the pending row landed");
+    const finalizer = new SessionReportFinalizer(repository);
+    const route = recoveringRoute(finalizer, true);
+
+    const accepted = await finalizer.endSession({
+      principal,
+      endedOffsetMs: 100,
+      finalizedAtMs: 9_000,
+      preparedEvidence,
+    });
+    expect((await accepted.finalization).outcome).toBe("FAILED");
+    expect(repository.state?.finalizedAtMs).toBeNull();
+
+    const response = await route(reportGet(), principal.ownerSubject);
+
+    expect(response?.status).toBe(200);
+    const body = (await response?.json()) as { report: SessionReport };
+    expect(body.report.finalizedAtMs).toBe(9_000);
+    // One pending CAS plus exactly one recovered finalizing CAS.
+    expect(repository.state?.revision).toBe(2);
+  });
+
+  test("a read that meets an in-flight finalization joins it instead of starting a second end", async () => {
+    const repository = new MemoryReportRepository();
+    const gate = deferred();
+    repository.finalizedCasGate = gate.promise;
+    let casCalls = 0;
+    const originalCas = repository.compareAndSetState.bind(repository);
+    repository.compareAndSetState = async (input) => {
+      casCalls += 1;
+      return await originalCas(input);
+    };
+    const finalizer = new SessionReportFinalizer(repository);
+    const route = recoveringRoute(finalizer, true);
+
+    const endResponse = await route(endPost(), principal.ownerSubject);
+    expect(endResponse?.status).toBe(202);
+
+    const readPromise = route(reportGet(), principal.ownerSubject);
+    gate.resolve();
+    const read = await readPromise;
+
+    expect(read?.status).toBe(200);
+    // The pending-row CAS and the single finalizing CAS; the read joined the same lane.
+    expect(casCalls).toBe(2);
+  });
+
+  test("a read on a live session stays pending and never drives finalization", async () => {
+    const repository = new MemoryReportRepository();
+    const route = recoveringRoute(new SessionReportFinalizer(repository), false);
+
+    const response = await route(reportGet(), principal.ownerSubject);
+
+    expect(response?.status).toBe(202);
+    expect(await response?.json()).toEqual({ status: "pending" });
+    expect(repository.state).toBeNull();
+  });
+
+  test("a route wired without a recovery resolver keeps answering pending", async () => {
+    const repository = new MemoryReportRepository();
+    const route = recoveringRoute(new SessionReportFinalizer(repository), true, false);
+
+    const response = await route(reportGet(), principal.ownerSubject);
+
+    expect(response?.status).toBe(202);
+    expect(await response?.json()).toEqual({ status: "pending" });
+    expect(repository.state).toBeNull();
+  });
+});

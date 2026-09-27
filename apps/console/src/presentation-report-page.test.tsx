@@ -1,16 +1,20 @@
-import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import { registerDom } from "@impromptu/test-harness";
 
-const { cleanup, render, act } = await import("@testing-library/react");
-const { test, expect, afterEach, afterAll } = await import("bun:test");
+const { cleanup, render, act, fireEvent } = await import("@testing-library/react");
+const { test, expect, afterEach } = await import("bun:test");
 
-GlobalRegistrator.register();
-afterAll(() => GlobalRegistrator.unregister());
+registerDom();
+
 const { createElement } = await import("react");
 const { MemoryRouter, Route, Routes } = await import("react-router-dom");
 
 import { AuthProvider } from "./App";
 import { PresentationReportPage } from "./report-page";
-import type { ConsoleSessionClient, SessionReportView } from "./session-client";
+import type {
+  ConsoleSessionClient,
+  SessionReportReadView,
+  SessionReportView,
+} from "./session-client";
 
 afterEach(cleanup);
 
@@ -54,6 +58,13 @@ const hostReport: SessionReportView = {
 };
 
 function reportClient(finalized: SessionReportView): ConsoleSessionClient {
+  return readSequencingClient([{ status: "FINALIZED", report: finalized }]);
+}
+
+// The report read is the recovery boundary: each queued outcome answers one real read, so a
+// PENDING -> retry -> FINALIZED sequence exercises the actual re-read path, never a sleep.
+function readSequencingClient(reads: readonly SessionReportReadView[]): ConsoleSessionClient {
+  const remaining = [...reads];
   return {
     async signUp() {
       throw new Error("not used");
@@ -78,16 +89,17 @@ function reportClient(finalized: SessionReportView): ConsoleSessionClient {
       throw new Error("not used");
     },
     async readFinalizedReport() {
-      return { status: "FINALIZED", report: finalized };
+      const next = remaining.length > 1 ? remaining.shift() : remaining[0];
+      return next ?? { status: "PENDING" };
     },
   };
 }
 
 async function renderReportPage(
-  finalized: SessionReportView,
+  clientOrReport: ConsoleSessionClient | SessionReportView,
   slides?: readonly { publicSlideKey: string; ordinal: number; accessibilityLabel: string }[],
 ): Promise<void> {
-  const client = reportClient(finalized);
+  const client = "reportVersion" in clientOrReport ? reportClient(clientOrReport) : clientOrReport;
   const routes = createElement(
     Routes,
     null,
@@ -134,4 +146,62 @@ test("the report host falls back to ko ordinals when no deck is in session", asy
   expect(titles.map((title) => title.textContent)).toEqual(["슬라이드 1", "슬라이드 2"]);
   const article = document.querySelector("[data-presentation-report='ready']");
   expect(article?.textContent).not.toMatch(/slide_[0-9a-f]{8}/i);
+});
+
+test("a pending report offers one retry that lands on the finalized report without a reload", async () => {
+  const client = readSequencingClient([
+    { status: "PENDING" },
+    { status: "FINALIZED", report: hostReport },
+  ]);
+  await renderReportPage(client, deckSlides);
+
+  const section = document.querySelector("[data-report-status]");
+  expect(section?.getAttribute("data-report-status")).toBe("PENDING");
+  const retry = document.querySelector("[data-report-retry]");
+  expect(retry).not.toBeNull();
+
+  await act(async () => {
+    fireEvent.click(retry as Element);
+  });
+
+  const article = document.querySelector("[data-presentation-report='ready']");
+  expect(article).not.toBeNull();
+  expect(document.querySelector("[data-report-status]")).toBeNull();
+  expect(article?.textContent).toContain("Results slide");
+});
+
+test("a pending report that stays pending keeps its retry control", async () => {
+  const client = readSequencingClient([
+    { status: "PENDING" },
+    { status: "PENDING" },
+    { status: "FINALIZED", report: hostReport },
+  ]);
+  await renderReportPage(client);
+
+  const firstRetry = document.querySelector("[data-report-retry]");
+  await act(async () => {
+    fireEvent.click(firstRetry as Element);
+  });
+  expect(document.querySelector("[data-report-status]")?.getAttribute("data-report-status")).toBe(
+    "PENDING",
+  );
+
+  await act(async () => {
+    fireEvent.click(document.querySelector("[data-report-retry]") as Element);
+  });
+  expect(document.querySelector("[data-presentation-report='ready']")).not.toBeNull();
+});
+
+test("a forbidden report read never exposes a retry or report content", async () => {
+  const client = readSequencingClient([]);
+  client.readFinalizedReport = async () => {
+    throw new Error("report_forbidden");
+  };
+  await renderReportPage(client);
+
+  expect(document.querySelector("[data-report-status]")?.getAttribute("data-report-status")).toBe(
+    "FORBIDDEN",
+  );
+  expect(document.querySelector("[data-report-retry]")).toBeNull();
+  expect(document.querySelector("[data-presentation-report='ready']")).toBeNull();
 });

@@ -60,6 +60,19 @@ export interface SessionReportEndContextResolver {
     finalizedAtMs: number;
     preparedEvidence: PreparedEvidenceReportSnapshot;
   }> | null>;
+  /**
+   * Recovery seam for a report read that finds the session ENDED but the report never
+   * finalized (crash or transient failure after the end was accepted). Returns the same
+   * end context as `resolve` only while the presentation is genuinely ended, or null —
+   * notably for a live talk, where driving `endSession` would finalize the report out
+   * from under it. Optional so route wirings without lifecycle knowledge keep their
+   * exact read behavior.
+   */
+  resolveEnded?(principal: SessionReportPrincipal): Promise<Readonly<{
+    endedOffsetMs: number;
+    finalizedAtMs: number;
+    preparedEvidence: PreparedEvidenceReportSnapshot;
+  }> | null>;
 }
 
 function response(body: unknown, status: number): Response {
@@ -117,7 +130,14 @@ export function createFinalizedSessionReportReadRouteHandler(
   };
 }
 
-/** Combined route: session-end persists derived state before returning 202; GET remains owner-only. */
+/**
+ * Combined route: session-end persists derived state before returning 202; GET remains
+ * owner-only. A GET that finds the session ended but the report still pending re-drives
+ * `endSession` — whose `#ends` dedup joins an in-flight finalization and whose CAS retry
+ * converges through `SessionReportFinalizedError` — so a stuck PENDING report completes on
+ * exactly one read instead of waiting forever. The response is always the truth AFTER that
+ * one attempt: 200 with the report, or 202 when finalization is still outstanding.
+ */
 export function createSessionReportRouteHandler(
   reports: SessionReportEnder,
   owners: SessionReportOwnerResolver,
@@ -126,7 +146,37 @@ export function createSessionReportRouteHandler(
   // Optional so routes wired without the prepared-evidence coordinator keep their exact behavior.
   endLifecycle?: SessionPresentationEndLifecycle,
 ): SessionReportReadRouteHandler {
-  const read = createFinalizedSessionReportReadRouteHandler(reports, owners, preparedEvidence);
+  const readOnce = createFinalizedSessionReportReadRouteHandler(reports, owners, preparedEvidence);
+  const read: SessionReportReadRouteHandler = async (request, accountId) => {
+    const first = await readOnce(request, accountId);
+    if (
+      first === null ||
+      first.status !== 202 ||
+      request.method !== "GET" ||
+      endContext.resolveEnded === undefined
+    ) {
+      return first;
+    }
+    const pendingMatch = /^\/v1\/presentation-sessions\/([^/]+)\/report$/.exec(
+      new URL(request.url).pathname,
+    );
+    const pendingSessionId = pendingMatch?.[1];
+    if (pendingSessionId === undefined) return first;
+    const principal = await owners.resolve({ accountId, presentationSessionId: pendingSessionId });
+    if (principal === null) return first;
+    const recovery = await endContext.resolveEnded(principal);
+    if (recovery === null) return first;
+    try {
+      const accepted = await reports.endSession({ principal, ...recovery });
+      // The joined attempt's outcome is deliberately not trusted; the final read re-checks
+      // persisted state so a FAILED result still answers pending rather than guesswork.
+      await accepted.finalization;
+    } catch {
+      // endSession pre-steps (visit flush, qa drain) can reject before the lane exists; the
+      // re-read below still reports the persisted truth.
+    }
+    return await readOnce(request, accountId);
+  };
   return async (request, accountId, accountSessionId) => {
     const pathname = new URL(request.url).pathname;
     const endMatch = /^\/v1\/presentation-sessions\/([^/]+)\/end$/.exec(pathname);

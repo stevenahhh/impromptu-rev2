@@ -1,4 +1,4 @@
-import { Panel } from "@impromptu/ui";
+import { Button, Panel } from "@impromptu/ui";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { useAuth } from "./auth-session";
@@ -7,8 +7,17 @@ import { PresentationReport } from "./presentation-report";
 import { presentationReportText } from "./presentation-report-text";
 import { QaDefensePanel } from "./qa-defense-panel";
 import { record } from "./server-payload";
-import type { SessionReportView } from "./session-client";
+import type { SessionReportReadView, SessionReportView } from "./session-client";
 import { sessionReport } from "./session-report-view";
+
+function applyReportRead(
+  result: SessionReportReadView,
+  setReport: (report: SessionReportView) => void,
+  setStatus: (status: "LOADING" | "PENDING" | "FORBIDDEN") => void,
+): void {
+  if (result.status === "FINALIZED") setReport(result.report);
+  else setStatus("PENDING");
+}
 
 function navigationReport(value: unknown, presentationSessionId: string): SessionReportView | null {
   // The closed parser decides — not a version equality shortcut. It accepts both shipped report
@@ -41,6 +50,18 @@ export function PresentationReportPage() {
     [activePresentation],
   );
 
+  // The owner-scoped controller event channel only exists while a presentation is ACTIVE — the
+  // end itself retires it — so a report left PENDING cannot subscribe to REPORT_READY. Instead
+  // every read of an ended-but-unfinalized report re-drives finalization server-side and one
+  // explicit retry re-issues exactly that read. No polling loop, no permanent spinner.
+  const retryPendingReport = () => {
+    if (client.readFinalizedReport === undefined || presentationSessionId.length === 0) return;
+    void client
+      .readFinalizedReport(presentationSessionId)
+      .then((result) => applyReportRead(result, setReport, setStatus))
+      .catch(() => setStatus("FORBIDDEN"));
+  };
+
   useEffect(() => {
     if (fromFinalization !== null) return;
     if (presentationSessionId.length === 0 || client.readFinalizedReport === undefined) {
@@ -52,8 +73,7 @@ export function PresentationReportPage() {
       .readFinalizedReport(presentationSessionId)
       .then((result) => {
         if (!active) return;
-        if (result.status === "FINALIZED") setReport(result.report);
-        else setStatus("PENDING");
+        applyReportRead(result, setReport, setStatus);
       })
       .catch(() => {
         if (active) setStatus("FORBIDDEN");
@@ -75,6 +95,11 @@ export function PresentationReportPage() {
                 ? text.reportPending
                 : text.reportUnavailable}
           </p>
+          {status === "PENDING" ? (
+            <Button data-report-retry variant="quiet" onClick={() => retryPendingReport()}>
+              {text.reportRetry}
+            </Button>
+          ) : null}
         </Panel>
       </section>
     );
