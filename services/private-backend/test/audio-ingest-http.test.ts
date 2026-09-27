@@ -203,6 +203,55 @@ class ConsecutiveFinalRouter implements StreamingSttRouterBoundary {
   }
 }
 
+/**
+ * Mirrors the whisper.cpp adapter's shape: it emits a PARTIAL when audio arrives, then holds
+ * inference silent behind a gate before the FINAL. The gate is the deterministic stand-in for
+ * a slow local inference that would otherwise be a wall-clock sleep.
+ */
+class GatedSilentInferenceRouter implements StreamingSttRouterBoundary {
+  readonly inferenceStarted = deferred();
+  readonly inferenceGate = deferred();
+
+  async *streamStt(chunks: AsyncIterable<{ sequence: number; audio: Uint8Array }>) {
+    for await (const _chunk of chunks) break;
+    yield {
+      kind: "transcript" as const,
+      event: {
+        sessionGeneration: 1,
+        sequence: 0,
+        segmentId: "segment-silent",
+        kind: "PARTIAL" as const,
+        transcript: { text: "silent-preview", language: "ko-KR", durationMs: 100, words: [] },
+      },
+    };
+    this.inferenceStarted.resolve();
+    await this.inferenceGate.promise;
+    yield {
+      kind: "transcript" as const,
+      event: {
+        sessionGeneration: 1,
+        sequence: 1,
+        segmentId: "segment-silent",
+        kind: "FINAL" as const,
+        finalSegmentId: "final-silent",
+        transcript: {
+          text: "SILENT_INFERENCE_SENTINEL",
+          language: "ko-KR",
+          durationMs: 100,
+          words: [],
+        },
+      },
+    };
+    yield {
+      kind: "complete" as const,
+      result: {
+        ok: true as const,
+        output: { text: "SILENT_INFERENCE_SENTINEL", language: "ko-KR", durationMs: 100 },
+      },
+    };
+  }
+}
+
 class BlockedRouter implements StreamingSttRouterBoundary {
   readonly gate = deferred();
   readonly completed = deferred();
@@ -229,7 +278,10 @@ type TestSystem = Readonly<{
   logEvents: Array<Parameters<JsonLogger["request"]>[0]>;
 }>;
 
-function createSystem(router: StreamingSttRouterBoundary): TestSystem {
+function createSystem(
+  router: StreamingSttRouterBoundary,
+  serviceOptions?: Partial<AudioIngestServiceOptions>,
+): TestSystem {
   const logEvents: Array<Parameters<JsonLogger["request"]>[0]> = [];
   const logger: JsonLogger = {
     request(event) {
@@ -242,6 +294,7 @@ function createSystem(router: StreamingSttRouterBoundary): TestSystem {
     contextFor: (identity, signal) => ({ tenantId: identity.accountId, signal }),
     coachingPreviewEnabledFor: () => true,
     createGrantId: () => "capture_http_1",
+    ...serviceOptions,
   });
   return {
     handler: createPrivateBackendHandler(parsePrivateBackendConfig({ CONSOLE_ORIGIN: origin }), {
@@ -379,15 +432,37 @@ async function bounded<T>(promise: Promise<T>, message: string): Promise<T> {
 async function readSseEvent(
   reader: ReadableStreamDefaultReader<Uint8Array>,
 ): Promise<Record<string, unknown>> {
-  const item = await bounded(reader.read(), "timed out waiting for audio SSE event");
-  if (item.done) throw new Error("audio SSE ended before the expected event");
-  const text = new TextDecoder().decode(item.value);
-  const data = text
-    .split("\n")
-    .find((line) => line.startsWith("data: "))
-    ?.slice("data: ".length);
-  if (data === undefined) throw new Error(`audio SSE data missing: ${text}`);
-  return JSON.parse(data) as Record<string, unknown>;
+  // Keep-alive comment frames carry no data line; skip them and keep waiting for the next
+  // real event. Every enqueued frame is delivered as its own chunk by the source stream.
+  for (;;) {
+    const item = await bounded(reader.read(), "timed out waiting for audio SSE event");
+    if (item.done) throw new Error("audio SSE ended before the expected event");
+    const text = new TextDecoder().decode(item.value);
+    const data = text
+      .split("\n")
+      .find((line) => line.startsWith("data: "))
+      ?.slice("data: ".length);
+    if (data === undefined) continue;
+    return JSON.parse(data) as Record<string, unknown>;
+  }
+}
+
+/**
+ * Reads one raw SSE frame, including comment frames that carry no `data:` line. Unlike
+ * readSseEvent this never throws on a comment; it fails only if the stream ends first.
+ */
+async function readRawFrame(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  buffered = "",
+): Promise<string> {
+  let pending = buffered;
+  for (;;) {
+    const boundary = pending.indexOf("\n\n");
+    if (boundary !== -1) return pending.slice(0, boundary);
+    const item = await bounded(reader.read(), "timed out waiting for an SSE frame");
+    if (item.done) throw new Error("audio SSE ended before the expected frame");
+    pending += new TextDecoder().decode(item.value);
+  }
 }
 
 function audioMutation(
@@ -397,6 +472,138 @@ function audioMutation(
   init: RequestInit = {},
 ) {
   return handler(browserRequest(path, session, { method: "POST", ...init }));
+}
+
+function socketRequest(
+  baseUrl: string,
+  path: string,
+  session: BrowserSession | undefined,
+  init: RequestInit = {},
+): Promise<Response> {
+  return fetch(`${baseUrl}${path}`, {
+    ...init,
+    headers: {
+      Origin: origin,
+      Referer: `${origin}/present`,
+      ...(session === undefined
+        ? {}
+        : { Cookie: session.accountCookie, "x-csrf-token": session.csrfToken }),
+      ...init.headers,
+    },
+  });
+}
+
+function setCookies(response: Response): string[] {
+  const headers = response.headers as Headers & { getSetCookie?: () => string[] };
+  if (typeof headers.getSetCookie === "function") return headers.getSetCookie();
+  const single = response.headers.get("set-cookie");
+  return single === null ? [] : [single];
+}
+
+async function socketSignIn(baseUrl: string): Promise<BrowserSession> {
+  const response = await socketRequest(baseUrl, "/v1/account-sessions", undefined, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ username: "presenter", password: "password" }),
+  });
+  const body = (await response.json()) as { csrfToken: string };
+  const accountCookie = setCookies(response)
+    .find((cookie) => cookie.startsWith("__Host-account="))
+    ?.split(";", 1)[0];
+  if (accountCookie === undefined) throw new Error("account cookie missing from socket login");
+  return { accountCookie, csrfToken: body.csrfToken };
+}
+
+async function socketIssueGrant(baseUrl: string, session: BrowserSession): Promise<BrowserSession> {
+  const response = await socketRequest(baseUrl, "/v1/audio/grants", session, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ mimeType: "audio/webm;codecs=opus", consent: consent() }),
+  });
+  expect(response.status).toBe(201);
+  const captureCookie = setCookies(response)
+    .find((cookie) => cookie.startsWith("__Host-capture="))
+    ?.split(";", 1)[0];
+  if (captureCookie === undefined) throw new Error("capture cookie missing from grant response");
+  return { ...session, accountCookie: `${session.accountCookie}; ${captureCookie}` };
+}
+
+class SocketSseReader {
+  readonly #chunks: string[] = [];
+  readonly #waiters: Array<() => void> = [];
+  #finished = false;
+  #failure: Error | undefined;
+
+  constructor(response: Response) {
+    const body = response.body;
+    if (body === null) throw new Error("audio event stream body missing");
+    void this.#pump(body.getReader());
+  }
+
+  async #pump(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<void> {
+    const decoder = new TextDecoder();
+    try {
+      for (;;) {
+        const item = await reader.read();
+        if (item.done) break;
+        this.#chunks.push(decoder.decode(item.value, { stream: true }));
+        this.#wake();
+      }
+    } catch (error) {
+      this.#failure = error instanceof Error ? error : new Error(String(error));
+    }
+    this.#finished = true;
+    this.#wake();
+  }
+
+  #wake(): void {
+    const waiters = this.#waiters.splice(0);
+    for (const waiter of waiters) waiter();
+  }
+
+  frames(): string[] {
+    return this.#chunks
+      .join("")
+      .split("\n\n")
+      .filter((frame) => frame.length > 0);
+  }
+
+  nextFrame(): Promise<void> {
+    if (this.#finished) return Promise.reject(this.#failure ?? new Error("audio SSE stream ended"));
+    return new Promise<void>((resolve, reject) => {
+      this.#waiters.push(() => {
+        if (this.#finished) reject(this.#failure ?? new Error("audio SSE stream ended"));
+        else resolve();
+      });
+    });
+  }
+}
+
+/**
+ * Waits until the stream has carried at least `count` frames matching `predicate`. A dead
+ * socket settles the pending wake-up by rejection instead of a timeout, so the assertion
+ * fails the moment the connection severs rather than after a fixed wait.
+ */
+async function awaitFrames(
+  reader: SocketSseReader,
+  count: number,
+  predicate: (frame: string) => boolean,
+  message: string,
+): Promise<void> {
+  const deadline = deferred();
+  const guard = setTimeout(() => deadline.resolve(), 15_000);
+  try {
+    while (reader.frames().filter(predicate).length < count) {
+      await Promise.race([
+        reader.nextFrame(),
+        deadline.promise.then(() => {
+          throw new Error(message);
+        }),
+      ]);
+    }
+  } finally {
+    clearTimeout(guard);
+  }
 }
 
 describe("private audio ingest HTTP transport", () => {
@@ -918,4 +1125,130 @@ describe("private audio ingest HTTP transport", () => {
     );
     expect(withoutCsrf.status).toBe(403);
   });
+
+  test("emits keep-alive comment frames while inference holds the transcript stream silent", async () => {
+    // The whisper.cpp adapter emits nothing while a segment infers; without periodic writes the
+    // SSE body goes silent for seconds at a time (live-baseline F3). The stream contract must
+    // include keep-alive comments so intermediaries and the HTTP server never see an idle body.
+    const router = new GatedSilentInferenceRouter();
+    const { handler } = createSystem(router, { eventStreamHeartbeatIntervalMs: 150 });
+    const account = await signIn(handler);
+    const session = await issueGrant(handler, account);
+    const eventsResponse = await handler(browserRequest("/v1/audio/events", session));
+    const reader = eventsResponse.body?.getReader();
+    if (reader === undefined) throw new Error("audio event stream body missing");
+    expect(await readSseEvent(reader)).toEqual({ kind: "READY" });
+    expect((await audioMutation(handler, session, "/v1/audio/stream/start")).status).toBe(202);
+    expect(
+      (
+        await audioMutation(handler, session, "/v1/audio/frames", {
+          headers: {
+            "content-type": "application/octet-stream",
+            "x-audio-sequence": "0",
+            "x-audio-duration-ms": "100",
+          },
+          body: new Uint8Array([1]),
+        })
+      ).status,
+    ).toBe(202);
+
+    await bounded(router.inferenceStarted.promise, "inference never consumed the audio frame");
+    // The PARTIAL transcript may already sit ahead of the first heartbeat; keep reading raw
+    // frames until a comment frame proves the stream writes while inference holds it silent.
+    const keepAliveDeadline = deferred();
+    const keepAliveGuard = setTimeout(() => keepAliveDeadline.resolve(), 1_000);
+    let keepAlive = "";
+    try {
+      while (!keepAlive.startsWith(":")) {
+        keepAlive = await Promise.race([
+          readRawFrame(reader),
+          keepAliveDeadline.promise.then(() => {
+            throw new Error("no keep-alive frame during inference");
+          }),
+        ]);
+      }
+    } finally {
+      clearTimeout(keepAliveGuard);
+    }
+
+    router.inferenceGate.resolve();
+    expect(await readSseEvent(reader)).toMatchObject({
+      kind: "TRANSCRIPT",
+      event: { kind: "FINAL", finalSegmentId: "final-silent" },
+    });
+    expect(await readSseEvent(reader)).toEqual({ kind: "TERMINAL", outcome: "COMPLETED" });
+  });
+
+  test("keeps the SSE socket connected across an inference longer than the server idle timeout", async () => {
+    // F3 regression at the real socket layer: Bun.serve closes responses whose body writes go
+    // idle past idleTimeout, checked on a ~4s sweep (default 10s -> kill 8-12s after the last
+    // write; production captures pause that long inside whisper inference). Serving with
+    // idleTimeout:5 reproduces the kill deterministically, while 200ms heartbeats keep the
+    // body active across the whole sweep window so the stream still reaches TERMINAL.
+    const router = new GatedSilentInferenceRouter();
+    const { handler } = createSystem(router, { eventStreamHeartbeatIntervalMs: 200 });
+    const server = Bun.serve({ hostname: "127.0.0.1", port: 0, idleTimeout: 5, fetch: handler });
+    const baseUrl = `http://127.0.0.1:${server.port}`;
+    try {
+      const account = await socketSignIn(baseUrl);
+      const session = await socketIssueGrant(baseUrl, account);
+      const eventsResponse = await socketRequest(baseUrl, "/v1/audio/events", session);
+      expect(eventsResponse.status).toBe(200);
+      const events = new SocketSseReader(eventsResponse);
+
+      const start = await socketRequest(baseUrl, "/v1/audio/stream/start", session, {
+        method: "POST",
+      });
+      expect(start.status).toBe(202);
+      const frame = await socketRequest(baseUrl, "/v1/audio/frames", session, {
+        method: "POST",
+        headers: {
+          "content-type": "application/octet-stream",
+          "x-audio-sequence": "0",
+          "x-audio-duration-ms": "100",
+        },
+        body: new Uint8Array([1]),
+      });
+      expect(frame.status).toBe(202);
+
+      // Hold inference silent until the stream has carried ~9s of heartbeat frames: longer
+      // than the worst-case idleTimeout:5 kill (one or two 4s sweeps after the last write).
+      // Reaching the count proves the connection survived; a dead socket rejects instead.
+      await awaitFrames(
+        events,
+        45,
+        (frame) => frame.startsWith(":"),
+        "audio SSE produced too few keep-alive frames before the deadline",
+      );
+
+      router.inferenceGate.resolve();
+      await awaitFrames(
+        events,
+        1,
+        (frame) => frame.includes('"finalSegmentId":"final-silent"'),
+        "audio SSE never delivered the FINAL transcript after inference",
+      );
+      await awaitFrames(
+        events,
+        1,
+        (frame) => frame.includes('"kind":"TERMINAL"'),
+        "audio SSE never delivered the TERMINAL event",
+      );
+      const terminal = events
+        .frames()
+        .map((frame) => {
+          const data = frame
+            .split("\n")
+            .find((line) => line.startsWith("data: "))
+            ?.slice("data: ".length);
+          return data === undefined
+            ? undefined
+            : (JSON.parse(data) as { kind?: string; outcome?: string });
+        })
+        .find((event) => event?.kind === "TERMINAL");
+      expect(terminal).toMatchObject({ kind: "TERMINAL", outcome: "COMPLETED" });
+    } finally {
+      server.stop(true);
+    }
+  }, 20_000);
 });

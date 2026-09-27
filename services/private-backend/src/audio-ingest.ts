@@ -121,6 +121,14 @@ export interface AudioIngestServiceOptions {
   ) => void;
   readonly adapterId?: string;
   readonly grantTtlMs?: number;
+  /**
+   * Interval between SSE comment heartbeats on the capture event stream. Local whisper
+   * inference leaves the stream silent for seconds at a time; Bun.serve's idleTimeout
+   * (10s default) and intermediary proxies close sockets whose body stops writing, which
+   * severed live captures mid-inference without a TERMINAL frame. Heartbeats must arrive
+   * well inside that window.
+   */
+  readonly eventStreamHeartbeatIntervalMs?: number;
   readonly createGrantId: () => string;
 }
 
@@ -133,6 +141,7 @@ type GrantBinding = {
   readonly validateTranscriptEvent: ReturnType<typeof createSttStreamEventValidator>;
   state: GrantState;
   eventController: ReadableStreamDefaultController<Uint8Array> | undefined;
+  heartbeat: ReturnType<typeof setInterval> | undefined;
   eventsOpened: boolean;
 };
 
@@ -145,6 +154,13 @@ type PendingTranscription = Readonly<{ grantId: string; identity: AudioCaptureId
  * abstention immediately instead of queueing without bound.
  */
 const MAX_RECOMMENDATION_LANE_DEPTH = 4;
+
+/**
+ * How often the capture event stream writes an SSE comment while it is open. The bound sits
+ * under Bun.serve's 10s default idleTimeout with margin for proxy sweeps, so a long whisper
+ * inference can no longer idle the socket into an IncompleteRead disconnect.
+ */
+const EVENT_STREAM_HEARTBEAT_INTERVAL_MS = 4_000;
 
 type RecommendationJob = {
   readonly grantId: string;
@@ -159,6 +175,7 @@ type RecommendationLane = {
 };
 
 const encoder = new TextEncoder();
+const HEARTBEAT_FRAME = encoder.encode(": keep-alive\n\n");
 
 class EventForwardingAudioSttPort {
   #pending: PendingTranscription | undefined;
@@ -220,8 +237,14 @@ class DefaultAudioIngestService implements AudioIngestService {
     AudioIngestServiceOptions["coachingPreviewEnabledFor"]
   >;
   readonly #onFinal: AudioIngestServiceOptions["onFinal"];
+  readonly #heartbeatIntervalMs: number;
 
   constructor(options: AudioIngestServiceOptions) {
+    this.#heartbeatIntervalMs =
+      options.eventStreamHeartbeatIntervalMs ?? EVENT_STREAM_HEARTBEAT_INTERVAL_MS;
+    if (!(this.#heartbeatIntervalMs > 0)) {
+      throw new TypeError("event stream heartbeat interval must be positive");
+    }
     this.#recommendations = options.recommendations;
     this.#coachingPreviewEnabledFor = options.coachingPreviewEnabledFor ?? (() => false);
     this.#onFinal = options.onFinal;
@@ -290,6 +313,7 @@ class DefaultAudioIngestService implements AudioIngestService {
       validateTranscriptEvent: createSttStreamEventValidator(),
       state: "ACTIVE",
       eventController: undefined,
+      heartbeat: undefined,
       eventsOpened: false,
     });
     return { outcome: "ISSUED", expiresAtMs: grant.expiresAtMs, grantId: grant.captureGrantId };
@@ -309,8 +333,29 @@ class DefaultAudioIngestService implements AudioIngestService {
       start: (controller) => {
         binding.eventController = controller;
         controller.enqueue(encodeEvent({ kind: "READY" }));
+        // Comment-frame heartbeats keep the socket busy while inference produces no events;
+        // without them the HTTP server reaps the connection as idle mid-capture.
+        binding.heartbeat = setInterval(() => {
+          if (binding.eventController === undefined) {
+            clearInterval(binding.heartbeat);
+            binding.heartbeat = undefined;
+            return;
+          }
+          try {
+            binding.eventController.enqueue(HEARTBEAT_FRAME);
+          } catch {
+            clearInterval(binding.heartbeat);
+            binding.heartbeat = undefined;
+            binding.eventController = undefined;
+          }
+        }, this.#heartbeatIntervalMs);
+        binding.heartbeat.unref();
       },
       cancel: () => {
+        if (binding.heartbeat !== undefined) {
+          clearInterval(binding.heartbeat);
+          binding.heartbeat = undefined;
+        }
         binding.eventController = undefined;
         this.#cancelRecommendations(grantId);
         if (binding.state === "STARTED" || binding.state === "STOPPING") {
@@ -617,6 +662,10 @@ class DefaultAudioIngestService implements AudioIngestService {
     if (binding === undefined || controller === undefined) return;
     controller.enqueue(encodeEvent(event));
     if (event.kind === "TERMINAL") {
+      if (binding.heartbeat !== undefined) {
+        clearInterval(binding.heartbeat);
+        binding.heartbeat = undefined;
+      }
       binding.eventController = undefined;
       controller.close();
       this.#cancelRecommendations(grantId);
