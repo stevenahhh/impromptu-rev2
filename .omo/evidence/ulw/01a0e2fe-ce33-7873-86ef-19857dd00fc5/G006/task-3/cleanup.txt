@@ -1,0 +1,32 @@
+# task-3 cleanup record
+
+Probe sessions created by this task (all owner account_production):
+  ps_90cbc63ef9519fc77b88fcb4b4bc33a1  text-layer PDF, pass A run 1 (left ACTIVE; grant attempt failed on schema)
+  ps_b3d83b2a1822a7f83f6b4adf528b4780  scanned PDF, pass A run 1 (left ACTIVE; never visited -> /end 500s, see baseline-summary)
+  ps_09bd03be04385ef0ce59aa41c84530ad  scanned PDF, pass A run 2 (left ACTIVE; /end + GET /report 500 verified)
+  ps_65e46f125869e1857a017fe7c6f9af3f  text-layer PDF + audio probe, pass A run 2 (ENDED; report finalized after QA exchange; report-final.json)
+  ps_57565c7b75497505f16ae2f1b32aa5aa  text-layer PDF + audio probe, HEAD pass B (ENDED; finalized)
+  ps_c107de6d80f1af111e4db152ab8e6a66  text-layer PDF + lane probe, HEAD pass C (ENDED; finalized)
+
+Cleanup actions taken:
+  - DELETE /v1/audio/grant on each probe's grant: pass A -> 409 GRANT_EXPIRED (grant TTL
+    lapsed mid-run); pass B and C -> 409 GRANT_REPLAYED (grant already consumed by the
+    completed/aborted stream). No dangling captures.
+  - DELETE /v1/account-session after every probe session -> HTTP 200 {"status":"revoked"}.
+  - QA windows opened on the ended probe sessions were allowed to lapse naturally
+    (5-minute askable window, no further writes possible after expiry).
+  - Deck artifacts for the uploaded fixtures remain under the deck-artifacts volume —
+    they are content-addressed products of the upload path (no delete API exists), so they
+    were left as-is rather than mutating the volume by hand.
+  - No service restarts, no code edits, no git staging performed by this task.
+  - Scratch files live under /tmp/task3 (fixtures, probe scripts, raw reports); evidence
+    copies of the scripts are beside this file.
+
+Leftover state (intentional, recorded):
+  - Three finalized report rows + three qa_exchanges rows in impromptu_private
+    (session_ids c107de6d…, 57565c7b…, 65e46f12…; see db-snapshot.txt).
+  - Three never-finalized ACTIVE presentations from uploads (ps_90cbc63e, ps_b3d83b2a,
+    ps_09bd03be; no visit/QA writes ever occurred for them; ending them 500s until a write
+    provisions the row — finding F2).
+  - Early aborted attempt: POST /v1/audio/grants with a non-schema captureDeviceId was
+    rejected 400 INVALID_REQUEST (recorded in live-probe.log pass 1 line "## 4").

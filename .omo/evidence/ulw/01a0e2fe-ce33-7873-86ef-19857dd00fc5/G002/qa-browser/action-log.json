@@ -1,0 +1,302 @@
+{
+  "actionLog": [
+    {
+      "at": "2026-09-27T18:59:33.280Z",
+      "step": "navigate",
+      "detail": "GET https://impromptu-rev2-console.vercel.app/sign-in"
+    },
+    {
+      "at": "2026-09-27T18:59:33.738Z",
+      "step": "sign-in-page",
+      "detail": "HTTP 200"
+    },
+    {
+      "at": "2026-09-27T18:59:33.936Z",
+      "step": "sign-in-submit",
+      "detail": "sample presenter account from .env (value not logged)"
+    },
+    {
+      "at": "2026-09-27T18:59:34.721Z",
+      "step": "sign-in-result",
+      "detail": "url=https://impromptu-rev2-console.vercel.app/"
+    },
+    {
+      "at": "2026-09-27T18:59:34.724Z",
+      "step": "post-sign-in-surface",
+      "detail": "h1=\"발표 자료를 올려 주세요\" uploadDropzone=1 reentryControls=0"
+    },
+    {
+      "at": "2026-09-27T18:59:34.759Z",
+      "step": "deck-upload",
+      "detail": "docs/samples/impromptu-sample-deck.pdf via [data-deck-file-input]"
+    },
+    {
+      "at": "2026-09-27T18:59:37.559Z",
+      "step": "upload-result",
+      "detail": "cockpit rendered; active presentation set client-side"
+    },
+    {
+      "at": "2026-09-27T18:59:37.668Z",
+      "step": "start-presentation",
+      "detail": "clicked primary action (opens Stage window + binds)"
+    },
+    {
+      "at": "2026-09-27T18:59:37.697Z",
+      "step": "stage-popup",
+      "detail": "opened url=https://impromptu-rev2-stage.vercel.app/"
+    },
+    {
+      "at": "2026-09-27T18:59:38.576Z",
+      "step": "stage-ready",
+      "detail": "data-audience-readiness=READY (snapshot validated, hash-checked)"
+    },
+    {
+      "at": "2026-09-27T18:59:38.583Z",
+      "step": "stage-pixels",
+      "detail": "slide image complete with naturalWidth>0 (or inline svg)"
+    },
+    {
+      "at": "2026-09-27T18:59:38.583Z",
+      "step": "stage-slide-rendered",
+      "detail": "{\"readiness\":\"READY\",\"blackout\":\"false\",\"surface\":\"uploaded\",\"ariaLabel\":\"Impromptu sample deck — slide 1\",\"imgTag\":\"IMG\",\"imgPath\":\"/v1/deck-assets/cb3ef3db00fecc76a61555d216eabad9284880ae944094afba8ea60a08fc945c/slides/slide-1.png\",\"imgComplete\":true,\"naturalWidth\":2560,\"svgInline\":false}"
+    },
+    {
+      "at": "2026-09-27T18:59:38.620Z",
+      "step": "screenshot",
+      "detail": "desktop 1440x900 captured for stage + console"
+    },
+    {
+      "at": "2026-09-27T18:59:38.641Z",
+      "step": "next-slide",
+      "detail": "clicked next slide in console"
+    },
+    {
+      "at": "2026-09-27T18:59:43.556Z",
+      "step": "next-slide-result",
+      "detail": "stage img path /v1/deck-assets/cb3ef3db00fecc76a61555d216eabad9284880ae944094afba8ea60a08fc945c/slides/slide-1.png -> /v1/deck-assets/cb3ef3db00fecc76a61555d216eabad9284880ae944094afba8ea60a08fc945c/slides/slide-2.png"
+    },
+    {
+      "at": "2026-09-27T18:59:43.661Z",
+      "step": "screenshot",
+      "detail": "mobile 375x812 captured for stage + console"
+    },
+    {
+      "at": "2026-09-27T18:59:43.731Z",
+      "step": "stage-snapshot-authenticated",
+      "detail": "{\"status\":200,\"role\":\"PUBLIC_STAGE\",\"slideCount\":7,\"occurrenceKey\":\"slide_d39394ff8a59b32b5def5a6622210c9a9fe5cb3365b2ff89993f2ef25b3c5915\",\"blackout\":false,\"displayBindingEpoch\":\"dbe_1\",\"presentationSessionId\":\"ps_8b7dd2560756cbdd6bec323c8c2c1b34\"}"
+    },
+    {
+      "at": "2026-09-27T18:59:46.786Z",
+      "step": "stage-alone-landing",
+      "detail": "{\"consoleOnly\":true,\"joinAttempts\":0,\"bodyText\":\"발표 화면은 발표자 화면에서 열립니다. 주소만으로는 이 화면이 시작되지 않습니다.\"}"
+    },
+    {
+      "at": "2026-09-27T18:59:46.876Z",
+      "step": "stage-alone-snapshot-probe",
+      "detail": "GET /v1/snapshot (no display cookie) -> 401"
+    },
+    {
+      "at": "2026-09-27T18:59:49.412Z",
+      "step": "stage-alone-display-route",
+      "detail": "{\"readiness\":null,\"heading\":\"This page doesn’t exist\"}"
+    }
+  ],
+  "networkLog": [
+    {
+      "surface": "console",
+      "method": "POST",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/account-sessions",
+      "status": 201
+    },
+    {
+      "surface": "console",
+      "method": "POST",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/deck-uploads",
+      "status": 201
+    },
+    {
+      "surface": "console",
+      "method": "GET",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/deck-assets/cb3ef3db00fecc76a61555d216eabad9284880ae944094afba8ea60a08fc945c/slides/slide-1.png",
+      "status": 200
+    },
+    {
+      "surface": "stage",
+      "method": "POST",
+      "host": "impromptu-rev2-stage.vercel.app",
+      "path": "/v1/display-joins",
+      "status": 201
+    },
+    {
+      "surface": "console",
+      "method": "GET",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/reference-documents",
+      "status": 200
+    },
+    {
+      "surface": "console",
+      "method": "POST",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/display-bindings",
+      "status": 201
+    },
+    {
+      "surface": "stage",
+      "method": "POST",
+      "host": "impromptu-rev2-stage.vercel.app",
+      "path": "/v1/display-session",
+      "status": 201
+    },
+    {
+      "surface": "stage",
+      "method": "GET",
+      "host": "impromptu-rev2-stage.vercel.app",
+      "path": "/v1/events",
+      "status": 200
+    },
+    {
+      "surface": "stage",
+      "method": "GET",
+      "host": "impromptu-rev2-stage.vercel.app",
+      "path": "/v1/snapshot",
+      "status": 200
+    },
+    {
+      "surface": "stage",
+      "method": "GET",
+      "host": "impromptu-rev2-stage.vercel.app",
+      "path": "/v1/deck-assets/cb3ef3db00fecc76a61555d216eabad9284880ae944094afba8ea60a08fc945c/slides/slide-1.png",
+      "status": 200
+    },
+    {
+      "surface": "console",
+      "method": "POST",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/playback/slide-set",
+      "status": 202
+    },
+    {
+      "surface": "stage",
+      "method": "GET",
+      "host": "impromptu-rev2-stage.vercel.app",
+      "path": "/v1/snapshot",
+      "status": 200
+    },
+    {
+      "surface": "console",
+      "method": "GET",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/reference-documents",
+      "status": 200
+    },
+    {
+      "surface": "console",
+      "method": "POST",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/playback/slide-set",
+      "status": 202
+    },
+    {
+      "surface": "console",
+      "method": "GET",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/deck-assets/cb3ef3db00fecc76a61555d216eabad9284880ae944094afba8ea60a08fc945c/slides/slide-2.png",
+      "status": 200
+    },
+    {
+      "surface": "console",
+      "method": "POST",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/recommendations",
+      "status": 200
+    },
+    {
+      "surface": "console",
+      "method": "POST",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/recommendations",
+      "status": 200
+    },
+    {
+      "surface": "console",
+      "method": "POST",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/recommendations",
+      "status": 200
+    },
+    {
+      "surface": "console",
+      "method": "POST",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/recommendations",
+      "status": 200
+    },
+    {
+      "surface": "console",
+      "method": "POST",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/recommendations",
+      "status": 200
+    },
+    {
+      "surface": "console",
+      "method": "POST",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/recommendations",
+      "status": 200
+    },
+    {
+      "surface": "console",
+      "method": "POST",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/recommendations",
+      "status": 200
+    },
+    {
+      "surface": "stage",
+      "method": "GET",
+      "host": "impromptu-rev2-stage.vercel.app",
+      "path": "/v1/snapshot",
+      "status": 200
+    },
+    {
+      "surface": "stage",
+      "method": "GET",
+      "host": "impromptu-rev2-stage.vercel.app",
+      "path": "/v1/events",
+      "status": 200
+    },
+    {
+      "surface": "stage",
+      "method": "GET",
+      "host": "impromptu-rev2-stage.vercel.app",
+      "path": "/v1/snapshot",
+      "status": 200
+    },
+    {
+      "surface": "stage-alone",
+      "method": "GET",
+      "host": "impromptu-rev2-stage.vercel.app",
+      "path": "/v1/snapshot",
+      "status": 401
+    }
+  ],
+  "independentStageFinding": {
+    "landing": {
+      "consoleOnly": true,
+      "joinAttempts": 0,
+      "bodyText": "발표 화면은 발표자 화면에서 열립니다. 주소만으로는 이 화면이 시작되지 않습니다."
+    },
+    "snapProbe": {
+      "status": 401
+    },
+    "disp": {
+      "readiness": null,
+      "heading": "This page doesn’t exist"
+    }
+  }
+}

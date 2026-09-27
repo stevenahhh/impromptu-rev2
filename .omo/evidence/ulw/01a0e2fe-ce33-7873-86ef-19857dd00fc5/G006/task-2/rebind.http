@@ -1,0 +1,27 @@
+# task-2 rebind receipts — close/reopen of a first successful opener-created binding
+# captured 2026-09-27T17:49Z against the deployed topology
+#   console https://impromptu-rev2-console.vercel.app -> private-backend :3001 (tunnel)
+#   stage   https://impromptu-rev2-stage.vercel.app  -> projection-gateway :3002 (tunnel)
+# secrets (session cookie, CSRF, join locator internals, display fingerprint) redacted.
+
+### Presenter: POST /v1/display-bindings — first opener-driven join, expectedDisplayBindingEpoch=dbe_0
+HTTP 201
+{"audienceDisplaySessionId":"audience_<session>","binding":{"displayBindingId":"binding_b6591d1fa1a7e2370e58f9876a691de6","presentationSessionId":"ps_eb258db2667f8f804c650796f364844f","presentationSessionEpoch":"pse_1","displayId":"display_<id>","displayBindingEpoch":"dbe_1","deckVersion":"deck_<hex64>","manifestHash":"<hex64>"},"expiresAtMs":1790560153211}
+
+### Presenter: POST /v1/display-bindings — the Console's own reopen gesture re-sends dbe_0
+### (display-playback.ts approveDisplay hardcodes expectedDisplayBindingEpoch:"dbe_0")
+HTTP 409
+{"error":"STALE_DISPLAY_BINDING"}
+
+### Effect observed in the real browsers at the same moment:
+###   stage popup #2: stays on / with data-audience-readiness="PAIRING", no slide (rebind-stage.png)
+###   console:        panel stays data-audience-screen-panel="CONNECTED" (stale — stage2 never bound; rebind-console.png)
+
+### Operator-side proof the CAS still works when the caller sends the live epoch:
+### POST /v1/display-bindings with expectedDisplayBindingEpoch=dbe_1 for a fresh join
+HTTP 201
+{"audienceDisplaySessionId":"audience_<session>","binding":{"displayBindingId":"binding_1d54747e83256f7cd7cadcd9bd616aa7","presentationSessionId":"ps_eb258db2667f8f804c650796f364844f","presentationSessionEpoch":"pse_1","displayId":"display_<id>","displayBindingEpoch":"dbe_2","deckVersion":"deck_<hex64>","manifestHash":"<hex64>"},"expiresAtMs":1790560180105}
+
+### POST /v1/display-bindings with expectedDisplayBindingEpoch=dbe_2 (third join)
+HTTP 201
+{"audienceDisplaySessionId":"audience_<session>","binding":{"displayBindingId":"binding_2d74fce6019b6f3c60835bdff926daf7","presentationSessionId":"ps_eb258db2667f8f804c650796f364844f","presentationSessionEpoch":"pse_1","displayId":"display_<id>","displayBindingEpoch":"dbe_3","deckVersion":"deck_<hex64>","manifestHash":"<hex64>"},"expiresAtMs":1790560185067}

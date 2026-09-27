@@ -1,0 +1,25 @@
+POST /v1/accounts owner -> 201 {"account":{"accountId":"account_61c4b757818ba28a66852143045e8733"}}
+POST /v1/account-sessions owner -> 201 {"account":{"accountId":"account_61c4b757818ba28a66852143045e8733","actorId":"actor_3df3814a11937559daa44a3ff6bb17cc"},"expiresAtMs":28801000,"csrfToken":"1438e9bdbfda213e02471d5dbe96546ee8cba94a75bc0
+POST /v1/accounts+session teammate -> 201 {"account":{"accountId":"account_b18467cbbbfc4a667b82c98c3e8e797d"}}
+POST /v1/account-sessions teammate -> 201 {"account":{"accountId":"account_b18467cbbbfc4a667b82c98c3e8e797d","actorId":"actor_47fcd3165af7f42cf46ed97c9db55d9d"},"expiresAtMs":28801000,"csrfToken":"9c25e155436c53399e2ae1398d583ceae26342138abab
+POST /v1/account-sessions stranger -> 401 {"error":"authentication_failed"}
+POST /v1/accounts stranger -> 201 {"account":{"accountId":"account_c8916ac48d8be548040ea1bb14cdbe46"}}
+POST /v1/account-sessions stranger-2 -> 201 {"account":{"accountId":"account_c8916ac48d8be548040ea1bb14cdbe46","actorId":"actor_b0f814f6a018a84b4e014f2e4803d855"},"expiresAtMs":28801000,"csrfToken":"8e64ecfbb11bbad49b8f6c9dfa4cea09ead6d8b561b0b
+POST /v1/presentation-sessions owner -> 201 {"lifecycle":{"presentationSessionId":"ps_bd67d385790a01bd3fe4b6bde2e48f75","presentationSessionEpoch":"pse_1","ownerAccountId":"account_61c4b757818ba28a66852143045e8733","deckVersion":"deck_probe","s
+POST /v1/team-question-grants owner->B -> 201 {"grantId":"tqg_cbddcfd75aaa0a939839ece0cf22d74f","presentationSessionId":"ps_bd67d385790a01bd3fe4b6bde2e48f75","teammateAccountId":"account_b18467cbbbfc4a667b82c98c3e8e797d","teammateUsername":"probe
+POST /v1/team-question-grants no-CSRF -> 403 {"error":"csrf_rejected"}
+POST /v1/team-question-grants wrong-origin -> 403 {"error":"origin_forbidden"}
+POST /v1/team-question-grants C targets B grant flow -> 403 {"error":"unauthorized"}
+POST /v1/team-question-grants/accept C with B token -> 404 {"error":"invitation_not_found"}
+POST /v1/team-question-grants/accept B -> 200 {"grantId":"tqg_cbddcfd75aaa0a939839ece0cf22d74f","presentationSessionId":"ps_bd67d385790a01bd3fe4b6bde2e48f75","expiresAtMs":14401000}
+POST /v1/team-question-grants/accept B replay -> 409 {"error":"team_grant_already_accepted"}
+POST /v1/team-questions B -> 202 {"questionId":"tqq_47256324a1e17d16a9d8c4858c11578f","grantId":"tqg_cbddcfd75aaa0a939839ece0cf22d74f","submittedAtMs":1000,"duplicate":false}
+POST /v1/team-questions B idempotent retry -> 202 {"questionId":"tqq_47256324a1e17d16a9d8c4858c11578f","grantId":"tqg_cbddcfd75aaa0a939839ece0cf22d74f","submittedAtMs":1000,"duplicate":true}
+POST /v1/team-questions C via B grant -> 404 {"error":"team_grant_not_found"}
+GET /v1/team-questions B (denied) -> 403 {"error":"unauthorized"}
+GET /v1/team-questions owner inbox -> 200 {"presentationSessionId":"ps_bd67d385790a01bd3fe4b6bde2e48f75","questions":[{"questionId":"tqq_47256324a1e17d16a9d8c4858c11578f","grantId":"tqg_cbddcfd75aaa0a939839ece0cf22d74f","teammateAccountId":"a
+GET /v1/presentation-sessions/:id/report B (denied) -> 400 {"error":"invalid_request"}
+DELETE /v1/team-question-grants/tqg_cbddcfd75aaa0a939839ece0cf22d74f by C -> 404 {"error":"team_grant_not_found"}
+DELETE /v1/team-question-grants/tqg_cbddcfd75aaa0a939839ece0cf22d74f owner -> 200 {"grantId":"tqg_cbddcfd75aaa0a939839ece0cf22d74f","presentationSessionId":"ps_bd67d385790a01bd3fe4b6bde2e48f75","teammateAccountId":"account_b18467cbbbfc4a667b82c98c3e8e797d","teammateUsername":"probe
+POST /v1/team-questions B after revoke -> 410 {"error":"team_grant_revoked"}
+POST /v1/presentation-sessions/:id/end owner -> 404 {"error":"not_found"}

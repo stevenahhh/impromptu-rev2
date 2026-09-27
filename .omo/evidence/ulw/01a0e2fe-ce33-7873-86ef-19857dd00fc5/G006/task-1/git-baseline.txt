@@ -1,0 +1,30 @@
+# git status --short @ 2026-09-27T18:43:21Z
+ M .omo/boulder.json
+?? .omo/drafts/impromptu-ideal-experience.md
+?? .omo/evidence/ulw/01a0e2fe-ce33-7873-86ef-19857dd00fc5/G002/
+?? .omo/evidence/ulw/01a0e2fe-ce33-7873-86ef-19857dd00fc5/G005/
+?? .omo/evidence/ulw/01a0e2fe-ce33-7873-86ef-19857dd00fc5/G006/task-1/
+?? .omo/evidence/ulw/01a0e2fe-ce33-7873-86ef-19857dd00fc5/G006/task-2/
+?? .omo/evidence/ulw/01a0e2fe-ce33-7873-86ef-19857dd00fc5/G006/task-20/
+?? .omo/evidence/ulw/01a0e2fe-ce33-7873-86ef-19857dd00fc5/G006/task-3/
+?? .omo/evidence/ulw/01a0e2fe-ce33-7873-86ef-19857dd00fc5/G006/task-4/
+?? .omo/evidence/ulw/01a0e2fe-ce33-7873-86ef-19857dd00fc5/G006/task-5/
+?? .omo/evidence/ulw/01a0e2fe-ce33-7873-86ef-19857dd00fc5/G006/wave-b-recovery/
+?? .omo/evidence/ulw/01a0e2fe-ce33-7873-86ef-19857dd00fc5/G006/wave-b/invite-contract-verification.md
+?? .omo/evidence/ulw/01a0e2fe-ce33-7873-86ef-19857dd00fc5/G006/wave-c/end-summary.md
+?? .omo/evidence/ulw/01a0e2fe-ce33-7873-86ef-19857dd00fc5/G006/wave-c/qa-expiry-refresh.md
+?? .omo/plans/impromptu-ideal-experience.md
+?? .omo/plans/ux-round2.md
+?? .omo/plans/zero-cost-deployment.md
+?? .omo/ulw-loop/
+?? .omo/ulw-research/20260825-211600/
+?? .tmp-docx/
+?? docs/paper/
+?? services/private-backend/test/display-invitations-integration.test.ts
+
+# git diff HEAD --stat
+ .omo/boulder.json | 20 ++++++++++++++++----
+ 1 file changed, 16 insertions(+), 4 deletions(-)
+
+# HEAD
+94fa31cfa12feb2d1a21246cd717ea46ab869aeb

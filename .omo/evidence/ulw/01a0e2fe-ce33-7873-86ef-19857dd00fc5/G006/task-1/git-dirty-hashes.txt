@@ -1,0 +1,2 @@
+# sha256 of dirty tracked paths
+a636bc543047b82b1285fe865678dc2fc1421787356ca5b75d136f6772297eaf  .omo/boulder.json

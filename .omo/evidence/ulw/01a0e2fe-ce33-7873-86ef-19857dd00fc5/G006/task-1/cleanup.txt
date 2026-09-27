@@ -1,0 +1,23 @@
+# task-1 cleanup receipt 2026-09-27T19:40:25Z
+killed pids: backend=32749 gateway=32750 console=31321 stage=32902 (nohup'd task-owned)
+docker rm -f impromptu-t1-pg -> removed
+removed /tmp/t1-head git-archive snapshot, /tmp/t1-probe*, /Users/gahn/projects/impromptu-rev2/.omo/evidence/ulw/01a0e2fe-ce33-7873-86ef-19857dd00fc5/G006/task-1/profiles/*
+=== port check after teardown ===
+3401 STILL BOUND
+3402 STILL BOUND
+4473 free
+4474 free
+32772 free
+=== pre-existing listeners (untouched) ===
+COMMAND  PID USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+ssh     5550 gahn   10u  IPv4 0x46cbd4fdcf45ea54      0t0  TCP 127.0.0.1:4173 (LISTEN)
+ssh     5550 gahn   12u  IPv4 0xcace8e72bc8b848e      0t0  TCP 127.0.0.1:4174 (LISTEN)
+ssh     5550 gahn   15u  IPv4 0x425661c46a573c00      0t0  TCP 127.0.0.1:3002 (LISTEN)
+ssh     5550 gahn   46u  IPv4 0x2ba9cc1cdcf1bc50      0t0  TCP 127.0.0.1:3001 (LISTEN)
+
+# re-check 2026-09-27T19:40:54Z
+3401 free
+3402 free
+4473 free
+4474 free
+actual bun child pids killed: 32751 32753

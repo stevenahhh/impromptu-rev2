@@ -1,0 +1,40 @@
+# task-2 cleanup record — Stage pairing / asset-failure baseline
+# captured 2026-09-27T17:45–17:55Z against the deployed topology
+#   console https://impromptu-rev2-console.vercel.app -> cloudflared -> private-backend 127.0.0.1:3001
+#   stage   https://impromptu-rev2-stage.vercel.app  -> cloudflared -> projection-gateway 127.0.0.1:3002
+# baseline was executed in-repo (read-only source); all browser state used task-owned profiles.
+
+WRITES THIS BASELINE PERFORMED (product API surface only; no code touched)
+- POST /v1/deck-uploads (real Console UI) -> 201; minted presentation ps_eb258db2667f8f804c650796f364844f
+  (deck deck_16d089f58618c3e943c230fd51978a4c4e660bc9794c27a65c2371990101a660, 6 rendered slides).
+- POST /v1/deck-artifacts + /v1/presentation-sessions -> 201/201; minted ps_faea109098902c69342c761527884034
+  (deck deck_b2b2…b2b2, artifact reuse of already-published asset id 46422982…).
+- POST /v1/display-bindings x4 -> 201 (dbe_1 UI auto-approve, dbe_2, dbe_3 operator probes).
+- POST /v1/display-invitations x2 -> 201 (one token consumed by the exchange probe, one left
+  unspent; TTL <=90s so it self-expired at ~17:55Z).
+- POST /v1/display-joins -> several pending locators (90s TTL; unclaimed ones self-expired).
+- DELETE /v1/account-session -> 200 for every node-side login (x3).
+
+CLEANUP PERFORMED
+- All 6 task-owned Chromium persistent profiles deleted (task-2/profiles/ removed).
+- harness/opener-server.mjs stopped (pkill confirmed; loopback :4199 no longer listening).
+- Browser windows/contexts all closed.
+- All node-side account sessions revoked (DELETE /v1/account-session -> 200 each).
+- Both presentations ENDED — verified in impromptu_private.prepared_evidence_state:
+    ps_eb258db2667f8f804c650796f364844f endedAtMs=1790531389921
+    ps_faea109098902c69342c761527884034 endedAtMs=1790531773081
+  Caveat recorded: POST /v1/presentation-sessions/:id/end answered HTTP 500
+  {"error":"internal_error"} (SessionReportAccessDeniedError in backend logs) yet the
+  lifecycle row did flip to ENDED — the route applies the mutation then fails; see report.
+- Redaction audit: pairing.http, browser-actions.log, results.json contain no cookie values,
+  no CSRF tokens, no passwords, no invitation tokens (all <redacted>), no join/fingerprint
+  internals (join_<id>/display_<id>/stage-browser-<uuid> placeholders).
+
+KNOWN NON-REVERTIBLE RESIDUE
+- Postgres history rows: two ENDED presentation sessions, gateway projection/bindings for them,
+  invitation state rows (one consumed, one expired), deck-artifact record deck_b2b2…b2b2,
+  and private_app session history. No delete routes exist (task-4 noted the same).
+- The Console-UI browser session for profile-a-presenter (cookie was in the deleted profile):
+  server-side session row remains valid until expiry (~8h); no logout was issued from that
+  profile before deletion. No credential material persists locally.
+- One extra prepared deck record (deck_b2b2…) reusing already-published public asset bytes.

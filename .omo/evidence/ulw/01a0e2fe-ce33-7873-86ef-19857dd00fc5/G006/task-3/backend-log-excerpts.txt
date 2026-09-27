@@ -1,0 +1,31 @@
+# backend log excerpts (docker logs impromptu-ulw-g003-demo-private-backend-1)
+# no secrets in these lines: requestIds, paths, outcomes only
+
+## deck index failures after uploads (both builds; ~15s cancelled embedding):
+{"timestampMs":1790530893174,"level":"info","event":"http_request","requestId":"deck-index:a4df10de-cda2-4358-b1f3-666c2f48042b","method":"INDEX","path":"/internal/deck-retrieval","status":500,"durationMs":15027,"outcome":"FAILED:PREPARATION_FAILED"}
+{"timestampMs":1790530893174,"level":"error","event":"http_error","requestId":"deck-index:a4df10de-cda2-4358-b1f3-666c2f48042b","path":"/internal/deck-retrieval","errorType":"Error","errorMessage":"Deck embedding failed: cancelled"}
+{"timestampMs":1790530912210,"level":"info","event":"http_request","requestId":"deck-index:7c9bf939-b61b-4d58-8fc3-f3f6db2c7fd6","method":"INDEX","path":"/internal/deck-retrieval","status":500,"durationMs":15026,"outcome":"FAILED:PREPARATION_FAILED"}
+{"timestampMs":1790530912210,"level":"error","event":"http_error","requestId":"deck-index:7c9bf939-b61b-4d58-8fc3-f3f6db2c7fd6","path":"/internal/deck-retrieval","errorType":"Error","errorMessage":"Deck embedding failed: cancelled"}
+{"timestampMs":1790530935447,"level":"info","event":"http_request","requestId":"deck-index:6ba067e2-623e-4ff1-b9bd-4251b74849e4","method":"INDEX","path":"/internal/deck-retrieval","status":500,"durationMs":15005,"outcome":"FAILED:PREPARATION_FAILED"}
+{"timestampMs":1790530935447,"level":"error","event":"http_error","requestId":"deck-index:6ba067e2-623e-4ff1-b9bd-4251b74849e4","path":"/internal/deck-retrieval","errorType":"Error","errorMessage":"Deck embedding failed: cancelled"}
+{"timestampMs":1790531202522,"level":"info","event":"http_request","requestId":"deck-index:714a782e-4d87-4f72-ba0f-85774f86085a","method":"INDEX","path":"/internal/deck-retrieval","status":500,"durationMs":15011,"outcome":"FAILED:PREPARATION_FAILED"}
+{"timestampMs":1790531202522,"level":"error","event":"http_error","requestId":"deck-index:714a782e-4d87-4f72-ba0f-85774f86085a","path":"/internal/deck-retrieval","errorType":"Error","errorMessage":"Deck embedding failed: cancelled"}
+
+## /end + /report 500s (SessionReportAccessDeniedError), pass A + HEAD:
+{"timestampMs":1790530777307,"level":"error","event":"http_error","requestId":"02f0b39f-7ce5-4158-8fec-f6bab997cda3","path":"/v1/presentation-sessions/ps_57565c7b75497505f16ae2f1b32aa5aa/end","errorType":"SessionReportAccessDeniedError"}
+{"timestampMs":1790530777309,"level":"error","event":"http_error","requestId":"0a54013c-036d-4f0a-9287-8fa384af6b20","path":"/v1/presentation-sessions/ps_57565c7b75497505f16ae2f1b32aa5aa/report","errorType":"SessionReportAccessDeniedError"}
+{"timestampMs":1790530917239,"level":"error","event":"http_error","requestId":"65ad005d-62bc-4350-9a4b-bbf71c927d97","path":"/v1/presentation-sessions/ps_c107de6d80f1af111e4db152ab8e6a66/end","errorType":"SessionReportAccessDeniedError"}
+{"timestampMs":1790530917241,"level":"error","event":"http_error","requestId":"790cfab9-6d99-4e26-9a61-4c3d0db6a5b1","path":"/v1/presentation-sessions/ps_c107de6d80f1af111e4db152ab8e6a66/report","errorType":"SessionReportAccessDeniedError"}
+{"timestampMs":1790531242048,"level":"error","event":"http_error","requestId":"f5fbfb05-1c91-4ae7-bbf5-3e399e819c84","path":"/v1/presentation-sessions/ps_00aa0de07fda0319d21cfce0cf9dcc96/end","errorType":"SessionReportAccessDeniedError"}
+
+## recommendation stage calls during probes (HEAD pass C window):
+{"timestampMs":1790530780814,"level":"info","event":"http_request","requestId":"recommendation-stage:cc0a4e54-0dc5-49be-828b-267cb84f3dbe","method":"INFERENCE","path":"/internal/recommendation/embedding","status":200,"durationMs":3498,"outcome":"SUCCESS"}
+{"timestampMs":1790530878145,"level":"info","event":"http_request","requestId":"recommendation-stage:2a98bb3e-11dc-4f04-b34e-ff174ce3a75b","method":"INFERENCE","path":"/internal/recommendation/embedding","status":200,"durationMs":4438,"outcome":"SUCCESS"}
+{"timestampMs":1790530897183,"level":"info","event":"http_request","requestId":"recommendation-stage:785cda78-7e1d-46fd-8d34-412ca471e548","method":"INFERENCE","path":"/internal/recommendation/embedding","status":200,"durationMs":4435,"outcome":"SUCCESS"}
+{"timestampMs":1790530920441,"level":"info","event":"http_request","requestId":"recommendation-stage:47b2fab5-aaae-4ec0-b0e0-0614f9f8503d","method":"INFERENCE","path":"/internal/recommendation/embedding","status":200,"durationMs":3191,"outcome":"SUCCESS"}
+{"timestampMs":1790531187508,"level":"info","event":"http_request","requestId":"recommendation-stage:389616e4-b9de-493f-b79b-a15d770ab3a5","method":"INFERENCE","path":"/internal/recommendation/embedding","status":200,"durationMs":3178,"outcome":"SUCCESS"}
+{"timestampMs":1790531189656,"level":"info","event":"http_request","requestId":"recommendation-stage:763f9e73-5d9c-477e-acc3-b5a5675d9756","method":"INFERENCE","path":"/internal/recommendation/embedding","status":500,"durationMs":4903,"outcome":"FAILED:cancelled"}
+{"timestampMs":1790531189720,"level":"info","event":"http_request","requestId":"recommendation-stage:3efaf90d-cc28-4f0a-aa56-df357949c885","method":"INFERENCE","path":"/internal/recommendation/embedding","status":500,"durationMs":4899,"outcome":"FAILED:cancelled"}
+{"timestampMs":1790531189808,"level":"info","event":"http_request","requestId":"recommendation-stage:ac84065a-0c9a-4e63-8320-f485fbe1efa5","method":"INFERENCE","path":"/internal/recommendation/embedding","status":500,"durationMs":4900,"outcome":"FAILED:cancelled"}
+{"timestampMs":1790531189954,"level":"info","event":"http_request","requestId":"recommendation-stage:56d018a8-3d72-4d81-95fd-c21b418a9c42","method":"INFERENCE","path":"/internal/recommendation/embedding","status":500,"durationMs":4901,"outcome":"FAILED:cancelled"}
+{"timestampMs":1790531190223,"level":"info","event":"http_request","requestId":"recommendation-stage:4c438a83-2a9d-49a3-b341-0cde05237377","method":"INFERENCE","path":"/internal/recommendation/embedding","status":500,"durationMs":4899,"outcome":"FAILED:cancelled"}

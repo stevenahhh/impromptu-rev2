@@ -1,0 +1,27 @@
+# cleanup record - task-5 browser-runtime run
+date: 2026-09-27T17:13:18Z
+
+## verifier temp workspace
+runtime root pattern: $TMPDIR/impromptu-r2-browser-runtime-* (mkdtemp, rmSync in finally)
+artifact dir pattern: $TMPDIR/browser-runtime-* (removed unless BROWSER_RUNTIME_RETAIN_ARTIFACTS=true; .env sets false)
+
+## residue check
+leftover count in TMPDIR (last 60min): 0
+
+## repo modification check
+?? .omo/drafts/impromptu-ideal-experience.md
+?? .omo/plans/impromptu-ideal-experience.md
+?? .omo/plans/ux-round2.md
+?? .omo/plans/zero-cost-deployment.md
+?? .omo/ulw-loop/
+?? .omo/ulw-research/20260825-211600/
+?? .tmp-docx/
+?? docs/paper/
+task-5 evidence files:
+total 48
+drwxr-xr-x   6 gahn  staff   192 Sep 28 02:13 .
+drwxr-xr-x  14 gahn  staff   448 Sep 28 02:13 ..
+-rw-r--r--   1 gahn  staff   131 Sep 28 02:10 browser-boundary.log
+-rw-r--r--   1 gahn  staff   660 Sep 28 02:13 cleanup.txt
+-rw-r--r--   1 gahn  staff  8529 Sep 28 02:13 inventory.md
+-rw-r--r--   1 gahn  staff  1122 Sep 28 02:10 runtime.log

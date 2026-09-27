@@ -1,0 +1,118 @@
+# cards + private-scope probes against http://127.0.0.1:3002 (loopback demo stack)
+# captured 2026-09-27T17:15:54Z; bearer <redacted> redacted
+# note: deployed gateway image predates /internal/display-invitations (task-6 code absent in image)
+
+### POST /internal/cards — valid internal bearer (plan task-4 happy path expects 410)
+HTTP/1.1 410 Gone
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 603965b4-2a39-48de-9b6a-4ecd688c04b8
+Date: Sun, 27 Sep 2026 17:15:53 GMT
+Content-Length: 32
+
+{"error":"stage_cards_disabled"}
+
+### POST /internal/cards — NO bearer (plan failure variant expects 401)
+HTTP/1.1 401 Unauthorized
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 79185f96-1c88-4786-84fb-97a30aed0f27
+Date: Sun, 27 Sep 2026 17:15:53 GMT
+Content-Length: 33
+
+{"error":"internal_unauthorized"}
+
+### POST /internal/cards — literal plan-token local-development-token (expected 401, not the real token)
+HTTP/1.1 401 Unauthorized
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 82daeb8d-5ac7-47e2-93f3-ea514ae5210d
+Date: Sun, 27 Sep 2026 17:15:53 GMT
+Content-Length: 33
+
+{"error":"internal_unauthorized"}
+
+### POST /internal/cards — bearer + private-marker body (must not echo marker)
+HTTP/1.1 410 Gone
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 571a64ea-c03a-4a0b-bd93-41faa1eafb46
+Date: Sun, 27 Sep 2026 17:15:53 GMT
+Content-Length: 32
+
+{"error":"stage_cards_disabled"}
+
+### POST /internal/display-invitations — valid bearer (deployed image predates route)
+HTTP/1.1 404 Not Found
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: f9d4861f-121e-44ca-8f18-3f4a45da531f
+Date: Sun, 27 Sep 2026 17:15:53 GMT
+Content-Length: 21
+
+{"error":"not_found"}
+
+### POST /v1/display-joins — private-scope field inside closed DTO (expect 400)
+HTTP/1.1 400 Bad Request
+Access-Control-Allow-Origin: https://resolve-reform-retired-zshops.trycloudflare.com
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST
+Access-Control-Allow-Headers: content-type, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: f6862f49-90ea-41ac-ada5-754e039a1b68
+Date: Sun, 27 Sep 2026 17:15:53 GMT
+Content-Length: 27
+
+{"error":"invalid_request"}
+
+### POST /v1/display-joins — well-formed join (positive control, locator only expected)
+HTTP/1.1 201 Created
+Access-Control-Allow-Origin: https://resolve-reform-retired-zshops.trycloudflare.com
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST
+Access-Control-Allow-Headers: content-type, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 875753b5-26ee-46b9-a85a-9912d32d78b5
+Date: Sun, 27 Sep 2026 17:15:53 GMT
+Content-Length: 199
+
+{"displayJoinId":"join_4723fdcd30896b4aa2c04b3aa4bcf2f1","displayId":"display_boundary_probe","deckVersion":"deck_boundary_probe","displayFingerprint":"fp_boundary_probe","expiresAtMs":1790529444476}
+
+### POST /v1/display-joins — wrong Origin header (expect 403 origin_forbidden)
+HTTP/1.1 403 Forbidden
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 73834c9c-ced4-4346-95ee-0233d0aa43f2
+Date: Sun, 27 Sep 2026 17:15:53 GMT
+Content-Length: 28
+
+{"error":"origin_forbidden"}
+
+### POST /v1/projections/ps_probe — direct write path (expect 403 dispatcher_required)
+HTTP/1.1 403 Forbidden
+Access-Control-Allow-Origin: https://resolve-reform-retired-zshops.trycloudflare.com
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST
+Access-Control-Allow-Headers: content-type, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 8d214cf6-2725-4860-a32e-20bc2ea87def
+Date: Sun, 27 Sep 2026 17:15:53 GMT
+Content-Length: 31
+
+{"error":"dispatcher_required"}
+
+### GET /readyz — public readiness
+HTTP/1.1 200 OK
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: b59f5aae-b58f-48f8-939f-eb202345eeb4
+Date: Sun, 27 Sep 2026 17:15:53 GMT
+Content-Length: 19
+
+{"outcome":"READY"}

@@ -1,0 +1,4 @@
+cleanup receipt — task-12
+- killed `next dev --turbopack --port 4185` (task-owned dev console); port closed.
+- no git stage/commit; worktree files left modified intentionally for review.
+- evidence artifacts kept under task-12/ (screenshots, browser-qa.log, checks.log, report.md).

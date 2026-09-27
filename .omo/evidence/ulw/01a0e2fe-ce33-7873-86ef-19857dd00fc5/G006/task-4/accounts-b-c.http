@@ -1,0 +1,221 @@
+# private-backend account-separation probes against http://127.0.0.1:3001 (loopback demo stack)
+# captured 2026-09-27T17:19:23Z; credentials/cookies/csrf redacted
+# A = controller bootstrap account (account_production), owns session ps_ad14d071bfe1476e90847cef95ec3ea8
+# B = boundary-probe-b (account_607f4dfb6dc4382606411f488004c640), signed in, owns nothing
+# C = anonymous, no session cookie
+
+### B: POST /v1/account-sessions — sign-in (201 positive)
+HTTP/1.1 200 OK
+Access-Control-Allow-Origin: https://tribunal-contrast-minerals-managed.trycloudflare.com
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, DELETE
+Access-Control-Allow-Headers: content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 6ece5d0f-475e-49b5-a9e1-ddc02c3c0e24
+Date: Sun, 27 Sep 2026 17:19:22 GMT
+Content-Length: 210
+
+{"account":{"accountId":"account_607f4dfb6dc4382606411f488004c640","actorId":"actor_<redacted>"},"expiresAtMs":1790558257020,"csrfToken":"<redacted>"}### (above is B self-read GET /v1/account-session — proves B authenticated; actual sign-in response was 201 earlier this run)
+
+
+### B signed-in: POST /v1/qa-defense — question submit on A-owned session
+HTTP/1.1 403 Forbidden
+Access-Control-Allow-Origin: https://tribunal-contrast-minerals-managed.trycloudflare.com
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, DELETE
+Access-Control-Allow-Headers: content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 80f39482-5c59-4329-a78c-eafbf80eb19f
+Date: Sun, 27 Sep 2026 17:19:22 GMT
+Content-Length: 24
+
+{"error":"unauthorized"}
+
+### B signed-in: GET /v1/publications/live-candidates on A-owned session
+HTTP/1.1 403 Forbidden
+Access-Control-Allow-Origin: https://tribunal-contrast-minerals-managed.trycloudflare.com
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, DELETE
+Access-Control-Allow-Headers: content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 28b021a0-2332-40ea-bc05-e16233b97fe1
+Date: Sun, 27 Sep 2026 17:19:22 GMT
+Content-Length: 24
+
+{"error":"UNAUTHORIZED"}
+
+### B signed-in: POST /v1/publications/teammates — self-grant attempt on A-owned session
+HTTP/1.1 403 Forbidden
+Access-Control-Allow-Origin: https://tribunal-contrast-minerals-managed.trycloudflare.com
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, DELETE
+Access-Control-Allow-Headers: content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 5bf07571-8322-4855-b49d-9852dce6c9c8
+Date: Sun, 27 Sep 2026 17:19:22 GMT
+Content-Length: 24
+
+{"error":"UNAUTHORIZED"}
+
+### B signed-in: POST /v1/publications/approve — retired stage-cards route
+HTTP/1.1 410 Gone
+Access-Control-Allow-Origin: https://tribunal-contrast-minerals-managed.trycloudflare.com
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, DELETE
+Access-Control-Allow-Headers: content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 4571a3dc-19c1-4af9-8566-77dcb6da2b82
+Date: Sun, 27 Sep 2026 17:19:22 GMT
+Content-Length: 32
+
+{"error":"stage_cards_disabled"}
+
+### B signed-in: POST /v1/qa-defense — no CSRF header
+HTTP/1.1 403 Forbidden
+Access-Control-Allow-Origin: https://tribunal-contrast-minerals-managed.trycloudflare.com
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, DELETE
+Access-Control-Allow-Headers: content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: bc116755-66f3-4a61-bec1-f0bfd59f2999
+Date: Sun, 27 Sep 2026 17:19:22 GMT
+Content-Length: 25
+
+{"error":"csrf_rejected"}
+
+### B signed-in: GET /v1/presentation-sessions/<A>/qa-defense (deployed image lacks GET route)
+HTTP/1.1 400 Bad Request
+Access-Control-Allow-Origin: https://tribunal-contrast-minerals-managed.trycloudflare.com
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, DELETE
+Access-Control-Allow-Headers: content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: ab1c7524-a4da-4473-b167-34f3e29ece39
+Date: Sun, 27 Sep 2026 17:19:22 GMT
+Content-Length: 27
+
+{"error":"invalid_request"}
+
+### C anonymous: POST /v1/qa-defense — question submit, no cookie
+HTTP/1.1 401 Unauthorized
+Access-Control-Allow-Origin: https://tribunal-contrast-minerals-managed.trycloudflare.com
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, DELETE
+Access-Control-Allow-Headers: content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 88da0b25-8667-4010-a018-427f305ef1d4
+Date: Sun, 27 Sep 2026 17:19:22 GMT
+Content-Length: 36
+
+{"error":"account_session_required"}
+
+### C anonymous: GET /v1/account-session
+HTTP/1.1 401 Unauthorized
+Access-Control-Allow-Origin: https://tribunal-contrast-minerals-managed.trycloudflare.com
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, DELETE
+Access-Control-Allow-Headers: content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: cdcc1ca7-d0cf-4d3f-901a-57f66928f8de
+Date: Sun, 27 Sep 2026 17:19:22 GMT
+Content-Length: 36
+
+{"error":"account_session_required"}
+
+### C anonymous: GET /v1/publications/live-candidates on A-owned session
+HTTP/1.1 401 Unauthorized
+Access-Control-Allow-Origin: https://tribunal-contrast-minerals-managed.trycloudflare.com
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, DELETE
+Access-Control-Allow-Headers: content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 1bb4b7fb-38b9-4475-9d8d-3b2d463371bb
+Date: Sun, 27 Sep 2026 17:19:22 GMT
+Content-Length: 36
+
+{"error":"account_session_required"}
+
+### C anonymous: GET /v1/playback/controller-events (private SSE)
+HTTP/1.1 401 Unauthorized
+Access-Control-Allow-Origin: https://tribunal-contrast-minerals-managed.trycloudflare.com
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, DELETE
+Access-Control-Allow-Headers: content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: f615b979-f6b1-40f8-89d7-69b074dfd2c5
+Date: Sun, 27 Sep 2026 17:19:22 GMT
+Content-Length: 36
+
+{"error":"account_session_required"}
+
+### C anonymous: POST /v1/qa-defense — forged cookie value
+HTTP/1.1 401 Unauthorized
+Access-Control-Allow-Origin: https://tribunal-contrast-minerals-managed.trycloudflare.com
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, DELETE
+Access-Control-Allow-Headers: content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 51145e11-8719-4591-ab77-e2443ddbd5d5
+Date: Sun, 27 Sep 2026 17:19:22 GMT
+Content-Length: 35
+
+{"error":"ACCOUNT_SESSION_UNKNOWN"}
+
+### C anonymous: POST /v1/qa-defense — no Origin/Referer at all
+HTTP/1.1 403 Forbidden
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: e16076b2-b847-4fcc-91c2-b5cda94d0f31
+Date: Sun, 27 Sep 2026 17:19:22 GMT
+Content-Length: 37
+
+{"error":"mutation_origin_forbidden"}
+
+### C anonymous: POST /internal/stage-applied — no internal bearer
+HTTP/1.1 401 Unauthorized
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 5540f538-ee92-4ece-885e-f34a6e429faf
+Date: Sun, 27 Sep 2026 17:19:22 GMT
+Content-Length: 33
+
+{"error":"internal_unauthorized"}
+
+### C anonymous: POST /v1/accounts — malformed body
+HTTP/1.1 400 Bad Request
+Access-Control-Allow-Origin: https://tribunal-contrast-minerals-managed.trycloudflare.com
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, DELETE
+Access-Control-Allow-Headers: content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: f69849b9-837c-4842-bb45-0e963c495077
+Date: Sun, 27 Sep 2026 17:19:22 GMT
+Content-Length: 27
+
+{"error":"invalid_request"}

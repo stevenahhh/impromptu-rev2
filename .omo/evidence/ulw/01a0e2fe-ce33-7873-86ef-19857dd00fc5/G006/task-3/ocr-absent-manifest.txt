@@ -1,0 +1,6 @@
+1 texts= 0 warnings= ['ocr_unavailable']
+2 texts= 0 warnings= ['ocr_unavailable']
+3 texts= 0 warnings= ['ocr_unavailable']
+4 texts= 0 warnings= ['ocr_unavailable']
+5 texts= 0 warnings= ['ocr_unavailable']
+6 texts= 0 warnings= ['ocr_unavailable']
