@@ -19,6 +19,7 @@ import {
   type ActivePresentationView,
   type ConsoleDeckUploadClient,
   type ConsoleSessionClient,
+  DisplayApprovalRejectedError,
   PlaybackCommandRejectedError,
   type RecommendationOutcome,
   SessionReportClientError,
@@ -537,9 +538,9 @@ describe("Console route boundary", () => {
       .getAllByRole("link", { name: "발표 준비" })
       .filter((link) => link.getAttribute("href") === "/");
     expect(returnLinks.length).toBeGreaterThan(0);
-    expect(
-      within(document.body).queryByRole("button", { name: messages("ko").approveCard }),
-    ).toBeNull();
+    // The retired approval page exposes no approval control at all — the only action is the
+    // return link. (approveCard and the rest of the dead catalog keys are gone.)
+    expect(document.querySelector("[data-live-publication-interstitial] button")).toBeNull();
     expect(within(document.body).queryByText("Authoritative snapshot")).toBeNull();
     expect(within(document.body).queryByRole("button", { name: "승인" })).toBeNull();
   });
@@ -1363,9 +1364,8 @@ describe("Console route boundary", () => {
     expect(approvals).toEqual([]);
     expect(document.querySelector("[data-live-publication-interstitial]")).toBeTruthy();
     expect(within(document.body).queryByText("Fresh verified claim")).toBeNull();
-    expect(
-      within(document.body).queryByRole("button", { name: messages("ko").approveCard }),
-    ).toBeNull();
+    // No approval control exists on the retired page; the approveCard catalog key is gone.
+    expect(document.querySelector("[data-live-publication-interstitial] button")).toBeNull();
     expect(loadEvents.map(({ type }) => type)).toEqual([]);
     window.removeEventListener("impromptu:approval-load", observeLoad);
   });
@@ -1467,6 +1467,25 @@ describe("Console route boundary", () => {
         approvals.push(`${presentation.presentationSessionId}:${join.displayId}`);
         return { displayBindingEpoch: "dbe_1" };
       },
+      async issueDisplayInvitation() {
+        return {
+          invitationId: `dinvite_${"cd".repeat(16)}`,
+          deckVersion: "deck_active",
+          expiresAtMs: Date.now() + 90_000,
+          stagePath: `/?deck=deck_active#invite=dinv_${"ab".repeat(32)}`,
+        };
+      },
+      async readDisplayInvitationPending(invitationId) {
+        return {
+          invitationId,
+          presentationSessionId: "ps_active",
+          deckVersion: "deck_active",
+          expiresAtMs: Date.now() + 90_000,
+          status: "PENDING",
+          displayBindingEpoch: "dbe_0",
+          join: null,
+        };
+      },
       async setSlide(_csrfToken, input) {
         slideCommands.push(input.publicSlideKey);
         return { acceptedControlRevision: "cr_1" };
@@ -1553,6 +1572,25 @@ describe("Console-led audience screen pairing", () => {
           `${presentation.presentationSessionId}:${join.displayId}:${join.displayJoinId}`,
         );
         return { displayBindingEpoch: "dbe_1" };
+      },
+      async issueDisplayInvitation() {
+        return {
+          invitationId: `dinvite_${"cd".repeat(16)}`,
+          deckVersion: "deck_active",
+          expiresAtMs: Date.now() + 90_000,
+          stagePath: `/?deck=deck_active#invite=dinv_${"ab".repeat(32)}`,
+        };
+      },
+      async readDisplayInvitationPending(invitationId) {
+        return {
+          invitationId,
+          presentationSessionId: "ps_active",
+          deckVersion: "deck_active",
+          expiresAtMs: Date.now() + 90_000,
+          status: "PENDING",
+          displayBindingEpoch: "dbe_0",
+          join: null,
+        };
       },
       async setSlide() {
         return { acceptedControlRevision: "cr_1" };
@@ -2204,5 +2242,338 @@ describe("Console-led audience screen pairing", () => {
     expect(
       within(document.body).getByRole("button", { name: "이전 슬라이드" }).hasAttribute("disabled"),
     ).toBe(true);
+  });
+});
+
+describe("Stage invitation pairing", () => {
+  const stageOrigin = STAGE_ORIGIN;
+  const INVITATION_ID = `dinvite_${"cd".repeat(16)}`;
+  const INVITATION_TOKEN = `dinv_${"ab".repeat(32)}`;
+
+  const slides: ActivePresentationView["slides"] = [
+    { publicSlideKey: "slide_one", ordinal: 1, accessibilityLabel: "Opening slide" },
+  ];
+
+  const joinedDisplay = {
+    displayJoinId: `join_${"ef".repeat(16)}`,
+    displayId: "display_projector",
+    displayFingerprint: "stage-browser-room-fp",
+    deckVersion: "deck_active",
+    expiresAtMs: Date.now() + 60_000,
+  };
+
+  function stubClipboard(): { copied: string[] } {
+    const copied: string[] = [];
+    Object.defineProperty(navigator, "clipboard", {
+      value: {
+        writeText: async (text: string) => {
+          copied.push(text);
+        },
+      },
+      configurable: true,
+    });
+    return { copied };
+  }
+
+  function invitationClient(input: {
+    approvals: Array<{ displayId: string; epoch: string }>;
+    pendingStatus: () => "PENDING" | "JOINED";
+    approveError?: (attempt: number) => Error | null;
+  }): ConsoleSessionClient {
+    let approveAttempts = 0;
+    return {
+      async signUp() {
+        throw new Error("not used");
+      },
+      async signIn() {
+        throw new Error("not used");
+      },
+      async readSession() {
+        return null;
+      },
+      async signOut() {},
+      async createPresentation() {
+        throw new Error("not used");
+      },
+      async recommend() {
+        throw new Error("not used");
+      },
+      async readLiveCandidates() {
+        throw new Error("not used");
+      },
+      async approveLiveCandidate() {
+        throw new Error("not used");
+      },
+      async approveDisplay(_csrfToken, _presentation, join, epoch) {
+        approveAttempts += 1;
+        input.approvals.push({ displayId: join.displayId, epoch });
+        const error = input.approveError?.(approveAttempts) ?? null;
+        if (error !== null) throw error;
+        return { displayBindingEpoch: "dbe_3" };
+      },
+      async issueDisplayInvitation() {
+        return {
+          invitationId: INVITATION_ID,
+          deckVersion: "deck_active",
+          expiresAtMs: Date.now() + 90_000,
+          stagePath: `/?deck=deck_active#invite=${INVITATION_TOKEN}`,
+        };
+      },
+      async readDisplayInvitationPending(invitationId) {
+        const status = input.pendingStatus();
+        return {
+          invitationId,
+          presentationSessionId: "ps_active",
+          deckVersion: "deck_active",
+          expiresAtMs: Date.now() + 90_000,
+          status,
+          displayBindingEpoch: "dbe_2",
+          join: status === "JOINED" ? joinedDisplay : null,
+        };
+      },
+      async setSlide() {
+        return { acceptedControlRevision: "cr_1" };
+      },
+    };
+  }
+
+  function renderWorkspace(client: ConsoleSessionClient) {
+    return render(
+      <MemoryRouter initialEntries={["/session"]}>
+        <AuthProvider
+          initialAuthenticated
+          initialPresentation={{
+            presentationSessionId: "ps_active",
+            presentationSessionEpoch: "pse_1",
+            deckVersion: "deck_active",
+            slides,
+          }}
+          client={client}
+        >
+          <ConsoleRoutes />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  test("copies the one-use invitation link and approves the exact pending display with its CAS", async () => {
+    const { copied } = stubClipboard();
+    let joined = false;
+    const approvals: Array<{ displayId: string; epoch: string }> = [];
+    renderWorkspace(
+      invitationClient({ approvals, pendingStatus: () => (joined ? "JOINED" : "PENDING") }),
+    );
+
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: "발표 화면 링크 복사" }));
+    });
+    expect(copied).toEqual([`${stageOrigin}/?deck=deck_active#invite=${INVITATION_TOKEN}`]);
+    const copiedUrl = new URL(copied[0] ?? "");
+    expect(copiedUrl.searchParams.get("invite")).toBeNull();
+    expect(copiedUrl.hash).toBe(`#invite=${INVITATION_TOKEN}`);
+    expect(document.querySelector("[data-stage-invitation='OPEN']")).toBeTruthy();
+
+    // Nothing about the mint itself attached a screen or asked for a decision.
+    expect(approvals).toEqual([]);
+    expect(document.querySelector("[data-stage-pairing='WAITING']")).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: "연결 요청 확인" }));
+    });
+    expect(document.body.textContent).toContain(messages("ko").stageInviteWaiting);
+
+    joined = true;
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: "연결 요청 확인" }));
+    });
+    expect(document.querySelector("[data-stage-invitation='JOINED']")).toBeTruthy();
+    expect(document.querySelector("[data-identity-display-id]")?.textContent).toBe(
+      "display_projector",
+    );
+    expect(document.querySelector("[data-identity-fingerprint]")?.textContent).toBe(
+      "stage-browser-room-fp",
+    );
+    expect(document.querySelector("[data-identity-deck]")?.textContent).toBe("deck_active");
+    expect(document.querySelector("[data-identity-epoch]")?.textContent).toBe("dbe_2");
+
+    await act(async () => {
+      fireEvent.click(
+        within(document.body).getByRole("button", { name: messages("ko").approveHandshake }),
+      );
+    });
+    expect(approvals).toEqual([{ displayId: "display_projector", epoch: "dbe_2" }]);
+    expect(document.querySelector("[data-audience-screen-panel='CONNECTED']")).toBeTruthy();
+  });
+
+  test("keeps the collapsed mid-talk surface until an invitation is minted", async () => {
+    const { copied } = stubClipboard();
+    const approvals: Array<{ displayId: string; epoch: string }> = [];
+    render(
+      <MemoryRouter initialEntries={["/session"]}>
+        <AuthProvider
+          initialAuthenticated
+          initialPresentation={{
+            presentationSessionId: "ps_active",
+            presentationSessionEpoch: "pse_1",
+            deckVersion: "deck_active",
+            slides,
+          }}
+          initialDisplayBindingEpoch="dbe_1"
+          client={invitationClient({ approvals, pendingStatus: () => "PENDING" })}
+        >
+          <ConsoleRoutes />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+
+    // Presenting with a live binding collapses to the badge plus the invite link copy.
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: "발표 시작" }));
+    });
+    expect(document.querySelector("[data-audience-screen-panel='CONNECTED']")).toBeTruthy();
+    expect(document.querySelector(".console-advanced-connect")).toBeNull();
+
+    // Copying the link mints the invitation and brings the full approval surface back.
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: "발표 화면 링크 복사" }));
+    });
+    expect(copied).toEqual([`${stageOrigin}/?deck=deck_active#invite=${INVITATION_TOKEN}`]);
+    expect(document.querySelector("[data-stage-invitation='OPEN']")).toBeTruthy();
+    expect(document.querySelector("[data-invitation-check]")).toBeTruthy();
+  });
+
+  test("a rejected reopen bind drops the connected badge instead of keeping a stale claim", async () => {
+    const approvals: Array<{ displayId: string; epoch: string }> = [];
+    const openStub = (() => {
+      const opened = {} as Window;
+      const originalOpen = window.open;
+      window.open = (() => opened) as typeof window.open;
+      return {
+        opened,
+        restore() {
+          window.open = originalOpen;
+        },
+      };
+    })();
+    let approveAttempts = 0;
+    const client: ConsoleSessionClient = {
+      async signUp() {
+        throw new Error("not used");
+      },
+      async signIn() {
+        throw new Error("not used");
+      },
+      async readSession() {
+        return null;
+      },
+      async signOut() {},
+      async createPresentation() {
+        throw new Error("not used");
+      },
+      async recommend() {
+        throw new Error("not used");
+      },
+      async readLiveCandidates() {
+        throw new Error("not used");
+      },
+      async approveLiveCandidate() {
+        throw new Error("not used");
+      },
+      async approveDisplay(_csrfToken, _presentation, join, epoch) {
+        approveAttempts += 1;
+        approvals.push({ displayId: join.displayId, epoch });
+        // Second bind: the server has moved to dbe_2 and stays pinned there, so the held
+        // dbe_1 is stale and the refreshed read is refused too.
+        if (approveAttempts === 1) return { displayBindingEpoch: "dbe_1" };
+        throw new DisplayApprovalRejectedError("STALE_DISPLAY_BINDING");
+      },
+      async issueDisplayInvitation() {
+        return {
+          invitationId: INVITATION_ID,
+          deckVersion: "deck_active",
+          expiresAtMs: Date.now() + 90_000,
+          stagePath: `/?deck=deck_active#invite=${INVITATION_TOKEN}`,
+        };
+      },
+      async readDisplayInvitationPending(invitationId) {
+        return {
+          invitationId,
+          presentationSessionId: "ps_active",
+          deckVersion: "deck_active",
+          expiresAtMs: Date.now() + 90_000,
+          status: "PENDING",
+          displayBindingEpoch: "dbe_2",
+          join: null,
+        };
+      },
+      async setSlide() {
+        return { acceptedControlRevision: "cr_1" };
+      },
+    };
+    renderWorkspace(client);
+
+    try {
+      await act(async () => {
+        fireEvent.click(within(document.body).getByRole("button", { name: "발표 시작" }));
+      });
+      await act(async () => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            origin: stageOrigin,
+            data: {
+              kind: "impromptu:display-join",
+              join: {
+                displayJoinId: `join_${"aa".repeat(16)}`,
+                displayId: "display_room",
+                displayFingerprint: "stage-browser-fingerprint",
+                deckVersion: "deck_active",
+                expiresAtMs: Date.now() + 60_000,
+              },
+            },
+            source: openStub.opened,
+          }),
+        );
+      });
+      expect(document.querySelector("[data-audience-screen-panel='CONNECTED']")).toBeTruthy();
+      expect(document.body.textContent).toContain(messages("ko").audienceConnected);
+
+      // Reopen goes through the same opener path; the server rejects both attempts.
+      await act(async () => {
+        fireEvent.click(within(document.body).getByRole("button", { name: "발표 화면 다시 열기" }));
+      });
+      await act(async () => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            origin: stageOrigin,
+            data: {
+              kind: "impromptu:display-join",
+              join: {
+                displayJoinId: `join_${"bb".repeat(16)}`,
+                displayId: "display_room",
+                displayFingerprint: "stage-browser-fingerprint",
+                deckVersion: "deck_active",
+                expiresAtMs: Date.now() + 60_000,
+              },
+            },
+            source: openStub.opened,
+          }),
+        );
+      });
+
+      // The held epoch is provably stale: the rebind went out with the held dbe_1, refreshed
+      // to the server's current dbe_2, and was refused again — so no CONNECTED badge may
+      // survive the refused rebind. The very first bind resolved its epoch from a fresh read
+      // because nothing was held after (re)load.
+      expect(approvals).toEqual([
+        { displayId: "display_room", epoch: "dbe_2" },
+        { displayId: "display_room", epoch: "dbe_1" },
+        { displayId: "display_room", epoch: "dbe_2" },
+      ]);
+      expect(document.querySelector("[data-audience-screen-panel='PENDING']")).toBeTruthy();
+      expect(document.body.textContent).not.toContain(messages("ko").audienceConnected);
+      expect(document.body.textContent).toContain(messages("ko").audienceBindFailed);
+    } finally {
+      openStub.restore();
+    }
   });
 });

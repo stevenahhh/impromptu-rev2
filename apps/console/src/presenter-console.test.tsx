@@ -124,8 +124,10 @@ describe("presenter console mid-talk surfaces", () => {
     expect(panel?.querySelector(".console-advanced-connect")).toBeTruthy();
     expect(panel?.querySelector(".console-field input")).toBeTruthy();
     expect(panel?.textContent).toContain(messages("ko").connectLead);
-    // The collapsed live-talk surface is not the recovery surface: no copy-only state here.
-    expect(panel?.querySelector("[data-copy-stage]")).toBeNull();
+    // The pending surface offers the copy-link action and the invitation flow; it is not
+    // collapsed into a copy-only state and no invitation is minted until requested.
+    expect(panel?.querySelector("[data-copy-stage]")).toBeTruthy();
+    expect(panel?.querySelector("[data-stage-invitation]")).toBeNull();
   });
 
   test("the header deck swap control disappears once the talk starts", async () => {

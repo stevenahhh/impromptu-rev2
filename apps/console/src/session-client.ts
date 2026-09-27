@@ -17,9 +17,21 @@ export {
   type DeckUploadXhr,
   type UploadDeckOptions,
 } from "./deck-upload";
+export type {
+  DisplayInvitationPendingView,
+  DisplayInvitationStatus,
+  IssuedStageInvitationView,
+} from "./display-invitations";
+export { DisplayInvitationError } from "./display-invitations";
 export type { DisplayBindingView, DisplayJoinView, PlaybackCommandView } from "./display-playback";
-export { PlaybackCommandRejectedError } from "./display-playback";
+export { DisplayApprovalRejectedError, PlaybackCommandRejectedError } from "./display-playback";
 export type { LiveCandidateSnapshotView } from "./live-publication";
+export type {
+  PresentationDetailView,
+  PresentationListView,
+  PresentationPlaybackView,
+  PresentationSummaryView,
+} from "./presentation-library";
 export type { ActivePresentationView, PresentationSessionView } from "./presentation-lifecycle";
 export type { ReportEventSource } from "./private-transport";
 export type {

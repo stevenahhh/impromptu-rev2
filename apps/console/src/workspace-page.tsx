@@ -12,10 +12,11 @@ import { SessionUploadPanel } from "./deck-upload-panel";
 import { EvidencePreparationPanel } from "./evidence-preparation-panel";
 import { messages } from "./i18n";
 import { PlaybackPanel } from "./playback-panel";
+import { PresentationListPanel } from "./presentation-list-panel";
 import { ReferenceDocumentPanel } from "./reference-documents-panel";
 import { coachingEventFromServer, record } from "./server-payload";
 import type { ActivePresentationView } from "./session-client";
-import { SlidePreview } from "./slide-preview";
+import { orderedSlides, SlidePreview } from "./slide-preview";
 import { STAGE_ORIGIN, stageUrl } from "./stage-origin";
 
 declare global {
@@ -41,6 +42,7 @@ export function PresentationWorkspacePage() {
   const {
     activePresentation,
     client,
+    displayBindingEpoch,
     joinTimeoutMs,
     locale,
     session,
@@ -58,11 +60,45 @@ export function PresentationWorkspacePage() {
     stageOrigin: new URL(STAGE_ORIGIN).origin,
     stageUrl: activePresentation === null ? "" : stageUrl(activePresentation.deckVersion),
     deckVersion: activePresentation?.deckVersion ?? "",
-    async approveJoin(join) {
+    displayBindingEpoch,
+    async approveJoin(join, expectedDisplayBindingEpoch) {
       if (session === null || activePresentation === null || client.approveDisplay === undefined) {
         throw new Error("audience approval is unavailable in this session");
       }
-      return await client.approveDisplay(session.csrfToken, activePresentation, join);
+      // CAS base: the caller's resolved epoch when the invitation flow has one, else the
+      // binding epoch this window last confirmed, else the epoch a resumed presentation
+      // reported, else a never-bound upload.
+      const expectedEpoch =
+        expectedDisplayBindingEpoch ??
+        displayBindingEpoch ??
+        activePresentation.displayBindingEpoch ??
+        "dbe_0";
+      const binding = await client.approveDisplay(
+        session.csrfToken,
+        activePresentation,
+        join,
+        expectedEpoch,
+      );
+      return binding;
+    },
+    async issueInvitation() {
+      if (
+        session === null ||
+        activePresentation === null ||
+        client.issueDisplayInvitation === undefined
+      ) {
+        throw new Error("stage invitations are unavailable in this session");
+      }
+      return await client.issueDisplayInvitation(
+        session.csrfToken,
+        activePresentation.presentationSessionId,
+      );
+    },
+    async readInvitation(invitationId) {
+      if (client.readDisplayInvitationPending === undefined) {
+        throw new Error("invitation checks are unavailable in this session");
+      }
+      return await client.readDisplayInvitationPending(invitationId);
     },
     onBound: setDisplayBindingEpoch,
     ...(joinTimeoutMs === undefined ? {} : { joinTimeoutMs }),
@@ -96,7 +132,15 @@ export function PresentationWorkspacePage() {
     // A new talk resets the rail to preparation weight; the cockpit unmounts between talks so
     // PlaybackPanel's own started-state restarts from false and reports that here.
     setPresentationStarted(false);
-  }, [coachingIdentity]);
+    // A resumed deck opens where the room already is — never rewound to slide one and never
+    // started automatically. A fresh upload has no currentSlideKey and stays at the top.
+    const resumedIndex = activePresentation?.currentSlideKey
+      ? orderedSlides(activePresentation).findIndex(
+          (slide) => slide.publicSlideKey === activePresentation.currentSlideKey,
+        )
+      : -1;
+    setActiveIndex(resumedIndex >= 0 ? resumedIndex : 0);
+  }, [coachingIdentity, activePresentation]);
 
   const onCoachingOptInChange = useCallback((enabled: boolean) => {
     setCoachingState((state) => reduceCoachingState(state, { kind: "OPT_IN", enabled }).state);
@@ -203,7 +247,13 @@ export function PresentationWorkspacePage() {
           )}
         </header>
         {session === null ? null : activePresentation === null ? (
-          <SessionUploadPanel client={client} csrfToken={session.csrfToken} />
+          <>
+            {/* The persisted owner list sits beside the upload surface so a returning
+                presenter re-enters an uploaded deck instead of re-uploading it. Keying on the
+                account id guarantees a switch remounts with zero stale rows. */}
+            <PresentationListPanel key={session.account.accountId} />
+            <SessionUploadPanel client={client} csrfToken={session.csrfToken} />
+          </>
         ) : (
           <div
             className="console-cockpit"
@@ -212,6 +262,7 @@ export function PresentationWorkspacePage() {
             <div className="console-cockpit__center">
               <SlidePreview index={activeIndex} />
               <PlaybackPanel
+                key={coachingIdentity}
                 audience={audience}
                 index={activeIndex}
                 onIndexChange={setActiveIndex}

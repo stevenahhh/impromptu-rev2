@@ -30,7 +30,10 @@ export function EvidenceCard({ card, text }: EvidenceCardProps) {
       data-evidence-kind={card.kind}
     >
       <h3>{card.title}</h3>
-      <Badge data-evidence-badge tone={card.kind === "INTERNAL" ? "success" : "neutral"}>
+      {/* An uploaded card reads "internal", never "verified": success tone would imply the
+          content was checked. EXTERNAL gets the warning tone because its usage terms genuinely
+          need a look — accuracy is claimed by neither. */}
+      <Badge data-evidence-badge tone={card.kind === "INTERNAL" ? "neutral" : "warning"}>
         {rightsLabel}
       </Badge>
       <dl>

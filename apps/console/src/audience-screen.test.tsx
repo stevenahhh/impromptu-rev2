@@ -13,7 +13,11 @@ import type {
   AudienceScreenOutcome,
   UseAudienceScreenInput,
 } from "./audience-screen";
-import type { DisplayJoinView } from "./session-client";
+import {
+  DisplayApprovalRejectedError,
+  DisplayInvitationError,
+  type DisplayJoinView,
+} from "./session-client";
 
 afterEach(cleanup);
 
@@ -31,10 +35,16 @@ function makeJoin(deckVersion: string = DECK_VERSION): DisplayJoinView {
   };
 }
 
+const INVITATION_ID = `dinvite_${"cd".repeat(16)}`;
+const INVITATION_TOKEN = `dinv_${"ab".repeat(32)}`;
+
 interface InputOverrides {
   readonly approveJoin?: UseAudienceScreenInput["approveJoin"];
   readonly onBound?: UseAudienceScreenInput["onBound"];
   readonly joinTimeoutMs?: number;
+  readonly displayBindingEpoch?: string | null;
+  readonly issueInvitation?: UseAudienceScreenInput["issueInvitation"];
+  readonly readInvitation?: UseAudienceScreenInput["readInvitation"];
 }
 
 function makeInput(overrides: InputOverrides = {}): UseAudienceScreenInput {
@@ -42,6 +52,10 @@ function makeInput(overrides: InputOverrides = {}): UseAudienceScreenInput {
     stageOrigin: STAGE_ORIGIN,
     stageUrl: STAGE_URL,
     deckVersion: DECK_VERSION,
+    // Explicit null matters: it is the "reloaded, nothing held" state that must force a
+    // fresh CAS read instead of a dbe_0 guess.
+    displayBindingEpoch:
+      overrides.displayBindingEpoch === undefined ? "dbe_0" : overrides.displayBindingEpoch,
     approveJoin:
       overrides.approveJoin ??
       (async () => {
@@ -49,6 +63,10 @@ function makeInput(overrides: InputOverrides = {}): UseAudienceScreenInput {
       }),
     onBound: overrides.onBound ?? (() => {}),
     ...(overrides.joinTimeoutMs === undefined ? {} : { joinTimeoutMs: overrides.joinTimeoutMs }),
+    ...(overrides.issueInvitation === undefined
+      ? {}
+      : { issueInvitation: overrides.issueInvitation }),
+    ...(overrides.readInvitation === undefined ? {} : { readInvitation: overrides.readInvitation }),
   };
 }
 
@@ -121,6 +139,50 @@ function recordingApprove(approvals: DisplayJoinView[], epoch: string) {
   return async (join: DisplayJoinView) => {
     approvals.push(join);
     return { displayBindingEpoch: epoch };
+  };
+}
+
+interface RecordedApproval {
+  readonly join: DisplayJoinView;
+  readonly epoch: string | null;
+}
+
+function recordingApproveWithEpoch(
+  approvals: RecordedApproval[],
+  epoch: string,
+): UseAudienceScreenInput["approveJoin"] {
+  return async (join, expectedDisplayBindingEpoch) => {
+    approvals.push({ join, epoch: expectedDisplayBindingEpoch });
+    return { displayBindingEpoch: epoch };
+  };
+}
+
+function issuedInvitation(overrides: Partial<{ deckVersion: string; expiresAtMs: number }> = {}) {
+  const deckVersion = overrides.deckVersion ?? DECK_VERSION;
+  return {
+    invitationId: INVITATION_ID,
+    deckVersion,
+    expiresAtMs: overrides.expiresAtMs ?? 1_000_090,
+    stagePath: `/?deck=${deckVersion}#invite=${INVITATION_TOKEN}`,
+  };
+}
+
+function pendingView(
+  overrides: Partial<{
+    status: "PENDING" | "JOINED" | "EXPIRED";
+    deckVersion: string;
+    displayBindingEpoch: string;
+    join: DisplayJoinView | null;
+  }> = {},
+) {
+  return {
+    invitationId: INVITATION_ID,
+    presentationSessionId: "ps_active",
+    deckVersion: overrides.deckVersion ?? DECK_VERSION,
+    expiresAtMs: 1_000_090,
+    status: overrides.status ?? "PENDING",
+    displayBindingEpoch: overrides.displayBindingEpoch ?? "dbe_0",
+    join: overrides.join === undefined ? null : overrides.join,
   };
 }
 
@@ -456,12 +518,12 @@ describe("useAudienceScreen", () => {
     await act(async () => {
       blocked = await controller().approve(null);
     });
-    expect(blocked).toEqual({ kind: "BIND_FAILED" });
+    expect(blocked).toEqual({ kind: "BIND_FAILED", reason: null });
     let mismatched: AudienceScreenOutcome | undefined;
     await act(async () => {
       mismatched = await controller().approve(makeJoin("deck_other"));
     });
-    expect(mismatched).toEqual({ kind: "BIND_FAILED" });
+    expect(mismatched).toEqual({ kind: "BIND_FAILED", reason: null });
     expect(approvals).toEqual([]);
     expect(controller().status).toBe("BIND_FAILED");
   });
@@ -478,7 +540,7 @@ describe("useAudienceScreen", () => {
     await act(async () => {
       outcome = await controller().approve(makeJoin());
     });
-    expect(outcome).toEqual({ kind: "BIND_FAILED" });
+    expect(outcome).toEqual({ kind: "BIND_FAILED", reason: null });
     expect(controller().status).toBe("BIND_FAILED");
   });
 
@@ -522,6 +584,389 @@ describe("useAudienceScreen", () => {
       expect(controller().status).toBe("CONNECTED");
       expect(stub.calls.map((call) => call.url)).toEqual([STAGE_URL, STAGE_URL]);
       expect(boundEpochs).toEqual(["epoch_1", "epoch_2"]);
+    } finally {
+      stub.restore();
+    }
+  });
+
+  test("copyInvitationLink mints a one-use invitation and returns the fragment-token URL", async () => {
+    const issues: number[] = [];
+    const { controller } = renderProbe(
+      makeInput({
+        issueInvitation: async () => {
+          issues.push(1);
+          return issuedInvitation();
+        },
+      }),
+    );
+    let url: string | null = null;
+    await act(async () => {
+      url = await controller().copyInvitationLink();
+    });
+    expect(issues).toHaveLength(1);
+    if (url === null) throw new Error("invitation link was not produced");
+    const parsed = new URL(url);
+    expect(parsed.origin).toBe(STAGE_ORIGIN);
+    expect(parsed.searchParams.get("invite")).toBeNull();
+    expect(parsed.hash).toBe(`#invite=${INVITATION_TOKEN}`);
+    expect(controller().invitation).toMatchObject({
+      kind: "OPEN",
+      invitationId: INVITATION_ID,
+      expiresAtMs: 1_000_090,
+    });
+    // Nothing about minting touched the approval surface.
+    expect(controller().pendingJoin).toBeNull();
+    expect(controller().status).toBe("IDLE");
+  });
+
+  test("copyInvitationLink reports failure when the mint is unavailable", async () => {
+    const { controller } = renderProbe(makeInput({}));
+    let url: string | null = null;
+    await act(async () => {
+      url = await controller().copyInvitationLink();
+    });
+    expect(url).toBeNull();
+    expect(controller().invitation.kind).toBe("ISSUE_FAILED");
+  });
+
+  test("checkInvitation reports an unredeemed link as still open", async () => {
+    const { controller } = renderProbe(
+      makeInput({
+        issueInvitation: async () => issuedInvitation(),
+        readInvitation: async () => pendingView({ status: "PENDING" }),
+      }),
+    );
+    await act(async () => {
+      await controller().copyInvitationLink();
+    });
+    await act(async () => {
+      await controller().checkInvitation();
+    });
+    expect(controller().invitation).toMatchObject({ kind: "OPEN", checking: false });
+    expect(controller().pendingJoin).toBeNull();
+  });
+
+  test("checkInvitation surfaces the exact pending display identity and CAS for approval", async () => {
+    const join = makeJoin();
+    const { controller } = renderProbe(
+      makeInput({
+        issueInvitation: async () => issuedInvitation(),
+        readInvitation: async () =>
+          pendingView({ status: "JOINED", displayBindingEpoch: "dbe_5", join }),
+      }),
+    );
+    await act(async () => {
+      await controller().copyInvitationLink();
+    });
+    await act(async () => {
+      await controller().checkInvitation();
+    });
+    expect(controller().invitation.kind).toBe("JOINED");
+    expect(controller().pendingJoin).toEqual(join);
+    // The identity check the presenter approves against: the read CAS, not a guess.
+    expect(controller().pendingEpoch).toBe("dbe_5");
+  });
+
+  test("approving an invitation join sends the freshly read CAS epoch", async () => {
+    const join = makeJoin();
+    const approvals: RecordedApproval[] = [];
+    const boundEpochs: string[] = [];
+    const { controller } = renderProbe(
+      makeInput({
+        displayBindingEpoch: null,
+        approveJoin: recordingApproveWithEpoch(approvals, "dbe_5"),
+        onBound: (epoch) => boundEpochs.push(epoch),
+        issueInvitation: async () => issuedInvitation(),
+        readInvitation: async () =>
+          pendingView({ status: "JOINED", displayBindingEpoch: "dbe_5", join }),
+      }),
+    );
+    await act(async () => {
+      await controller().copyInvitationLink();
+    });
+    await act(async () => {
+      await controller().checkInvitation();
+    });
+    const held = controller().pendingJoin;
+    if (held === null) throw new Error("joined display was not held for approval");
+    let outcome: AudienceScreenOutcome | undefined;
+    await act(async () => {
+      outcome = await controller().approve(held);
+    });
+    expect(outcome).toEqual({ kind: "CONNECTED", displayBindingEpoch: "dbe_5" });
+    expect(approvals).toEqual([{ join, epoch: "dbe_5" }]);
+    expect(boundEpochs).toEqual(["dbe_5"]);
+    expect(controller().status).toBe("CONNECTED");
+    expect(controller().pendingJoin).toBeNull();
+    expect(controller().invitation.kind).toBe("NONE");
+  });
+
+  test("a stale CAS refreshes through a fresh read and retries the approval once", async () => {
+    const join = makeJoin();
+    const approvals: RecordedApproval[] = [];
+    let attempts = 0;
+    let reads = 0;
+    const boundEpochs: string[] = [];
+    const { controller } = renderProbe(
+      makeInput({
+        displayBindingEpoch: null,
+        approveJoin: async (candidate, epoch) => {
+          attempts += 1;
+          approvals.push({ join: candidate, epoch });
+          if (attempts === 1) throw new DisplayApprovalRejectedError("STALE_DISPLAY_BINDING");
+          return { displayBindingEpoch: "dbe_9" };
+        },
+        onBound: (epoch) => boundEpochs.push(epoch),
+        issueInvitation: async () => issuedInvitation(),
+        readInvitation: async () => {
+          reads += 1;
+          return pendingView({
+            status: "JOINED",
+            displayBindingEpoch: reads === 1 ? "dbe_7" : "dbe_9",
+            join,
+          });
+        },
+      }),
+    );
+    await act(async () => {
+      await controller().copyInvitationLink();
+    });
+    await act(async () => {
+      await controller().checkInvitation();
+    });
+    const held = controller().pendingJoin;
+    if (held === null) throw new Error("joined display was not held for approval");
+    let outcome: AudienceScreenOutcome | undefined;
+    await act(async () => {
+      outcome = await controller().approve(held);
+    });
+    expect(outcome).toEqual({ kind: "CONNECTED", displayBindingEpoch: "dbe_9" });
+    // First attempt went out with the read epoch, the retry with the refreshed one — and the
+    // refusal reason never became a silent success.
+    expect(approvals).toEqual([
+      { join, epoch: "dbe_7" },
+      { join, epoch: "dbe_9" },
+    ]);
+    expect(reads).toBe(2);
+    expect(boundEpochs).toEqual(["dbe_9"]);
+    expect(controller().status).toBe("CONNECTED");
+  });
+
+  test("a stale CAS that cannot be refreshed lands as BIND_FAILED with the reason intact", async () => {
+    const join = makeJoin();
+    const { controller } = renderProbe(
+      makeInput({
+        displayBindingEpoch: null,
+        approveJoin: async () => {
+          throw new DisplayApprovalRejectedError("STALE_DISPLAY_BINDING");
+        },
+        issueInvitation: async () => issuedInvitation(),
+        readInvitation: async () =>
+          pendingView({ status: "JOINED", displayBindingEpoch: "dbe_7", join }),
+      }),
+    );
+    await act(async () => {
+      await controller().copyInvitationLink();
+    });
+    await act(async () => {
+      await controller().checkInvitation();
+    });
+    const held = controller().pendingJoin;
+    if (held === null) throw new Error("joined display was not held for approval");
+    let outcome: AudienceScreenOutcome | undefined;
+    await act(async () => {
+      outcome = await controller().approve(held);
+    });
+    // Same epoch came back from the refresh, so no doomed retry was posted.
+    expect(outcome).toEqual({ kind: "BIND_FAILED", reason: "STALE_DISPLAY_BINDING" });
+    expect(controller().status).toBe("BIND_FAILED");
+    expect(controller().failureReason).toBe("STALE_DISPLAY_BINDING");
+  });
+
+  test("an expired invitation is reported honestly and never leaves a pending join", async () => {
+    const { controller } = renderProbe(
+      makeInput({
+        issueInvitation: async () => issuedInvitation(),
+        readInvitation: async () => pendingView({ status: "EXPIRED", join: null }),
+      }),
+    );
+    await act(async () => {
+      await controller().copyInvitationLink();
+    });
+    await act(async () => {
+      await controller().checkInvitation();
+    });
+    expect(controller().invitation.kind).toBe("EXPIRED");
+    expect(controller().pendingJoin).toBeNull();
+  });
+
+  test("an invitation the server forgot is gone, not still pending", async () => {
+    const { controller } = renderProbe(
+      makeInput({
+        issueInvitation: async () => issuedInvitation(),
+        readInvitation: async () => {
+          throw new DisplayInvitationError(404, "invitation_not_found");
+        },
+      }),
+    );
+    await act(async () => {
+      await controller().copyInvitationLink();
+    });
+    await act(async () => {
+      await controller().checkInvitation();
+    });
+    expect(controller().invitation.kind).toBe("EXPIRED");
+  });
+
+  test("a pending view for another deck marks the link outdated instead of surfacing it", async () => {
+    const { controller } = renderProbe(
+      makeInput({
+        issueInvitation: async () => issuedInvitation({ deckVersion: "deck_old" }),
+        readInvitation: async () =>
+          pendingView({ status: "JOINED", deckVersion: "deck_old", join: makeJoin("deck_old") }),
+      }),
+    );
+    await act(async () => {
+      await controller().copyInvitationLink();
+    });
+    expect(controller().invitation.kind).toBe("OUTDATED");
+  });
+
+  test("a failed check keeps the invitation open and flagged, never connected", async () => {
+    let reads = 0;
+    const { controller } = renderProbe(
+      makeInput({
+        issueInvitation: async () => issuedInvitation(),
+        readInvitation: async () => {
+          reads += 1;
+          if (reads === 1) throw new DisplayInvitationError(503, "projection_unavailable");
+          return pendingView({ status: "JOINED", displayBindingEpoch: "dbe_2", join: makeJoin() });
+        },
+      }),
+    );
+    await act(async () => {
+      await controller().copyInvitationLink();
+    });
+    await act(async () => {
+      await controller().checkInvitation();
+    });
+    expect(controller().invitation).toMatchObject({ kind: "OPEN", checkFailed: true });
+    // The retry recovers.
+    await act(async () => {
+      await controller().checkInvitation();
+    });
+    expect(controller().invitation.kind).toBe("JOINED");
+    expect(controller().pendingJoin?.displayId).toBe("display_room");
+  });
+
+  test("after a reload there is no held epoch, so the CAS is resolved fresh instead of dbe_0", async () => {
+    const child = {} as Window;
+    const stub = stubWindowOpen(() => child);
+    const approvals: RecordedApproval[] = [];
+    const mints: string[] = [];
+    try {
+      const { controller } = renderProbe(
+        makeInput({
+          displayBindingEpoch: null,
+          approveJoin: recordingApproveWithEpoch(approvals, "dbe_7"),
+          issueInvitation: async () => {
+            mints.push("mint");
+            return issuedInvitation();
+          },
+          readInvitation: async () =>
+            pendingView({ status: "PENDING", displayBindingEpoch: "dbe_7" }),
+          joinTimeoutMs: 200,
+        }),
+      );
+      const pendingBox: { current: Promise<AudienceScreenOutcome> | null } = { current: null };
+      await act(async () => {
+        pendingBox.current = controller().openAndBind();
+      });
+      const pending = pendingBox.current;
+      if (pending === null) throw new Error("openAndBind did not start");
+      let outcome: AudienceScreenOutcome | undefined;
+      await act(async () => {
+        dispatchDisplayJoin({ source: child });
+        outcome = await pending;
+      });
+      expect(outcome).toEqual({ kind: "CONNECTED", displayBindingEpoch: "dbe_7" });
+      // The approval carried the server-authoritative epoch; the constant dbe_0 is gone.
+      expect(approvals).toEqual([{ join: makeJoin(), epoch: "dbe_7" }]);
+      expect(mints).toHaveLength(1);
+    } finally {
+      stub.restore();
+    }
+  });
+
+  test("a stale held epoch on an opened-screen rebind refreshes and retries instead of failing", async () => {
+    const child = {} as Window;
+    const stub = stubWindowOpen(() => child);
+    const approvals: RecordedApproval[] = [];
+    let attempts = 0;
+    try {
+      const { controller } = renderProbe(
+        makeInput({
+          // The stored epoch is what the task-2 repro held: dbe_1 while the server sits at dbe_2.
+          displayBindingEpoch: "dbe_1",
+          approveJoin: async (join, epoch) => {
+            attempts += 1;
+            approvals.push({ join, epoch });
+            if (attempts === 1) throw new DisplayApprovalRejectedError("STALE_DISPLAY_BINDING");
+            return { displayBindingEpoch: "dbe_2" };
+          },
+          issueInvitation: async () => issuedInvitation(),
+          readInvitation: async () =>
+            pendingView({ status: "PENDING", displayBindingEpoch: "dbe_2" }),
+          joinTimeoutMs: 200,
+        }),
+      );
+      const pendingBox: { current: Promise<AudienceScreenOutcome> | null } = { current: null };
+      await act(async () => {
+        pendingBox.current = controller().openAndBind();
+      });
+      const pending = pendingBox.current;
+      if (pending === null) throw new Error("openAndBind did not start");
+      let outcome: AudienceScreenOutcome | undefined;
+      await act(async () => {
+        dispatchDisplayJoin({ source: child });
+        outcome = await pending;
+      });
+      expect(outcome).toEqual({ kind: "CONNECTED", displayBindingEpoch: "dbe_2" });
+      expect(approvals).toEqual([
+        { join: makeJoin(), epoch: "dbe_1" },
+        { join: makeJoin(), epoch: "dbe_2" },
+      ]);
+      expect(controller().status).toBe("CONNECTED");
+    } finally {
+      stub.restore();
+    }
+  });
+
+  test("the opener path still binds without a second confirmation when no resolver is wired", async () => {
+    const child = {} as Window;
+    const stub = stubWindowOpen(() => child);
+    const approvals: RecordedApproval[] = [];
+    try {
+      const { controller } = renderProbe(
+        makeInput({
+          displayBindingEpoch: "dbe_0",
+          approveJoin: recordingApproveWithEpoch(approvals, "dbe_1"),
+          joinTimeoutMs: 200,
+        }),
+      );
+      const pendingBox: { current: Promise<AudienceScreenOutcome> | null } = { current: null };
+      await act(async () => {
+        pendingBox.current = controller().openAndBind();
+      });
+      const pending = pendingBox.current;
+      if (pending === null) throw new Error("openAndBind did not start");
+      let outcome: AudienceScreenOutcome | undefined;
+      await act(async () => {
+        dispatchDisplayJoin({ source: child });
+        outcome = await pending;
+      });
+      expect(outcome).toEqual({ kind: "CONNECTED", displayBindingEpoch: "dbe_1" });
+      expect(approvals).toEqual([{ join: makeJoin(), epoch: "dbe_0" }]);
     } finally {
       stub.restore();
     }

@@ -56,6 +56,25 @@ function pairingClient(approvals: string[]): ConsoleSessionClient {
       approvals.push(`${presentation.presentationSessionId}:${join.displayId}`);
       return { displayBindingEpoch: "dbe_fresh" };
     },
+    async issueDisplayInvitation() {
+      return {
+        invitationId: `dinvite_${"cd".repeat(16)}`,
+        deckVersion: "deck_active",
+        expiresAtMs: Date.now() + 90_000,
+        stagePath: `/?deck=deck_active#invite=dinv_${"ab".repeat(32)}`,
+      };
+    },
+    async readDisplayInvitationPending(invitationId) {
+      return {
+        invitationId,
+        presentationSessionId: "ps_active",
+        deckVersion: "deck_active",
+        expiresAtMs: Date.now() + 90_000,
+        status: "PENDING",
+        displayBindingEpoch: "dbe_0",
+        join: null,
+      };
+    },
     async setSlide(_csrfToken, _input) {
       throw new Error("not used");
     },

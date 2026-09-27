@@ -2,14 +2,17 @@ html[data-surface="console"] {
   --console-app-bar-size: calc(var(--space-12) + var(--space-2));
   --console-support-rail-size: calc(var(--space-20) * 4 + var(--space-4));
   --console-preview-ratio: 16 / 9;
-  /* On stage the stacked preview must leave room for the app bar and the sticky transport
-     strip so both stay inside one viewport height. */
-  --console-presenting-preview-cap: calc(
+  /* On stage the stacked preview must leave room for the app bar, the heading row and the
+     sticky transport strip so both stay inside one viewport height in every phase. */
+  --console-stacked-preview-cap: calc(
     var(--size-viewport) -
     var(--console-app-bar-size) -
+    var(--space-16) -
     var(--space-20) *
-    3
+    3 -
+    var(--space-8)
   );
+  --console-presenting-preview-cap: var(--console-stacked-preview-cap);
 }
 
 html[data-surface="console"],
@@ -432,6 +435,13 @@ html[data-surface="console"] .ui-shell__body--focused {
   flex: 0 0 auto;
 }
 
+/* Rail status lines carry real sentences (mic denied, capture retry, recovery hints). Clipped to
+   one line they hid the actual instruction; inside the rail they wrap and read left-aligned. */
+.console-cockpit__side .console-status-line {
+  text-align: start;
+  white-space: normal;
+}
+
 .console-status-line--attention {
   font-weight: var(--weight-bold);
 }
@@ -681,6 +691,52 @@ html[data-surface="console"] .ui-shell__body--focused {
   user-select: text;
 }
 
+/* Owner-scoped "My presentations" list: one row per persisted deck with its title,
+   activity timestamp, and the resume/report actions. */
+.console-presentation-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-0);
+  padding: var(--space-0);
+  list-style: none;
+}
+
+.console-presentation-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding-block: var(--space-2);
+  border-block-end: var(--size-hairline) solid var(--border-subtle);
+}
+
+.console-presentation-row:last-child {
+  border-block-end: none;
+}
+
+.console-presentation-row__title {
+  font-weight: var(--weight-emphasis, 600);
+  overflow-wrap: anywhere;
+}
+
+.console-presentation-row__meta {
+  color: var(--text-secondary);
+  font-size: var(--text-caption);
+}
+
+.console-presentation-row__actions {
+  display: inline-flex;
+  gap: var(--space-2);
+  margin-inline-start: auto;
+}
+
+.console-presentation-rename {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .console-evidence-card a {
   color: var(--text-secondary);
   -webkit-user-select: text;
@@ -751,11 +807,21 @@ html[data-surface="console"] .ui-shell__body--focused {
     background: var(--surface-inset);
   }
 
-  /* Presenting caps the preview so preview plus transport fit a short viewport; the rendered
-     slide keeps its own ratio and letterboxes inside the capped frame. */
-  .console-cockpit[data-cockpit-phase="PRESENTING"] .console-preview__frame {
-    block-size: var(--console-presenting-preview-cap);
-    max-block-size: var(--console-presenting-preview-cap);
+  /* Stacked, the preview must yield before the transport does: the strip is the one control
+     surface a presenter cannot scroll for, so on short viewports the frame is capped from the
+     viewport height in every phase — not only while presenting — and the slide letterboxes
+     inside it. */
+  .console-cockpit .console-preview__frame {
+    block-size: var(--console-stacked-preview-cap);
+    max-block-size: var(--console-stacked-preview-cap);
+  }
+
+  /* Stacked rows have vertical room to spare — a clipped one-line title only saves a few
+     pixels there, so let the workspace heading wrap instead of truncating mid-word. */
+  .console-workspace--presenting .console-workspace__intro h1 {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
   }
 
   .console-cockpit__side {

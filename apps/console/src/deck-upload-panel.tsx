@@ -99,6 +99,7 @@ export function SessionUploadPanel({
           if (dropped !== undefined) void uploadFile(dropped);
         }}
       >
+        <p>{text.uploadSelect}</p>
         <label className="ui-button ui-button--quiet console-file-button" data-deck-upload-submit>
           <span>{phase === "UPLOADING" ? text.uploading : text.chooseFile}</span>
           <input
@@ -122,9 +123,7 @@ export function SessionUploadPanel({
         aria-live="polite"
         data-upload-status={phase}
       >
-        {phase === "SUCCESS"
-          ? `${text.deckAccepted} ${text.presentationReady}`
-          : message || text.uploadSelect}
+        {phase === "SUCCESS" ? `${text.deckAccepted} ${text.presentationReady}` : message}
       </p>
     </Panel>
   );

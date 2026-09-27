@@ -4,6 +4,12 @@
 
 import { type DeckUploadView, type UploadDeckOptions, uploadDeck } from "./deck-upload";
 import {
+  type DisplayInvitationPendingView,
+  type IssuedStageInvitationView,
+  issueDisplayInvitation,
+  readDisplayInvitationPending,
+} from "./display-invitations";
+import {
   approveDisplay,
   type DisplayBindingView,
   type DisplayJoinView,
@@ -15,6 +21,15 @@ import {
   type LiveCandidateSnapshotView,
   readLiveCandidates,
 } from "./live-publication";
+import {
+  listPresentations,
+  type PresentationDetailView,
+  type PresentationListView,
+  type PresentationSummaryView,
+  readPresentation,
+  renamePresentation,
+  takeoverPlaybackLease,
+} from "./presentation-library";
 import {
   type ActivePresentationView,
   createPresentation,
@@ -94,7 +109,33 @@ export interface ConsoleSessionClient {
     csrfToken: string,
     presentation: ActivePresentationView,
     join: DisplayJoinView,
+    expectedDisplayBindingEpoch: string,
   ): Promise<DisplayBindingView>;
+  // The <=90s one-use Stage invitation: mint is owner-only, the pending read returns the
+  // exact display identity plus the CAS epoch the approval is written against.
+  issueDisplayInvitation?(
+    csrfToken: string,
+    presentationSessionId: string,
+  ): Promise<IssuedStageInvitationView>;
+  readDisplayInvitationPending?(invitationId: string): Promise<DisplayInvitationPendingView>;
+  // Owner-scoped persisted library: returning presenters re-enter a deck they already
+  // uploaded instead of re-uploading. Optional like the other late-added surfaces so narrow
+  // injected test doubles stay valid.
+  listPresentations?(options?: {
+    readonly cursor?: string;
+    readonly limit?: number;
+  }): Promise<PresentationListView>;
+  readPresentation?(presentationSessionId: string): Promise<PresentationDetailView>;
+  renamePresentation?(
+    csrfToken: string,
+    presentationSessionId: string,
+    title: string,
+  ): Promise<PresentationSummaryView>;
+  takeoverPlaybackLease?(
+    csrfToken: string,
+    presentationSessionId: string,
+    expectedDisplayBindingEpoch: string,
+  ): Promise<{ readonly leaseActorId: string }>;
   setSlide?(
     csrfToken: string,
     input: Readonly<{
@@ -155,8 +196,18 @@ export function createConsoleSessionClient(
       readLiveCandidates(context, presentationSessionId),
     approveLiveCandidate: (csrfToken, snapshot, candidate, approvalId) =>
       approveLiveCandidate(context, csrfToken, snapshot, candidate, approvalId),
-    approveDisplay: (csrfToken, presentation, join) =>
-      approveDisplay(context, csrfToken, presentation, join),
+    approveDisplay: (csrfToken, presentation, join, expectedDisplayBindingEpoch) =>
+      approveDisplay(context, csrfToken, presentation, join, expectedDisplayBindingEpoch),
+    issueDisplayInvitation: (csrfToken, presentationSessionId) =>
+      issueDisplayInvitation(context, csrfToken, presentationSessionId),
+    readDisplayInvitationPending: (invitationId) =>
+      readDisplayInvitationPending(context, invitationId),
+    listPresentations: (options) => listPresentations(context, options),
+    readPresentation: (presentationSessionId) => readPresentation(context, presentationSessionId),
+    renamePresentation: (csrfToken, presentationSessionId, title) =>
+      renamePresentation(context, csrfToken, presentationSessionId, title),
+    takeoverPlaybackLease: (csrfToken, presentationSessionId, expectedDisplayBindingEpoch) =>
+      takeoverPlaybackLease(context, csrfToken, presentationSessionId, expectedDisplayBindingEpoch),
     setSlide: (csrfToken, input) => setSlide(context, csrfToken, input),
     endPresentationAndAwaitReport: (csrfToken, presentationSessionId) =>
       endPresentationAndAwaitReport(context, csrfToken, presentationSessionId),

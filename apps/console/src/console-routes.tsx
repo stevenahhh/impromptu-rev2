@@ -3,6 +3,7 @@ import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { SignInPage, SignUpPage } from "./auth-pages";
 import { PublicOnly, RequireAuth, useAuth } from "./auth-session";
 import { messages } from "./i18n";
+import { PresentationsPage } from "./presentations-page";
 import { PrivateLayout } from "./private-shell";
 import { PresentationReportPage } from "./report-page";
 import { PresentationWorkspacePage } from "./workspace-page";
@@ -55,6 +56,7 @@ export function ConsoleRoutes({ coResident = false }: { readonly coResident?: bo
         <Route element={<PrivateLayout coResident={coResident} />}>
           <Route index element={<CockpitWorkspace />} />
           <Route path="/session" element={<CockpitWorkspace />} />
+          <Route path="/presentations" element={<PresentationsPage />} />
           <Route path="/live-publication" element={<LivePublicationInterstitial />} />
           <Route path="/reports/:presentationSessionId" element={<PresentationReportPage />} />
         </Route>

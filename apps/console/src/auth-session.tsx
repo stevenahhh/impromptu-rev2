@@ -16,6 +16,8 @@ type SignUpOutcome = "SUCCESS" | AccountRegistrationFailure;
 
 interface AuthState {
   authenticated: boolean;
+  /** True while a mount-time session read is in flight; private routes wait for it. */
+  restoring: boolean;
   pending: boolean;
   error: string | null;
   session: AccountSessionView | null;
@@ -43,6 +45,11 @@ export interface AuthProviderProps {
   initialPresentation?: ActivePresentationView;
   initialDisplayBindingEpoch?: string;
   joinTimeoutMs?: number;
+  /**
+   * When true, the provider reads the server account session once on mount so a reload
+   * restores the signed-in workspace. Tests default to no hydration and stay synchronous.
+   */
+  hydrateSession?: boolean;
 }
 
 export function AuthProvider({
@@ -52,6 +59,7 @@ export function AuthProvider({
   initialPresentation,
   initialDisplayBindingEpoch,
   joinTimeoutMs,
+  hydrateSession = false,
 }: AuthProviderProps) {
   // The production client is already the typed deck-upload client; injected test
   // clients are narrower and never reach the upload panel.
@@ -77,12 +85,38 @@ export function AuthProvider({
     initialDisplayBindingEpoch ?? null,
   );
   const [locale, setLocale] = useState<Locale>("ko");
+  const [restoring, setRestoring] = useState(hydrateSession && !initialAuthenticated);
   useEffect(() => {
     document.documentElement.lang = locale;
   }, [locale]);
+
+  // One mount-time server read restores the account session across a reload. Nothing private
+  // renders until it settles: RequireAuth/PublicOnly see `restoring` and wait instead of
+  // bouncing a signed-in presenter through the sign-in page or vice versa.
+  useEffect(() => {
+    if (!hydrateSession) return;
+    let cancelled = false;
+    void sessionClient
+      .readSession()
+      .then((restored) => {
+        if (cancelled || restored === null) return;
+        setSession(restored);
+      })
+      .catch(() => {
+        // A failed read means "still signed out": the presenter lands on the sign-in page,
+        // never on half-restored private state.
+      })
+      .finally(() => {
+        if (!cancelled) setRestoring(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrateSession, sessionClient]);
   const value = useMemo(
     () => ({
       authenticated: session !== null,
+      restoring,
       pending,
       error,
       session,
@@ -111,7 +145,15 @@ export function AuthProvider({
         setPending(true);
         setError(null);
         try {
-          setSession(await sessionClient.signIn(username, password));
+          const next = await sessionClient.signIn(username, password);
+          // The private workspace belongs to the arriving account: any deck, binding, or
+          // preview state a previous session (or account) left behind clears before the new
+          // session lands, so a re-login resumes from the server list rather than stale UI.
+          if (session?.account.accountId !== next.account.accountId) {
+            setActivePresentation(null);
+            setDisplayBindingEpoch(null);
+          }
+          setSession(next);
         } catch {
           setError("SIGN_IN_FAILED");
         } finally {
@@ -124,7 +166,12 @@ export function AuthProvider({
         setError(null);
         try {
           await sessionClient.signOut(session.csrfToken);
+          // Only after the server accepts: the deck and binding clear with the session, so a
+          // half-accepted sign-out never strands private UI on screen or drops a session the
+          // backend still considers live.
           setSession(null);
+          setActivePresentation(null);
+          setDisplayBindingEpoch(null);
         } catch {
           setError("SIGN_OUT_FAILED");
         } finally {
@@ -139,6 +186,7 @@ export function AuthProvider({
       joinTimeoutMs,
       locale,
       pending,
+      restoring,
       session,
       sessionClient,
     ],
@@ -156,9 +204,10 @@ export function useAuth() {
 }
 
 export function RequireAuth() {
-  const { authenticated } = useAuth();
+  const { authenticated, restoring } = useAuth();
   const location = useLocation();
 
+  if (restoring) return null;
   return authenticated ? (
     <Outlet />
   ) : (
@@ -167,7 +216,9 @@ export function RequireAuth() {
 }
 
 export function PublicOnly() {
-  return useAuth().authenticated ? <Navigate to="/" replace /> : <Outlet />;
+  const { authenticated, restoring } = useAuth();
+  if (restoring) return null;
+  return authenticated ? <Navigate to="/" replace /> : <Outlet />;
 }
 
 export function LanguagePicker() {
