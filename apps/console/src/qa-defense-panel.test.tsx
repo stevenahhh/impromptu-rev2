@@ -27,12 +27,7 @@ const { ConsoleRoutes } = await import("./App");
 const { messages } = await import("./i18n");
 const { QaDefensePanel } = await import("./qa-defense-panel");
 
-import type {
-  ConsoleDeckUploadClient,
-  PresentationSessionView,
-  QaDefenseAnswer,
-  SessionReportView,
-} from "./session-client";
+import type { ConsoleDeckUploadClient, QaDefenseAnswer, SessionReportView } from "./session-client";
 
 afterEach(cleanup);
 
@@ -75,12 +70,13 @@ function client(overrides: Partial<ConsoleDeckUploadClient> = {}): ConsoleDeckUp
   };
 }
 
-const endedLifecycle: PresentationSessionView["lifecycle"] = {
+const endedLifecycle = {
   presentationSessionId: "ps_done",
   presentationSessionEpoch: "pse_1",
   deckVersion: "deck_done",
   status: "ENDED",
-};
+  qaWindow: { status: "LIVE", askableUntilMs: Date.now() + 300_000 },
+} as const;
 
 const endedReport: SessionReportView = {
   reportVersion: 1,
@@ -251,6 +247,7 @@ describe("Q&A defense panel", () => {
         ],
         latencyMs: 120,
         completedAtMs: 1_000,
+        askableUntilMs: Date.now() + 300_000,
       });
     });
 
@@ -320,6 +317,7 @@ describe("Q&A defense panel", () => {
         retryable: true,
         latencyMs: 40,
         completedAtMs: 900,
+        askableUntilMs: Date.now() + 300_000,
       });
     });
 
@@ -352,6 +350,7 @@ describe("Q&A defense panel", () => {
         ],
         latencyMs: 90,
         completedAtMs: 1_500,
+        askableUntilMs: Date.now() + 300_000,
       });
     });
     expect(document.querySelector("[data-qa-answer='ANSWERED']")).toBeTruthy();
@@ -397,6 +396,7 @@ describe("Q&A defense panel", () => {
         retryable: false,
         latencyMs: 60,
         completedAtMs: 800,
+        askableUntilMs: Date.now() + 300_000,
       });
     });
 
@@ -461,6 +461,7 @@ describe("Q&A defense panel", () => {
       citations: [],
       latencyMs: 10,
       completedAtMs: 100,
+      askableUntilMs: Date.now() + 300_000,
     });
     const card = document.querySelector("[data-qa-answer='ANSWERED']");
     const heading = card?.querySelector("[data-qa-question]");
@@ -475,6 +476,7 @@ describe("Q&A defense panel", () => {
       retryable: true,
       latencyMs: 40,
       completedAtMs: 900,
+      askableUntilMs: Date.now() + 300_000,
     });
     expect(
       document.querySelector("[data-qa-abstained='RETRYABLE']")?.querySelector("[data-qa-question]")
@@ -489,6 +491,7 @@ describe("Q&A defense panel", () => {
       retryable: false,
       latencyMs: 60,
       completedAtMs: 800,
+      askableUntilMs: Date.now() + 300_000,
     });
     expect(
       document.querySelector("[data-qa-abstained='TERMINAL']")?.querySelector("[data-qa-question]")
@@ -535,6 +538,7 @@ describe("Q&A defense panel", () => {
         retryable: true,
         latencyMs: 30,
         completedAtMs: 700,
+        askableUntilMs: Date.now() + 300_000,
       });
     });
 
@@ -552,11 +556,267 @@ describe("Q&A defense panel", () => {
         citations: [],
         latencyMs: 80,
         completedAtMs: 1_400,
+        askableUntilMs: Date.now() + 300_000,
       });
     });
     const card = document.querySelector("[data-qa-answer='ANSWERED']");
     expect(card?.querySelector("[data-qa-question]")?.textContent).toBe(
       "도입부 구조를 다시 설명해 주세요",
     );
+  });
+
+  // -----------------------------------------------------------------------
+  // FIVE-MINUTE WINDOW EXPIRY. The panel arms one coalesced recheck at the
+  // accepted submission's askableUntilMs; an expiry landing mid-ask aborts the
+  // pending submission and ends EXPIRED — an 'asking' state can never outlive
+  // its window silently.
+  // -----------------------------------------------------------------------
+  interface ManualTimer {
+    readonly delayMs: number;
+    fire(): void;
+    cancelled: boolean;
+    fired: boolean;
+  }
+
+  function manualClock() {
+    const timers: ManualTimer[] = [];
+    const pending = () => timers.filter((timer) => !timer.cancelled && !timer.fired);
+    const seams = {
+      now: () => 0,
+      schedule(delayMs: number, fire: () => void) {
+        const timer: ManualTimer = {
+          delayMs,
+          cancelled: false,
+          fired: false,
+          fire: () => {
+            timer.fired = true;
+            if (!timer.cancelled) fire();
+          },
+        };
+        timers.push(timer);
+        return {
+          cancel: () => {
+            timer.cancelled = true;
+          },
+        };
+      },
+      cancel(handle: { cancel(): void }) {
+        handle.cancel();
+      },
+    };
+    return { timers, pending, seams };
+  }
+
+  test("an ask interrupted by its window's deadline refetches and ends EXPIRED, never left as 'asking'", async () => {
+    const clock = manualClock();
+    let pendingSignal: AbortSignal | undefined;
+    const rechecks: string[] = [];
+    render(
+      <MemoryRouter>
+        <AuthProvider
+          initialAuthenticated
+          client={client({
+            async openQaDefense(_csrfToken, sessionId) {
+              return {
+                ...endedLifecycle,
+                presentationSessionId: sessionId,
+                qaWindow: { status: "LIVE", askableUntilMs: 5_000 },
+              };
+            },
+            submitQaDefenseQuestion(_csrfToken, _request, signal) {
+              pendingSignal = signal;
+              return new Promise<QaDefenseAnswer>(() => {});
+            },
+            async readQaDefenseWindow(_csrfToken, sessionId) {
+              rechecks.push(sessionId);
+              return { status: "EXPIRED", askableUntilMs: 5_000 };
+            },
+          })}
+        >
+          <QaDefensePanel presentationSessionId="ps_expiry" clockSeams={clock.seams} />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: ko.qaOpen }));
+    });
+    // The LIVE window armed exactly one recheck at its deadline.
+    expect(clock.pending()).toHaveLength(1);
+
+    const input = document.querySelector("[data-qa-question-input]");
+    if (!(input instanceof HTMLInputElement)) throw new Error("question input is missing");
+    fireEvent.change(input, { target: { value: "자료 근거를 다시 설명해 주세요" } });
+    await act(async () => {
+      fireEvent.click(document.querySelector("[data-qa-submit]") as Element);
+    });
+    expect(document.querySelector("[data-qa-phase]")?.getAttribute("data-qa-phase")).toBe("ASKING");
+
+    // The deadline lands while the ask is still in flight: the recheck fires, refetches,
+    // and the server-verified EXPIRED verdict ends the window and aborts the pending ask.
+    await act(async () => {
+      clock.timers[0]?.fire();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(rechecks).toEqual(["ps_expiry"]);
+    expect(pendingSignal?.aborted).toBe(true);
+    expect(document.querySelector("[data-qa-phase]")?.getAttribute("data-qa-phase")).toBe(
+      "EXPIRED",
+    );
+    expect(document.querySelector("[data-qa-question-input]")).toBeNull();
+    expect(document.querySelector("[data-qa-submit]")).toBeNull();
+    expect(document.body.textContent).toContain(ko.qaWindowExpired);
+  });
+
+  test("a LIVE recheck verdict re-arms the chain and the ask completes normally inside the window", async () => {
+    const clock = manualClock();
+    const resolvers: Array<(outcome: QaDefenseAnswer) => void> = [];
+    let reads = 0;
+    render(
+      <MemoryRouter>
+        <AuthProvider
+          initialAuthenticated
+          client={client({
+            async openQaDefense(_csrfToken, sessionId) {
+              return {
+                ...endedLifecycle,
+                presentationSessionId: sessionId,
+                qaWindow: { status: "LIVE", askableUntilMs: 5_000 },
+              };
+            },
+            submitQaDefenseQuestion() {
+              return new Promise<QaDefenseAnswer>((resolve) => {
+                resolvers.push(resolve);
+              });
+            },
+            async readQaDefenseWindow() {
+              reads += 1;
+              // First recheck: still LIVE (server clock disagrees). Second: terminal EXPIRED.
+              return reads === 1
+                ? { status: "LIVE", askableUntilMs: 5_000 }
+                : { status: "EXPIRED", askableUntilMs: 5_000 };
+            },
+          })}
+        >
+          <QaDefensePanel presentationSessionId="ps_still_live" clockSeams={clock.seams} />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: ko.qaOpen }));
+    });
+    const input = document.querySelector("[data-qa-question-input]");
+    if (!(input instanceof HTMLInputElement)) throw new Error("question input is missing");
+    fireEvent.change(input, { target: { value: "경쟁 우위는?" } });
+    await act(async () => {
+      fireEvent.click(document.querySelector("[data-qa-submit]") as Element);
+    });
+
+    // Tick at the deadline: the refetch says the window is still LIVE, so the ask is left
+    // alone and the chain re-arms once — never two pending timers.
+    await act(async () => {
+      clock.timers[0]?.fire();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(document.querySelector("[data-qa-phase]")?.getAttribute("data-qa-phase")).toBe("ASKING");
+    expect(clock.pending()).toHaveLength(1);
+
+    await act(async () => {
+      resolvers[0]?.({
+        outcome: "ANSWERED",
+        answer: "단가 우위가 핵심입니다.",
+        citations: [],
+        latencyMs: 40,
+        completedAtMs: 2_000,
+        askableUntilMs: 5_000,
+      });
+    });
+    expect(document.querySelector("[data-qa-answer='ANSWERED']")).toBeTruthy();
+
+    // The settled submission's window is still watched: the next tick refetches and the
+    // terminal EXPIRED verdict ends the window — the card stays, the controls leave.
+    await act(async () => {
+      clock.pending().at(-1)?.fire();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(document.querySelector("[data-qa-phase]")?.getAttribute("data-qa-phase")).toBe(
+      "EXPIRED",
+    );
+    expect(document.querySelector("[data-qa-answer='ANSWERED']")).toBeTruthy();
+    expect(document.querySelector("[data-qa-submit]")).toBeNull();
+  });
+
+  test("a window already EXPIRED at open stays terminal — no ask controls, no armed recheck", async () => {
+    const clock = manualClock();
+    render(
+      <MemoryRouter>
+        <AuthProvider
+          initialAuthenticated
+          client={client({
+            async openQaDefense(_csrfToken, sessionId) {
+              return {
+                ...endedLifecycle,
+                presentationSessionId: sessionId,
+                qaWindow: { status: "EXPIRED", askableUntilMs: 5_000 },
+              };
+            },
+          })}
+        >
+          <QaDefensePanel presentationSessionId="ps_late" clockSeams={clock.seams} />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: ko.qaOpen }));
+    });
+    expect(document.querySelector("[data-qa-phase]")?.getAttribute("data-qa-phase")).toBe(
+      "EXPIRED",
+    );
+    expect(document.querySelector("[data-qa-question-input]")).toBeNull();
+    expect(clock.pending()).toHaveLength(0);
+    expect(document.body.textContent).toContain(ko.qaWindowExpired);
+  });
+
+  test("an ask refused with qa_expired ends the window EXPIRED without waiting for a tick", async () => {
+    const clock = manualClock();
+    const { QaDefenseExpiredError } = await import("./session-client");
+    render(
+      <MemoryRouter>
+        <AuthProvider
+          initialAuthenticated
+          client={client({
+            async openQaDefense(_csrfToken, sessionId) {
+              return {
+                ...endedLifecycle,
+                presentationSessionId: sessionId,
+                qaWindow: { status: "LIVE", askableUntilMs: 5_000 },
+              };
+            },
+            async submitQaDefenseQuestion() {
+              throw new QaDefenseExpiredError();
+            },
+          })}
+        >
+          <QaDefensePanel presentationSessionId="ps_refused" clockSeams={clock.seams} />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: ko.qaOpen }));
+    });
+    const input = document.querySelector("[data-qa-question-input]");
+    if (!(input instanceof HTMLInputElement)) throw new Error("question input is missing");
+    fireEvent.change(input, { target: { value: "늦은 질문" } });
+    await act(async () => {
+      fireEvent.click(document.querySelector("[data-qa-submit]") as Element);
+    });
+    expect(document.querySelector("[data-qa-phase]")?.getAttribute("data-qa-phase")).toBe(
+      "EXPIRED",
+    );
+    expect(document.body.textContent).toContain(ko.qaWindowExpired);
+    expect(clock.pending()).toHaveLength(0);
   });
 });

@@ -26,6 +26,8 @@ import {
   type QaDefenseAnswer,
   type QaDefenseLifecycle,
   type QaDefenseQuestionRequest,
+  type QaDefenseWindow,
+  readQaDefenseWindow,
   type SpokenQuestionTranscription,
   submitQaDefenseQuestion,
   transcribeQuestionClip,
@@ -108,6 +110,8 @@ export interface ConsoleSessionClient {
   ): Promise<SessionReportView>;
   // Post-talk Q&A defense, mounted on the report surface the end action navigates to.
   openQaDefense?(csrfToken: string, presentationSessionId: string): Promise<QaDefenseLifecycle>;
+  /** Read-only ask-window recheck; powers the cockpit's expiry refetch chain. */
+  readQaDefenseWindow?(csrfToken: string, presentationSessionId: string): Promise<QaDefenseWindow>;
   submitQaDefenseQuestion?(
     csrfToken: string,
     request: QaDefenseQuestionRequest,
@@ -160,8 +164,10 @@ export function createConsoleSessionClient(
       readFinalizedReport(context, presentationSessionId),
     openQaDefense: (csrfToken, presentationSessionId) =>
       openQaDefense(context, csrfToken, presentationSessionId),
-    submitQaDefenseQuestion: (csrfToken, request) =>
-      submitQaDefenseQuestion(context, csrfToken, request),
+    readQaDefenseWindow: (csrfToken, presentationSessionId) =>
+      readQaDefenseWindow(context, csrfToken, presentationSessionId),
+    submitQaDefenseQuestion: (csrfToken, request, signal) =>
+      submitQaDefenseQuestion(context, csrfToken, request, signal),
     transcribeQuestionClip: (csrfToken, audio, durationMs) =>
       transcribeQuestionClip(context, csrfToken, audio, durationMs),
     uploadDeck: (csrfToken, file, uploadOptions) =>

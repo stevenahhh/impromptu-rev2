@@ -10,7 +10,15 @@ import {
   responseBody,
 } from "./private-transport";
 
-export type QaDefenseLifecycle = PresentationSessionView["lifecycle"];
+/** The typed five-minute ask window the backend stamps on the Q&A session. */
+export type QaDefenseWindow = Readonly<{
+  status: "EMPTY" | "LIVE" | "EXPIRED";
+  /** Deadline the window asks until; null only for a never-opened (EMPTY) window. */
+  askableUntilMs: number | null;
+}>;
+
+export type QaDefenseLifecycle = PresentationSessionView["lifecycle"] &
+  Readonly<{ qaWindow: QaDefenseWindow }>;
 
 export const QUESTION_CLIP_MIME_TYPE = "audio/webm;codecs=opus" as const;
 const QUESTION_CLIP_TRANSCRIPTION_URL = "/v1/question-clips/transcription";
@@ -61,6 +69,8 @@ export type QaDefenseAnswer =
       citations: readonly QaDefenseCitation[];
       latencyMs: number;
       completedAtMs: number;
+      /** Typed expiry stamped on every accepted submission; absent = parse failure. */
+      askableUntilMs: number;
     }>
   | Readonly<{
       outcome: "ABSTAINED";
@@ -68,10 +78,14 @@ export type QaDefenseAnswer =
       retryable: boolean;
       latencyMs: number;
       completedAtMs: number;
+      askableUntilMs: number;
     }>;
 
 /** Questions are rejected until the presenter explicitly opened this session's Q&A. */
 export class QaDefenseNotOpenError extends Error {}
+
+/** The five-minute ask window lapsed before this submission reached the backend. */
+export class QaDefenseExpiredError extends Error {}
 
 /**
  * Closed view of ONE spoken-question clip transcription. TRANSCRIBED carries the presenter-
@@ -115,13 +129,22 @@ function answer(value: unknown): QaDefenseAnswer | null {
   if (typeof value !== "object" || value === null) return null;
   const latencyMs = Reflect.get(value, "latencyMs");
   const completedAtMs = Reflect.get(value, "completedAtMs");
-  if (typeof latencyMs !== "number" || typeof completedAtMs !== "number") return null;
+  const askableUntilMs = Reflect.get(value, "askableUntilMs");
+  // Closed receipt: an accepted submission MUST carry its typed expiry. A response without
+  // it is unreadable, not "unbounded".
+  if (
+    typeof latencyMs !== "number" ||
+    typeof completedAtMs !== "number" ||
+    typeof askableUntilMs !== "number"
+  ) {
+    return null;
+  }
   const outcome = Reflect.get(value, "outcome");
   if (outcome === "ABSTAINED") {
     const reason = Reflect.get(value, "reason");
     const retryable = Reflect.get(value, "retryable");
     return typeof reason === "string" && typeof retryable === "boolean"
-      ? { outcome, reason, retryable, latencyMs, completedAtMs }
+      ? { outcome, reason, retryable, latencyMs, completedAtMs, askableUntilMs }
       : null;
   }
   if (outcome !== "ANSWERED") return null;
@@ -137,7 +160,24 @@ function answer(value: unknown): QaDefenseAnswer | null {
   if (parsed.some((entry) => entry === null)) return null;
   const settledCitations = parsed as readonly QaDefenseCitation[];
   if (settledCitations.length === 0 || settledCitations.length > 3) return null;
-  return { outcome, answer: text, citations: settledCitations, latencyMs, completedAtMs };
+  return {
+    outcome,
+    answer: text,
+    citations: settledCitations,
+    latencyMs,
+    completedAtMs,
+    askableUntilMs,
+  };
+}
+
+function qaWindow(value: unknown): QaDefenseWindow | null {
+  if (typeof value !== "object" || value === null) return null;
+  const status = Reflect.get(value, "status");
+  const askableUntilMs = Reflect.get(value, "askableUntilMs");
+  if (status !== "EMPTY" && status !== "LIVE" && status !== "EXPIRED") return null;
+  // The deadline is required to be a number whenever one exists — null only when EMPTY.
+  if (askableUntilMs !== null && typeof askableUntilMs !== "number") return null;
+  return { status, askableUntilMs };
 }
 
 function qaLifecycle(value: unknown): QaDefenseLifecycle | null {
@@ -146,15 +186,23 @@ function qaLifecycle(value: unknown): QaDefenseLifecycle | null {
   const presentationSessionEpoch = Reflect.get(value, "presentationSessionEpoch");
   const deckVersion = Reflect.get(value, "deckVersion");
   const status = Reflect.get(value, "status");
+  const window_ = qaWindow(Reflect.get(value, "qaWindow"));
   if (
     typeof presentationSessionId !== "string" ||
     typeof presentationSessionEpoch !== "string" ||
     typeof deckVersion !== "string" ||
-    (status !== "ACTIVE" && status !== "ENDED")
+    (status !== "ACTIVE" && status !== "ENDED") ||
+    window_ === null
   ) {
     return null;
   }
-  return { presentationSessionId, presentationSessionEpoch, deckVersion, status };
+  return {
+    presentationSessionId,
+    presentationSessionEpoch,
+    deckVersion,
+    status,
+    qaWindow: window_,
+  };
 }
 
 /**
@@ -205,9 +253,43 @@ export async function submitQaDefenseQuestion(
     if (response.status === 409 && error === "qa_not_open") {
       throw new QaDefenseNotOpenError("The Q&A defense session is not open.");
     }
+    if (response.status === 409 && error === "qa_expired") {
+      throw new QaDefenseExpiredError("The Q&A window has ended.");
+    }
     throw new Error("The Q&A defense request failed.");
   }
   return parsed;
+}
+
+/**
+ * Read-only recheck of the ask window — the call the cockpit's expiry clock makes when a
+ * LIVE deadline ticks, so a lapsed window lands on a server-verified verdict rather than
+ * trusting the local clock. A GET: authenticated by the session cookie, never mutates.
+ */
+export async function readQaDefenseWindow(
+  context: PrivateClientContext,
+  _csrfToken: string,
+  presentationSessionId: string,
+): Promise<QaDefenseWindow> {
+  const response = await fetch(
+    `${context.baseUrl}/v1/presentation-sessions/${encodeURIComponent(presentationSessionId)}/qa-defense`,
+    {
+      method: "GET",
+      credentials: "include",
+    },
+  );
+  const body = await responseBody(response);
+  const lifecycle =
+    typeof body === "object" && body !== null ? Reflect.get(body, "lifecycle") : undefined;
+  const window_ = qaWindow(
+    typeof lifecycle === "object" && lifecycle !== null
+      ? Reflect.get(lifecycle, "qaWindow")
+      : undefined,
+  );
+  if (!response.ok || window_ === null) {
+    throw new Error("The Q&A window could not be re-checked.");
+  }
+  return window_;
 }
 
 /**

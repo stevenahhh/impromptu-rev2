@@ -27,9 +27,10 @@ export type {
   QaDefenseCitation,
   QaDefenseLifecycle,
   QaDefenseQuestionRequest,
+  QaDefenseWindow,
   SpokenQuestionTranscription,
 } from "./qa-defense";
-export { QaDefenseNotOpenError } from "./qa-defense";
+export { QaDefenseExpiredError, QaDefenseNotOpenError } from "./qa-defense";
 export type {
   PrivateEvidenceCardView,
   RecommendationOutcome,

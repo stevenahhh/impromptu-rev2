@@ -157,6 +157,8 @@
   "qaAbstainedTerminal": "Your uploaded materials do not contain what is needed to answer this question.",
   "qaRetry": "Try again",
   "qaFailed": "We could not process that request. Please try again.",
+  "qaWindowExpired": "The question window for this session has ended and can no longer accept questions.",
+  "qaWindowRecheckFailed": "We could not confirm the question window is still open.",
   "reportQaTitle": "Q&A",
   "reportQaEmpty": "No audience questions were recorded.",
   "reportQaUnavailable": "The Q&A record could not be displayed.",

@@ -77,3 +77,41 @@ export const QaDefenseOutcomeSchema = z.discriminatedUnion("outcome", [
     .strict(),
 ]);
 export type QaDefenseOutcome = z.infer<typeof QaDefenseOutcomeSchema>;
+
+// ---------------------------------------------------------------------------
+// FIVE-MINUTE ASK WINDOW. Once the owner opens post-talk Q&A, questions stay
+// askable for exactly QA_ASK_WINDOW_MS after qaStartedAtMs: an accepted
+// submission echoes the typed askableUntilMs expiry, an ask at or past it is
+// refused with the typed qa_expired rejection, and the read-only recheck view
+// reports the window LIVE -> EXPIRED so a submission whose window lapses while
+// the presenter waits can never sit silently as 'asking'.
+// ---------------------------------------------------------------------------
+export const QA_ASK_WINDOW_MS = 300_000 as const;
+
+/**
+ * Terminal verdicts are explicit: EMPTY means no Q&A window was ever opened for the
+ * session (asking is refused before opening) and EXPIRED means the window's deadline
+ * passed. Only LIVE submissions may be re-checked; EMPTY/EXPIRED never re-arm.
+ */
+export const QaWindowStatusSchema = z.enum(["EMPTY", "LIVE", "EXPIRED"]);
+export type QaWindowStatus = z.infer<typeof QaWindowStatusSchema>;
+
+export const QaDefenseWindowSchema = z
+  .object({
+    status: QaWindowStatusSchema,
+    /** Deadline the window asks until; null only for a never-opened (EMPTY) window. */
+    askableUntilMs: TimestampMsSchema.nullable(),
+  })
+  .strict();
+export type QaDefenseWindow = z.infer<typeof QaDefenseWindowSchema>;
+
+/**
+ * The accepted submission: the defense outcome plus the typed expiry of the window it
+ * was accepted under. Closed — a response without the deadline fails to parse rather
+ * than silently reading as unbounded.
+ */
+export const QaAskResultSchema = z.discriminatedUnion("outcome", [
+  QaDefenseOutcomeSchema.options[0].extend({ askableUntilMs: TimestampMsSchema }),
+  QaDefenseOutcomeSchema.options[1].extend({ askableUntilMs: TimestampMsSchema }),
+]);
+export type QaAskResult = z.infer<typeof QaAskResultSchema>;

@@ -1,9 +1,12 @@
 import {
   type PresentationSessionLifecycle,
+  QA_ASK_WINDOW_MS,
+  QaAskResultSchema,
   type QaCitation,
   type QaDefenseOutcome,
-  QaDefenseOutcomeSchema,
   QaDefenseRequestSchema,
+  type QaDefenseWindow,
+  QaDefenseWindowSchema,
 } from "@impromptu/contracts/private";
 import type { RecommendationOutcome } from "@impromptu/contracts/retrieval";
 import type { OperationResult } from "../../prepared-evidence.ts";
@@ -92,13 +95,33 @@ function openRejection(reason: string, origin: Headers): Response {
   return json({ error: "account_session_invalid" }, 401, origin);
 }
 
-/** Exactly the four fields the Console's qaLifecycle parser reads; nothing else is emitted. */
-function lifecycleView(lifecycle: PresentationSessionLifecycle): Record<string, unknown> {
+/**
+ * Derives the typed ask window off the persisted qaStartedAtMs — never stored separately,
+ * so a restored snapshot and a fresh open compute the identical deadline. An EMPTY window
+ * carries a null deadline; only LIVE has remaining askable time.
+ */
+function qaWindow(lifecycle: PresentationSessionLifecycle, nowMs: number): QaDefenseWindow {
+  if (lifecycle.qaStartedAtMs === null) {
+    return QaDefenseWindowSchema.parse({ status: "EMPTY", askableUntilMs: null });
+  }
+  const askableUntilMs = lifecycle.qaStartedAtMs + QA_ASK_WINDOW_MS;
+  return QaDefenseWindowSchema.parse({
+    status: nowMs >= askableUntilMs ? "EXPIRED" : "LIVE",
+    askableUntilMs,
+  });
+}
+
+/** The fields the Console's qaLifecycle parser reads plus the typed ask window; nothing else. */
+function lifecycleView(
+  lifecycle: PresentationSessionLifecycle,
+  nowMs: number,
+): Record<string, unknown> {
   return {
     presentationSessionId: lifecycle.presentationSessionId,
     presentationSessionEpoch: lifecycle.presentationSessionEpoch,
     deckVersion: lifecycle.deckVersion,
     status: lifecycle.status,
+    qaWindow: qaWindow(lifecycle, nowMs),
   };
 }
 
@@ -161,6 +184,27 @@ export async function qaDefenseRoutes(
 ): Promise<Response | null> {
   const { request, url, origin } = ctx;
 
+  // READ-ONLY RECHECK. The cockpit polls this at the ask window's deadline so a submission
+  // whose window lapses mid-wait lands on a server-verified verdict instead of trusting its
+  // own clock. A GET: authenticated by the session cookie upstream, no CSRF, never mutates.
+  if (request.method === "GET" && OPEN_QA_PATH.exec(url.pathname) !== null) {
+    const presentationSessionId = OPEN_QA_PATH.exec(url.pathname)?.[1] ?? "";
+    if (qaDefense?.resolveQaSession === undefined) {
+      return json({ error: "qa_defense_unavailable" }, 503, origin);
+    }
+    const resolution = await qaDefense.resolveQaSession(
+      ctx.accountSessionId,
+      presentationSessionId,
+    );
+    if (resolution.outcome === "NOT_FOUND") {
+      return json({ error: "presentation_not_found" }, 404, origin);
+    }
+    if (resolution.outcome === "UNAUTHORIZED") {
+      return json({ error: "unauthorized" }, 403, origin);
+    }
+    return json({ lifecycle: lifecycleView(resolution.lifecycle, qaDefense.now()) }, 200, origin);
+  }
+
   if (request.method === "POST" && OPEN_QA_PATH.exec(url.pathname) !== null) {
     const presentationSessionId = OPEN_QA_PATH.exec(url.pathname)?.[1] ?? "";
     if (qaDefense?.beginQuestions === undefined || qaDefense.resolveQaSession === undefined) {
@@ -169,7 +213,7 @@ export async function qaDefenseRoutes(
     const result = await qaDefense.beginQuestions(ctx.accountSessionId, presentationSessionId);
     if (result.outcome === "REJECTED") return openRejection(result.reason, origin);
     await qaDefense.persist?.();
-    return json({ lifecycle: lifecycleView(result.value) }, 200, origin);
+    return json({ lifecycle: lifecycleView(result.value, qaDefense.now()) }, 200, origin);
   }
 
   if (request.method === "POST" && url.pathname === "/v1/qa-defense") {
@@ -198,6 +242,13 @@ export async function qaDefenseRoutes(
     // it with a different error code.
     if (resolution.lifecycle.qaStartedAtMs === null) {
       return json({ error: "qa_not_open" }, 409, origin);
+    }
+    // FIVE-MINUTE WINDOW GATE: an ask arriving at or past askableUntilMs is a typed 409 —
+    // decided BEFORE the model runs, so an expired question spends nothing and records
+    // nothing. The console's own clock can only ever narrow this check, never widen it.
+    const askableUntilMs = resolution.lifecycle.qaStartedAtMs + QA_ASK_WINDOW_MS;
+    if (qaDefense.now() >= askableUntilMs) {
+      return json({ error: "qa_expired" }, 409, origin);
     }
     // Ground across BOTH corpora: deck slides and reference documents share one table and one
     // vector space, so a query WITHOUT slideOrdinal retrieves over everything. Sending
@@ -230,7 +281,9 @@ export async function qaDefenseRoutes(
       return json({ error: "qa_exchange_not_recorded" }, 503, origin);
     }
     await qaDefense.persist?.();
-    return json(QaDefenseOutcomeSchema.parse(outcome), 200, origin);
+    // The accepted submission carries the typed expiry of the window it was accepted under,
+    // so the cockpit can arm its recheck even when this ask landed seconds before the end.
+    return json(QaAskResultSchema.parse({ ...outcome, askableUntilMs }), 200, origin);
   }
 
   return null;

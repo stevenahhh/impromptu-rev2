@@ -76,6 +76,7 @@ function baseClient(overrides: Partial<ConsoleDeckUploadClient> = {}): ConsoleDe
         presentationSessionEpoch: "pse_1",
         deckVersion: "deck_done",
         status: "ENDED",
+        qaWindow: { status: "LIVE", askableUntilMs: Date.now() + 300_000 },
       };
     },
     submitQaDefenseQuestion() {
@@ -232,6 +233,7 @@ describe("spoken questions in the Q&A defense panel", () => {
             ],
             latencyMs: 10,
             completedAtMs: 100,
+            askableUntilMs: Date.now() + 300_000,
           });
         },
       }),
@@ -303,6 +305,7 @@ describe("spoken questions in the Q&A defense panel", () => {
           ],
           latencyMs: 10,
           completedAtMs: 100,
+          askableUntilMs: Date.now() + 300_000,
         };
       },
     });
@@ -353,6 +356,7 @@ describe("spoken questions in the Q&A defense panel", () => {
             ],
             latencyMs: 10,
             completedAtMs: 100,
+            askableUntilMs: Date.now() + 300_000,
           };
         },
       }),
@@ -390,6 +394,7 @@ describe("spoken questions in the Q&A defense panel", () => {
             ],
             latencyMs: 10,
             completedAtMs: 100,
+            askableUntilMs: Date.now() + 300_000,
           };
         },
       }),
@@ -446,6 +451,7 @@ describe("spoken questions in the Q&A defense panel", () => {
             ],
             latencyMs: 5,
             completedAtMs: 50,
+            askableUntilMs: Date.now() + 300_000,
           };
         },
       }),

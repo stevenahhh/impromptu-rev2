@@ -157,6 +157,8 @@
   "qaAbstainedTerminal": "올린 자료에서 이 질문에 답할 내용을 찾지 못했습니다.",
   "qaRetry": "다시 시도",
   "qaFailed": "요청을 처리하지 못했습니다. 다시 시도해 주세요.",
+  "qaWindowExpired": "이 세션의 질문 가능 시간이 지나 더 이상 질문할 수 없습니다.",
+  "qaWindowRecheckFailed": "질문 가능 시간이 아직 열려 있는지 확인하지 못했습니다.",
   "reportQaTitle": "질의응답",
   "reportQaEmpty": "기록된 청중 질문이 없습니다.",
   "reportQaUnavailable": "질의응답 기록을 표시하지 못했습니다.",
