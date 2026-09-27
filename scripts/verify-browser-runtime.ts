@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { createServer as createHttpServer, type Server } from "node:http";
 import { createServer as createNetServer } from "node:net";
 import { extname, join, resolve } from "node:path";
@@ -43,6 +43,7 @@ const consolePort = await availablePort();
 const consoleBackendPort = await availablePort();
 const consoleOrigin = `http://127.0.0.1:${consolePort}`;
 const consoleDistDir = `.next-browser-runtime-${process.pid}`;
+const consoleTsconfig = `.tsconfig-browser-runtime-${process.pid}.json`;
 const devPorts = [await availablePort(), await availablePort()] as const;
 const lifecyclePorts = [await availablePort(), await availablePort()] as const;
 let runtimeRoot: string;
@@ -336,9 +337,11 @@ function startConsoleFixtureBackend(): Promise<Server> {
 // (Vite build, preview origin, service-worker lifecycle). It is built once with `next build`
 // into its gitignored .next output and served with `next start` for the accessibility matrix.
 async function buildConsoleDistribution() {
+  copyFileSync("apps/console/tsconfig.json", join("apps/console", consoleTsconfig));
   await runCommand(["bun", "run", "build"], "apps/console", {
     ...process.env,
     IMPROMPTU_NEXT_DIST_DIR: consoleDistDir,
+    IMPROMPTU_NEXT_TSCONFIG: consoleTsconfig,
   });
 }
 
@@ -361,6 +364,7 @@ async function startConsoleOrigin(): Promise<ServiceProcess> {
       CONSOLE_PRIVATE_API_ORIGIN: `http://127.0.0.1:${consoleBackendPort}`,
       STAGE_ORIGIN: `http://127.0.0.1:${stagePort}`,
       IMPROMPTU_NEXT_DIST_DIR: consoleDistDir,
+      IMPROMPTU_NEXT_TSCONFIG: consoleTsconfig,
     },
   );
 }
@@ -1485,6 +1489,7 @@ const completedWorkspace = await withBrowserRuntimeWorkspace(
       return workspace;
     } finally {
       rmSync(join("apps/console", consoleDistDir), { recursive: true, force: true });
+      rmSync(join("apps/console", consoleTsconfig), { force: true });
     }
   },
   { retainArtifacts: process.env.BROWSER_RUNTIME_RETAIN_ARTIFACTS === "true" },

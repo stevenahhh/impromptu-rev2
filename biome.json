@@ -9,6 +9,7 @@
       "!**/dist",
       "!**/.next",
       "!**/.next-browser-runtime-*",
+      "!**/.tsconfig-browser-runtime-*.json",
       "!**/.vercel",
       "!docs/*.html",
       "!docs/*.pdf",
