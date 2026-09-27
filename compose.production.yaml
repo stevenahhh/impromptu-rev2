@@ -136,10 +136,12 @@ services:
       EMBEDDING_MODEL_API_KEY: ${EMBEDDING_MODEL_API_KEY:?Set EMBEDDING_MODEL_API_KEY}
       EMBEDDING_MODEL_BASE_URL: ${EMBEDDING_MODEL_BASE_URL:?Set EMBEDDING_MODEL_BASE_URL}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:?Set EMBEDDING_MODEL}
-      RERANK_MODEL: ${RERANK_MODEL:-swe-2-max}
-      LLM_MODEL: ${LLM_MODEL:-swe-2-max}
-      # Verifier shares the Devin SWE-2 chat slot behind CHAT_MODEL_BASE_URL.
-      VERIFIER_MODEL: ${VERIFIER_MODEL:-swe-2-max}
+      RERANK_MODEL: ${RERANK_MODEL:-deepseek-v4.1-flash}
+      RERANK_MODEL_FALLBACK: ${RERANK_MODEL_FALLBACK:-space-bunny-free}
+      LLM_MODEL: ${LLM_MODEL:-deepseek-v4.1-flash}
+      LLM_MODEL_FALLBACK: ${LLM_MODEL_FALLBACK:-space-bunny-free}
+      VERIFIER_MODEL: ${VERIFIER_MODEL:-deepseek-v4.1-flash}
+      VERIFIER_MODEL_FALLBACK: ${VERIFIER_MODEL_FALLBACK:-space-bunny-free}
     healthcheck:
       test: ["CMD", "bun", "-e", "const r=await fetch('http://127.0.0.1:3001/readyz');process.exit(r.ok?0:1)"]
       interval: 10s
