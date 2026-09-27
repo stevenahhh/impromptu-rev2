@@ -38,6 +38,7 @@ const permissionsPolicy = [
 ].join(", ");
 
 const config: NextConfig = {
+  ...(process.env.IMPROMPTU_NEXT_DIST_DIR ? { distDir: process.env.IMPROMPTU_NEXT_DIST_DIR } : {}),
   experimental: {
     optimizePackageImports: ["@impromptu/ui"],
   },

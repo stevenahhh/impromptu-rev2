@@ -6,6 +6,7 @@ coverage/
 .turbo/
 .vite/
 .next/
+.next-browser-runtime-*/
 .vercel/
 .cache/
 playwright-report/

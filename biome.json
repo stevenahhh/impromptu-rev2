@@ -8,6 +8,7 @@
       "!node_modules",
       "!**/dist",
       "!**/.next",
+      "!**/.next-browser-runtime-*",
       "!**/.vercel",
       "!docs/*.html",
       "!docs/*.pdf",

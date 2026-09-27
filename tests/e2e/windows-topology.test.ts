@@ -67,8 +67,10 @@ describe("WP4 Windows topology real-browser E2E", () => {
       expect(modeEvidence.rehearsals).toBe(3);
       expect(modeEvidence.successfulRehearsals).toBe(3);
       expect(modeEvidence.failedRehearsals).toBe(0);
-      expect(modeEvidence.faultRecoveries).toBe(24);
-      expect(modeEvidence.realFaults).toBe(12);
+      // Six faults per rehearsal: four simulated, two real (browser-refresh, projection-drop).
+      // The retired fullscreen faults are absent by design on the slide-only Stage.
+      expect(modeEvidence.faultRecoveries).toBe(18);
+      expect(modeEvidence.realFaults).toBe(6);
       expect(modeEvidence.simulatedFaults).toBe(12);
       expect(modeEvidence.privatePixelCount).toBe(0);
       expect(modeEvidence.maxRecoveryMs).toBeLessThanOrEqual(30_000);
@@ -80,11 +82,9 @@ describe("WP4 Windows topology real-browser E2E", () => {
         "MANUAL_FALLBACK",
         "MANUAL_FALLBACK",
       ]);
-      expect(modeEvidence.manualPlacementFallback).toEqual(
-        mode === "extend"
-          ? ["NOT_REQUIRED", "NOT_REQUIRED", "NOT_REQUIRED"]
-          : ["VERIFIED", "VERIFIED", "VERIFIED"],
-      );
+      // Headless single-screen Chromium always falls back to manual placement for every mode;
+      // TARGET_PLACED requires a physical second screen (F3 venue check).
+      expect(modeEvidence.manualPlacementFallback).toEqual(["VERIFIED", "VERIFIED", "VERIFIED"]);
       expect(modeEvidence.screenshotChecksums.every((value) => /^[a-f0-9]{64}$/.test(value))).toBe(
         true,
       );
