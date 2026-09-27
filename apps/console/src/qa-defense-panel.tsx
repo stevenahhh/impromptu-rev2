@@ -457,8 +457,6 @@ export function QaDefensePanel({
     setDraft(outcome.text);
   };
 
-  const windowOpen = phase === "READY" || phase === "ASKING";
-
   return (
     <Panel className="console-qa" title={text.qaTitle} tone="inset">
       <div className="console-qa__body" data-qa-phase={asking ? "ASKING" : phase}>

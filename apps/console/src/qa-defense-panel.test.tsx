@@ -530,6 +530,7 @@ describe("Q&A defense panel", () => {
                 ],
                 latencyMs: 10,
                 completedAtMs: 100,
+                askableUntilMs: endedLifecycle.qaWindow.askableUntilMs,
               };
             },
           })}
