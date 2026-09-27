@@ -223,8 +223,8 @@ describe("presenter console mid-talk surfaces", () => {
 
     await act(async () => {
       fireEvent.click(within(document.body).getByRole("button", { name: "발표 종료" }));
-      await summaryLanded;
     });
+    await summaryLanded;
     await act(async () => {});
 
     // In-flight: the summary says the results are being compiled; no report body exists yet.

@@ -205,3 +205,80 @@ test("a forbidden report read never exposes a retry or report content", async ()
   expect(document.querySelector("[data-report-retry]")).toBeNull();
   expect(document.querySelector("[data-presentation-report='ready']")).toBeNull();
 });
+
+test("a pending report shows finalizing copy, never a report that was not generated", async () => {
+  const client: ConsoleSessionClient = {
+    ...reportClient(hostReport),
+    async readFinalizedReport() {
+      return { status: "PENDING" };
+    },
+  };
+  const routes = createElement(
+    Routes,
+    null,
+    createElement(Route, {
+      path: "/reports/:presentationSessionId",
+      element: createElement(PresentationReportPage),
+    }),
+  );
+  await act(async () => {
+    render(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ["/reports/ps_host"] },
+        createElement(AuthProvider, { initialAuthenticated: true, client, children: routes }),
+      ),
+    );
+  });
+  await act(async () => {});
+
+  const status = document.querySelector("[data-report-status='PENDING']");
+  expect(status).toBeTruthy();
+  // The artifact rule: no report card, no slide rows, none of the generated report's fields.
+  expect(document.querySelector("[data-presentation-report]")).toBeNull();
+  expect(document.querySelectorAll("[data-report-slide-visit]")).toHaveLength(0);
+  expect(document.body.textContent).not.toContain(hostReport.speech.derivedSummary);
+});
+
+test("a forged navigation state for another session is never shown as this report", async () => {
+  // The end action navigates with the generated report in router state; a state object that
+  // parses but belongs to another session must not render here - the page re-reads instead.
+  const client: ConsoleSessionClient = {
+    ...reportClient(hostReport),
+    async readFinalizedReport() {
+      return { status: "PENDING" };
+    },
+  };
+  const foreignReport: SessionReportView = {
+    ...hostReport,
+    presentationSessionId: "ps_other",
+    speech: {
+      ...hostReport.speech,
+      derivedSummary: "FORGED_SUMMARY_SENTINEL",
+    },
+  };
+  const routes = createElement(
+    Routes,
+    null,
+    createElement(Route, {
+      path: "/reports/:presentationSessionId",
+      element: createElement(PresentationReportPage),
+    }),
+  );
+  await act(async () => {
+    render(
+      createElement(
+        MemoryRouter,
+        {
+          initialEntries: [{ pathname: "/reports/ps_host", state: { report: foreignReport } }],
+        },
+        createElement(AuthProvider, { initialAuthenticated: true, client, children: routes }),
+      ),
+    );
+  });
+  await act(async () => {});
+
+  expect(document.querySelector("[data-presentation-report]")).toBeNull();
+  expect(document.body.textContent).not.toContain("FORGED_SUMMARY_SENTINEL");
+  expect(document.querySelector("[data-report-status='PENDING']")).toBeTruthy();
+});

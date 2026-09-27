@@ -68,7 +68,7 @@
   "endPresentation": "End presentation",
   "endingPresentation": "Finishing up the presentation.",
   "reportFinalizing": "Ending the presentation and compiling its results.",
-  "reportFinalizeFailed": "The presentation results could not be compiled.",
+  "reportFinalizeFailed": "The presentation results could not be compiled. Press 'End presentation' again to retry.",
   "reportTitle": "Presentation results",
   "reportLoading": "Loading the completed results.",
   "reportPending": "The presentation results are being compiled.",

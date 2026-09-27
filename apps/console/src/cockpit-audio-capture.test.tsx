@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { registerDom } from "@impromptu/test-harness";
 
 registerDom();
@@ -64,14 +64,14 @@ class FakeMediaRecorder extends EventTarget {
 
 globalThis.EventSource = FakeEventSource as unknown as typeof EventSource;
 globalThis.MediaRecorder = FakeMediaRecorder as unknown as typeof MediaRecorder;
-const realFetch = globalThis.fetch;
+// No manual restore in afterAll: GlobalRegistrator.unregister() already puts back the
+// fetch that existed before this file registered happy-dom. Writing realFetch back AFTER
+// unregister would instead resurrect happy-dom's closed-window fetch and poison every
+// suite scheduled behind this one (observed: private-api-proxy failing with a dead fetch).
 globalThis.fetch = (async () =>
   new Response(JSON.stringify({ expiresAtMs: Date.now() + 3_600_000 }), {
     status: 201,
   })) as unknown as typeof fetch;
-afterAll(() => {
-  globalThis.fetch = realFetch;
-});
 
 const stubClient = {} as ConsoleSessionClient;
 

@@ -9,7 +9,11 @@ const { MemoryRouter } = await import("react-router-dom");
 const { AuthProvider, ConsoleRoutes } = await import("./App");
 const { STAGE_ORIGIN } = await import("./stage-origin");
 
-import type { ActivePresentationView, ConsoleSessionClient } from "./session-client";
+import type {
+  ActivePresentationView,
+  ConsoleSessionClient,
+  SessionReportView,
+} from "./session-client";
 import { PlaybackCommandRejectedError } from "./session-client";
 
 afterEach(cleanup);
@@ -201,4 +205,135 @@ test("renders a slide failure in the problem state with its own announced region
     (element) => element.textContent?.includes("슬라이드 변경에 실패했습니다."),
   );
   expect(announcer).toBeDefined();
+});
+
+// The end-presentation summary is the cockpit's status line while 발표 종료 runs: it opens as
+// in-flight work, and resolves only to the outcome that actually happened.
+const generatedReport: SessionReportView = {
+  reportVersion: 1,
+  presentationSessionId: "ps_active",
+  ownerAccountId: "account_preview",
+  finalizedAtMs: 10_000,
+  totalDurationMs: 1_000,
+  slideVisits: [
+    {
+      sequence: 1,
+      publicSlideKey: "slide_one",
+      occurrenceSequence: 1,
+      enteredOffsetMs: 0,
+      leftOffsetMs: 1_000,
+      dwellMs: 1_000,
+      revisit: false,
+    },
+  ],
+  speech: {
+    derivedSummary: "1개 최종 발화에서 2개 단어를 집계했습니다.",
+    wordCount: 2,
+    speakingDurationMs: 400,
+    timingAggregate: { finalCount: 1, measuredFinalCount: 1 },
+    coachingAggregate: {
+      cueCount: 0,
+      latestCurrentWordsPerMinute: null,
+      latestPreviousWordsPerMinute: null,
+    },
+  },
+  preparedEvidence: { label: "준비된 근거", items: [] },
+};
+
+async function startTalkAndEnd(client: ConsoleSessionClient): Promise<void> {
+  renderPlayback(client, "dbe_1");
+  await act(async () => {
+    fireEvent.click(within(document.body).getByRole("button", { name: "발표 시작" }));
+  });
+  await act(async () => {
+    fireEvent.click(within(document.body).getByRole("button", { name: "발표 종료" }));
+  });
+}
+
+test("the end summary opens with the report in flight and lands on the generated report", async () => {
+  let settleEnd: (report: SessionReportView) => void = () => {
+    throw new Error("end promise was not installed");
+  };
+  const endOutcome = new Promise<SessionReportView>((resolve) => {
+    settleEnd = resolve;
+  });
+  let endCalls = 0;
+  const client: ConsoleSessionClient = {
+    ...pairingClient([]),
+    async setSlide() {
+      return { acceptedControlRevision: "cr_1" };
+    },
+    endPresentationAndAwaitReport() {
+      endCalls += 1;
+      return endOutcome;
+    },
+    async readFinalizedReport() {
+      throw new Error("the fallback read must not run while the live signal is pending");
+    },
+  };
+  await startTalkAndEnd(client);
+
+  // While the report is still being generated the summary says so - and shows no report.
+  expect(endCalls).toBe(1);
+  const status = document.querySelector("[data-playback-status]");
+  expect(status?.textContent).toContain("발표를 종료하고 결과를 정리하고 있습니다.");
+  expect(document.querySelector("[data-presentation-report]")).toBeNull();
+
+  await act(async () => {
+    settleEnd(generatedReport);
+    await endOutcome;
+  });
+
+  // Success resolves to the artifact the server actually produced.
+  const report = document.querySelector("[data-presentation-report='ready']");
+  expect(report).toBeTruthy();
+  expect(report?.textContent).toContain(generatedReport.speech.derivedSummary);
+});
+
+test("a failed end stays on the talk with bounded recovery copy, never a fabricated report", async () => {
+  const client: ConsoleSessionClient = {
+    ...pairingClient([]),
+    async setSlide() {
+      return { acceptedControlRevision: "cr_1" };
+    },
+    async endPresentationAndAwaitReport() {
+      throw new Error("Private report stream did not open in time.");
+    },
+    async readFinalizedReport() {
+      throw new Error("the report cannot be read");
+    },
+  };
+  await startTalkAndEnd(client);
+
+  const problem = document.querySelector("[data-playback-status='PROBLEM']");
+  expect(problem?.textContent).toContain("발표 결과를 정리하지 못했습니다.");
+  // Bounded recovery: the summary names the one action that retries the end, and the control
+  // that performs it is live again - no dead panel, no second implicit mutation.
+  expect(problem?.textContent).toContain("발표 종료");
+  const retry = within(document.body).getByRole("button", { name: "발표 종료" });
+  expect(retry.hasAttribute("disabled")).toBe(false);
+  expect(document.querySelector("[data-presentation-report]")).toBeNull();
+  expect(document.querySelector("[data-presentation-state='PRESENTING']")).toBeTruthy();
+});
+
+test("a still-finalizing report lands on its page as pending, not as a report that was never made", async () => {
+  const client: ConsoleSessionClient = {
+    ...pairingClient([]),
+    async setSlide() {
+      return { acceptedControlRevision: "cr_1" };
+    },
+    async endPresentationAndAwaitReport() {
+      // The live signal is bounded; the end itself already took server-side.
+      throw new Error("Finalized report signal did not arrive in time.");
+    },
+    async readFinalizedReport() {
+      return { status: "PENDING" };
+    },
+  };
+  await startTalkAndEnd(client);
+
+  // PENDING is the honest summary of an end that was accepted but has not produced a report yet.
+  expect(document.querySelector("[data-report-status='PENDING']")).toBeTruthy();
+  expect(document.querySelector("[data-presentation-report]")).toBeNull();
+  expect(document.querySelectorAll("[data-report-slide-visit]")).toHaveLength(0);
 });

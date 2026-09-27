@@ -8,6 +8,7 @@ const { MemoryRouter } = await import("react-router-dom");
 
 const { StrictMode } = await import("react");
 const { AuthProvider, ConsoleRoutes } = await import("./App");
+const { STAGE_ORIGIN } = await import("./stage-origin");
 const { CoachingDisplay } = await import("./coaching-display");
 const { messages } = await import("./i18n");
 const { createCoachingState, reduceCoachingState } = await import("@impromptu/state/coaching");
@@ -23,7 +24,6 @@ import {
   SessionReportClientError,
   type SessionReportView,
 } from "./session-client";
-import { STAGE_ORIGIN } from "./stage-origin";
 
 afterEach(cleanup);
 
@@ -537,6 +537,7 @@ describe("Console route boundary", () => {
     expect(returnLinks.length).toBeGreaterThan(0);
     expect(within(document.body).queryByRole("button", { name: "카드 승인" })).toBeNull();
     expect(within(document.body).queryByText("Authoritative snapshot")).toBeNull();
+    expect(within(document.body).queryByRole("button", { name: "승인" })).toBeNull();
   });
 
   test("switches locale from the compact language control", () => {
@@ -1011,10 +1012,31 @@ describe("Console route boundary", () => {
     expect(
       within(document.body).queryByRole("link", { name: "Presentation preparation" }),
     ).toBeNull();
-    expect(within(document.body).queryByRole("alert")).toBeNull();
-    expect(
-      within(document.body).getByRole("heading", { name: "Upload your presentation" }),
-    ).toBeTruthy();
+  });
+
+  test("renders an explicit private navigation landmark", async () => {
+    // The landmark appears on non-workspace routes - on the workspace the presenter is already
+    // there, so the navigation quietly stays out of the way. A stub client keeps the report
+    // route's read from leaving the test process.
+    render(
+      <MemoryRouter initialEntries={["/reports/ps_nav"]}>
+        <AuthProvider
+          initialAuthenticated
+          client={workspaceClient({
+            async readFinalizedReport() {
+              return { status: "PENDING" };
+            },
+          })}
+        >
+          <ConsoleRoutes />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+    await act(async () => {});
+
+    expect(within(document.body).getByRole("navigation", { name: "발표자 화면" })).toBeTruthy();
+    expect(within(document.body).getByRole("link", { name: "발표 준비" })).toBeTruthy();
+    expect(within(document.body).queryByRole("link", { name: "Evidence approval" })).toBeNull();
   });
 
   test("disables co-resident convenience after the public surface observes a private pixel", async () => {
@@ -1340,7 +1362,7 @@ describe("Console route boundary", () => {
     window.removeEventListener("impromptu:approval-load", observeLoad);
   });
 
-  test("uses the active presentation without asking for a session id", async () => {
+  test("the retired live-publication route never sends the active presentation id anywhere", async () => {
     const activePresentation: ActivePresentationView = {
       presentationSessionId: "ps_active",
       presentationSessionEpoch: "pse_1",
@@ -1369,16 +1391,7 @@ describe("Console route boundary", () => {
         // The retired route must never read the candidate snapshot: the route renders the
         // guide-and-return interstitial regardless of the active presentation.
         loadedPresentationId = presentationSessionId;
-        return {
-          authoritativeSnapshotHash: "snapshot-active",
-          presentationSessionId,
-          presentationSessionEpoch: "pse_1",
-          publicationPolicyVersion: "policy_1",
-          publicationAuthorityId: "authority_1",
-          publicCardRevision: "pcr_0",
-          livePublicEnabled: true,
-          candidates: [],
-        };
+        throw new Error("the retired route must not read live candidates");
       },
       async approveLiveCandidate() {
         throw new Error("not used");

@@ -68,7 +68,7 @@
   "endPresentation": "발표 종료",
   "endingPresentation": "발표를 마무리하고 있습니다.",
   "reportFinalizing": "발표를 종료하고 결과를 정리하고 있습니다.",
-  "reportFinalizeFailed": "발표 결과를 정리하지 못했습니다.",
+  "reportFinalizeFailed": "발표 결과를 정리하지 못했습니다. 발표는 아직 진행 중이니 '발표 종료'를 다시 눌러 주세요.",
   "reportTitle": "발표 결과",
   "reportLoading": "완성된 발표 결과를 불러오고 있습니다.",
   "reportPending": "발표 결과를 정리하고 있습니다.",
