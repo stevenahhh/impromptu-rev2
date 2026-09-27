@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { Button } from "@impromptu/ui";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type AudioConsentNoticeView,
   BrowserCaptureController,
   BrowserCaptureError,
   type CaptureGrantView,
 } from "./audio-capture";
+import { useAuth } from "./auth-session";
+import { messages } from "./i18n";
 import { createCaptureGrantRequester, WebmOpusCaptureUploader } from "./webm-opus-capture";
 
 export interface CockpitAudioCaptureProps {
@@ -43,6 +46,7 @@ export function CockpitAudioCapture({
   text,
 }: CockpitAudioCaptureProps) {
   const [state, setState] = useState<CaptureState>("STARTING");
+  const { locale } = useAuth();
   const identity = `${presentationSessionId}:${presentationSessionEpoch}`;
   // A capture grant belongs to the session rather than to one effect run. React re-runs effects
   // on remount, and issuing a second grant retires the first one server-side, which leaves the
@@ -50,10 +54,10 @@ export function CockpitAudioCapture({
   const startedFor = useRef<string | null>(null);
   const controller = useRef<BrowserCaptureController | null>(null);
 
-  useEffect(() => {
-    if (startedFor.current === identity) return;
-    startedFor.current = identity;
-
+  // One start path for both the automatic first attempt and a presenter retry. A retry runs
+  // inside a click handler, which is a user gesture, so the browser may present its microphone
+  // prompt again instead of silently re-refusing.
+  const startCapture = useCallback(() => {
     const uploader = new WebmOpusCaptureUploader({
       csrfToken,
       ...(baseUrl === undefined ? {} : { baseUrl }),
@@ -93,19 +97,33 @@ export function CockpitAudioCapture({
     actorId,
     baseUrl,
     csrfToken,
-    identity,
     notice,
     onServerEvent,
     presentationSessionEpoch,
     presentationSessionId,
   ]);
 
+  useEffect(() => {
+    if (startedFor.current === identity) return;
+    startedFor.current = identity;
+    startCapture();
+  }, [identity, startCapture]);
+
   // Releasing the microphone belongs to leaving the surface, never to a re-run of the effect
   // above, which would revoke a grant the live stream is still using.
   useEffect(() => () => controller.current?.dispose(), []);
 
+  // A refused or dead microphone is the presenter's problem to fix, so it earns the attention
+  // modifier and a quiet retry; neutral progress never asks for a click.
+  const failure = state === "MICROPHONE_DENIED" || state === "UNAVAILABLE";
   return (
-    <p className="console-status-line" aria-live="polite" data-capture-status={state}>
+    <p
+      className={
+        failure ? "console-status-line console-status-line--attention" : "console-status-line"
+      }
+      aria-live="polite"
+      data-capture-status={state}
+    >
       {state === "CAPTURING"
         ? text.capturing
         : state === "MICROPHONE_DENIED"
@@ -113,6 +131,11 @@ export function CockpitAudioCapture({
           : state === "UNAVAILABLE"
             ? text.unavailable
             : ""}
+      {failure ? (
+        <Button type="button" variant="quiet" data-capture-retry onClick={startCapture}>
+          {messages(locale).captureRetry}
+        </Button>
+      ) : null}
     </p>
   );
 }

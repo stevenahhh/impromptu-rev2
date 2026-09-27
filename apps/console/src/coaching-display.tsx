@@ -37,6 +37,24 @@ export function CoachingDisplay({
 }: CoachingDisplayProps) {
   const measurementAvailable = wordTimingCapable && state.measurement.outcome === "AVAILABLE";
 
+  // Before opt-in the surface holds a full panel of space for nothing; it stays one checkbox tall
+  // until the presenter opts in. This only changes how much room the panel takes — never when or
+  // how coaching state itself is gated.
+  if (!state.optedIn) {
+    return (
+      <div className="console-coaching console-coaching--folded" data-coaching-folded="FOLDED">
+        <label className="console-consent-check">
+          <input
+            type="checkbox"
+            checked={state.optedIn}
+            onChange={(event) => onOptInChange(event.currentTarget.checked)}
+          />
+          {text.optIn}
+        </label>
+      </div>
+    );
+  }
+
   return (
     <Panel className="console-coaching" title={text.title} tone="inset">
       <label className="console-consent-check">
