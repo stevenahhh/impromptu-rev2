@@ -138,11 +138,18 @@ describe("Console Next.js private API proxy", () => {
     const response = await proxyPrivateApi(
       request,
       ["display-invitations", "dinvite_1", "pending"],
-      async () => new Response(payload, { headers: { "content-type": "application/json" } }),
+      async () =>
+        new Response(payload, {
+          headers: {
+            "content-type": "application/json",
+            "transfer-encoding": "chunked",
+          },
+        }),
     );
 
     expect(response.status).toBe(200);
     expect(await response.text()).toBe(payload);
+    expect(response.headers.has("transfer-encoding")).toBe(false);
   });
 
   test("does not wait for a private event stream to finish", async () => {

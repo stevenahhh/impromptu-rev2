@@ -28,9 +28,14 @@ export async function proxyPrivateApi(
     contentType?.includes("text/event-stream") || upstream.body === null
       ? upstream.body
       : await upstream.arrayBuffer();
+  const responseHeaders = new Headers(upstream.headers);
+  responseHeaders.delete("transfer-encoding");
+  responseHeaders.delete("content-length");
+  responseHeaders.delete("connection");
+  responseHeaders.delete("content-encoding");
   return new Response(body, {
     status: upstream.status,
     statusText: upstream.statusText,
-    headers: upstream.headers,
+    headers: responseHeaders,
   });
 }
