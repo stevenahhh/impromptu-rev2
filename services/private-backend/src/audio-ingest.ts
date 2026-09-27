@@ -11,6 +11,7 @@ import {
   RouterBackedAudioSttPort,
   type StreamingSttRouterBoundary,
 } from "./audio-capture.ts";
+import { abstain } from "./verifier/recommendation-outcome.ts";
 
 export const AUDIO_CAPTURE_COOKIE_NAME = "__Host-capture";
 export const MAX_AUDIO_FRAME_BYTES = 1_048_576;
@@ -137,6 +138,26 @@ type GrantBinding = {
 
 type PendingTranscription = Readonly<{ grantId: string; identity: AudioCaptureIdentity }>;
 
+/**
+ * Per-presentation bound on recommendation work in flight behind the transcript path. At four
+ * entries the lane holds roughly twenty seconds of provider headroom (one running call plus
+ * three queued under the 5,400ms per-run deadline); a deeper backlog reports an overload
+ * abstention immediately instead of queueing without bound.
+ */
+const MAX_RECOMMENDATION_LANE_DEPTH = 4;
+
+type RecommendationJob = {
+  readonly grantId: string;
+  cancelled: boolean;
+  run: () => Promise<void>;
+};
+
+type RecommendationLane = {
+  readonly queue: RecommendationJob[];
+  running: RecommendationJob | undefined;
+  tail: Promise<void>;
+};
+
 const encoder = new TextEncoder();
 
 class EventForwardingAudioSttPort {
@@ -145,7 +166,7 @@ class EventForwardingAudioSttPort {
   constructor(
     private readonly router: StreamingSttRouterBoundary,
     private readonly contextFor: AudioIngestServiceOptions["contextFor"],
-    private readonly publishTranscript: (grantId: string, event: SttStreamEvent) => Promise<void>,
+    private readonly publishTranscript: (grantId: string, event: SttStreamEvent) => void,
     private readonly adapterId?: string,
   ) {}
 
@@ -182,9 +203,8 @@ class EventForwardingAudioSttPort {
         yield item;
         continue;
       }
-      const processing = this.publishTranscript(grantId, SttStreamEventSchema.parse(item.event));
+      this.publishTranscript(grantId, SttStreamEventSchema.parse(item.event));
       yield item;
-      await processing;
     }
   }
 }
@@ -194,6 +214,7 @@ class DefaultAudioIngestService implements AudioIngestService {
   readonly #port: EventForwardingAudioSttPort;
   readonly #bindings = new Map<string, GrantBinding>();
   readonly #recommendationKeys = new Set<string>();
+  readonly #recommendationLanes = new Map<string, RecommendationLane>();
   readonly #recommendations: AudioIngestServiceOptions["recommendations"];
   readonly #coachingPreviewEnabledFor: NonNullable<
     AudioIngestServiceOptions["coachingPreviewEnabledFor"]
@@ -291,6 +312,7 @@ class DefaultAudioIngestService implements AudioIngestService {
       },
       cancel: () => {
         binding.eventController = undefined;
+        this.#cancelRecommendations(grantId);
         if (binding.state === "STARTED" || binding.state === "STOPPING") {
           this.#coordinator.cancelStream(grantId, nowMs);
           binding.state = "CONSUMED";
@@ -316,7 +338,15 @@ class DefaultAudioIngestService implements AudioIngestService {
     binding.state = "STARTED";
     this.#port.bindNext(grantId, binding.identity);
     const terminal = this.#coordinator.startCapture(grantId, binding.identity, nowMs);
-    void terminal.then((result) => {
+    void terminal.then(async (result) => {
+      // A natural end (the provider finished or failed while the grant was still live) drains
+      // the recommendation lane first so every accepted FINAL still publishes its ordered
+      // outcome before the terminal. Abort paths - stop, revoke, session end, disconnect -
+      // already changed the binding state and cancelled the lane, so their terminals publish
+      // without waiting on provider work.
+      if (binding.state === "STARTED") {
+        await this.#drainRecommendations(binding.identity.presentationSessionId);
+      }
       if (result.outcome === "GRANT_EXPIRED") binding.state = "EXPIRED";
       else if (
         result.outcome === "GRANT_REVOKED" ||
@@ -357,7 +387,10 @@ class DefaultAudioIngestService implements AudioIngestService {
       return { outcome: "REJECTED", reason: "STREAM_NOT_ACTIVE" } as const;
     }
     const binding = this.#bindings.get(grantId);
-    if (binding !== undefined) binding.state = "STOPPING";
+    if (binding !== undefined) {
+      binding.state = "STOPPING";
+      this.#cancelRecommendations(grantId);
+    }
     return { outcome: "STOPPED" } as const;
   }
 
@@ -427,7 +460,7 @@ class DefaultAudioIngestService implements AudioIngestService {
     return { outcome: "ALLOWED" };
   }
 
-  async #acceptTranscript(grantId: string, input: SttStreamEvent): Promise<void> {
+  #acceptTranscript(grantId: string, input: SttStreamEvent): void {
     const binding = this.#bindings.get(grantId);
     if (binding === undefined || (binding.state !== "STARTED" && binding.state !== "STOPPING")) {
       return;
@@ -448,32 +481,134 @@ class DefaultAudioIngestService implements AudioIngestService {
     }
 
     this.#onFinal?.(binding.identity, event);
+    // The FINAL transcript forwards synchronously: recommendation work must never hold the
+    // router iteration, or a slow provider would delay every transcript that follows it.
+    this.#publish(grantId, { kind: "TRANSCRIPT", event });
     const recommendations = this.#recommendations;
-    if (recommendations === undefined) {
-      this.#publish(grantId, { kind: "TRANSCRIPT", event });
-      return;
-    }
-    const context = await recommendations.resolveContext(binding.identity);
-    const currentState = this.#bindings.get(grantId)?.state;
-    if (context === null || (currentState !== "STARTED" && currentState !== "STOPPING")) return;
+    if (recommendations === undefined || binding.state !== "STARTED") return;
     const key = `${binding.identity.presentationSessionId}\u0000${event.sessionGeneration}\u0000${event.finalSegmentId}`;
     if (this.#recommendationKeys.has(key)) return;
     this.#recommendationKeys.add(key);
+    this.#dispatchRecommendation(grantId, binding.identity, binding.accountSessionId, event);
+  }
 
-    this.#publish(grantId, { kind: "TRANSCRIPT", event });
-    const recommendation = await recommendations.recommend(binding.accountSessionId, {
-      query: event.transcript.text,
-      deckVersion: context.deckVersion,
-      manifestHash: context.manifestHash,
-      maxResults: 3,
-    });
-    this.#publish(grantId, {
-      kind: "RECOMMENDATION",
-      presentationSessionId: binding.identity.presentationSessionId,
-      sessionGeneration: event.sessionGeneration,
-      finalSegmentId: event.finalSegmentId,
-      recommendation,
-    });
+  /**
+   * Queues one FINAL's recommendation on the presentation's serial lane. Dispatch order
+   * decides report order: jobs run one at a time and publish their outcomes in the order the
+   * FINALs arrived, so a slow provider can never reorder or starve a later segment's entry.
+   */
+  #dispatchRecommendation(
+    grantId: string,
+    identity: AudioCaptureIdentity,
+    accountSessionId: string,
+    event: Extract<SttStreamEvent, { kind: "FINAL" }>,
+  ): void {
+    const recommendations = this.#recommendations;
+    if (recommendations === undefined) return;
+    const presentationSessionId = identity.presentationSessionId;
+    const lane = this.#recommendationLanes.get(presentationSessionId) ?? {
+      queue: [],
+      running: undefined,
+      tail: Promise.resolve(),
+    };
+    this.#recommendationLanes.set(presentationSessionId, lane);
+
+    if (lane.queue.length + (lane.running === undefined ? 0 : 1) >= MAX_RECOMMENDATION_LANE_DEPTH) {
+      this.#publish(grantId, {
+        kind: "RECOMMENDATION",
+        presentationSessionId,
+        sessionGeneration: event.sessionGeneration,
+        finalSegmentId: event.finalSegmentId,
+        recommendation: abstain("BUDGET_EXCEEDED", Date.now(), Date.now()),
+      });
+      return;
+    }
+
+    const job: RecommendationJob = {
+      grantId,
+      cancelled: false,
+      run: async () => {
+        if (job.cancelled) return;
+        // Context resolves at run time so a queued job reads the presentation's current deck,
+        // never a stale snapshot taken at dispatch.
+        const context = await Promise.resolve(recommendations.resolveContext(identity)).catch(
+          () => null,
+        );
+        if (context === null || job.cancelled) return;
+        const state = this.#bindings.get(grantId)?.state;
+        if (state !== "STARTED") return;
+        const startedAtMs = Date.now();
+        // A provider rejection degrades to a typed abstention on the private stream instead of
+        // faulting the capture itself.
+        const recommendation = await recommendations
+          .recommend(accountSessionId, {
+            query: event.transcript.text,
+            deckVersion: context.deckVersion,
+            manifestHash: context.manifestHash,
+            maxResults: 3,
+          })
+          .catch(() => abstain("MODEL_FAILURE", startedAtMs, Date.now()));
+        // A grant that stopped, ended, or closed meanwhile must not attach a late outcome.
+        if (job.cancelled) return;
+        this.#publish(grantId, {
+          kind: "RECOMMENDATION",
+          presentationSessionId,
+          sessionGeneration: event.sessionGeneration,
+          finalSegmentId: event.finalSegmentId,
+          recommendation,
+        });
+      },
+    };
+
+    lane.queue.push(job);
+    const pump = async (): Promise<void> => {
+      const next = lane.queue.shift();
+      if (next === undefined) {
+        if (
+          lane.running === undefined &&
+          this.#recommendationLanes.get(presentationSessionId) === lane
+        ) {
+          this.#recommendationLanes.delete(presentationSessionId);
+        }
+        return;
+      }
+      lane.running = next;
+      try {
+        // run() already converts provider failures to abstentions; this guard keeps the serial
+        // lane alive if publishing throws while the stream is being torn down.
+        await next.run().catch(() => undefined);
+      } finally {
+        lane.running = undefined;
+        await pump();
+      }
+    };
+    lane.tail = lane.tail.then(pump);
+  }
+
+  #cancelRecommendations(grantId: string): void {
+    const binding = this.#bindings.get(grantId);
+    if (binding === undefined) return;
+    const lane = this.#recommendationLanes.get(binding.identity.presentationSessionId);
+    if (lane === undefined) return;
+    for (const job of lane.queue) {
+      if (job.grantId === grantId) job.cancelled = true;
+    }
+    if (lane.running?.grantId === grantId) lane.running.cancelled = true;
+  }
+
+  /**
+   * Waits until every job dispatched so far has run. `lane.tail` grows as jobs settle, so this
+   * must re-read the chain until the lane is empty rather than snapshot it once.
+   */
+  async #drainRecommendations(presentationSessionId: string): Promise<void> {
+    let lane = this.#recommendationLanes.get(presentationSessionId);
+    while (lane !== undefined) {
+      await lane.tail;
+      lane =
+        lane.queue.length > 0 || lane.running !== undefined
+          ? lane
+          : this.#recommendationLanes.get(presentationSessionId);
+    }
   }
 
   #publish(grantId: string, event: AudioIngestEvent): void {
@@ -484,6 +619,7 @@ class DefaultAudioIngestService implements AudioIngestService {
     if (event.kind === "TERMINAL") {
       binding.eventController = undefined;
       controller.close();
+      this.#cancelRecommendations(grantId);
     }
   }
 }

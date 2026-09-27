@@ -5,7 +5,7 @@ import type { AudioCaptureConsent } from "@impromptu/contracts/private";
 import { PreparedEvidenceProjectionGateway } from "@impromptu/projection-gateway";
 import { createCoachingState, reduceCoachingState } from "@impromptu/state/coaching";
 import type { StreamingSttRouterBoundary } from "../src/audio-capture.ts";
-import { createAudioIngestService } from "../src/audio-ingest.ts";
+import { type AudioIngestServiceOptions, createAudioIngestService } from "../src/audio-ingest.ts";
 import { parsePrivateBackendConfig } from "../src/config.ts";
 import { createPrivateBackendHandler, type PrivateBackendHandler } from "../src/http.ts";
 import type { JsonLogger } from "../src/observability.ts";
@@ -165,6 +165,44 @@ class FinalRecommendationRouter implements StreamingSttRouterBoundary {
   }
 }
 
+const TEST_MANIFEST_HASH = createHash("sha256").update("final-forwarding").digest("hex");
+
+function finalEvent(sequence: number, segment: string, text: string) {
+  return {
+    kind: "transcript" as const,
+    event: {
+      sessionGeneration: 3,
+      sequence,
+      segmentId: `segment-${segment}`,
+      kind: "FINAL" as const,
+      finalSegmentId: `final-${segment}`,
+      transcript: { text, language: "ko-KR", durationMs: 120, words: [] },
+    },
+  };
+}
+
+/**
+ * Emits one FINAL per segment once the first audio frame arrives so tests can hold the
+ * recommendation provider on a deferred promise while watching the SSE event order.
+ */
+class ConsecutiveFinalRouter implements StreamingSttRouterBoundary {
+  readonly sentFinals = deferred();
+
+  constructor(private readonly segments: readonly string[]) {}
+
+  async *streamStt(chunks: AsyncIterable<{ sequence: number; audio: Uint8Array }>) {
+    for await (const _chunk of chunks) break;
+    for (const [index, segment] of this.segments.entries()) {
+      yield finalEvent(index, segment, `FINAL_${segment.toUpperCase()}_SENTINEL`);
+    }
+    this.sentFinals.resolve();
+    yield {
+      kind: "complete" as const,
+      result: { ok: false as const, error: { code: "cancelled" } },
+    };
+  }
+}
+
 class BlockedRouter implements StreamingSttRouterBoundary {
   readonly gate = deferred();
   readonly completed = deferred();
@@ -217,6 +255,40 @@ function createSystem(router: StreamingSttRouterBoundary): TestSystem {
       internalAuthToken: "audio-http-test-token",
       now: () => 1_000,
       logger,
+    }),
+    logEvents,
+  };
+}
+
+function createRecommendationSystem(
+  router: StreamingSttRouterBoundary,
+  recommendations: NonNullable<AudioIngestServiceOptions["recommendations"]>,
+): TestSystem {
+  const logEvents: Array<Parameters<JsonLogger["request"]>[0]> = [];
+  const audio = createAudioIngestService({
+    router,
+    contextFor: (identity, signal) => ({ tenantId: identity.accountId, signal }),
+    coachingPreviewEnabledFor: () => true,
+    recommendations,
+    createGrantId: () => "capture_http_1",
+  });
+  return {
+    handler: createPrivateBackendHandler(parsePrivateBackendConfig({ CONSOLE_ORIGIN: origin }), {
+      coordinator: new PreparedEvidenceCoordinator(new PreparedEvidenceProjectionGateway()),
+      identityVerifier: {
+        async verifyCredentials() {
+          return { accountId: "account_http", actorId: "actor_http" };
+        },
+      },
+      audio,
+      internalAuthToken: "audio-http-test-token",
+      now: () => 1_000,
+      logger: {
+        request(event) {
+          logEvents.push(event);
+        },
+        error() {},
+      },
     }),
     logEvents,
   };
@@ -607,6 +679,220 @@ describe("private audio ingest HTTP transport", () => {
       "FINAL_PRIVATE_SENTINEL",
     );
     expect(JSON.stringify(persistedSnapshots)).not.toContain("FINAL_PRIVATE_SENTINEL");
+  });
+
+  test("forwards a consecutive FINAL transcript while a recommendation is still pending", async () => {
+    const router = new ConsecutiveFinalRouter(["a", "b"]);
+    const recommendationGate = deferred();
+    const recommendationCalls: string[] = [];
+    const { handler } = createRecommendationSystem(router, {
+      resolveContext: () => ({
+        deckVersion: "deck_head_of_line",
+        manifestHash: TEST_MANIFEST_HASH,
+      }),
+      async recommend(_accountSessionId, input) {
+        recommendationCalls.push((input as { query: string }).query);
+        await recommendationGate.promise;
+        return {
+          outcome: "ABSTAIN" as const,
+          reason: "INSUFFICIENT_EVIDENCE" as const,
+          completedAtMs: 1_001,
+          latencyMs: 1,
+        };
+      },
+    });
+    const account = await signIn(handler);
+    const session = await issueGrant(handler, account);
+    const eventsResponse = await handler(browserRequest("/v1/audio/events", session));
+    const reader = eventsResponse.body?.getReader();
+    if (reader === undefined) throw new Error("audio event stream body missing");
+    expect(await readSseEvent(reader)).toEqual({ kind: "READY" });
+    expect((await audioMutation(handler, session, "/v1/audio/stream/start")).status).toBe(202);
+    expect(
+      (
+        await audioMutation(handler, session, "/v1/audio/frames", {
+          headers: {
+            "content-type": "application/octet-stream",
+            "x-audio-sequence": "0",
+            "x-audio-duration-ms": "100",
+          },
+          body: new Uint8Array([1]),
+        })
+      ).status,
+    ).toBe(202);
+
+    await bounded(router.sentFinals.promise, "router did not emit both FINAL events");
+    // Both transcripts must reach SSE before the held recommendation resolves; awaiting the
+    // first recommendation inside transcript forwarding is the head-of-line block under test.
+    expect(await readSseEvent(reader)).toMatchObject({
+      kind: "TRANSCRIPT",
+      event: { kind: "FINAL", finalSegmentId: "final-a" },
+    });
+    expect(await readSseEvent(reader)).toMatchObject({
+      kind: "TRANSCRIPT",
+      event: { kind: "FINAL", finalSegmentId: "final-b" },
+    });
+    expect(recommendationCalls).toEqual(["FINAL_A_SENTINEL"]);
+    recommendationGate.resolve();
+    expect(await readSseEvent(reader)).toMatchObject({
+      kind: "RECOMMENDATION",
+      finalSegmentId: "final-a",
+      recommendation: { outcome: "ABSTAIN", reason: "INSUFFICIENT_EVIDENCE" },
+    });
+    expect(await readSseEvent(reader)).toMatchObject({
+      kind: "RECOMMENDATION",
+      finalSegmentId: "final-b",
+      recommendation: { outcome: "ABSTAIN" },
+    });
+    expect(await readSseEvent(reader)).toEqual({ kind: "TERMINAL", outcome: "STREAM_CANCELLED" });
+    expect(recommendationCalls).toEqual(["FINAL_A_SENTINEL", "FINAL_B_SENTINEL"]);
+  });
+
+  test("bounds the recommendation lane and reports provider failure as a typed abstention", async () => {
+    const router = new ConsecutiveFinalRouter(["a", "b", "c", "d", "e"]);
+    const recommendationGate = deferred();
+    const recommendationCalls: string[] = [];
+    const { handler } = createRecommendationSystem(router, {
+      resolveContext: () => ({
+        deckVersion: "deck_head_of_line",
+        manifestHash: TEST_MANIFEST_HASH,
+      }),
+      async recommend(_accountSessionId, input) {
+        const query = (input as { query: string }).query;
+        recommendationCalls.push(query);
+        await recommendationGate.promise;
+        if (query === "FINAL_C_SENTINEL") throw new Error("provider exploded");
+        return {
+          outcome: "ABSTAIN" as const,
+          reason: "INSUFFICIENT_EVIDENCE" as const,
+          completedAtMs: 1_001,
+          latencyMs: 1,
+        };
+      },
+    });
+    const account = await signIn(handler);
+    const session = await issueGrant(handler, account);
+    const eventsResponse = await handler(browserRequest("/v1/audio/events", session));
+    const reader = eventsResponse.body?.getReader();
+    if (reader === undefined) throw new Error("audio event stream body missing");
+    expect(await readSseEvent(reader)).toEqual({ kind: "READY" });
+    expect((await audioMutation(handler, session, "/v1/audio/stream/start")).status).toBe(202);
+    expect(
+      (
+        await audioMutation(handler, session, "/v1/audio/frames", {
+          headers: {
+            "content-type": "application/octet-stream",
+            "x-audio-sequence": "0",
+            "x-audio-duration-ms": "100",
+          },
+          body: new Uint8Array([1]),
+        })
+      ).status,
+    ).toBe(202);
+
+    for (const segment of ["a", "b", "c", "d", "e"]) {
+      expect(await readSseEvent(reader)).toMatchObject({
+        kind: "TRANSCRIPT",
+        event: { kind: "FINAL", finalSegmentId: `final-${segment}` },
+      });
+    }
+    // The lane holds four dispatches; the fifth FINAL earns a typed abstention immediately
+    // instead of queueing without bound.
+    expect(await readSseEvent(reader)).toMatchObject({
+      kind: "RECOMMENDATION",
+      finalSegmentId: "final-e",
+      recommendation: { outcome: "ABSTAIN", reason: "BUDGET_EXCEEDED" },
+    });
+    recommendationGate.resolve();
+    const outcomes: Record<string, unknown>[] = [];
+    for (let index = 0; index < 4; index += 1) {
+      outcomes.push(await readSseEvent(reader));
+    }
+    expect(outcomes.map((outcome) => outcome.finalSegmentId)).toEqual([
+      "final-a",
+      "final-b",
+      "final-c",
+      "final-d",
+    ]);
+    for (const outcome of outcomes) {
+      expect(outcome).toMatchObject({
+        kind: "RECOMMENDATION",
+        recommendation: { outcome: "ABSTAIN" },
+      });
+    }
+    // The provider rejection on the third FINAL degrades to a typed outcome; the stream and
+    // the remaining queued recommendations continue in order.
+    expect(outcomes[2]).toMatchObject({
+      recommendation: { outcome: "ABSTAIN", reason: "MODEL_FAILURE" },
+    });
+    expect(await readSseEvent(reader)).toEqual({ kind: "TERMINAL", outcome: "STREAM_CANCELLED" });
+    expect(recommendationCalls).toEqual([
+      "FINAL_A_SENTINEL",
+      "FINAL_B_SENTINEL",
+      "FINAL_C_SENTINEL",
+      "FINAL_D_SENTINEL",
+    ]);
+  });
+
+  test("revoking the grant cancels queued and running recommendations without leaking results", async () => {
+    const router = new ConsecutiveFinalRouter(["first", "second"]);
+    const recommendationGate = deferred();
+    const runningSettled = deferred();
+    const recommendationCalls: string[] = [];
+    const { handler } = createRecommendationSystem(router, {
+      resolveContext: () => ({
+        deckVersion: "deck_head_of_line",
+        manifestHash: TEST_MANIFEST_HASH,
+      }),
+      async recommend(_accountSessionId, input) {
+        recommendationCalls.push((input as { query: string }).query);
+        await recommendationGate.promise;
+        runningSettled.resolve();
+        return {
+          outcome: "ABSTAIN" as const,
+          reason: "INSUFFICIENT_EVIDENCE" as const,
+          completedAtMs: 1_001,
+          latencyMs: 1,
+        };
+      },
+    });
+    const account = await signIn(handler);
+    const session = await issueGrant(handler, account);
+    const eventsResponse = await handler(browserRequest("/v1/audio/events", session));
+    const reader = eventsResponse.body?.getReader();
+    if (reader === undefined) throw new Error("audio event stream body missing");
+    expect(await readSseEvent(reader)).toEqual({ kind: "READY" });
+    expect((await audioMutation(handler, session, "/v1/audio/stream/start")).status).toBe(202);
+    expect(
+      (
+        await audioMutation(handler, session, "/v1/audio/frames", {
+          headers: {
+            "content-type": "application/octet-stream",
+            "x-audio-sequence": "0",
+            "x-audio-duration-ms": "100",
+          },
+          body: new Uint8Array([1]),
+        })
+      ).status,
+    ).toBe(202);
+
+    for (const segment of ["first", "second"]) {
+      expect(await readSseEvent(reader)).toMatchObject({
+        kind: "TRANSCRIPT",
+        event: { kind: "FINAL", finalSegmentId: `final-${segment}` },
+      });
+    }
+    // First recommendation is running on the held provider, second is queued on the lane.
+    const revoke = await handler(browserRequest("/v1/audio/grant", session, { method: "DELETE" }));
+    expect(revoke.status).toBe(200);
+    expect(await readSseEvent(reader)).toEqual({ kind: "TERMINAL", outcome: "GRANT_REVOKED" });
+    recommendationGate.resolve();
+    await bounded(runningSettled.promise, "running recommendation did not settle");
+    // The cancelled queued job never reaches the provider, and the running job's late outcome
+    // is discarded: no RECOMMENDATION event may arrive after the terminal.
+    expect(recommendationCalls).toEqual(["FINAL_FIRST_SENTINEL"]);
+    const tail = await bounded(reader.read(), "event stream did not close after revocation");
+    expect(tail.done).toBe(true);
   });
 
   test("requires the account actor and exact mutation CSRF before issuing a capture grant", async () => {
