@@ -1,0 +1,14 @@
+HTTP/1.1 201 Created
+set-cookie: __Host-account=account_session_709ccd62a4f029421363c8176450ff7fe49148e2fe266480; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=28799
+Access-Control-Allow-Origin: https://tribunal-contrast-minerals-managed.trycloudflare.com
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, DELETE
+Access-Control-Allow-Headers: content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 8c874a8e-73c7-4dd7-8a29-0411c5111b3c
+Date: Sun, 27 Sep 2026 13:46:35 GMT
+Content-Length: 188
+
+{"account":{"accountId":"account_production","actorId":"actor_3b26703470291b072648fe1dd774b334"},"expiresAtMs":1790545596608,"csrfToken":"49434f40700c86e4fc96701bd52cfaa98feda7a59e3293c6"}

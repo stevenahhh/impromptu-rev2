@@ -1,0 +1,31 @@
+# stack state during probe (docker ps, 2026-09-27T17:4xZ)
+NAMES                                          IMAGE                                 STATUS
+impromptu-ulw-g003-demo-private-backend-1      impromptu/private-backend:latest      Up 9 minutes (healthy)
+impromptu-ulw-g003-demo-projection-gateway-1   impromptu/projection-gateway:latest   Up 10 minutes (healthy)
+impromptu-ulw-g003-demo-embedding-tls-1        caddy:2-alpine                        Up 4 hours (healthy)
+impromptu-ulw-g003-demo-ollama-1               ollama/ollama:0.13.2                  Up 4 hours (healthy)
+impromptu-ulw-g003-demo-console-1              impromptu/console:latest              Up 5 hours (healthy)
+impromptu-ulw-g003-demo-stage-1                impromptu/stage:latest                Up 5 hours (healthy)
+impromptu-ulw-g003-demo-postgres-1             postgres:17.6-alpine                  Up 5 hours (healthy)
+
+# image identity (running private-backend at probe time)
+image_created=2026-09-28T02:34:00.052289388+09:00 id=sha256:02ac578152faf118c5f5e8ce9be961ce9335d949e8feb5bc3cc7d81c26a3c8d4
+
+# in-container vs repo HEAD file hashes (sha256)
+container:
+f3fad21177ef417a53db8d8a5a23fdcb5e57087dbaf3b83c01fa92ca43497086  /app/services/private-backend/src/audio-ingest.ts
+226c8839489608d982cdd01aff8106155434191d418c845476030c623ac247ae  /app/services/private-backend/src/report/http.ts
+9694a338502d5f025e722b7e3f4c22c67c798fd38f30c65605bbdedd97cc06e6  /app/services/private-backend/src/qa/spoken-question-stt.ts
+6382587c22dc79ab5266b0c4173185b2d31eac3bdc7a978aeacb2deb47490962  /app/services/private-backend/src/http/routes/audio.ts
+repo HEAD e407007:
+f3fad21177ef417a53db8d8a5a23fdcb5e57087dbaf3b83c01fa92ca43497086  services/private-backend/src/audio-ingest.ts
+226c8839489608d982cdd01aff8106155434191d418c845476030c623ac247ae  services/private-backend/src/report/http.ts
+9694a338502d5f025e722b7e3f4c22c67c798fd38f30c65605bbdedd97cc06e6  services/private-backend/src/qa/spoken-question-stt.ts
+6382587c22dc79ab5266b0c4173185b2d31eac3bdc7a978aeacb2deb47490962  services/private-backend/src/http/routes/audio.ts
+
+# note: first probe pass ran against the PREVIOUS container build (image pre-5a7a11e/pre-280c649);
+# stack was recreated mid-session by another worker; second+third passes ran on HEAD.
+#
+# Earlier pass-A container (pre-fix): audio-ingest.ts was d75de50f691ee411842c48af5f9953e5f1fbe1a4290424a9762bef897e71ab37
+# and report/http.ts was de510669dc1bb8669981b9dc6f564fda6f7d2ac2eb6ca84e629d688d24883ba3 (diffs in baseline-summary.md).
+# Pass-A image was impromptu/private-backend:latest id sha256:8d8421199ef3 created 2026-09-27T15:21:47Z.

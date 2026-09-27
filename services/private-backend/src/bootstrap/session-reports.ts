@@ -76,6 +76,22 @@ export function createSessionReportRead(options: {
           preparedEvidence: preparedEvidenceFor(principal.presentationSessionId),
         };
       },
+      // Recovery only fires for a session whose lifecycle actually ended: resolving a context
+      // for a live talk would let a report read finalize the report mid-presentation. The end
+      // offset derives from the recorded endedAtMs so a late recovery keeps the talk's real
+      // duration instead of stretching it to the retry time.
+      async resolveEnded(principal) {
+        const presentation = store.presentations.get(principal.presentationSessionId);
+        if (presentation === undefined || presentation.lifecycle.status !== "ENDED") {
+          return null;
+        }
+        const endedAtMs = presentation.lifecycle.endedAtMs ?? now();
+        return {
+          endedOffsetMs: Math.max(0, endedAtMs - presentation.lifecycle.createdAtMs),
+          finalizedAtMs: now(),
+          preparedEvidence: preparedEvidenceFor(principal.presentationSessionId),
+        };
+      },
     },
     endLifecycle,
   );

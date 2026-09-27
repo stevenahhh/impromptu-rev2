@@ -550,6 +550,78 @@ describe("concurrent deck corpus preparation", () => {
     ]);
   });
 
+  test("keeps committed waves after a mid-run embedding failure and resumes only the missing chunks", async () => {
+    // A cancelled or timed-out embedding call used to roll back the entire preparation
+    // transaction, so the next recommendation re-embedded the whole deck from zero. On a
+    // serial provider the duplicate bursts queued every later call past its own deadline,
+    // which is exactly the churn the live baseline recorded as `Deck embedding failed:
+    // cancelled` after every upload. Waves now commit independently, so a run that dies
+    // mid-corpus leaves its finished rows durable and the next run embeds only what is
+    // still missing.
+    const root = mkdtempSync(join(tmpdir(), "deck-corpus-resume-"));
+    roots.push(root);
+    const texts = [
+      "첫 번째 슬라이드 본문입니다.",
+      "두 번째 슬라이드 본문입니다.",
+      "세 번째 슬라이드 본문입니다.",
+      "네 번째 슬라이드 본문입니다.",
+      "다섯 번째 슬라이드 본문입니다.",
+    ];
+    const deckHash = "3".repeat(64);
+    const manifestHash = writeArtifact(root, deckHash, texts);
+    const database = fakeSql();
+
+    const embedded: string[] = [];
+    const events: Record<string, unknown>[] = [];
+    let failRemaining = true;
+    const store = new PostgresDeckRetrievalStore({
+      sql: database.sql,
+      artifactRoot: root,
+      access: {
+        async authorize() {
+          return true;
+        },
+      },
+      embedding: {
+        async embed(text) {
+          embedded.push(text);
+          if (failRemaining && embedded.length === texts.length) {
+            throw new Error("Deck embedding failed: cancelled");
+          }
+          return [1, 0];
+        },
+      },
+      logger: {
+        log(event) {
+          events.push(event);
+        },
+      },
+    });
+
+    const principal = principalFor("tenant-resume");
+    const request = RetrievalRequestSchema.parse({
+      query: "본문",
+      deckVersion: `deck_${deckHash}`,
+      manifestHash,
+      maxResults: 3,
+    });
+
+    await expect(store.prepare(principal, request)).rejects.toThrow("cancelled");
+    const durableAfterFailure = database.rows.length;
+    expect(durableAfterFailure).toBeGreaterThan(0);
+    expect(durableAfterFailure).toBeLessThan(texts.length);
+
+    failRemaining = false;
+    embedded.length = 0;
+    await store.prepare(principal, request);
+
+    expect(embedded).toHaveLength(texts.length - durableAfterFailure);
+    expect(database.rows).toHaveLength(texts.length);
+    expect(events.at(-1)).toEqual(
+      expect.objectContaining({ outcome: "INDEXED", reason: "COMPLETED" }),
+    );
+  });
+
   test("embeds a multi-chunk corpus concurrently and keeps row association", async () => {
     // Serial embedding of 44 chunks took ~13.5 seconds on the dev stack - far beyond a single
     // recommendation budget - and stretched the critical section every concurrent recommender

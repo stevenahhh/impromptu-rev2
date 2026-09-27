@@ -24,6 +24,72 @@ FROM private_app.deck_retrieval_chunks \gset
   \quit 1
 \endif
 
+SELECT (count(*) = 0)::integer AS grants_missing_context_is_empty
+FROM private_app.team_question_grants \gset
+\if :grants_missing_context_is_empty
+\else
+  \echo 'team question grants were visible without a tenant or actor context'
+  \quit 1
+\endif
+
+SELECT (count(*) = 0)::integer AS questions_missing_context_is_empty
+FROM private_app.team_questions \gset
+\if :questions_missing_context_is_empty
+\else
+  \echo 'team questions were visible without a tenant context'
+  \quit 1
+\endif
+
+-- The teammate-targeted read exception: under only app.actor_account_id, teammate B sees
+-- exactly its own grant and never teammate C's or another tenant's inbox row.
+BEGIN;
+SET LOCAL app.actor_account_id = 'account_seed_teammate_b';
+SELECT (
+  count(*) = 1
+  AND bool_and(grant_id = 'tqg_' || repeat('0', 32))
+  AND bool_and(teammate_account_id = 'account_seed_teammate_b')
+)::integer AS teammate_scoped_grant
+FROM private_app.team_question_grants \gset
+\if :teammate_scoped_grant
+\else
+  \echo 'teammate-scoped read exposed another account or missed the targeted grant'
+  \quit 1
+\endif
+SELECT (count(*) = 0)::integer AS teammate_no_inbox
+FROM private_app.team_questions \gset
+\if :teammate_no_inbox
+\else
+  \echo 'teammate context leaked inbox question rows'
+  \quit 1
+\endif
+WITH changed AS (
+  UPDATE private_app.team_question_grants
+  SET revoked_at = transaction_timestamp()
+  WHERE grant_id = 'tqg_' || repeat('0', 32)
+  RETURNING 1
+)
+SELECT (count(*) = 0)::integer AS teammate_cannot_revoke FROM changed \gset
+\if :teammate_cannot_revoke
+\else
+  \echo 'a teammate-scoped context revoked a grant'
+  \quit 1
+\endif
+COMMIT;
+
+BEGIN;
+SET LOCAL app.actor_account_id = 'account_seed_teammate_c';
+SELECT (
+  count(*) = 1
+  AND bool_and(grant_id = 'tqg_' || repeat('2', 32))
+)::integer AS teammate_c_scoped
+FROM private_app.team_question_grants \gset
+\if :teammate_c_scoped
+\else
+  \echo 'teammate C did not see exactly its own grant'
+  \quit 1
+\endif
+COMMIT;
+
 BEGIN;
 SET LOCAL app.tenant_id = '10000000-0000-4000-8000-000000000001';
 SELECT (
@@ -104,5 +170,19 @@ WHERE state_key = 'database-test' \gset
   \echo 'private_app could not read the persisted prepared-evidence state'
   \quit 1
 \endif
+
+BEGIN;
+SET LOCAL app.tenant_id = '10000000-0000-4000-8000-000000000001';
+SELECT (
+  count(*) = 1
+  AND bool_and(question = 'seeded tenant-A question')
+)::integer AS tenant_a_inbox
+FROM private_app.team_questions \gset
+\if :tenant_a_inbox
+\else
+  \echo 'tenant A could not read its own seeded question'
+  \quit 1
+\endif
+COMMIT;
 
 SELECT 'private tenant RLS and prepared-evidence state surface passed' AS result;

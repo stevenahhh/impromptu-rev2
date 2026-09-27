@@ -1,0 +1,24 @@
+# db snapshot (docker exec postgres psql, impromptu_private, redacted: no secrets present)
+$ psql -U impromptu_bootstrap -d impromptu_private
+              session_id              |              owner_subject               | presentation_session_epoch | ended 
+--------------------------------------+------------------------------------------+----------------------------+-------
+ c107de6d-80f1-af11-1e4d-b152ab8e6a66 | account_production                       |                          1 | f
+ 57565c7b-7549-7505-f16a-e2f1b32aa5aa | account_production                       |                          1 | f
+ 65e46f12-5869-e185-7a01-7fe7c6f9af3f | account_production                       |                          1 | f
+ 5ba30dbb-2288-8939-6be4-058d4b362470 | account_bdb631893ebcb27d554e43cd419f7044 |                          1 | f
+(4 rows)
+
+              session_id              | revision |               speech_summary               | word_count | speaking_duration_ms | finalized | report_version |                                                                       coaching_aggregate                                                                       
+--------------------------------------+----------+--------------------------------------------+------------+----------------------+-----------+----------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ c107de6d-80f1-af11-1e4d-b152ab8e6a66 |        2 | 2개 최종 발화에서 8개 단어를 집계했습니다. |          8 |                 4540 | t         |              2 | {"timing": {"finalCount": 2, "measuredFinalCount": 2}, "coaching": {"cueCount": 0, "latestCurrentWordsPerMinute": null, "latestPreviousWordsPerMinute": null}}
+ 57565c7b-7549-7505-f16a-e2f1b32aa5aa |        2 | 3개 최종 발화에서 9개 단어를 집계했습니다. |          9 |                 5160 | t         |              2 | {"timing": {"finalCount": 3, "measuredFinalCount": 3}, "coaching": {"cueCount": 0, "latestCurrentWordsPerMinute": null, "latestPreviousWordsPerMinute": null}}
+ 65e46f12-5869-e185-7a01-7fe7c6f9af3f |        2 | 1개 최종 발화에서 4개 단어를 집계했습니다. |          4 |                 2040 | t         |              2 | {"timing": {"finalCount": 1, "measuredFinalCount": 1}, "coaching": {"cueCount": 0, "latestCurrentWordsPerMinute": null, "latestPreviousWordsPerMinute": null}}
+(3 rows)
+
+              session_id              |               exchange_id               | ask_seq | asked_offset_ms |              question              | origin |                                  defense_payload                                  
+--------------------------------------+-----------------------------------------+---------+-----------------+------------------------------------+--------+-----------------------------------------------------------------------------------
+ c107de6d-80f1-af11-1e4d-b152ab8e6a66 | qa-894f4bc8-0d17-483a-ae65-608edc597fa1 |       3 |   1790530917249 | 한빛유통 매출?                     | TYPED  | {"outcome": "ABSTAINED", "retryable": true, "abstainReason": "DEADLINE_EXCEEDED"}
+ 57565c7b-7549-7505-f16a-e2f1b32aa5aa | qa-ccff11a6-afaa-4524-8c04-1e2d87af5095 |       2 |   1790530777314 | 한빛유통의 2025년 매출은 얼마였나? | TYPED  | {"outcome": "ABSTAINED", "retryable": true, "abstainReason": "DEADLINE_EXCEEDED"}
+ 65e46f12-5869-e185-7a01-7fe7c6f9af3f | qa-8a58ba19-966b-44bc-9e75-c1bfa452676e |       1 |   1790530081667 | 한빛유통의 2025년 매출은 얼마였나? | TYPED  | {"outcome": "ABSTAINED", "retryable": true, "abstainReason": "DEADLINE_EXCEEDED"}
+(3 rows)
+

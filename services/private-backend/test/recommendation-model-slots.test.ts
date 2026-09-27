@@ -9,7 +9,6 @@ import { z } from "zod";
 import { createRecommendationModelSlots } from "../src/verifier/recommendation-model-slots.ts";
 
 const scheduler: DeadlineScheduler = {
-  now: () => Date.now(),
   schedule: () => () => {},
 };
 

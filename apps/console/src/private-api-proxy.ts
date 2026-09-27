@@ -1,9 +1,8 @@
 import { consolePrivateApiOrigin } from "./next-runtime-config";
 
-type Fetcher = (
-  input: string | URL | Request,
-  init?: RequestInit & { readonly duplex?: "half" },
-) => Promise<Response>;
+type ProxyInit = RequestInit & { readonly duplex?: "half" };
+
+type Fetcher = (input: string | URL | Request, init?: ProxyInit) => Promise<Response>;
 
 export async function proxyPrivateApi(
   request: Request,
@@ -24,9 +23,19 @@ export async function proxyPrivateApi(
     headers,
     ...(hasBody ? { body: request.body, duplex: "half" } : {}),
   });
-  return new Response(upstream.body, {
+  const contentType = upstream.headers.get("content-type");
+  const body =
+    contentType?.includes("text/event-stream") || upstream.body === null
+      ? upstream.body
+      : await upstream.arrayBuffer();
+  const responseHeaders = new Headers(upstream.headers);
+  responseHeaders.delete("transfer-encoding");
+  responseHeaders.delete("content-length");
+  responseHeaders.delete("connection");
+  responseHeaders.delete("content-encoding");
+  return new Response(body, {
     status: upstream.status,
     statusText: upstream.statusText,
-    headers: upstream.headers,
+    headers: responseHeaders,
   });
 }

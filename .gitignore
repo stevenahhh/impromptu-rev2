@@ -6,6 +6,9 @@ coverage/
 .turbo/
 .vite/
 .next/
+.next-browser-runtime-*/
+.tsconfig-browser-runtime-*.json
+.vercel/
 .cache/
 playwright-report/
 test-results/

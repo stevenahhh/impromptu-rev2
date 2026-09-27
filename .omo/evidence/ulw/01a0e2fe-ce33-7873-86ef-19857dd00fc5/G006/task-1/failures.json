@@ -1,0 +1,85 @@
+{
+  "generatedAt": "2026-09-27T19:36:29.167Z",
+  "results": [
+    {
+      "id": "sign-in",
+      "verdict": "PASS",
+      "detail": "workspace upload panel reached after localdemo sign-in"
+    },
+    {
+      "id": "upload-long-deck",
+      "verdict": "PASS",
+      "detail": "cockpit reached after 6-slide pptx upload"
+    },
+    {
+      "id": "independent-stage-inert",
+      "verdict": "PASS",
+      "detail": "stage readiness=null console pairing=WAITING body=\"발표자 화면에서 발표 화면을 열어 주세요. 이 페이지만 열면 시작되지 않아요.\""
+    },
+    {
+      "id": "popup-bind",
+      "verdict": "PASS",
+      "detail": "console-opened stage bound, panel CONNECTED"
+    },
+    {
+      "id": "slide-navigation",
+      "verdict": "PASS",
+      "detail": "4x next accepted (index -> 4 of 6)"
+    },
+    {
+      "id": "deck-replace-entry",
+      "verdict": "PASS",
+      "detail": "new-deck control present (PREPARING)"
+    },
+    {
+      "id": "deck-replace-index-reset",
+      "verdict": "FAIL",
+      "detail": "counter=5 / 3 preview=\"슬라이드를 불러오지 못했어요.5 / 3\" prev=true"
+    },
+    {
+      "id": "deck-replace-stale-binding",
+      "verdict": "PASS",
+      "detail": "presenting=false statusLine=\"마이크를 시작하지 못했어요. 다시 시도해 주세요.마이크 다시 시도\" (409 seen on slide-set)"
+    },
+    {
+      "id": "rebind-after-replace",
+      "verdict": "PASS",
+      "detail": "fresh bind for short deck succeeded"
+    },
+    {
+      "id": "start-presentation",
+      "verdict": "PASS",
+      "detail": "PRESENTING after rebind"
+    },
+    {
+      "id": "c1-transport-above-fold-1024",
+      "verdict": "FAIL",
+      "detail": "transport-strip box={\"x\":29,\"y\":639,\"width\":966,\"height\":154.375} viewport=1024x768"
+    },
+    {
+      "id": "c5-prep-hidden-while-presenting",
+      "verdict": "PASS",
+      "detail": "drawer=true stageOpenBtn=false"
+    },
+    {
+      "id": "report-pending-observed",
+      "verdict": "PASS",
+      "detail": "report status=null (finalized before status read)"
+    },
+    {
+      "id": "c3-report-human-identifiers",
+      "verdict": "FAIL",
+      "detail": "slideTitles=2 hashKeys=2 sample=[\"slide_e8d26df11b082379760ef147700605bcc0d476171eec71b50ff22f8dc4573875\",\"slide_44b75bc649764bab270268f88240490c82a2962dfd04c0e469cd2380639520fd\"]"
+    },
+    {
+      "id": "reload-session-restore",
+      "verdict": "FAIL",
+      "detail": "url after reload=http://localhost:4473/sign-in"
+    },
+    {
+      "id": "account-switch-isolation",
+      "verdict": "PASS",
+      "detail": "B url=http://localhost:4473/ uploadPanel=true cockpit=false deckLeak=false"
+    }
+  ]
+}

@@ -1,0 +1,942 @@
+diff --git a/apps/console/src/console.css b/apps/console/src/console.css
+index 1d79741..9f8950f 100644
+--- a/apps/console/src/console.css
++++ b/apps/console/src/console.css
+@@ -2,14 +2,17 @@ html[data-surface="console"] {
+   --console-app-bar-size: calc(var(--space-12) + var(--space-2));
+   --console-support-rail-size: calc(var(--space-20) * 4 + var(--space-4));
+   --console-preview-ratio: 16 / 9;
+-  /* On stage the stacked preview must leave room for the app bar and the sticky transport
+-     strip so both stay inside one viewport height. */
+-  --console-presenting-preview-cap: calc(
++  /* On stage the stacked preview must leave room for the app bar, the heading row and the
++     sticky transport strip so both stay inside one viewport height in every phase. */
++  --console-stacked-preview-cap: calc(
+     var(--size-viewport) -
+     var(--console-app-bar-size) -
++    var(--space-16) -
+     var(--space-20) *
+-    3
++    3 -
++    var(--space-8)
+   );
++  --console-presenting-preview-cap: var(--console-stacked-preview-cap);
+ }
+ 
+ html[data-surface="console"],
+@@ -432,6 +435,13 @@ html[data-surface="console"] .ui-shell__body--focused {
+   flex: 0 0 auto;
+ }
+ 
++/* Rail status lines carry real sentences (mic denied, capture retry, recovery hints). Clipped to
++   one line they hid the actual instruction; inside the rail they wrap and read left-aligned. */
++.console-cockpit__side .console-status-line {
++  text-align: start;
++  white-space: normal;
++}
++
+ .console-status-line--attention {
+   font-weight: var(--weight-bold);
+ }
+@@ -751,11 +761,21 @@ html[data-surface="console"] .ui-shell__body--focused {
+     background: var(--surface-inset);
+   }
+ 
+-  /* Presenting caps the preview so preview plus transport fit a short viewport; the rendered
+-     slide keeps its own ratio and letterboxes inside the capped frame. */
+-  .console-cockpit[data-cockpit-phase="PRESENTING"] .console-preview__frame {
+-    block-size: var(--console-presenting-preview-cap);
+-    max-block-size: var(--console-presenting-preview-cap);
++  /* Stacked, the preview must yield before the transport does: the strip is the one control
++     surface a presenter cannot scroll for, so on short viewports the frame is capped from the
++     viewport height in every phase — not only while presenting — and the slide letterboxes
++     inside it. */
++  .console-cockpit .console-preview__frame {
++    block-size: var(--console-stacked-preview-cap);
++    max-block-size: var(--console-stacked-preview-cap);
++  }
++
++  /* Stacked rows have vertical room to spare — a clipped one-line title only saves a few
++     pixels there, so let the workspace heading wrap instead of truncating mid-word. */
++  .console-workspace--presenting .console-workspace__intro h1 {
++    overflow: visible;
++    text-overflow: clip;
++    white-space: normal;
+   }
+ 
+   .console-cockpit__side {
+diff --git a/apps/console/src/deck-upload-panel.tsx b/apps/console/src/deck-upload-panel.tsx
+index 813925b..e05e2e1 100644
+--- a/apps/console/src/deck-upload-panel.tsx
++++ b/apps/console/src/deck-upload-panel.tsx
+@@ -99,6 +99,7 @@ export function SessionUploadPanel({
+           if (dropped !== undefined) void uploadFile(dropped);
+         }}
+       >
++        <p>{text.uploadSelect}</p>
+         <label className="ui-button ui-button--quiet console-file-button" data-deck-upload-submit>
+           <span>{phase === "UPLOADING" ? text.uploading : text.chooseFile}</span>
+           <input
+@@ -122,9 +123,7 @@ export function SessionUploadPanel({
+         aria-live="polite"
+         data-upload-status={phase}
+       >
+-        {phase === "SUCCESS"
+-          ? `${text.deckAccepted} ${text.presentationReady}`
+-          : message || text.uploadSelect}
++        {phase === "SUCCESS" ? `${text.deckAccepted} ${text.presentationReady}` : message}
+       </p>
+     </Panel>
+   );
+diff --git a/apps/console/src/evidence-card.tsx b/apps/console/src/evidence-card.tsx
+index 3b29555..99a4429 100644
+--- a/apps/console/src/evidence-card.tsx
++++ b/apps/console/src/evidence-card.tsx
+@@ -30,7 +30,10 @@ export function EvidenceCard({ card, text }: EvidenceCardProps) {
+       data-evidence-kind={card.kind}
+     >
+       <h3>{card.title}</h3>
+-      <Badge data-evidence-badge tone={card.kind === "INTERNAL" ? "success" : "neutral"}>
++      {/* An uploaded card reads "internal", never "verified": success tone would imply the
++          content was checked. EXTERNAL gets the warning tone because its usage terms genuinely
++          need a look — accuracy is claimed by neither. */}
++      <Badge data-evidence-badge tone={card.kind === "INTERNAL" ? "neutral" : "warning"}>
+         {rightsLabel}
+       </Badge>
+       <dl>
+diff --git a/apps/console/src/live-publication-page.tsx b/apps/console/src/live-publication-page.tsx
+deleted file mode 100644
+index 4bd9cfc..0000000
+--- a/apps/console/src/live-publication-page.tsx
++++ /dev/null
+@@ -1,103 +0,0 @@
+-import { Button, Panel } from "@impromptu/ui";
+-import { useCallback, useEffect, useId, useState } from "react";
+-import { useAuth } from "./auth-session";
+-import { messages } from "./i18n";
+-import type { LiveCandidateSnapshotView } from "./session-client";
+-
+-function publishApprovalLoadEvent(detail: Readonly<Record<string, unknown>>): void {
+-  window.dispatchEvent(new CustomEvent("impromptu:approval-load", { detail }));
+-}
+-
+-export function LivePublicationPage() {
+-  const titleId = useId();
+-  const { activePresentation, client, locale, session } = useAuth();
+-  const text = messages(locale);
+-  const presentationSessionId = activePresentation?.presentationSessionId ?? "";
+-  const [snapshot, setSnapshot] = useState<LiveCandidateSnapshotView | null>(null);
+-  const [pendingCandidateId, setPendingCandidateId] = useState<string | null>(null);
+-  const [message, setMessage] = useState("");
+-
+-  const loadSnapshot = useCallback(async () => {
+-    setMessage(text.loadingSnapshot);
+-    try {
+-      const next = await client.readLiveCandidates(presentationSessionId);
+-      setSnapshot(next);
+-      publishApprovalLoadEvent({ type: "SNAPSHOT_LOADED", atMs: performance.now() });
+-      setMessage(
+-        next.livePublicEnabled
+-          ? locale === "ko"
+-            ? `검토할 실시간 제안 ${next.candidates.length}개를 불러왔습니다.`
+-            : `${next.candidates.length} fresh live candidate${next.candidates.length === 1 ? "" : "s"}.`
+-          : locale === "ko"
+-            ? "실시간 공개가 비활성화되어 있습니다. 확인된 제안은 비공개로 유지됩니다."
+-            : "Live public is fail-closed. Verified candidates remain private.",
+-      );
+-    } catch {
+-      setSnapshot(null);
+-      setMessage(text.snapshotFailed);
+-    }
+-  }, [client, locale, presentationSessionId, text]);
+-
+-  useEffect(() => {
+-    if (activePresentation !== null) void loadSnapshot();
+-  }, [activePresentation, loadSnapshot]);
+-
+-  const approve = async (candidate: LiveCandidateSnapshotView["candidates"][number]) => {
+-    if (snapshot === null || session === null) return;
+-    setPendingCandidateId(candidate.candidateId);
+-    setMessage(text.submittingApproval);
+-    const approvalId = crypto.randomUUID();
+-    publishApprovalLoadEvent({
+-      type: "APPROVAL_REQUESTED",
+-      approvalId,
+-      atMs: performance.now(),
+-    });
+-    let outcome = "REJECTED";
+-    try {
+-      await client.approveLiveCandidate(session.csrfToken, snapshot, candidate, approvalId);
+-      outcome = "PUBLISHED";
+-      setSnapshot(null);
+-      setMessage(text.published);
+-    } catch {
+-      setSnapshot(null);
+-      setMessage(text.liveApprovalFailed);
+-    } finally {
+-      publishApprovalLoadEvent({
+-        type: "APPROVAL_SETTLED",
+-        approvalId,
+-        outcome,
+-        atMs: performance.now(),
+-      });
+-      setPendingCandidateId(null);
+-    }
+-  };
+-
+-  return (
+-    <section className="console-stack ui-reveal" aria-labelledby={titleId}>
+-      <div>
+-        <h1 id={titleId}>{text.liveApproval}</h1>
+-        <p className="console-lead">{text.liveApprovalLead}</p>
+-      </div>
+-      <Panel title={text.snapshotTitle} tone="inset">
+-        <p>{activePresentation === null ? text.approvalNeedsDeck : text.autoSuggestions}</p>
+-        <Button disabled={presentationSessionId.length === 0} onClick={() => void loadSnapshot()}>
+-          {activePresentation === null ? text.loadCandidates : text.refreshSuggestions}
+-        </Button>
+-        <p className="console-caption" aria-live="polite">
+-          {message || text.approvalInitial}
+-        </p>
+-      </Panel>
+-      {snapshot?.candidates.map((candidate) => (
+-        <Panel key={candidate.candidateId} title={candidate.claimText}>
+-          <p>{candidate.evidenceExcerpt}</p>
+-          <Button
+-            disabled={!snapshot.livePublicEnabled || pendingCandidateId !== null}
+-            onClick={() => void approve(candidate)}
+-          >
+-            {pendingCandidateId === candidate.candidateId ? text.approving : text.approveCard}
+-          </Button>
+-        </Panel>
+-      ))}
+-    </section>
+-  );
+-}
+diff --git a/apps/console/src/locales/en.json b/apps/console/src/locales/en.json
+index aa4890f..dcb20fa 100644
+--- a/apps/console/src/locales/en.json
++++ b/apps/console/src/locales/en.json
+@@ -99,20 +99,6 @@
+   "signInLink": "Sign in",
+   "privateWorkspace": "Presenter view",
+   "liveApproval": "About this screen",
+-  "liveApprovalLead": "Preparation and presenting happen on the same screen.",
+-  "snapshotTitle": "Loaded suggestions",
+-  "approvalNeedsDeck": "Upload your presentation in the preparation screen first.",
+-  "autoSuggestions": "Suggestions for this presentation load automatically.",
+-  "loadCandidates": "Load fresh candidates",
+-  "refreshSuggestions": "Refresh suggestions",
+-  "approvalInitial": "Load the latest suggestions first.",
+-  "loadingSnapshot": "Loading the latest suggestions.",
+-  "snapshotFailed": "We could not load the latest suggestions. Try again.",
+-  "submittingApproval": "Sending the approval.",
+-  "liveApprovalFailed": "Approval failed. Load the latest suggestions again.",
+-  "published": "Published.",
+-  "approving": "Approving.",
+-  "approveCard": "Approve card",
+   "uploadSelect": "Select a .pptx or .pdf presentation file.",
+   "uploadFailed": "The presentation could not be uploaded. Please try again.",
+   "uploadTooLarge": "The presentation file exceeds the upload size limit. Try a smaller deck.",
+diff --git a/apps/console/src/locales/ko.json b/apps/console/src/locales/ko.json
+index a386b9c..52ff9f9 100644
+--- a/apps/console/src/locales/ko.json
++++ b/apps/console/src/locales/ko.json
+@@ -99,20 +99,6 @@
+   "signInLink": "로그인",
+   "privateWorkspace": "발표자 화면",
+   "liveApproval": "화면 안내",
+-  "liveApprovalLead": "발표 준비와 발표 진행은 발표 준비 화면에서 합니다.",
+-  "snapshotTitle": "불러온 제안 목록",
+-  "approvalNeedsDeck": "먼저 발표 준비 화면에서 발표 자료를 올려 주세요.",
+-  "autoSuggestions": "현재 발표에 맞는 제안을 자동으로 불러옵니다.",
+-  "loadCandidates": "새 제안 불러오기",
+-  "refreshSuggestions": "제안 새로고침",
+-  "approvalInitial": "먼저 최신 제안 목록을 불러오세요.",
+-  "loadingSnapshot": "최신 제안을 불러오고 있습니다.",
+-  "snapshotFailed": "최신 제안을 불러오지 못했습니다. 다시 시도해 주세요.",
+-  "submittingApproval": "승인을 보내고 있습니다.",
+-  "liveApprovalFailed": "승인하지 못했습니다. 최신 제안을 다시 불러오세요.",
+-  "published": "공개했습니다.",
+-  "approving": "승인하고 있습니다.",
+-  "approveCard": "카드 승인",
+   "uploadSelect": ".pptx 또는 .pdf 발표 자료를 선택해 주세요.",
+   "uploadFailed": "발표 자료를 올리지 못했습니다. 다시 시도해 주세요.",
+   "uploadTooLarge": "발표 자료가 업로드 크기 한도를 넘었습니다. 더 작은 파일로 다시 시도해 주세요.",
+diff --git a/apps/stage/src/App.test.tsx b/apps/stage/src/App.test.tsx
+index 099522f..d7f02ed 100644
+--- a/apps/stage/src/App.test.tsx
++++ b/apps/stage/src/App.test.tsx
+@@ -471,7 +471,7 @@ describe("console-led pairing", () => {
+    */
+   async function renderLanding(client: StageSessionClient) {
+     const view = render(
+-      <MemoryRouter initialEntries={["/?deck=deck_alpha"]}>
++      <MemoryRouter initialEntries={["/?deck=deck_alpha&lang=ko"]}>
+         <StageRoutes client={client} />
+       </MemoryRouter>,
+     );
+@@ -555,3 +555,77 @@ describe("console-led pairing", () => {
+     expect(document.querySelectorAll("button, input").length).toBe(0);
+   });
+ });
++
++describe("audience language", () => {
++  test("resolves the browser language, honors an explicit ?lang= override, and defaults to Korean", async () => {
++    const { resolveStageLocale, stageMessages } = await import("./stage-i18n");
++    expect(resolveStageLocale("", ["en-US", "en"])).toBe("en");
++    expect(resolveStageLocale("", ["fr-FR", "ko-KR"])).toBe("ko");
++    expect(resolveStageLocale("", [])).toBe("ko");
++    expect(resolveStageLocale("?lang=en", ["ko-KR"])).toBe("en");
++    expect(resolveStageLocale("?lang=ko", ["en-US"])).toBe("ko");
++    expect(resolveStageLocale("?lang=zh", ["en-US"])).toBe("en");
++    // Both catalogs expose the same key set so a resolved locale never renders a missing string.
++    const koKeys = Object.keys(stageMessages("ko")).sort();
++    expect(Object.keys(stageMessages("en")).sort()).toEqual(koKeys);
++  });
++
++  test("renders the Korean notice by default and the English one for an English device", async () => {
++    const { stageMessages } = await import("./stage-i18n");
++    const renderWithLanguages = async (languages: string[]) => {
++      const original = Object.getOwnPropertyDescriptor(window.navigator, "languages");
++      Object.defineProperty(window.navigator, "languages", {
++        configurable: true,
++        value: languages,
++      });
++      try {
++        render(
++          <MemoryRouter initialEntries={["/"]}>
++            <StageRoutes client={stageClient(deferred())} />
++          </MemoryRouter>,
++        );
++        await act(async () => {});
++      } finally {
++        if (original === undefined) {
++          delete (window.navigator as { languages?: readonly string[] }).languages;
++        } else {
++          Object.defineProperty(window.navigator, "languages", original);
++        }
++      }
++    };
++
++    await renderWithLanguages(["en-US"]);
++    expect(document.body.textContent).toContain(stageMessages("en").consoleOnlyNotice);
++    cleanup();
++
++    await renderWithLanguages(["ko-KR"]);
++    expect(document.body.textContent).toContain(stageMessages("ko").consoleOnlyNotice);
++    cleanup();
++  });
++});
++
++describe("truthful slide failure", () => {
++  test("a slide whose image cannot load reports SLIDE_FAILED instead of a blank READY", async () => {
++    const observerSignal = deferred<StageEventObserver>();
++    const snapshotApplied = nextStageEvent("impromptu:snapshot-applied");
++    const { stageMessages } = await import("./stage-i18n");
++    render(
++      <MemoryRouter initialEntries={["/display/display_alpha?lang=ko"]}>
++        <StageRoutes client={stageClient(observerSignal)} />
++      </MemoryRouter>,
++    );
++    await act(async () => snapshotApplied);
++    const display = document.querySelector(".stage-display");
++    expect(display?.getAttribute("data-audience-readiness")).toBe("READY");
++
++    const img = document.querySelector("img.stage-slide");
++    expect(img).not.toBeNull();
++    await act(async () => {
++      fireEvent.error(img as Element);
++    });
++
++    expect(display?.getAttribute("data-audience-readiness")).toBe("SLIDE_FAILED");
++    expect(document.querySelector("img.stage-slide")).toBeNull();
++    expect(document.body.textContent).toContain(stageMessages("ko").slideUnavailable);
++  });
++});
+diff --git a/apps/stage/src/display-page.tsx b/apps/stage/src/display-page.tsx
+index ed87209..d904782 100644
+--- a/apps/stage/src/display-page.tsx
++++ b/apps/stage/src/display-page.tsx
+@@ -1,17 +1,22 @@
+-import { useCallback, useEffect, useId, useRef } from "react";
+-import copy from "./locales/ko.json";
++import { useCallback, useEffect, useId, useRef, useState } from "react";
+ import { RenderedSlidePlayer, type RenderedSlidePlayerHandle } from "./rendered-slide-player";
+ import { normalizeDeckAssetUrl, renderedSlideRuntime, StaticSlide } from "./slide-view";
+ import type { StageSessionClient } from "./stage-client";
+ import { publishStageEvent } from "./stage-events";
++import { useStageCopy } from "./stage-i18n";
+ import { useScreenTopology } from "./use-screen-topology";
+ import { useStageSubscription } from "./use-stage-subscription";
+ import { emergencyPublicSlideSet, windowsDisplayMode } from "./windows-topology";
+ 
+ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
++  const copy = useStageCopy();
+   const titleId = useId();
+   const requestedMode = windowsDisplayMode(new URL(window.location.href).searchParams.get("mode"));
+   const { mode, placementMessage } = useScreenTopology(requestedMode);
++  // Truthful slide failure: the identity (slide key + occurrence) of the one occurrence whose
++  // verified bytes could not be rendered. A later occurrence — even of the same slide — clears
++  // it because the keyed player remounts and gets a fresh chance.
++  const [failedSlide, setFailedSlide] = useState<string | null>(null);
+   const renderedSlidePlayerRef = useRef<RenderedSlidePlayerHandle>(null);
+   const { snapshot, unavailable, setSnapshot } = useStageSubscription(client, mode, requestedMode);
+ 
+@@ -86,40 +91,59 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
+       : { ...projectedSlide, imageUrl: normalizeDeckAssetUrl(projectedSlide.imageUrl) };
+   const currentSlideRuntime =
+     currentSlide === undefined ? null : renderedSlideRuntime(currentSlide);
++  const currentOccurrenceKey =
++    currentSlide === undefined || snapshot === null
++      ? null
++      : `${currentSlide.publicSlideKey}:${snapshot.occurrence.occurrenceSeq}`;
++  const slideFailed = currentOccurrenceKey !== null && failedSlide === currentOccurrenceKey;
++  const visibleSlide = slideFailed ? undefined : currentSlide;
+ 
+   return (
+     <div
+       className="stage-display"
+-      data-audience-readiness={snapshot === null ? "RECOVERING" : "READY"}
++      data-audience-readiness={
++        snapshot === null ? "RECOVERING" : slideFailed ? "SLIDE_FAILED" : "READY"
++      }
+       data-blackout={snapshot?.blackout === true ? "true" : "false"}
+       data-stage-chrome="hidden"
+     >
+       <main
+         className={`stage-display__content${currentSlide === undefined ? "" : " stage-display__content--slide"}`}
+-        aria-labelledby={currentSlide === undefined ? titleId : undefined}
++        aria-labelledby={visibleSlide === undefined ? titleId : undefined}
+       >
+-        {currentSlide === undefined ? (
+-          <section className="stage-claim ui-reveal">
++        {visibleSlide === undefined ? (
++          <section
++            className="stage-claim ui-reveal"
++            data-stage-state={slideFailed ? "SLIDE_FAILED" : undefined}
++          >
+             <h1 id={titleId}>
+-              {unavailable === null ? copy.awaitingPresentation : copy.audienceUnavailable}
++              {slideFailed
++                ? copy.slideUnavailable
++                : unavailable === null
++                  ? copy.awaitingPresentation
++                  : copy.audienceUnavailable}
+             </h1>
+           </section>
+         ) : (
+           <section
+             className="stage-slide-surface ui-reveal"
+             data-stage-slide-surface="uploaded"
+-            aria-label={currentSlide.accessibilityLabel}
++            aria-label={currentSlide?.accessibilityLabel}
+           >
+             {currentSlideRuntime !== null ? (
+               <RenderedSlidePlayer
+-                key={`${currentSlide.publicSlideKey}:${snapshot?.occurrence.occurrenceSeq ?? 0}`}
++                key={currentOccurrenceKey}
+                 ref={renderedSlidePlayerRef}
+-                slide={currentSlide}
++                slide={visibleSlide}
+                 runtime={currentSlideRuntime}
+                 occurrenceSeq={snapshot?.occurrence.occurrenceSeq ?? 0}
++                onFailure={() => setFailedSlide(currentOccurrenceKey)}
+               />
+             ) : (
+-              <StaticSlide slide={currentSlide} />
++              <StaticSlide
++                slide={visibleSlide}
++                onFailure={() => setFailedSlide(currentOccurrenceKey)}
++              />
+             )}
+           </section>
+         )}
+diff --git a/apps/stage/src/landing-page.tsx b/apps/stage/src/landing-page.tsx
+index 627e58e..00364dc 100644
+--- a/apps/stage/src/landing-page.tsx
++++ b/apps/stage/src/landing-page.tsx
+@@ -1,10 +1,11 @@
+ import { useEffect, useMemo, useState } from "react";
+ import { useNavigate } from "react-router-dom";
+-import copy from "./locales/ko.json";
+ import type { DisplayJoinView, StageSessionClient } from "./stage-client";
+ import { publishStageEvent } from "./stage-events";
++import { useStageCopy } from "./stage-i18n";
+ 
+ function LandingPage({ client }: { readonly client: StageSessionClient }) {
++  const copy = useStageCopy();
+   const navigate = useNavigate();
+   const identity = useMemo(
+     () => ({
+@@ -60,7 +61,7 @@ function LandingPage({ client }: { readonly client: StageSessionClient }) {
+     return () => {
+       active = false;
+     };
+-  }, [client, consoleOrigin, deckVersion, identity, openedByConsole]);
++  }, [client, consoleOrigin, copy, deckVersion, identity, openedByConsole]);
+ 
+   // The console tells the window it opened the moment approval lands, so this display claims at
+   // once instead of waiting out the interval below. It is only a nudge: the claim is still what
+diff --git a/apps/stage/src/locales/ko.json b/apps/stage/src/locales/ko.json
+index a14d6ac..eeef1ef 100644
+--- a/apps/stage/src/locales/ko.json
++++ b/apps/stage/src/locales/ko.json
+@@ -1,15 +1,15 @@
+ {
++  "pageTitle": "Impromptu 발표 화면",
+   "waitingApproval": "발표자가 이 화면을 연결할 때까지 기다려 주세요.",
+   "consoleOnlyNotice": "발표 화면은 발표자 화면에서 열립니다. 주소만으로는 이 화면이 시작되지 않습니다.",
+   "joinFailed": "발표 화면 연결을 시작하지 못했습니다. 화면을 닫고 발표자 화면에서 다시 열어 주세요.",
+   "approvalFailed": "발표 화면 연결을 확인하지 못했습니다. 화면을 닫고 다시 열어 주세요.",
+   "awaitingPresentation": "발표가 시작되기를 기다리고 있습니다.",
+   "audienceUnavailable": "발표자 화면과의 연결이 끊겼습니다.",
+-  "exitFullscreen": "전체 화면 나가기",
+-  "enterFullscreen": "전체 화면으로 보기",
+-  "fullscreenBlocked": "브라우저가 전체 화면을 막았습니다. 브라우저 메뉴를 사용해 주세요.",
+-  "fullscreenUnavailable": "이 브라우저에서는 전체 화면을 사용할 수 없습니다.",
+-  "placeTarget": "대상 화면으로 옮기기",
++  "slideUnavailable": "슬라이드를 표시하지 못했습니다. 발표자 화면에서 연결을 확인해 주세요.",
+   "targetPlaced": "선택한 발표 화면으로 옮겼습니다.",
+-  "targetRecovered": "대상 화면 연결이 끊겨 남아 있는 발표 화면으로 복구했습니다."
++  "targetRecovered": "대상 화면 연결이 끊겨 남아 있는 발표 화면으로 복구했습니다.",
++  "placementExtend": "수동 배치: 이 화면을 대상 화면으로 옮긴 뒤 전체 화면으로 보여 주세요.",
++  "placementDuplicate": "수동 배치: 이 PC에는 발표 화면만 남기고 발표자 화면은 다른 기기에서 연 뒤 전체 화면으로 보여 주세요.",
++  "placementSingle": "수동 배치: 발표 화면에는 이 화면만 남긴 뒤 전체 화면으로 보여 주세요."
+ }
+diff --git a/apps/stage/src/rendered-slide-player.tsx b/apps/stage/src/rendered-slide-player.tsx
+index de204db..ff7aa7c 100644
+--- a/apps/stage/src/rendered-slide-player.tsx
++++ b/apps/stage/src/rendered-slide-player.tsx
+@@ -28,6 +28,11 @@ interface RenderedSlidePlayerProps {
+   readonly runtime: PublishedSlideRuntime;
+   readonly occurrenceSeq?: number;
+   readonly onAllClickGroupsExhausted?: () => void;
++  /**
++   * Called when even the last-resort still image cannot render — the slide is not on screen
++   * at all, so the surface must stop claiming it is.
++   */
++  readonly onFailure?: () => void;
+ }
+ 
+ type RuntimeStatus = "loading" | "active" | "error";
+@@ -70,7 +75,13 @@ function isAbortError(error: unknown): boolean {
+ }
+ 
+ function RenderedSlidePlayerComponent(
+-  { slide, runtime, occurrenceSeq = 0, onAllClickGroupsExhausted }: RenderedSlidePlayerProps,
++  {
++    slide,
++    runtime,
++    occurrenceSeq = 0,
++    onAllClickGroupsExhausted,
++    onFailure,
++  }: RenderedSlidePlayerProps,
+   ref: Ref<RenderedSlidePlayerHandle>,
+ ) {
+   const { publicSlideKey, imageUrl, imageContentHash, accessibilityLabel } = slide;
+@@ -269,7 +280,12 @@ function RenderedSlidePlayerComponent(
+     >
+       <div ref={canvasRef} className="stage-slide-runtime" />
+       {status === "error" ? (
+-        <img className="stage-slide" src={imageUrl} alt={accessibilityLabel} />
++        <img
++          className="stage-slide"
++          src={imageUrl}
++          alt={accessibilityLabel}
++          onError={() => onFailure?.()}
++        />
+       ) : null}
+     </div>
+   );
+diff --git a/apps/stage/src/slide-view.tsx b/apps/stage/src/slide-view.tsx
+index cd43f24..f819f30 100644
+--- a/apps/stage/src/slide-view.tsx
++++ b/apps/stage/src/slide-view.tsx
+@@ -37,15 +37,20 @@ export function renderedSlideRuntime(
+  * Raster slides (PDF decks render to PNG) keep the `<img>` path, which has no such restriction.
+  */
+ export function StaticSlide({
++  onFailure,
+   slide,
+ }: {
+   readonly slide: StageSnapshotView["deckSlides"][number];
++  /** Called once when this slide's bytes cannot be verified or rendered — never auto-retried. */
++  readonly onFailure?: () => void;
+ }) {
+   const hostRef = useRef<HTMLDivElement>(null);
+   const { imageUrl, imageContentHash, accessibilityLabel } = slide;
+   // String-only on purpose: a resolution failure would silently degrade the slide to the raster
+   // path, which is what drops its background.
+   const vector = (imageUrl.split(/[?#]/)[0] ?? "").toLowerCase().endsWith(".svg");
++  const onFailureRef = useRef(onFailure);
++  onFailureRef.current = onFailure;
+ 
+   useEffect(() => {
+     if (!vector) return;
+@@ -58,7 +63,10 @@ export function StaticSlide({
+         if (active) hostRef.current?.replaceChildren(svg);
+       })
+       .catch(() => {
+-        // The surface stays empty rather than showing a room a slide whose bytes did not verify.
++        if (!active || controller.signal.aborted) return;
++        // Unverified bytes never reach the room: the host stays empty and the surface reports
++        // the failure up so it can stop claiming a slide is on screen.
++        onFailureRef.current?.();
+       });
+     return () => {
+       active = false;
+@@ -69,6 +77,12 @@ export function StaticSlide({
+   return vector ? (
+     <div className="stage-slide-host" ref={hostRef} />
+   ) : (
+-    <img className="stage-slide" data-slide-fit="contain" src={imageUrl} alt={accessibilityLabel} />
++    <img
++      className="stage-slide"
++      data-slide-fit="contain"
++      src={imageUrl}
++      alt={accessibilityLabel}
++      onError={() => onFailureRef.current?.()}
++    />
+   );
+ }
+diff --git a/apps/stage/src/stage-routes.tsx b/apps/stage/src/stage-routes.tsx
+index c20e57a..e6494eb 100644
+--- a/apps/stage/src/stage-routes.tsx
++++ b/apps/stage/src/stage-routes.tsx
+@@ -1,20 +1,48 @@
+-import { useMemo } from "react";
+-import { Navigate, Route, Routes } from "react-router-dom";
++import { useEffect, useMemo } from "react";
++import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+ import DisplayPage from "./display-page";
+ import LandingPage from "./landing-page";
+ import { STAGE_PUBLIC_API_ORIGIN } from "./slide-view";
+ import { createStageSessionClient, type StageSessionClient } from "./stage-client";
++import {
++  resolveStageLocale,
++  StageCopyProvider,
++  StageLocaleContext,
++  stageMessages,
++} from "./stage-i18n";
+ 
+ export function StageRoutes({ client }: { readonly client?: StageSessionClient }) {
+   const sessionClient = useMemo(
+     () => client ?? createStageSessionClient(STAGE_PUBLIC_API_ORIGIN),
+     [client],
+   );
++  // Resolved once per app mount: the audience device language, or the presenter-chosen ?lang=
++  // the Console appends when it opens the window. A ?lang= on the landing URL therefore stays
++  // authoritative through the SPA navigation onto /display/:displayId.
++  const location = useLocation();
++  // Resolved once at app mount: a ?lang= on the entry URL stays authoritative through the SPA
++  // navigation onto /display/:displayId — the dep list is intentionally empty.
++  // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only resolution by design
++  const locale = useMemo(
++    () => resolveStageLocale(location.search, [...(navigator.languages ?? []), navigator.language]),
++    [],
++  );
++  const copy = stageMessages(locale);
++
++  useEffect(() => {
++    document.documentElement.lang = locale;
++    document.title = copy.pageTitle;
++  }, [locale, copy]);
++
+   return (
+-    <Routes>
+-      <Route index element={<LandingPage client={sessionClient} />} />
+-      <Route path="/display/:displayId" element={<DisplayPage client={sessionClient} />} />
+-      <Route path="*" element={<Navigate to="/" replace />} />
+-    </Routes>
++    <StageLocaleContext.Provider value={locale}>
++      <StageCopyProvider value={copy}>
++        <Routes>
++          <Route index element={<LandingPage client={sessionClient} />} />
++          <Route path="/display/:displayId" element={<DisplayPage client={sessionClient} />} />
++          <Route path="*" element={<Navigate to="/" replace />} />
++        </Routes>
++      </StageCopyProvider>
++    </StageLocaleContext.Provider>
+   );
+ }
+diff --git a/apps/stage/src/stage.css b/apps/stage/src/stage.css
+index a553bb3..505eeaf 100644
+--- a/apps/stage/src/stage.css
++++ b/apps/stage/src/stage.css
+@@ -8,9 +8,15 @@
+ }
+ 
+ .stage-console-only p {
++  max-inline-size: var(--size-stage-copy);
+   margin: var(--space-0);
++  padding-inline: var(--space-stage);
+   color: var(--text-secondary);
+-  font-size: var(--text-lead);
++  font-family: var(--font-display);
++  font-size: var(--text-stage-display);
++  line-height: var(--line-tight);
++  letter-spacing: var(--tracking-tight);
++  text-align: center;
+ }
+ 
+ .stage-display {
+diff --git a/apps/stage/src/use-screen-topology.ts b/apps/stage/src/use-screen-topology.ts
+index a2cd653..d12c47c 100644
+--- a/apps/stage/src/use-screen-topology.ts
++++ b/apps/stage/src/use-screen-topology.ts
+@@ -1,6 +1,6 @@
+ import { useEffect, useRef, useState } from "react";
+-import copy from "./locales/ko.json";
+ import { publishStageEvent } from "./stage-events";
++import { useStageCopy } from "./stage-i18n";
+ import {
+   manualPlacementSummary,
+   observeWindowsTopology,
+@@ -21,8 +21,11 @@ export function useScreenTopology(requestedMode: WindowsDisplayMode): {
+   readonly mode: WindowsDisplayMode;
+   readonly placementMessage: string;
+ } {
++  const copy = useStageCopy();
+   const [mode, setMode] = useState(requestedMode);
+-  const [placementMessage, setPlacementMessage] = useState(manualPlacementSummary(requestedMode));
++  const [placementMessage, setPlacementMessage] = useState(() =>
++    manualPlacementSummary(requestedMode, copy),
++  );
+   const detailsRef = useRef<ScreenDetailsLike | null>(null);
+   const targetRef = useRef<ScreenLike | null>(null);
+ 
+@@ -45,7 +48,7 @@ export function useScreenTopology(requestedMode: WindowsDisplayMode): {
+           ? copy.targetPlaced
+           : status === "TARGET_LOST_RECOVERED"
+             ? copy.targetRecovered
+-            : manualPlacementSummary(requestedMode),
++            : manualPlacementSummary(requestedMode, copy),
+       );
+     };
+     const sync = async () => {
+@@ -132,7 +135,7 @@ export function useScreenTopology(requestedMode: WindowsDisplayMode): {
+       window.removeEventListener("impromptu:platform-topology-change", onPlatformTopology);
+       window.removeEventListener("impromptu:target-screen-placement-request", onPlacementRequest);
+     };
+-  }, [requestedMode]);
++  }, [requestedMode, copy]);
+ 
+   return { mode, placementMessage };
+ }
+diff --git a/apps/stage/src/windows-topology.test.ts b/apps/stage/src/windows-topology.test.ts
+index 1275bf9..dae043d 100644
+--- a/apps/stage/src/windows-topology.test.ts
++++ b/apps/stage/src/windows-topology.test.ts
+@@ -1,11 +1,11 @@
+ import { describe, expect, test } from "bun:test";
++import ko from "./locales/ko.json";
+ import {
+   emergencyPublicSlideSet,
+   manualPlacementSummary,
+   observeWindowsTopology,
+   placeStageOnTargetScreen,
+   recoverTargetScreenLoss,
+-  topologyInstructions,
+   windowsDisplayMode,
+ } from "./windows-topology";
+ 
+@@ -24,11 +24,11 @@ describe("Windows Stage topology", () => {
+     expect(windowsDisplayMode("duplicate")).toBe("duplicate");
+     expect(windowsDisplayMode("single")).toBe("single");
+     expect(windowsDisplayMode("unknown")).toBe("extend");
+-    expect(topologyInstructions("extend").join(" ")).toContain("프로젝터로 옮긴 뒤");
+-    expect(topologyInstructions("duplicate").join(" ")).toContain("발표 화면만 열린");
+-    expect(topologyInstructions("single").join(" ")).toContain("공개 슬라이드만");
+-    expect(manualPlacementSummary("duplicate")).toContain("발표 화면만 남기고");
+-    expect(manualPlacementSummary("single")).toContain("발표 화면에는 이 화면만");
++    // The placement summary is catalog text now: the module selects the right sentence and
++    // the caller supplies the resolved audience locale.
++    expect(manualPlacementSummary("duplicate", ko)).toBe(ko.placementDuplicate);
++    expect(manualPlacementSummary("single", ko)).toBe(ko.placementSingle);
++    expect(manualPlacementSummary("extend", ko)).toBe(ko.placementExtend);
+   });
+ 
+   test("maps the emergency keyboard fallback only to absolute public slide sets", () => {
+diff --git a/apps/stage/src/windows-topology.ts b/apps/stage/src/windows-topology.ts
+index eff6b79..4ffdd15 100644
+--- a/apps/stage/src/windows-topology.ts
++++ b/apps/stage/src/windows-topology.ts
+@@ -46,36 +46,22 @@ export function windowsDisplayMode(value: string | null): WindowsDisplayMode {
+   return value === "duplicate" || value === "single" ? value : "extend";
+ }
+ 
+-export function topologyInstructions(mode: WindowsDisplayMode): readonly string[] {
+-  if (mode === "extend") {
+-    return [
+-      "발표 PC에는 발표 화면만 여세요.",
+-      "이 화면을 프로젝터로 옮긴 뒤 전체 화면으로 보여 주세요.",
+-      "발표자 화면은 다른 휴대폰, 태블릿 또는 노트북에서 여세요.",
+-    ];
+-  }
+-  if (mode === "duplicate") {
+-    return [
+-      "이 PC에는 발표 화면만 열린 깨끗한 브라우저 프로필을 사용하세요.",
+-      "발표자 화면은 다른 휴대폰, 태블릿 또는 노트북에서 여세요.",
+-      "Win+P로 화면 구성이 바뀌면 발표 화면만 남기고 전체 화면으로 다시 보여 주세요.",
+-    ];
+-  }
+-  return [
+-    "공유 발표 화면에는 이 화면만 표시하세요.",
+-    "발표자 화면은 다른 휴대폰, 태블릿 또는 노트북에서 여세요.",
+-    "비상 키보드 조작은 공개 슬라이드만 바꿉니다.",
+-  ];
+-}
+-
+-export function manualPlacementSummary(mode: WindowsDisplayMode): string {
+-  if (mode === "duplicate") {
+-    return "수동 배치: 이 PC에는 발표 화면만 남기고 발표자 화면은 다른 기기에서 연 뒤 전체 화면으로 보여 주세요.";
+-  }
+-  if (mode === "single") {
+-    return "수동 배치: 발표 화면에는 이 화면만 남긴 뒤 전체 화면으로 보여 주세요.";
+-  }
+-  return "수동 배치: 이 화면을 대상 화면으로 옮긴 뒤 전체 화면으로 보여 주세요.";
++/**
++ * Placement summary for the sr-only status line. The catalog strings live in
++ * stage-i18n (locales/*.json) so the audience surface speaks the device's language; this
++ * module stays text-free and the caller passes the three sentences in.
++ */
++export function manualPlacementSummary(
++  mode: WindowsDisplayMode,
++  copy: Readonly<{
++    placementExtend: string;
++    placementDuplicate: string;
++    placementSingle: string;
++  }>,
++): string {
++  if (mode === "duplicate") return copy.placementDuplicate;
++  if (mode === "single") return copy.placementSingle;
++  return copy.placementExtend;
+ }
+ 
+ export function emergencyPublicSlideSet(
+diff --git a/apps/stage/src/stage-i18n.ts b/apps/stage/src/stage-i18n.ts
+new file mode 100644
+index 0000000..9be7601
+--- a/apps/stage/src/stage-i18n.ts
++++ b/apps/stage/src/stage-i18n.ts
+@@ -0,0 +1,53 @@
++import { createContext, useContext } from "react";
++import en from "./locales/en.json";
++import ko from "./locales/ko.json";
++
++export type StageLocale = "ko" | "en";
++export type StageMessages = { readonly [Key in keyof typeof ko]: string };
++
++const catalogs = { ko, en } satisfies Record<StageLocale, StageMessages>;
++
++export function stageMessages(locale: StageLocale): StageMessages {
++  return catalogs[locale];
++}
++
++function recognizedTag(tag: string | undefined): StageLocale | null {
++  const base = (tag ?? "").split("-")[0]?.toLowerCase();
++  return base === "ko" ? "ko" : base === "en" ? "en" : null;
++}
++
++/**
++ * Audience-side language resolution. The `lang` query parameter wins because it is the one
++ * channel the presenter's own Console choice can pass through when it opens the window; after
++ * that the device's browser language applies, and Korean is the default for everything else.
++ * Resolution happens once at app mount, so ?lang= on the landing URL survives the SPA
++ * navigation onto /display/:displayId.
++ */
++export function resolveStageLocale(
++  search: string,
++  languageTags: readonly (string | undefined)[],
++): StageLocale {
++  const requested = recognizedTag(new URLSearchParams(search).get("lang") ?? undefined);
++  if (requested !== null) return requested;
++  for (const tag of languageTags) {
++    const recognized = recognizedTag(tag);
++    if (recognized !== null) return recognized;
++  }
++  return "ko";
++}
++
++const StageCopyContext = createContext<StageMessages>(catalogs.ko);
++
++export const StageCopyProvider = StageCopyContext.Provider;
++
++/** The resolved audience-language catalog for the mounted Stage route tree. */
++export function useStageCopy(): StageMessages {
++  return useContext(StageCopyContext);
++}
++
++/** Locale of the mounted Stage route tree, for document.title/lang sync. */
++export const StageLocaleContext = createContext<StageLocale>("ko");
++
++export function useStageLocale(): StageLocale {
++  return useContext(StageLocaleContext);
++}
+diff --git a/apps/stage/src/locale-parity.test.ts b/apps/stage/src/locale-parity.test.ts
+new file mode 100644
+index 0000000..9a93219
+--- a/apps/stage/src/locale-parity.test.ts
++++ b/apps/stage/src/locale-parity.test.ts
+@@ -0,0 +1,39 @@
++import { describe, expect, test } from "bun:test";
++
++// Same contract as the console's locale-parity test: the audience surface resolves a device
++// language at runtime, so a key missing in one catalog would render a gap on a projector.
++function placeholders(message: unknown): string[] {
++  return typeof message === "string"
++    ? [...message.matchAll(/\{([a-zA-Z0-9_]+)\}/g)].map((match) => match[1] ?? "").sort()
++    : [];
++}
++
++describe("stage locale catalogs", () => {
++  test("ko and en expose the same key set", async () => {
++    const ko = await Bun.file(new URL("./locales/ko.json", import.meta.url)).json();
++    const en = await Bun.file(new URL("./locales/en.json", import.meta.url)).json();
++    expect(Object.keys(ko).sort()).toEqual(Object.keys(en).sort());
++  });
++
++  test("ko and en values interpolate the same placeholder set for every key", async () => {
++    const ko = await Bun.file(new URL("./locales/ko.json", import.meta.url)).json();
++    const en = await Bun.file(new URL("./locales/en.json", import.meta.url)).json();
++    for (const key of Object.keys(en)) {
++      expect(placeholders(ko[key]), `placeholder set for "${key}"`).toEqual(placeholders(en[key]));
++    }
++  });
++
++  test("no catalog value is blank", async () => {
++    const ko = await Bun.file(new URL("./locales/ko.json", import.meta.url)).json();
++    const en = await Bun.file(new URL("./locales/en.json", import.meta.url)).json();
++    for (const [locale, catalog] of [
++      ["ko", ko],
++      ["en", en],
++    ] as const) {
++      for (const [key, value] of Object.entries(catalog)) {
++        expect(typeof value, `${locale}.${key}`).toBe("string");
++        expect((value as string).trim().length, `${locale}.${key}`).toBeGreaterThan(0);
++      }
++    }
++  });
++});
+diff --git a/apps/stage/src/locales/en.json b/apps/stage/src/locales/en.json
+new file mode 100644
+index 0000000..b3178b2
+--- a/apps/stage/src/locales/en.json
++++ b/apps/stage/src/locales/en.json
+@@ -0,0 +1,15 @@
++{
++  "pageTitle": "Impromptu presentation screen",
++  "waitingApproval": "Please wait until the presenter connects this screen.",
++  "consoleOnlyNotice": "The presentation screen opens from the presenter view. This screen does not start from the address alone.",
++  "joinFailed": "Could not start connecting the presentation screen. Close this window and reopen it from the presenter view.",
++  "approvalFailed": "Could not confirm the presentation screen connection. Close this window and reopen it.",
++  "awaitingPresentation": "Waiting for the presentation to start.",
++  "audienceUnavailable": "The connection to the presenter view was lost.",
++  "slideUnavailable": "The slide could not be shown. Please check the presenter view.",
++  "targetPlaced": "Moved to the selected presentation screen.",
++  "targetRecovered": "The target display disconnected, so this screen recovered onto the remaining presentation display.",
++  "placementExtend": "Manual placement: move this window to the target display, then go full screen.",
++  "placementDuplicate": "Manual placement: keep only the presentation screen on this PC, open the presenter view on another device, then go full screen.",
++  "placementSingle": "Manual placement: keep only this window on the presentation screen, then go full screen."
++}

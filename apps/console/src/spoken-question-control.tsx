@@ -19,7 +19,11 @@ export interface SpokenQuestionControlProps {
   readonly text: Messages;
   readonly disabled?: boolean;
   readonly transcribe: (audio: Blob, durationMs: number) => Promise<SpokenQuestionTranscription>;
-  readonly onTranscript: (text: string) => void;
+  /** Receives the settled TRANSCRIBED outcome so the caller sees both the verbatim text and
+      the wire-declared ask deadline (null when the server did not carry one). */
+  readonly onTranscript: (
+    outcome: Extract<SpokenQuestionTranscription, { outcome: "TRANSCRIBED" }>,
+  ) => void;
   /** Test seams mirroring audio-capture's injected runtime; defaults use real browser APIs. */
   readonly seams?: QuestionClipSeams;
 }
@@ -94,7 +98,7 @@ export function SpokenQuestionControl({
         setFailure("TRANSCRIPTION");
         return;
       }
-      onTranscript(outcome.text);
+      onTranscript(outcome);
       setState("IDLE");
     } catch {
       if (!mountedRef.current) return;

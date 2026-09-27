@@ -36,6 +36,22 @@ export class PlaybackCommandRejectedError extends Error {
   }
 }
 
+/**
+ * A display-binding approval refused by the backend (409 `{ "error": "<reason>" }`).
+ * `STALE_DISPLAY_BINDING` means the expected CAS epoch no longer matches the server's
+ * current binding epoch — the only answer is a fresh read, never a retry of the same
+ * epoch. Other reasons (WRONG_DECK, UNAUTHORIZED, ...) stay verbatim for the UI.
+ */
+export class DisplayApprovalRejectedError extends Error {
+  readonly reason: string;
+
+  constructor(reason: string) {
+    super(`Audience screen approval was rejected: ${reason}`);
+    this.name = "DisplayApprovalRejectedError";
+    this.reason = reason;
+  }
+}
+
 function rejectionReason(body: unknown): string | null {
   if (typeof body !== "object" || body === null) return null;
   const error = (body as Record<string, unknown>).error;
@@ -51,6 +67,10 @@ export async function approveDisplay(
   csrfToken: string,
   presentation: ActivePresentationView,
   join: DisplayJoinView,
+  // The CAS epoch must be the one the presenter just read or the console currently holds —
+  // the backend compares it to its live playback.displayBindingEpoch and refuses stale
+  // writes, so a constant here (the old hardcoded "dbe_0") strands every rebind.
+  expectedDisplayBindingEpoch: string,
 ): Promise<DisplayBindingView> {
   const response = await fetch(`${context.baseUrl}/v1/display-bindings`, {
     method: "POST",
@@ -59,7 +79,7 @@ export async function approveDisplay(
     body: JSON.stringify({
       presentationSessionId: presentation.presentationSessionId,
       displayJoinId: join.displayJoinId,
-      expectedDisplayBindingEpoch: "dbe_0",
+      expectedDisplayBindingEpoch,
       expectedDeckVersion: presentation.deckVersion,
       approvedDisplayId: join.displayId,
       approvedDisplayFingerprint: join.displayFingerprint,
@@ -68,9 +88,12 @@ export async function approveDisplay(
   const body = await responseBody(response);
   const binding =
     typeof body === "object" && body !== null ? (body as Record<string, unknown>).binding : null;
-  const displayBindingEpoch =
-    stringField(body, "displayBindingEpoch") ?? stringField(binding, "displayBindingEpoch");
+  // The endpoint answers an applied approval with the strict AudienceDisplaySession DTO, so
+  // the epoch only ever lives at binding.displayBindingEpoch; anything else fails closed.
+  const displayBindingEpoch = stringField(binding, "displayBindingEpoch");
   if (!response.ok || displayBindingEpoch === null) {
+    const reason = rejectionReason(body);
+    if (!response.ok && reason !== null) throw new DisplayApprovalRejectedError(reason);
     throw new Error("Audience screen approval failed.");
   }
   return { displayBindingEpoch };

@@ -1,0 +1,106 @@
+# anonymous-snapshot probes against http://127.0.0.1:3002 (loopback demo stack impromptu-ulw-g003-demo-*)
+# STAGE_ORIGIN enforced: https://resolve-reform-retired-zshops.trycloudflare.com
+# captured 2026-09-27T17:15:06Z; credentials/cookies redacted
+
+### GET /health (public positive control)
+HTTP/1.1 200 OK
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: b3962b75-b630-4da7-8d0b-1abe8bcd95d1
+Date: Sun, 27 Sep 2026 17:15:06 GMT
+Content-Length: 46
+
+{"service":"projection-gateway","status":"ok"}
+
+### GET /v1/snapshot — no display cookie
+HTTP/1.1 401 Unauthorized
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 84490d9d-9ddc-4e6c-98a9-1be3bbf59f54
+Date: Sun, 27 Sep 2026 17:15:06 GMT
+Content-Length: 36
+
+{"error":"display_session_required"}
+
+### GET /v1/snapshot — forged display cookie
+HTTP/1.1 401 Unauthorized
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 583d3980-a536-4544-9c15-9496b6f0472f
+Date: Sun, 27 Sep 2026 17:15:06 GMT
+Content-Length: 35
+
+{"error":"display_session_expired"}
+
+### GET /v1/events — no display cookie
+HTTP/1.1 401 Unauthorized
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: f776f5e2-99e8-431d-a856-f7421ebe2c38
+Date: Sun, 27 Sep 2026 17:15:06 GMT
+Content-Length: 36
+
+{"error":"display_session_required"}
+
+### POST /v1/stage-applied — forged cookie, closed DTO satisfied
+HTTP/1.1 409 Conflict
+Access-Control-Allow-Origin: https://resolve-reform-retired-zshops.trycloudflare.com
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST
+Access-Control-Allow-Headers: content-type, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 0866e023-71a1-4c1f-8a01-46f34e09cf87
+Date: Sun, 27 Sep 2026 17:15:06 GMT
+Content-Length: 28
+
+{"error":"receipt_rejected"}
+
+### GET /v1/realtime — no cookie (WS upgrade pre-auth)
+HTTP/1.1 403 Forbidden
+Content-Type: application/json
+Cache-Control: no-store
+Date: Sun, 27 Sep 2026 17:15:06 GMT
+Content-Length: 36
+
+{"error":"DISPLAY_SESSION_REQUIRED"}
+
+### GET /v1/realtime — no Origin header at all
+HTTP/1.1 403 Forbidden
+Content-Type: application/json
+Cache-Control: no-store
+Date: Sun, 27 Sep 2026 17:15:06 GMT
+Content-Length: 28
+
+{"error":"ORIGIN_FORBIDDEN"}
+
+### GET /v1/deck-assets/../escape — path escape probe
+HTTP/1.1 400 Bad Request
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: aa545b63-4541-4cde-91f8-44db8e87f6b4
+Date: Sun, 27 Sep 2026 17:15:06 GMT
+Content-Length: 30
+
+{"error":"invalid_asset_path"}
+
+### GET /metrics — no internal bearer
+HTTP/1.1 401 Unauthorized
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 0ad05734-0794-49dc-a076-de8c5ed74412
+Date: Sun, 27 Sep 2026 17:15:06 GMT
+Content-Length: 33
+
+{"error":"internal_unauthorized"}
+
+### GET /internal/display-invitations/inv_probe — no bearer
+HTTP/1.1 404 Not Found
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: da1f4af3-9c5f-4566-aa50-166850591f29
+Date: Sun, 27 Sep 2026 17:15:06 GMT
+Content-Length: 21
+
+{"error":"not_found"}

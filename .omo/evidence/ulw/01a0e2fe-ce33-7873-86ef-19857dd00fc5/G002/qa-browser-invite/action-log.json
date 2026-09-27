@@ -1,0 +1,272 @@
+{
+  "actionLog": [
+    {
+      "at": "2026-09-27T20:11:14.398Z",
+      "step": "sign-in",
+      "detail": "sample presenter account"
+    },
+    {
+      "at": "2026-09-27T20:11:18.545Z",
+      "step": "library-after-signin",
+      "detail": "{\"items\":18,\"getList\":true,\"text\":\"본문으로 건너뛰기\\nI\\nImpromptu\\n발표자 화면\\n발표 준비\\nKO\\nEN\\n로그아웃\\n내 발표\\n\\n올려 둔 발표를 이어서 준비하거나 새 발표를 만들 수 있습니다.\\n\\n다른 발표 자료 올리기\\n내 발표\\nImpromptu sample deck\\n슬라이드 7개 · 최근 수정 2026. 9. 28. 오전 5:09:51 · 발표 준비됨\\n이어서 준비\\n이름 바꾸기\\nKorean text layer\\n슬라이드 6개 · 최근 수정 2026. 9. 28. 오전 4:38:43 · 발표 준비됨\\n이어서 준비\\n이름 바꾸기\\nTask18 zero-activity 844b440b\\n슬라이드 1개 · 최근 수정 2026. 9. 28. 오전 4:12:17 · 발표 종료됨\\n발표 결과 보기\\n이름 바꾸기\\nImpromptu sample deck\\n슬라이드 7개 · \"}"
+    },
+    {
+      "at": "2026-09-27T20:11:23.065Z",
+      "step": "upload-result",
+      "detail": "cockpit rendered"
+    },
+    {
+      "at": "2026-09-27T20:11:23.128Z",
+      "step": "invite-mint-click",
+      "detail": "clicked the copy-stage mint control"
+    },
+    {
+      "at": "2026-09-27T20:11:23.914Z",
+      "step": "invite-link",
+      "detail": "https://impromptu-rev2-stage.vercel.app/#invite=<redacted>"
+    },
+    {
+      "at": "2026-09-27T20:11:24.913Z",
+      "step": "stage-invite-open",
+      "detail": "stage landed on invite URL in its own profile"
+    },
+    {
+      "at": "2026-09-27T20:11:28.919Z",
+      "step": "stage-invite-landing",
+      "detail": "{\"hashScrubbed\":true,\"hasPending\":false,\"joinPost\":null}"
+    },
+    {
+      "at": "2026-09-27T20:11:30.965Z",
+      "step": "console-pending-join",
+      "detail": "{\"pairing\":\"DETECTED\",\"invitation\":\"JOINED\",\"joinDisplay\":\"display_3befe2a1079443c48e3fec1f5a5e33f5\"}"
+    },
+    {
+      "at": "2026-09-27T20:11:31.031Z",
+      "step": "invite-approve",
+      "detail": "approved the pending display join with CAS epoch"
+    },
+    {
+      "at": "2026-09-27T20:11:32.629Z",
+      "step": "stage-slide-rendered",
+      "detail": "{\"readiness\":\"READY\",\"imgComplete\":true,\"naturalWidth\":2560,\"svgInline\":false}"
+    }
+  ],
+  "networkLog": [
+    {
+      "surface": "console",
+      "method": "GET",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/account-session",
+      "status": 401
+    },
+    {
+      "surface": "console",
+      "method": "POST",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/account-sessions",
+      "status": 201
+    },
+    {
+      "surface": "console",
+      "method": "GET",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/presentations",
+      "status": 200
+    },
+    {
+      "surface": "console",
+      "method": "GET",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/account-session",
+      "status": 200
+    },
+    {
+      "surface": "console",
+      "method": "GET",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/presentations",
+      "status": 200
+    },
+    {
+      "surface": "console",
+      "method": "GET",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/account-session",
+      "status": 200
+    },
+    {
+      "surface": "console",
+      "method": "GET",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/presentations",
+      "status": 200
+    },
+    {
+      "surface": "console",
+      "method": "POST",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/deck-uploads",
+      "status": 201
+    },
+    {
+      "surface": "console",
+      "method": "GET",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/deck-assets/cb3ef3db00fecc76a61555d216eabad9284880ae944094afba8ea60a08fc945c/slides/slide-1.png",
+      "status": 200
+    },
+    {
+      "surface": "console",
+      "method": "POST",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/display-invitations",
+      "status": 201
+    },
+    {
+      "surface": "console",
+      "method": "GET",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/reference-documents",
+      "status": 200
+    },
+    {
+      "surface": "stage",
+      "method": "POST",
+      "host": "impromptu-rev2-stage.vercel.app",
+      "path": "/v1/display-joins",
+      "status": 201
+    },
+    {
+      "surface": "stage",
+      "method": "POST",
+      "host": "impromptu-rev2-stage.vercel.app",
+      "path": "/v1/display-session",
+      "status": 409
+    },
+    {
+      "surface": "console",
+      "method": "POST",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/recommendations",
+      "status": 200
+    },
+    {
+      "surface": "stage",
+      "method": "POST",
+      "host": "impromptu-rev2-stage.vercel.app",
+      "path": "/v1/display-session",
+      "status": 409
+    },
+    {
+      "surface": "console",
+      "method": "POST",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/recommendations",
+      "status": 200
+    },
+    {
+      "surface": "console",
+      "method": "POST",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/recommendations",
+      "status": 200
+    },
+    {
+      "surface": "console",
+      "method": "POST",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/recommendations",
+      "status": 200
+    },
+    {
+      "surface": "console",
+      "method": "POST",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/recommendations",
+      "status": 200
+    },
+    {
+      "surface": "console",
+      "method": "POST",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/recommendations",
+      "status": 200
+    },
+    {
+      "surface": "console",
+      "method": "POST",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/recommendations",
+      "status": 200
+    },
+    {
+      "surface": "stage",
+      "method": "POST",
+      "host": "impromptu-rev2-stage.vercel.app",
+      "path": "/v1/display-session",
+      "status": 409
+    },
+    {
+      "surface": "console",
+      "method": "GET",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/display-invitations/dinvite_19e340329d752c62fb02a37671e888df/pending",
+      "status": 200
+    },
+    {
+      "surface": "stage",
+      "method": "POST",
+      "host": "impromptu-rev2-stage.vercel.app",
+      "path": "/v1/display-session",
+      "status": 409
+    },
+    {
+      "surface": "console",
+      "method": "POST",
+      "host": "impromptu-rev2-console.vercel.app",
+      "path": "/v1/display-bindings",
+      "status": 201
+    },
+    {
+      "surface": "stage",
+      "method": "POST",
+      "host": "impromptu-rev2-stage.vercel.app",
+      "path": "/v1/display-session",
+      "status": 201
+    },
+    {
+      "surface": "stage",
+      "method": "GET",
+      "host": "impromptu-rev2-stage.vercel.app",
+      "path": "/v1/events",
+      "status": 200
+    },
+    {
+      "surface": "stage",
+      "method": "GET",
+      "host": "impromptu-rev2-stage.vercel.app",
+      "path": "/v1/snapshot",
+      "status": 200
+    },
+    {
+      "surface": "stage",
+      "method": "GET",
+      "host": "impromptu-rev2-stage.vercel.app",
+      "path": "/v1/deck-assets/cb3ef3db00fecc76a61555d216eabad9284880ae944094afba8ea60a08fc945c/slides/slide-1.png",
+      "status": 200
+    },
+    {
+      "surface": "stage",
+      "method": "GET",
+      "host": "impromptu-rev2-stage.vercel.app",
+      "path": "/v1/snapshot",
+      "status": 200
+    }
+  ],
+  "verdict": {
+    "library": true,
+    "inviteJoin": true,
+    "stagePixels": true
+  },
+  "inviteLinkSeen": true
+}

@@ -1,0 +1,80 @@
+# private-backend probes against http://127.0.0.1:3001 (loopback demo stack)
+# CONSOLE_ORIGIN enforced: https://tribunal-contrast-minerals-managed.trycloudflare.com
+# captured 2026-09-27T17:18:59Z; credentials/cookies/csrf redacted
+# deployed private-backend image predates GET .../qa-defense recheck and display-invitation routes
+
+### A owner: POST /v1/account-sessions (controller bootstrap account, password in body redacted)
+HTTP/1.1 201 Created
+set-cookie: __Host-account=<redacted>; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=28799
+Access-Control-Allow-Origin: https://tribunal-contrast-minerals-managed.trycloudflare.com
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, DELETE
+Access-Control-Allow-Headers: content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 2cec6c6a-7ce9-4c2b-89a9-f8976456ab65
+Date: Sun, 27 Sep 2026 17:18:58 GMT
+Content-Length: 188
+
+{"account":{"accountId":"account_production","actorId":"actor_<redacted>"},"expiresAtMs":1790558339731,"csrfToken":"<redacted>"}
+
+### A owner: GET /v1/account-session (self-read positive)
+HTTP/1.1 200 OK
+Access-Control-Allow-Origin: https://tribunal-contrast-minerals-managed.trycloudflare.com
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, DELETE
+Access-Control-Allow-Headers: content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 451fdf24-e0eb-42f1-ba17-ea8a28d5eecd
+Date: Sun, 27 Sep 2026 17:18:58 GMT
+Content-Length: 188
+
+{"account":{"accountId":"account_production","actorId":"actor_<redacted>"},"expiresAtMs":1790558339731,"csrfToken":"<redacted>"}
+
+### A owner: GET /v1/publications/live-candidates on own session ps_ad14d071...
+HTTP/1.1 403 Forbidden
+Access-Control-Allow-Origin: https://tribunal-contrast-minerals-managed.trycloudflare.com
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, DELETE
+Access-Control-Allow-Headers: content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: b57ae100-20cc-4236-80b7-e9f4eb12f50c
+Date: Sun, 27 Sep 2026 17:18:58 GMT
+Content-Length: 42
+
+{"error":"PUBLICATION_AUTHORITY_REQUIRED"}
+
+### A owner: GET /v1/publications/live-candidates on nonexistent session
+HTTP/1.1 403 Forbidden
+Access-Control-Allow-Origin: https://tribunal-contrast-minerals-managed.trycloudflare.com
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, DELETE
+Access-Control-Allow-Headers: content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: c45cfb2b-f846-44fd-a2f3-e01eb5a8cc92
+Date: Sun, 27 Sep 2026 17:18:58 GMT
+Content-Length: 34
+
+{"error":"PRESENTATION_NOT_FOUND"}
+
+### A owner: GET /v1/presentation-sessions/<own>/qa-defense (deployed image lacks GET route -> fallthrough 400)
+HTTP/1.1 400 Bad Request
+Access-Control-Allow-Origin: https://tribunal-contrast-minerals-managed.trycloudflare.com
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, DELETE
+Access-Control-Allow-Headers: content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: b41e5051-8601-4647-bb32-d8c982ea7605
+Date: Sun, 27 Sep 2026 17:18:58 GMT
+Content-Length: 27
+
+{"error":"invalid_request"}

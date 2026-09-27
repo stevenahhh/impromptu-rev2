@@ -1,0 +1,217 @@
+{
+  "notes": [
+    "[data-copy-stage] not rendered in current cockpit phase",
+    "closed stage1; reopening via console [data-stage-open] again"
+  ],
+  "probes": {
+    "join-malformed": {
+      "status": 400,
+      "body": {
+        "error": "invalid_request"
+      }
+    },
+    "join-invitation-token-malformed": {
+      "status": 400,
+      "body": {
+        "error": "invalid_request"
+      }
+    },
+    "snapshot-no-cookie": {
+      "status": 401,
+      "body": {
+        "error": "display_session_required"
+      }
+    },
+    "events-no-cookie": {
+      "status": 401,
+      "body": {
+        "error": "display_session_required"
+      }
+    },
+    "invitation-mint-no-auth": {
+      "status": 401,
+      "body": {
+        "error": "<cookie>"
+      }
+    },
+    "login-node": {
+      "status": 201,
+      "body": {
+        "accountId": "account_production",
+        "csrfToken": "<redacted>"
+      }
+    },
+    "ui-upload-result": {
+      "status": 201,
+      "body": {
+        "presentationSessionId": "ps_eb258db2667f8f804c650796f364844f",
+        "presentationSessionEpoch": "pse_1",
+        "deckVersion": "deck_<hex64>",
+        "slides": 6,
+        "imageUrlSample": "http://projection-gateway:3002/v1/deck-assets/<hex64>/slides/slide-1.svg"
+      }
+    },
+    "ui-first-bind-response": {
+      "status": 201,
+      "body": {
+        "audienceDisplaySessionId": "audience_<session>",
+        "binding": {
+          "displayBindingId": "binding_b6591d1fa1a7e2370e58f9876a691de6",
+          "presentationSessionId": "ps_eb258db2667f8f804c650796f364844f",
+          "presentationSessionEpoch": "pse_1",
+          "displayId": "display_<id>",
+          "displayBindingEpoch": "dbe_1",
+          "deckVersion": "deck_<hex64>",
+          "manifestHash": "<hex64>"
+        },
+        "expiresAtMs": 1790560153211
+      }
+    },
+    "ui-rebind-response": {
+      "status": 409,
+      "body": {
+        "error": "STALE_DISPLAY_BINDING"
+      }
+    },
+    "independent-device-createJoin": {
+      "status": 201,
+      "body": {
+        "displayJoinId": "join_<id>",
+        "displayId": "display_task2indep01",
+        "deckVersion": "deck_<hex64>",
+        "displayFingerprint": "fp_task2independent",
+        "expiresAtMs": 1790531464638
+      }
+    },
+    "independent-device-claim-unapproved": {
+      "status": 409,
+      "body": {
+        "error": "display_not_approved"
+      }
+    },
+    "join-invitation-token-forged": {
+      "status": 400,
+      "body": {
+        "error": "invalid_request"
+      }
+    },
+    "invitation-mint": {
+      "status": 201,
+      "body": {
+        "invitationId": "dinvite_<id>",
+        "token": "<redacted>",
+        "deckVersion": "deck_<hex64>",
+        "expiresAtMs": 1790531466963,
+        "stagePath": "/?deck=<v>#invite=dinv_<redacted>"
+      }
+    },
+    "invitation-exchange-first": {
+      "status": 400,
+      "body": {
+        "error": "invalid_request"
+      }
+    },
+    "invitation-exchange-replay": {
+      "status": 400,
+      "body": {
+        "error": "invalid_request"
+      }
+    },
+    "approve-join3-assetfail": {
+      "status": 201,
+      "body": {
+        "audienceDisplaySessionId": "audience_<session>",
+        "binding": {
+          "displayBindingId": "binding_1d54747e83256f7cd7cadcd9bd616aa7",
+          "presentationSessionId": "ps_eb258db2667f8f804c650796f364844f",
+          "presentationSessionEpoch": "pse_1",
+          "displayId": "display_<id>",
+          "displayBindingEpoch": "dbe_2",
+          "deckVersion": "deck_<hex64>",
+          "manifestHash": "<hex64>"
+        },
+        "expiresAtMs": 1790560180105
+      }
+    },
+    "approve-join4-mobile": {
+      "status": 201,
+      "body": {
+        "audienceDisplaySessionId": "audience_<session>",
+        "binding": {
+          "displayBindingId": "binding_2d74fce6019b6f3c60835bdff926daf7",
+          "presentationSessionId": "ps_eb258db2667f8f804c650796f364844f",
+          "presentationSessionEpoch": "pse_1",
+          "displayId": "display_<id>",
+          "displayBindingEpoch": "dbe_3",
+          "deckVersion": "deck_<hex64>",
+          "manifestHash": "<hex64>"
+        },
+        "expiresAtMs": 1790560185067
+      }
+    },
+    "cleanup-end-presentation": {
+      "status": 500,
+      "body": {
+        "error": "internal_error"
+      }
+    },
+    "cleanup-revoke-session": {
+      "status": 200,
+      "body": {
+        "status": "revoked"
+      }
+    }
+  },
+  "screens": {
+    "consoleLanding": "본문으로 건너뛰기\nI\nImpromptu\n발표자 화면\nKO\nEN\nImpromptu에 로그인\n\n발표 자료를 준비하고, 발표와 질문에 필요한 정보를 확인하세요.\n\n아이디\n비밀번호\n로그인\n\n로그인하면 발표 준비로 이어집니다.\n\n계정이 없으신가요? 계정 만들기",
+    "stage1OpenedUrl": "https://impromptu-rev2-stage.vercel.app/",
+    "opener": {
+      "readiness": "READY",
+      "url": "/display/display_<id>",
+      "svgPainted": false,
+      "imgPainted": false,
+      "hasOpener": true
+    },
+    "uiRebindState": {
+      "panel": "CONNECTED",
+      "pairing": "WAITING",
+      "text": "발표 화면발표 화면 연결됨다른 기기나 화면으로 연결발표 화면 미리 열기발표 화면 링크 복사발표 화면을 열면 연결 요청이 여기에 표시됩니다.다른 기기에서 발표 화면을 열었다면 그 화면의 연결 코드를 여기에 붙여 넣으세요.발표 화면 연결 코드코드로 화면 연결"
+    },
+    "stage2Reopen": {
+      "readiness": "PAIRING",
+      "url": "/",
+      "svgPainted": false
+    },
+    "independentText": "발표 화면은 발표자 화면에서 열립니다. 주소만으로는 이 화면이 시작되지 않습니다.",
+    "invitedLanding": {
+      "url": "/?deck=deck_<hex64>",
+      "readiness": null,
+      "text": "발표 화면은 발표자 화면에서 열립니다. 주소만으로는 이 화면이 시작되지 않습니다."
+    },
+    "assetFail": {
+      "readiness": "READY",
+      "svgPainted": false,
+      "hostEmpty": true,
+      "bodyText": "수동 배치: 이 화면을 대상 화면으로 옮긴 뒤 전체 화면으로 보여 주세요."
+    }
+  },
+  "verdicts": {
+    "consoleUiSignIn": 201,
+    "uiUpload": 201,
+    "cockpitReached": true,
+    "stageOpenPresent": true,
+    "panelAfterBind": "CONNECTED",
+    "uiRebind": {
+      "status": 409,
+      "body": {
+        "error": "STALE_DISPLAY_BINDING"
+      }
+    },
+    "independentJoinAttempts": 0,
+    "independentInert": true,
+    "invitationReplayDenied": 400,
+    "assetBind": 201,
+    "assetBlockedCount": 2,
+    "completed": true
+  }
+}

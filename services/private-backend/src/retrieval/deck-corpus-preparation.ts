@@ -23,13 +23,15 @@ const EMPTY_SCAN: DeckArtifactScan = {
 };
 
 /**
- * Bound on simultaneous chunk embedding calls inside one preparation. The embedding endpoint
- * serves concurrent queries without degrading (a 20-way burst stayed under ~300ms per call),
- * so overlapping calls shorten the advisory-locked critical section that every concurrent
- * first-wave recommendation waits behind: serially embedding a 44-chunk deck took ~13.5s,
- * which alone exceeded the whole recommendation budget twenty times over.
+ * Bound on simultaneous chunk embedding calls inside one preparation wave, and the number of
+ * chunks one advisory-locked transaction embeds and writes before committing. The embedding
+ * endpoint serializes requests under load, so deeper bursts only lengthen every in-flight
+ * call's wait against its own deadline; a shallow wave still overlaps enough calls to shorten
+ * the critical section (serially embedding a 44-chunk deck took ~13.5s) while bounding how
+ * much uncommitted work one failed call can take down with it.
  */
-const EMBEDDING_CONCURRENCY = 8;
+const EMBEDDING_CONCURRENCY = 4;
+const EMBEDDING_WAVE_SIZE = 4;
 
 export interface DeckCorpusPreparationDependencies {
   readonly repository: TenantScopedPostgresRepository;
@@ -175,11 +177,93 @@ export async function prepareDeckCorpus(
     // whole provider run and burned their entire deadlines on redundant work while holding
     // nothing that late racers could observe. Holding the lock across embedding makes late
     // racers wait once and then see the winner's committed rows instead of repeating them.
-    // A racer that finds this exact scope already written repeats no work; repeating its
-    // work would only rewrite identical rows.
-    let insertedChunkCount = 0;
-    const written = await deps.repository.transaction(principal.tenantId, async (sql) => {
-      await sql`
+    //
+    // Waves commit independently. The previous single-transaction pass rolled back every
+    // already-embedded chunk whenever one call exceeded its deadline, so a provider hiccup
+    // discarded all progress and the next request re-embedded the whole deck from zero while
+    // holding the lock every recommender waits behind - the churn the live baseline logged
+    // as a cancelled index run after every upload. Committing per wave bounds a failure's
+    // blast radius to the chunks still in flight, and re-reading the committed set inside
+    // each locked wave makes a follow-up run embed only what is still missing. A racer that
+    // finds this exact scope already written repeats no work; repeating its work would only
+    // rewrite identical rows.
+    const pendingList = [...scan.pendingRows.values()];
+    const pendingIds = new Set(scan.pendingRows.keys());
+    // Rows in this scope that the current scan no longer produces are stale replacements of
+    // an earlier deck revision and must go; computing the set from the pre-scan read lets the
+    // delete run inside the first locked wave (or a lone cleanup pass) without a second scan.
+    const staleIds = existingRows
+      .map((row) => row.object_id)
+      .filter((objectId) => !pendingIds.has(objectId));
+    let staleCleanupDone = staleIds.length === 0;
+    for (let offset = 0; offset < pendingList.length; offset += EMBEDDING_WAVE_SIZE) {
+      const wave = pendingList.slice(offset, offset + EMBEDDING_WAVE_SIZE);
+      const outcome = await deps.repository.transaction(principal.tenantId, async (sql) => {
+        await sql`
+            SELECT pg_advisory_xact_lock(
+              hashtextextended(
+                ${`${principal.tenantId}:${request.deckVersion}:${request.manifestHash}:${DECK_CORPUS_KIND}`},
+                0
+              )
+            )
+          `;
+        if (!staleCleanupDone) {
+          await sql`
+              DELETE FROM private_app.deck_retrieval_chunks
+              WHERE tenant_id = ${principal.tenantId}
+                AND deck_version = ${request.deckVersion}
+                AND corpus_kind = ${DECK_CORPUS_KIND}
+                AND object_id IN ${sql(staleIds)}
+            `;
+          staleCleanupDone = true;
+        }
+        const current = await sql<readonly Pick<RetrievalRow, "object_id">[]>`
+            SELECT object_id
+            FROM private_app.deck_retrieval_chunks
+            WHERE tenant_id = ${principal.tenantId}
+              AND deck_version = ${request.deckVersion}
+              AND manifest_hash = ${request.manifestHash}
+              AND authorization_version = ${AUTHORIZATION_VERSION}
+              AND corpus_kind = ${DECK_CORPUS_KIND}
+          `;
+        const committed = new Set(current.map((row) => row.object_id));
+        const missing = wave.filter((row) => !committed.has(row.object_id));
+        if (missing.length === 0) return { inserted: 0, failure: undefined };
+        // Commit every chunk whose embedding succeeded even when a sibling call failed:
+        // the successes are durable work the next run does not have to repeat, and the
+        // failure still propagates after the transaction commits.
+        const settled = await mapWithConcurrency(missing, EMBEDDING_CONCURRENCY, (row) =>
+          embedChunk(deps.embedding, row.content, principal).then(
+            (embedding) => ({ ok: true as const, embedding }),
+            (reason: unknown) => ({ ok: false as const, reason }),
+          ),
+        );
+        let inserted = 0;
+        let failure: unknown;
+        for (const [index, result] of settled.entries()) {
+          const row = missing[index];
+          if (row === undefined) continue;
+          if (result.ok) {
+            await insertChunkRow(sql, {
+              ...row,
+              embedding: result.embedding,
+              corpus_kind: DECK_CORPUS_KIND,
+            });
+            inserted += 1;
+          } else if (failure === undefined) {
+            failure = result.reason;
+          }
+        }
+        return { inserted, failure };
+      });
+      indexedChunkCount += outcome.inserted;
+      if (outcome.failure !== undefined) throw outcome.failure;
+    }
+    if (!staleCleanupDone) {
+      // No pending chunks at all (e.g. the rescan produced no extractable text for this
+      // scope): the stale sweep still has to run, under the same advisory lock.
+      await deps.repository.transaction(principal.tenantId, async (sql) => {
+        await sql`
           SELECT pg_advisory_xact_lock(
             hashtextextended(
               ${`${principal.tenantId}:${request.deckVersion}:${request.manifestHash}:${DECK_CORPUS_KIND}`},
@@ -187,48 +271,23 @@ export async function prepareDeckCorpus(
             )
           )
         `;
-      const current = await sql<readonly Pick<RetrievalRow, "object_id">[]>`
-          SELECT object_id
-          FROM private_app.deck_retrieval_chunks
+        await sql`
+          DELETE FROM private_app.deck_retrieval_chunks
           WHERE tenant_id = ${principal.tenantId}
             AND deck_version = ${request.deckVersion}
-            AND manifest_hash = ${request.manifestHash}
-            AND authorization_version = ${AUTHORIZATION_VERSION}
             AND corpus_kind = ${DECK_CORPUS_KIND}
+            AND object_id IN ${sql(staleIds)}
         `;
-      if (existingRows.length === 0 && current.length > 0) return false;
-      if (current.length > 0) {
-        await sql`
-            DELETE FROM private_app.deck_retrieval_chunks
-            WHERE tenant_id = ${principal.tenantId}
-              AND deck_version = ${request.deckVersion}
-              AND corpus_kind = ${DECK_CORPUS_KIND}
-          `;
-      }
-      const pendingList = [...scan.pendingRows.values()];
-      const vectors = await mapWithConcurrency(pendingList, EMBEDDING_CONCURRENCY, (pending) =>
-        embedChunk(deps.embedding, pending.content, principal),
-      );
-      for (const [offset, row] of pendingList.entries()) {
-        await insertChunkRow(sql, {
-          ...row,
-          embedding: vectors[offset] ?? [],
-          corpus_kind: DECK_CORPUS_KIND,
-        });
-      }
-      insertedChunkCount = pendingList.length;
-      return true;
-    });
-    if (!written) {
-      log("SKIPPED", "ALREADY_INDEXED");
-      return;
+      });
+      staleCleanupDone = true;
     }
-    indexedChunkCount = insertedChunkCount;
+
+    if (scan.extractableChunkCount === 0) log("SKIPPED", "NO_EXTRACTABLE_TEXT");
+    else if (indexedChunkCount === 0) log("SKIPPED", "ALREADY_INDEXED");
+    else log("INDEXED", "COMPLETED");
+    return;
   } catch (error) {
     log("FAILED", "PREPARATION_FAILED", error);
     throw error;
   }
-
-  if (scan.extractableChunkCount === 0) log("SKIPPED", "NO_EXTRACTABLE_TEXT");
-  else log("INDEXED", "COMPLETED");
 }

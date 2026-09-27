@@ -1,0 +1,13 @@
+HTTP/1.1 200 OK
+Access-Control-Allow-Origin: https://tribunal-contrast-minerals-managed.trycloudflare.com
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, DELETE
+Access-Control-Allow-Headers: content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 4b7e5216-e76f-42f0-af65-4c67724d82e4
+Date: Sun, 27 Sep 2026 13:46:35 GMT
+Content-Length: 51
+
+{"outcome":"REJECTED","reason":"UNSUPPORTED_CODEC"}

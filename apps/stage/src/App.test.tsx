@@ -1,20 +1,22 @@
-import { afterAll, afterEach, describe, expect, test } from "bun:test";
-import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import { afterEach, describe, expect, test } from "bun:test";
+import { registerDom } from "@impromptu/test-harness";
 
-GlobalRegistrator.register();
-afterAll(() => GlobalRegistrator.unregister());
+registerDom();
 
-const { act, cleanup, fireEvent, render, within } = await import("@testing-library/react");
+const { act, cleanup, fireEvent, render, waitFor, within } = await import("@testing-library/react");
 const { MemoryRouter } = await import("react-router-dom");
 const { RECONCILE_RECOVERY_LIMIT, StageRoutes } = await import("./App");
 const copy = (await import("./locales/ko.json")).default;
 
+import { StrictMode } from "react";
 import type {
+  DisplayIdentity,
   StageEventObserver,
   StagePlaybackEvent,
   StageSessionClient,
   StageSnapshotView,
 } from "./stage-client";
+import { DisplayJoinError } from "./stage-client";
 
 function deferred<Value>() {
   let resolve: ((value: Value) => void) | null = null;
@@ -32,9 +34,9 @@ function deferred<Value>() {
   };
 }
 
-function nextStageEvent(type: string): Promise<unknown> {
+function nextStageEvent(type: string, timeoutMs = 2_000): Promise<unknown> {
   return new Promise((resolve, reject) => {
-    const signal = AbortSignal.timeout(2_000);
+    const signal = AbortSignal.timeout(timeoutMs);
     window.addEventListener(
       type,
       (event) => resolve(event instanceof CustomEvent ? event.detail : null),
@@ -44,6 +46,35 @@ function nextStageEvent(type: string): Promise<unknown> {
       once: true,
     });
   });
+}
+
+/** happy-dom's history.replaceState does not rewrite window.location, so the suite navigates
+ * with location.href (which real navigation semantics resolve) and observes scrubbing through
+ * a spy that bridges the replaceState URL onto the location, matching real browser behavior. */
+function setStageUrl(url: string): void {
+  window.location.href = url.startsWith("http") ? url : `https://stage.test${url}`;
+}
+
+function installHistorySpy(): { readonly calls: string[]; restore(): void } {
+  const original = window.history.replaceState;
+  const calls: string[] = [];
+  const spy = function (
+    this: History,
+    data: unknown,
+    unused: string,
+    url?: string | URL | null,
+  ): void {
+    calls.push(url === null || url === undefined ? "" : String(url));
+    if (url !== undefined && url !== null) setStageUrl(String(url));
+    original.call(this, data, unused, url);
+  };
+  window.history.replaceState = spy;
+  return {
+    calls,
+    restore() {
+      window.history.replaceState = original;
+    },
+  };
 }
 
 afterEach(() => cleanup());
@@ -420,8 +451,12 @@ describe("slide-only public Stage", () => {
       const pending = pendingRefetches[attempt];
       if (pending === undefined) throw new Error(`Recovery refetch ${attempt} did not run`);
       const recoveredApplied = nextStageEvent("impromptu:snapshot-applied");
-      pending.resolve(snapshot);
-      expect(await recoveredApplied).toMatchObject({ publicPlaybackRevision: "pbr_0" });
+      // Resolving the deferred snapshot commits a DisplayPage state update, so resolution and
+      // the resulting snapshot-applied event stay inside the same act scope.
+      await act(async () => {
+        pending.resolve(snapshot);
+        expect(await recoveredApplied).toMatchObject({ publicPlaybackRevision: "pbr_0" });
+      });
     }
     expect(pendingRefetches.length).toBe(RECONCILE_RECOVERY_LIMIT);
 
@@ -472,7 +507,7 @@ describe("console-led pairing", () => {
    */
   async function renderLanding(client: StageSessionClient) {
     const view = render(
-      <MemoryRouter initialEntries={["/?deck=deck_alpha"]}>
+      <MemoryRouter initialEntries={["/?deck=deck_alpha&lang=ko"]}>
         <StageRoutes client={client} />
       </MemoryRouter>,
     );
@@ -518,13 +553,55 @@ describe("console-led pairing", () => {
     }
   });
 
+  test("ignores an invite fragment when a console window opened the page", async () => {
+    const token = `dinv_${"d".repeat(64)}`;
+    const posted: Array<{ data: unknown; origin: string }> = [];
+    const removeOpener = installOpener((data, origin) => posted.push({ data, origin }));
+    const joins: Array<{
+      identity: DisplayIdentity;
+      deckVersion: string;
+      token: string | undefined;
+    }> = [];
+    const recordingClient: StageSessionClient = {
+      ...landingClient({ value: false }),
+      async createJoin(identity, deckVersion, invitationToken) {
+        joins.push({ identity, deckVersion, token: invitationToken });
+        return {
+          ...identity,
+          displayJoinId: "join_opener_path",
+          deckVersion,
+          expiresAtMs: Date.now() + 60_000,
+        };
+      },
+    };
+    const spy = installHistorySpy();
+    setStageUrl(`/?deck=deck_alpha&lang=ko#invite=${token}`);
+    try {
+      await renderLanding(recordingClient);
+
+      // The opener handshake keeps its existing shape: no invitation token is attached, and the
+      // fragment is still scrubbed so the one-use secret cannot linger in the address bar.
+      expect(joins.length).toBe(1);
+      expect(joins[0]?.token).toBeUndefined();
+      expect(spy.calls.some((url) => !url.includes("#"))).toBe(true);
+      expect(window.location.hash).toBe("");
+      expect(posted.length).toBe(1);
+      expect(posted[0]?.origin).toBe(consoleOrigin);
+    } finally {
+      removeOpener();
+      spy.restore();
+      setStageUrl("/");
+    }
+  });
+
   // Both of these encode the current product decision: the bare Stage URL is NOT self-service.
   // A window the Console did not open stays inert, so the security property still holds — a
   // screen can only attach itself through a join the presenter's Console created and approved.
   test("shows only a neutral notice when no console window opened it", async () => {
     await renderLanding(landingClient({ value: false }));
 
-    expect(document.body.textContent).toContain(copy.consoleOnlyNotice);
+    const en = await importEn();
+    expect(document.body.textContent).toContain(en.consoleOnlyNotice);
     expect(document.querySelector(".stage-placement-hint")).toBeNull();
     expect(document.querySelector("[data-display-claim]")).toBeNull();
     expect(document.querySelector(".stage-connection-code")).toBeNull();
@@ -554,5 +631,310 @@ describe("console-led pairing", () => {
     expect(joinsCreated).toBe(0);
     expect(claimsAttempted).toBe(0);
     expect(document.querySelectorAll("button, input").length).toBe(0);
+  });
+});
+
+describe("invitation-led pairing", () => {
+  const validToken = `dinv_${"f".repeat(64)}`;
+  let historySpy: ReturnType<typeof installHistorySpy> | null = null;
+
+  afterEach(() => {
+    historySpy?.restore();
+    historySpy = null;
+    setStageUrl("/");
+  });
+
+  function invitationClient(options?: {
+    readonly joinError?: { current: Error | undefined };
+    readonly expiresAtMs?: number;
+    readonly approved?: { value: boolean };
+  }) {
+    const joins: Array<{
+      identity: DisplayIdentity;
+      deckVersion: string;
+      invitationToken: string | undefined;
+    }> = [];
+    let claims = 0;
+    const approved = options?.approved ?? { value: false };
+    const client: StageSessionClient = {
+      async createJoin(identity, deckVersion, invitationToken) {
+        joins.push({ identity, deckVersion, invitationToken });
+        const failure = options?.joinError?.current;
+        if (failure !== undefined) throw failure;
+        return {
+          ...identity,
+          displayJoinId: "join_invited",
+          deckVersion,
+          expiresAtMs: options?.expiresAtMs ?? Date.now() + 60_000,
+        };
+      },
+      async claim() {
+        claims += 1;
+        if (!approved.value) throw new Error("PENDING_APPROVAL");
+      },
+      async snapshot() {
+        return snapshot;
+      },
+      async subscribe() {
+        return { close() {} };
+      },
+      async recordApplied() {
+        return { status: "STAGE_APPLIED" };
+      },
+    };
+    return { client, joins, claims: () => claims };
+  }
+
+  function joinError(status: number | undefined, reason?: string): Error {
+    return new DisplayJoinError("Display join could not be created.", status, reason);
+  }
+
+  function renderInvitedLanding(client: StageSessionClient, strict = false) {
+    historySpy = installHistorySpy();
+    const routes = (
+      <MemoryRouter initialEntries={["/"]}>
+        <StageRoutes client={client} />
+      </MemoryRouter>
+    );
+    render(strict ? <StrictMode>{routes}</StrictMode> : routes);
+  }
+
+  test("consumes the invite fragment once, shows the pending display identity, and joins on approval", async () => {
+    const approval = { value: false };
+    const { client, joins } = invitationClient({ approved: approval });
+    const joined = nextStageEvent("impromptu:display-join");
+    setStageUrl(`/?deck=deck_alpha&lang=ko#invite=${validToken}`);
+    renderInvitedLanding(client);
+
+    await act(async () => joined);
+    // Exactly one join carries the token; the locator is not authority by itself.
+    expect(joins.length).toBe(1);
+    expect(joins[0]?.invitationToken).toBe(validToken);
+    expect(joins[0]?.deckVersion).toBe("deck_alpha");
+    // The fragment is gone from the address bar and history before the exchange resolves.
+    expect(historySpy?.calls.some((url) => url.includes("#"))).toBe(false);
+    expect(historySpy?.calls).toContain("/?deck=deck_alpha&lang=ko");
+    expect(window.location.hash).toBe("");
+    expect(window.location.href).not.toContain(validToken);
+    // The token stays in memory only: nothing reaches storage, cookies, or the DOM.
+    expect(window.localStorage.getItem("invite")).toBeNull();
+    expect(window.localStorage.length).toBe(0);
+    expect(window.sessionStorage.length).toBe(0);
+    expect(document.cookie).not.toContain(validToken);
+    expect(document.body.textContent).not.toContain(validToken);
+    expect(document.querySelector(".stage-invitation")).not.toBeNull();
+    expect(document.body.textContent).toContain(copy.waitingApproval);
+    const joinedIdentity = joins[0]?.identity;
+    if (joinedIdentity === undefined) throw new Error("join identity missing");
+    expect(document.querySelector("[data-display-id]")?.textContent).toBe(joinedIdentity.displayId);
+    expect(document.querySelector("[data-display-fingerprint]")?.textContent).toBe(
+      joinedIdentity.displayFingerprint,
+    );
+
+    // Only the presenter's approval — modeled by claim() starting to succeed — moves the
+    // Stage onto the public display surface. waitFor keeps an act scope alive around each
+    // check so the interval-driven claim, navigation and display snapshot can commit.
+    const applied = nextStageEvent("impromptu:snapshot-applied", 8_000);
+    approval.value = true;
+    await waitFor(
+      () =>
+        expect(
+          document.querySelector(".stage-display")?.getAttribute("data-audience-readiness"),
+        ).toBe("READY"),
+      { timeout: 8_000 },
+    );
+    expect(await applied).toMatchObject({ publicPlaybackRevision: "pbr_0" });
+    expect(within(document.body).getByRole("img", { name: "Slide one" })).toBeTruthy();
+  });
+
+  test("sends the join exactly once even under StrictMode double-mount", async () => {
+    const { client, joins } = invitationClient();
+    const joined = nextStageEvent("impromptu:display-join");
+    setStageUrl(`/?deck=deck_alpha&lang=ko#invite=${validToken}`);
+    renderInvitedLanding(client, true);
+
+    await act(async () => joined);
+    expect(joins.length).toBe(1);
+    expect(joins[0]?.invitationToken).toBe(validToken);
+  });
+
+  test.each([
+    ["INVITATION_UNKNOWN", 404],
+    ["INVITATION_CONSUMED", 409],
+    ["INVITATION_DECK_MISMATCH", 409],
+  ])(
+    "rejects a %s invitation (%i) without claiming or navigating",
+    async (reason: string, status: number) => {
+      const { client, joins, claims } = invitationClient({
+        joinError: { current: joinError(status, reason) },
+      });
+      const failed = nextStageEvent("impromptu:invitation-failed");
+      setStageUrl(`/?deck=deck_alpha&lang=ko#invite=${validToken}`);
+      renderInvitedLanding(client);
+
+      await act(async () => {
+        await failed;
+      });
+      expect((await failed) as { reason: string }).toMatchObject({ reason });
+      expect(joins.length).toBe(1);
+      expect(claims()).toBe(0);
+      expect(document.body.textContent).toContain(copy.invitationInvalid);
+      expect(document.body.textContent).not.toContain(validToken);
+      expect(document.querySelector(".stage-display")).toBeNull();
+      // A rejected link is dead: no retry affordance that would just replay the same refusal.
+      expect(document.querySelector("[data-invitation-retry]")).toBeNull();
+    },
+  );
+
+  test("shows the expired state for an expired invitation", async () => {
+    const { client, claims } = invitationClient({
+      joinError: { current: joinError(410, "INVITATION_EXPIRED") },
+    });
+    const failed = nextStageEvent("impromptu:invitation-failed");
+    setStageUrl(`/?deck=deck_alpha&lang=ko#invite=${validToken}`);
+    renderInvitedLanding(client);
+
+    await act(async () => {
+      await failed;
+    });
+    expect((await failed) as { reason: string }).toMatchObject({
+      reason: "INVITATION_EXPIRED",
+    });
+    expect(document.body.textContent).toContain(copy.invitationExpired);
+    expect(claims()).toBe(0);
+  });
+
+  test("shows the expired state when the pending join outlives its window", async () => {
+    const { client, joins } = invitationClient({ expiresAtMs: Date.now() - 1 });
+    const expired = nextStageEvent("impromptu:invitation-expired");
+    setStageUrl(`/?deck=deck_alpha&lang=ko#invite=${validToken}`);
+    renderInvitedLanding(client);
+
+    // The expiry check lives in the claim-polling effect, which React only flushes while an act
+    // scope drains — awaiting the event inside act() would deadlock against that flush.
+    await act(async () => {
+      for (let tick = 0; tick < 16; tick += 1) await Promise.resolve();
+    });
+    expect(await expired).toEqual({ reason: "JOIN_EXPIRED" });
+    expect(joins.length).toBe(1);
+    expect(document.body.textContent).toContain(copy.invitationExpired);
+    expect(document.querySelector(".stage-display")).toBeNull();
+  });
+
+  test("treats a malformed invite fragment as an invalid link without any join", async () => {
+    const { client, joins } = invitationClient();
+    setStageUrl("/?deck=deck_alpha&lang=ko#invite=not-a-token");
+    renderInvitedLanding(client);
+    await act(async () => {
+      for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+    });
+
+    expect(joins.length).toBe(0);
+    expect(document.body.textContent).toContain(copy.invitationInvalid);
+    expect(window.location.hash).toBe("");
+  });
+
+  test("offers a retry only for transient join failures", async () => {
+    const transient = { current: joinError(503) as Error | undefined };
+    const { client, joins } = invitationClient({ joinError: transient });
+    const failed = nextStageEvent("impromptu:invitation-failed");
+    setStageUrl(`/?deck=deck_alpha&lang=ko#invite=${validToken}`);
+    renderInvitedLanding(client);
+
+    await act(async () => failed);
+    expect(document.body.textContent).toContain(copy.invitationRetryable);
+    const retry = document.querySelector("[data-invitation-retry]");
+    expect(retry).not.toBeNull();
+    expect(joins.length).toBe(1);
+
+    // With the transient failure cleared, the retry consumes the same in-memory token once more
+    // and lands in the pending-approval state without any URL involvement.
+    transient.current = undefined;
+    const joined = nextStageEvent("impromptu:display-join");
+    await act(async () => {
+      fireEvent.click(retry as Element);
+      await joined;
+    });
+    expect(joins.length).toBe(2);
+    expect(joins[1]?.invitationToken).toBe(validToken);
+    expect(document.body.textContent).toContain(copy.waitingApproval);
+    expect(window.location.hash).toBe("");
+  });
+});
+
+async function importEn() {
+  return (await import("./locales/en.json")).default;
+}
+
+describe("audience language", () => {
+  test("resolves the browser language, honors an explicit ?lang= override, and defaults to Korean", async () => {
+    const { resolveStageLocale, stageMessages } = await import("./stage-i18n");
+    expect(resolveStageLocale("", ["en-US", "en"])).toBe("en");
+    expect(resolveStageLocale("", ["fr-FR", "ko-KR"])).toBe("ko");
+    expect(resolveStageLocale("", [])).toBe("ko");
+    expect(resolveStageLocale("?lang=en", ["ko-KR"])).toBe("en");
+    expect(resolveStageLocale("?lang=ko", ["en-US"])).toBe("ko");
+    expect(resolveStageLocale("?lang=zh", ["en-US"])).toBe("en");
+    // Both catalogs expose the same key set so a resolved locale never renders a missing string.
+    const koKeys = Object.keys(stageMessages("ko")).sort();
+    expect(Object.keys(stageMessages("en")).sort()).toEqual(koKeys);
+  });
+
+  test("renders the Korean notice by default and the English one for an English device", async () => {
+    const { stageMessages } = await import("./stage-i18n");
+    const renderWithLanguages = async (languages: string[]) => {
+      const original = Object.getOwnPropertyDescriptor(window.navigator, "languages");
+      Object.defineProperty(window.navigator, "languages", {
+        configurable: true,
+        value: languages,
+      });
+      try {
+        render(
+          <MemoryRouter initialEntries={["/"]}>
+            <StageRoutes client={stageClient(deferred())} />
+          </MemoryRouter>,
+        );
+        await act(async () => {});
+      } finally {
+        if (original === undefined) {
+          delete (window.navigator as { languages?: readonly string[] }).languages;
+        } else {
+          Object.defineProperty(window.navigator, "languages", original);
+        }
+      }
+    };
+
+    await renderWithLanguages(["en-US"]);
+    expect(document.body.textContent).toContain(stageMessages("en").consoleOnlyNotice);
+    cleanup();
+
+    await renderWithLanguages(["ko-KR"]);
+    expect(document.body.textContent).toContain(stageMessages("ko").consoleOnlyNotice);
+    cleanup();
+  });
+});
+
+describe("truthful slide failure", () => {
+  test("a slide whose image cannot load reports SLIDE_FAILED instead of a blank READY", async () => {
+    const observerSignal = deferred<StageEventObserver>();
+    const snapshotApplied = nextStageEvent("impromptu:snapshot-applied");
+    render(
+      <MemoryRouter initialEntries={["/display/display_alpha?lang=ko"]}>
+        <StageRoutes client={stageClient(observerSignal)} />
+      </MemoryRouter>,
+    );
+    await act(async () => snapshotApplied);
+    const display = document.querySelector(".stage-display");
+    expect(display?.getAttribute("data-audience-readiness")).toBe("READY");
+
+    const img = document.querySelector("img.stage-slide");
+    expect(img).not.toBeNull();
+    await act(async () => {
+      fireEvent.error(img as Element);
+    });
+
+    expect(display?.getAttribute("data-audience-readiness")).toBe("SLIDE_FAILED");
+    const en = await importEn();
+    expect(document.body.textContent).toContain(en.slideUnavailable);
   });
 });

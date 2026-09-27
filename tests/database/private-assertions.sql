@@ -22,7 +22,7 @@ SELECT pg_temp.assert_true(
 );
 SELECT pg_temp.assert_true(
   (
-    SELECT count(*) = 6 AND bool_and(relrowsecurity) AND bool_and(relforcerowsecurity)
+    SELECT count(*) = 8 AND bool_and(relrowsecurity) AND bool_and(relforcerowsecurity)
     FROM pg_class AS relation
     JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
     WHERE namespace.nspname = 'private_app'
@@ -32,14 +32,16 @@ SELECT pg_temp.assert_true(
         'evidence_candidates',
         'publication_outbox',
         'slide_visits',
-        'session_report_state'
+        'session_report_state',
+        'team_question_grants',
+        'team_questions'
       )
   ),
   'every tenant-owned private table must force row-level security'
 );
 SELECT pg_temp.assert_true(
   (
-    SELECT count(*) = 6
+    SELECT count(*) = 8
     FROM pg_policies
     WHERE schemaname = 'private_app'
       AND tablename IN (
@@ -48,7 +50,9 @@ SELECT pg_temp.assert_true(
         'evidence_candidates',
         'publication_outbox',
         'slide_visits',
-        'session_report_state'
+        'session_report_state',
+        'team_question_grants',
+        'team_questions'
       )
       AND policyname = 'tenant_isolation'
       AND permissive = 'PERMISSIVE'
@@ -57,6 +61,75 @@ SELECT pg_temp.assert_true(
       AND with_check LIKE '%app.tenant_id%'
   ),
   'tenant-owned tables must have fail-closed read and write policies'
+);
+SELECT pg_temp.assert_true(
+  EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'private_app'
+      AND tablename = 'team_question_grants'
+      AND policyname = 'teammate_target'
+      AND permissive = 'PERMISSIVE'
+      AND cmd = 'SELECT'
+      AND roles = '{private_app}'
+      AND qual LIKE '%app.actor_account_id%'
+      AND qual LIKE '%teammate_account_id%'
+  )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM pg_policies
+      WHERE schemaname = 'private_app'
+        AND tablename = 'team_questions'
+        AND policyname <> 'tenant_isolation'
+        AND roles <> '{impromptu_owner}'
+    ),
+  'the only cross-tenant read must be the teammate-pinned SELECT on grants; the inbox table admits tenant context only'
+);
+SELECT pg_temp.assert_true(
+  has_table_privilege(
+    'private_app',
+    'private_app.team_question_grants',
+    'SELECT,INSERT,UPDATE'
+  )
+    AND NOT has_table_privilege('private_app', 'private_app.team_question_grants', 'DELETE')
+    AND has_table_privilege('private_app', 'private_app.team_questions', 'SELECT,INSERT')
+    AND NOT has_table_privilege(
+      'private_app',
+      'private_app.team_questions',
+      'UPDATE,DELETE'
+    ),
+  'grant rows must be revocable but never deletable; question rows must be append-only'
+);
+SELECT pg_temp.assert_true(
+  EXISTS (
+    SELECT 1
+    FROM pg_indexes
+    WHERE schemaname = 'private_app'
+      AND tablename = 'team_question_grants'
+      AND indexdef LIKE '%UNIQUE%invitation_digest%'
+  )
+    AND EXISTS (
+      SELECT 1
+      FROM pg_constraint
+      WHERE conrelid = 'private_app.team_question_grants'::regclass
+        AND contype = 'f'
+        AND confrelid = 'private_app.presentation_sessions'::regclass
+    )
+    AND EXISTS (
+      SELECT 1
+      FROM pg_constraint
+      WHERE conrelid = 'private_app.team_question_grants'::regclass
+        AND contype = 'f'
+        AND confrelid = 'private_app.accounts'::regclass
+    )
+    AND EXISTS (
+      SELECT 1
+      FROM pg_constraint
+      WHERE conrelid = 'private_app.team_questions'::regclass
+        AND contype = 'f'
+        AND confrelid = 'private_app.team_question_grants'::regclass
+    ),
+  'grants must pin a unique invitation digest and reference sessions, accounts and the parent grant'
 );
 SELECT pg_temp.assert_true(
   (
@@ -172,7 +245,7 @@ SELECT pg_temp.assert_true(
 );
 SELECT pg_temp.assert_true(
   (
-    SELECT count(*) = 9
+    SELECT count(*) = 12
     FROM _migrations.applied_migrations
     WHERE migration_name IN (
       '0001_private_foundation.sql',
@@ -183,7 +256,10 @@ SELECT pg_temp.assert_true(
       '0006_deck_retrieval_chunks.sql',
       '0007_embedding_dimension.sql',
       '0008_deck_retrieval_hybrid.sql',
-      '0009_session_reports.sql'
+      '0009_session_reports.sql',
+      '0010_reference_documents.sql',
+      '0011_qa_exchanges.sql',
+      '0012_team_questions.sql'
     )
       AND checksum ~ '^[0-9a-f]{64}$'
   ),

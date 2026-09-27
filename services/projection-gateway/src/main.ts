@@ -1,7 +1,10 @@
 import { parseProjectionGatewayConfig } from "./config.ts";
 import { createDeckAssetReader, createProjectionGatewayHandler } from "./http.ts";
 import { createJsonLogger, createMetricsRegistry } from "./observability.ts";
-import { createPostgresProjectionGatewayPersistence } from "./ports/postgres-projection-store.ts";
+import {
+  createPostgresDisplayInvitationPersistence,
+  createPostgresProjectionGatewayPersistence,
+} from "./ports/postgres-projection-store.ts";
 import { PreparedEvidenceProjectionGateway } from "./prepared-evidence.ts";
 import { createTokenBucketRateLimiter } from "./rate-limit.ts";
 import { createProjectionRealtimeProtocol, type ProjectionRealtimeConnection } from "./realtime.ts";
@@ -55,6 +58,14 @@ const projectionStateKey = Bun.env.PROJECTION_GATEWAY_STATE_KEY;
 const persistence = await createPostgresProjectionGatewayPersistence(projectionSql, {
   ...(projectionStateKey === undefined ? {} : { stateKey: projectionStateKey }),
 });
+// Invitations restore into the same in-memory store from their own versioned row, before
+// the gateway ever serves a request.
+const invitationStateKey = Bun.env.PROJECTION_INVITATION_STATE_KEY;
+const invitationPersistence = await createPostgresDisplayInvitationPersistence(
+  projectionSql,
+  persistence.store,
+  invitationStateKey === undefined ? {} : { stateKey: invitationStateKey },
+);
 const gateway = new PreparedEvidenceProjectionGateway(persistence.store);
 const logger = createJsonLogger();
 const metrics = createMetricsRegistry("projection_gateway");
@@ -92,6 +103,7 @@ const httpHandler = createProjectionGatewayHandler(config, {
   internalAuthToken,
   now: Date.now,
   persist: persistence.persist,
+  persistInvitations: invitationPersistence.persist,
   stageReceiptWriter: { recordApplied },
   deckAssets: createDeckAssetReader(deckArtifactRoot),
   logger,

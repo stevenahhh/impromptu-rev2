@@ -1,7 +1,10 @@
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { copyFileSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { createServer as createHttpServer, type Server } from "node:http";
 import { createServer as createNetServer } from "node:net";
 import { extname, join, resolve } from "node:path";
+import type { Readable } from "node:stream";
 
 import { type BrowserContext, chromium, type Page } from "playwright-core";
 import { build as buildVite, createServer as createViteServer, preview } from "vite";
@@ -26,10 +29,21 @@ async function availablePort(): Promise<number> {
   return address.port;
 }
 
-const chromeExecutable = process.env.CHROME_EXECUTABLE_PATH ?? chromium.executablePath();
+// An empty CHROME_EXECUTABLE_PATH (`.env` ships it blank) must fall back to the installed
+// Playwright Chromium: the variable is present, so `??` alone would leave a literal "" path.
+const configuredChromeExecutable = process.env.CHROME_EXECUTABLE_PATH;
+const chromeExecutable =
+  configuredChromeExecutable === undefined || configuredChromeExecutable === ""
+    ? chromium.executablePath()
+    : configuredChromeExecutable;
 const chromeHeadless = process.env.BROWSER_HEADED !== "true";
 const stagePort = await availablePort();
 const embedPort = await availablePort();
+const consolePort = await availablePort();
+const consoleBackendPort = await availablePort();
+const consoleOrigin = `http://127.0.0.1:${consolePort}`;
+const consoleDistDir = `.next-browser-runtime-${process.pid}`;
+const consoleTsconfig = `.tsconfig-browser-runtime-${process.pid}.json`;
 const devPorts = [await availablePort(), await availablePort()] as const;
 const lifecyclePorts = [await availablePort(), await availablePort()] as const;
 let runtimeRoot: string;
@@ -122,6 +136,8 @@ async function buildRuntimeDistributions() {
     }
   }
   console.log("Built isolated production distribution for Stage.");
+  await buildConsoleDistribution();
+  console.log("Built the production Console (Next.js) for accessibility checks.");
 }
 
 async function verifyDevResponseHeaders() {
@@ -165,6 +181,192 @@ async function closeHttpServer(server: Server) {
   await new Promise<void>((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()));
   });
+}
+
+type ServiceProcess = ReturnType<typeof spawn>;
+
+async function waitForOutput(
+  stream: Readable,
+  expected: string,
+  timeoutMs = 30_000,
+): Promise<void> {
+  await new Promise<void>((resolveWait, rejectWait) => {
+    let output = "";
+    const signal = AbortSignal.timeout(timeoutMs);
+    const cleanup = () => {
+      stream.off("data", onData);
+      stream.off("end", onEnd);
+      signal.removeEventListener("abort", onAbort);
+    };
+    const onData = (chunk: Buffer) => {
+      output += chunk.toString("utf8");
+      if (output.includes(expected)) {
+        cleanup();
+        resolveWait();
+      }
+    };
+    const onEnd = () => {
+      cleanup();
+      rejectWait(new Error(`process exited before ${expected}: ${output}`));
+    };
+    const onAbort = () => {
+      cleanup();
+      rejectWait(new Error(`process did not emit ${expected}: ${output}`));
+    };
+    stream.on("data", onData);
+    stream.once("end", onEnd);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+async function runCommand(
+  command: readonly string[],
+  cwd: string,
+  environment = process.env,
+): Promise<void> {
+  const executable = command[0];
+  if (executable === undefined) throw new Error("empty command");
+  const child = spawn(executable, command.slice(1), {
+    cwd,
+    env: environment,
+    stdio: "inherit",
+  });
+  const [code] = await once(child, "exit", { signal: AbortSignal.timeout(300_000) });
+  if (code !== 0) throw new Error(`command failed (${String(code)}): ${command.join(" ")}`);
+}
+
+async function startServiceProcess(
+  command: readonly string[],
+  expected: string,
+  environment = process.env,
+): Promise<ServiceProcess> {
+  const executable = command[0];
+  if (executable === undefined) throw new Error("empty service command");
+  const child = spawn(executable, command.slice(1), {
+    env: environment,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  try {
+    await waitForOutput(child.stdout, expected, 60_000);
+    return child;
+  } catch (error) {
+    child.kill();
+    await once(child, "exit", { signal: AbortSignal.timeout(5_000) }).catch(() => undefined);
+    throw error;
+  }
+}
+
+async function stopServiceProcess(child: ServiceProcess): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  const exited = once(child, "exit", { signal: AbortSignal.timeout(5_000) });
+  child.kill();
+  await exited;
+}
+
+// The authenticated fixture covers exactly what the Console asks a private backend for during
+// these checks: session creation and the owner-scoped report read. Everything else stays a 404
+// so an unexpected private fetch surfaces as a failure instead of silently succeeding.
+const A11Y_REPORT_SESSION_ID = "ps_a11y";
+const A11Y_SESSION_BODY = JSON.stringify({
+  account: { accountId: "account_a11y", actorId: "actor_a11y" },
+  csrfToken: "a11y-csrf",
+  expiresAtMs: 4_102_444_800_000,
+});
+const A11Y_REPORT_BODY = JSON.stringify({
+  report: {
+    reportVersion: 1,
+    presentationSessionId: A11Y_REPORT_SESSION_ID,
+    ownerAccountId: "account_a11y",
+    finalizedAtMs: 1_758_925_200_000,
+    totalDurationMs: 46_000,
+    slideVisits: [
+      {
+        sequence: 1,
+        publicSlideKey: "slide_public_1",
+        occurrenceSequence: 1,
+        enteredOffsetMs: 0,
+        leftOffsetMs: 46_000,
+        dwellMs: 46_000,
+        revisit: false,
+      },
+    ],
+    speech: {
+      derivedSummary: "발표 음성 요약",
+      wordCount: 120,
+      speakingDurationMs: 40_000,
+      timingAggregate: { finalCount: 8, measuredFinalCount: 8 },
+      coachingAggregate: {
+        cueCount: 1,
+        latestCurrentWordsPerMinute: 140,
+        latestPreviousWordsPerMinute: null,
+      },
+    },
+    preparedEvidence: { label: "준비된 근거", items: [] },
+  },
+});
+
+function startConsoleFixtureBackend(): Promise<Server> {
+  const server = createHttpServer((request, response) => {
+    const url = new URL(request.url ?? "/", `http://127.0.0.1:${consoleBackendPort}`);
+    if (request.method === "POST" && url.pathname === "/v1/account-sessions") {
+      response.writeHead(200, {
+        "Content-Type": "application/json",
+        "Set-Cookie": "impromptu_session=a11y; Path=/; HttpOnly; SameSite=Strict",
+      });
+      response.end(A11Y_SESSION_BODY);
+      return;
+    }
+    if (
+      request.method === "GET" &&
+      url.pathname === `/v1/presentation-sessions/${A11Y_REPORT_SESSION_ID}/report`
+    ) {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(A11Y_REPORT_BODY);
+      return;
+    }
+    response.writeHead(404, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ error: "a11y_fixture_not_found" }));
+  });
+  return new Promise<Server>((resolveListen, rejectListen) => {
+    server.once("error", rejectListen);
+    server.listen(consoleBackendPort, "127.0.0.1", () => resolveListen(server));
+  });
+}
+
+// The Console is a Next.js app, not a Vite PWA, so it cannot ride the `surfaces` pipeline
+// (Vite build, preview origin, service-worker lifecycle). It is built once with `next build`
+// into its gitignored .next output and served with `next start` for the accessibility matrix.
+async function buildConsoleDistribution() {
+  copyFileSync("apps/console/tsconfig.json", join("apps/console", consoleTsconfig));
+  await runCommand(["bun", "run", "build"], "apps/console", {
+    ...process.env,
+    IMPROMPTU_NEXT_DIST_DIR: consoleDistDir,
+    IMPROMPTU_NEXT_TSCONFIG: consoleTsconfig,
+  });
+}
+
+async function startConsoleOrigin(): Promise<ServiceProcess> {
+  return startServiceProcess(
+    [
+      "node",
+      "apps/console/node_modules/next/dist/bin/next",
+      "start",
+      "apps/console",
+      "--port",
+      String(consolePort),
+    ],
+    "Ready in",
+    {
+      ...process.env,
+      NODE_ENV: "production",
+      // Loopback fixture origin: production demands HTTPS only for browser-routed hops; the
+      // server-to-server proxy hop may be cleartext on 127.0.0.1.
+      CONSOLE_PRIVATE_API_ORIGIN: `http://127.0.0.1:${consoleBackendPort}`,
+      STAGE_ORIGIN: `http://127.0.0.1:${stagePort}`,
+      IMPROMPTU_NEXT_DIST_DIR: consoleDistDir,
+      IMPROMPTU_NEXT_TSCONFIG: consoleTsconfig,
+    },
+  );
 }
 
 async function startLifecycleOrigin(surface: AppSurface, port: number): Promise<LifecycleOrigin> {
@@ -600,27 +802,52 @@ async function verifyUpdateLifecycles() {
   }
 }
 
-async function assertStageFitsViewport(page: Page, label: string, selectors: string[]) {
-  const result = await page.evaluate((criticalSelectors) => {
-    const viewport = { height: window.innerHeight, width: window.innerWidth };
-    const clipped = criticalSelectors.flatMap((selector) =>
-      [...document.querySelectorAll(selector)].flatMap((element) => {
-        const rect = element.getBoundingClientRect();
-        return rect.top < 0 ||
-          rect.left < 0 ||
-          rect.bottom > viewport.height ||
-          rect.right > viewport.width
-          ? [selector]
-          : [];
-      }),
-    );
-    return {
-      clipped,
-      documentHeight: document.documentElement.scrollHeight,
-      viewport,
-    };
-  }, selectors);
+async function assertStageFitsViewport(
+  page: Page,
+  label: string,
+  criticalSelectors: readonly string[],
+  removedSelectors: readonly string[] = [],
+) {
+  // Measure the settled layout, not the ui-reveal entrance frame: transforms count in
+  // getBoundingClientRect, so a mid-animation read reports a transient clip.
+  await page.evaluate(async () => {
+    await Promise.race([
+      Promise.allSettled(document.getAnimations().map((animation) => animation.finished)),
+      new Promise((resolve) => setTimeout(resolve, 5_000)),
+    ]);
+  });
+  const result = await page.evaluate(
+    ({ critical, removed }) => {
+      const viewport = { height: window.innerHeight, width: window.innerWidth };
+      const clipped = critical.flatMap((selector) =>
+        [...document.querySelectorAll(selector)].flatMap((element) => {
+          const rect = element.getBoundingClientRect();
+          return rect.top < 0 ||
+            rect.left < 0 ||
+            rect.bottom > viewport.height ||
+            rect.right > viewport.width
+            ? [selector]
+            : [];
+        }),
+      );
+      return {
+        clipped,
+        documentHeight: document.documentElement.scrollHeight,
+        missing: critical.filter((selector) => document.querySelector(selector) === null),
+        present: removed.filter((selector) => document.querySelector(selector) !== null),
+        viewport,
+      };
+    },
+    { critical: [...criticalSelectors], removed: [...removedSelectors] },
+  );
 
+  if (result.missing.length > 0 || result.present.length > 0) {
+    throw new Error(
+      `${label} rendered the wrong Stage surface: ` +
+        `missing=${result.missing.join(",") || "none"}, ` +
+        `resurrected=${result.present.join(",") || "none"}`,
+    );
+  }
   if (result.documentHeight > result.viewport.height || result.clipped.length > 0) {
     throw new Error(
       `${label} overflowed ${result.viewport.width}x${result.viewport.height}: ` +
@@ -636,23 +863,33 @@ async function verifyStageLayouts(context: BrowserContext) {
     { height: 800, label: "320x800", width: 320 },
     { height: 450, label: "200-percent-equivalent", width: 720 },
   ] as const;
+  // Slide-only Stage: no chrome, no fullscreen/placement buttons, no pairing scaffolding. The
+  // landing route without a Console opener is the deliberate inert notice (`stage-console-only`);
+  // the display route is the audience surface itself.
   const routes = [
     {
-      critical: [".ui-shell__header", ".stage-welcome", ".stage-join", ".stage-join .ui-button"],
+      critical: ["main.stage-console-only"],
       name: "landing",
       path: "/",
-    },
-    {
-      critical: [
-        ".stage-display__bar",
-        ".stage-display__actions",
-        ".stage-display__actions .ui-button",
-        ".stage-display__content",
-        ".stage-claim",
+      removed: [
+        "[data-stage-fullscreen]",
+        "[data-stage-placement]",
+        "[data-stage-chrome='visible']",
         ".stage-evidence",
       ],
+    },
+    {
+      critical: ["[data-audience-readiness]", ".stage-display__content", ".stage-claim"],
       name: "display",
       path: "/display/rehearsal",
+      removed: [
+        "[data-stage-fullscreen]",
+        "[data-stage-placement]",
+        "[data-stage-chrome='visible']",
+        ".stage-display__bar",
+        ".stage-display__actions",
+        ".stage-evidence",
+      ],
     },
   ] as const;
 
@@ -664,7 +901,13 @@ async function verifyStageLayouts(context: BrowserContext) {
         waitUntil: "domcontentloaded",
       });
       await page.locator("#root").waitFor({ state: "visible" });
-      await assertStageFitsViewport(page, `${route.name}-${viewport.label}`, [...route.critical]);
+      await page.locator(route.critical[0]).waitFor({ state: "visible" });
+      await assertStageFitsViewport(
+        page,
+        `${route.name}-${viewport.label}`,
+        route.critical,
+        route.removed,
+      );
       await page.screenshot({
         path: join(artifactPath, `stage-${route.name}-${viewport.label}.png`),
       });
@@ -672,96 +915,171 @@ async function verifyStageLayouts(context: BrowserContext) {
     }
   }
 
-  const fullscreenPage = await context.newPage();
-  await fullscreenPage.setViewportSize({ height: 900, width: 1440 });
-  await fullscreenPage.goto(`http://127.0.0.1:${stagePort}/display/rehearsal`, {
+  // Placement is a published outcome, not a control: the display announces it on mount through
+  // `impromptu:target-screen-placement` and an assistive-only live region. Headless single-screen
+  // Chrome can only ever reach MANUAL_FALLBACK; TARGET_PLACED requires a physical second screen.
+  const placementPage = await context.newPage();
+  await placementPage.setViewportSize({ height: 900, width: 1440 });
+  await placementPage.addInitScript(() => {
+    Reflect.set(window, "__runtimePlacementRecords", []);
+    window.addEventListener("impromptu:target-screen-placement", (event) => {
+      const records = Reflect.get(window, "__runtimePlacementRecords") as unknown[];
+      records.push(event instanceof CustomEvent ? event.detail : null);
+    });
+  });
+  await placementPage.goto(`http://127.0.0.1:${stagePort}/display/rehearsal`, {
     waitUntil: "domcontentloaded",
   });
-  await fullscreenPage.locator("[data-stage-fullscreen]").waitFor({ state: "visible" });
-  const enteredMarker = "IMPROMPTU_FULLSCREEN_ENTERED";
-  const enterFullscreen = fullscreenPage.waitForEvent("console", {
-    predicate: (message) => message.text() === enteredMarker,
+  await placementPage.locator("[data-audience-readiness]").waitFor({ state: "visible" });
+  const placementDetail = await placementPage.evaluate(async () => {
+    const records = Reflect.get(window, "__runtimePlacementRecords") as unknown[];
+    if (records.length === 0) {
+      const observed = await new Promise<unknown>((resolveObserve, rejectObserve) => {
+        const signal = AbortSignal.timeout(10_000);
+        window.addEventListener(
+          "impromptu:target-screen-placement",
+          (event) => resolveObserve(event instanceof CustomEvent ? event.detail : null),
+          { once: true },
+        );
+        signal.addEventListener(
+          "abort",
+          () => rejectObserve(new Error("target-screen placement was never published")),
+          { once: true },
+        );
+      });
+      records.push(observed);
+    }
+    return records[0];
   });
-  await fullscreenPage.evaluate((marker) => {
-    document.addEventListener("fullscreenchange", () => console.info(marker), { once: true });
-  }, enteredMarker);
-  await fullscreenPage.locator("[data-stage-fullscreen]").click();
-  await enterFullscreen;
-  if (!(await fullscreenPage.evaluate(() => document.fullscreenElement !== null))) {
-    throw new Error("Fullscreen enter event fired without an active fullscreen element");
+  if (
+    typeof placementDetail !== "object" ||
+    placementDetail === null ||
+    !["TARGET_PLACED", "TARGET_LOST_RECOVERED", "MANUAL_FALLBACK"].includes(
+      String((placementDetail as Record<string, unknown>).status),
+    ) ||
+    (placementDetail as Record<string, unknown>).privatePixelCount !== 0
+  ) {
+    throw new Error(
+      `Stage did not publish a clean target-screen placement outcome: ${JSON.stringify(placementDetail)}`,
+    );
   }
-  await assertStageFitsViewport(fullscreenPage, "physical-fullscreen", routes[1].critical.slice());
-  await fullscreenPage.screenshot({ path: join(artifactPath, "stage-physical-fullscreen.png") });
-  const exitedMarker = "IMPROMPTU_FULLSCREEN_EXITED";
-  const exitFullscreen = fullscreenPage.waitForEvent("console", {
-    predicate: (message) => message.text() === exitedMarker,
-  });
-  await fullscreenPage.evaluate((marker) => {
-    document.addEventListener("fullscreenchange", () => console.info(marker), { once: true });
-  }, exitedMarker);
-  await fullscreenPage.locator("[data-stage-fullscreen]").click();
-  await exitFullscreen;
-  if (await fullscreenPage.evaluate(() => document.fullscreenElement !== null)) {
-    throw new Error("Fullscreen exit event fired while fullscreen remained active");
+  const placementAnnouncement = (
+    await placementPage.locator(".stage-display [aria-live='polite']").textContent()
+  )?.trim();
+  if (placementAnnouncement === undefined || placementAnnouncement === "") {
+    throw new Error("Stage did not publish a placement summary for assistive technology");
   }
-  await fullscreenPage.close();
-  console.log("Stage layout and fullscreen controls fit every required viewport.");
+  if ((await placementPage.locator("[data-stage-fullscreen]").count()) !== 0) {
+    throw new Error("Stage reintroduced a local fullscreen control");
+  }
+  await placementPage.screenshot({ path: join(artifactPath, "stage-placement-outcome.png") });
+  await placementPage.close();
+  console.log("Stage slide-only layout and published placement outcome fit every viewport.");
 }
 
 interface AccessibilityRoute {
   app: AppSurface["app"];
   authenticated?: boolean;
+  /** Selectors that must carry a visible forced-colors border; null skips the check. */
+  forcedColorsSelector: string | null;
+  /** Exact expected landmark counts; the slide-only Stage landing is deliberately h1-free. */
+  landmarks: { readonly h1: number; readonly main: number; readonly nav: number };
   name: string;
   path: string;
+  /** Extra element to await before asserting, beyond the always-required `main`. */
+  readySelector?: string;
 }
 
+const CONSOLE_FORCED_COLORS = ".ui-button, .ui-panel, .ui-brand__mark, .ui-badge";
+
 const accessibilityRoutes: readonly AccessibilityRoute[] = [
-  { app: "stage", name: "landing", path: "/" },
-  { app: "stage", name: "display", path: "/display/rehearsal" },
+  {
+    app: "console",
+    forcedColorsSelector: CONSOLE_FORCED_COLORS,
+    landmarks: { h1: 1, main: 1, nav: 0 },
+    name: "sign-in",
+    path: "/sign-in",
+  },
+  {
+    app: "console",
+    authenticated: true,
+    forcedColorsSelector: CONSOLE_FORCED_COLORS,
+    landmarks: { h1: 1, main: 1, nav: 0 },
+    name: "workspace",
+    path: "/",
+  },
+  {
+    app: "console",
+    authenticated: true,
+    forcedColorsSelector: CONSOLE_FORCED_COLORS,
+    landmarks: { h1: 1, main: 1, nav: 0 },
+    name: "session",
+    path: "/session",
+  },
+  {
+    app: "console",
+    authenticated: true,
+    forcedColorsSelector: CONSOLE_FORCED_COLORS,
+    landmarks: { h1: 1, main: 1, nav: 1 },
+    name: "report",
+    path: `/reports/${A11Y_REPORT_SESSION_ID}`,
+    readySelector: "[data-presentation-report='ready']",
+  },
+  {
+    app: "stage",
+    forcedColorsSelector: null,
+    landmarks: { h1: 0, main: 1, nav: 0 },
+    name: "landing",
+    path: "/",
+  },
+  {
+    app: "stage",
+    forcedColorsSelector: null,
+    landmarks: { h1: 1, main: 1, nav: 0 },
+    name: "display",
+    path: "/display/rehearsal",
+  },
 ];
 
-async function openAccessibilityRoute(context: BrowserContext, route: AccessibilityRoute) {
+function accessibilityOrigin(route: AccessibilityRoute): string {
+  if (route.app === "console") return consoleOrigin;
   const surface = surfaces.find((candidate) => candidate.app === route.app);
   if (!surface) throw new Error(`missing accessibility surface for ${route.app}`);
+  return `http://127.0.0.1:${surface.port}`;
+}
+
+// Authenticated Console routes exist only inside the running SPA (sessions live in memory and
+// RequireAuth bounces unauthenticated loads), so each check signs in through the real form and
+// `/v1` proxy, then navigates in-app with pushState + popstate exactly like a link activation.
+async function signInConsoleFixture(page: Page) {
+  await page.goto(`${consoleOrigin}/sign-in`, { waitUntil: "domcontentloaded" });
+  await page.locator("[data-sign-in-username]").fill("a11y-presenter");
+  await page.locator("[data-sign-in-password]").fill("a11y-presenter-password");
+  await page.locator("[data-sign-in-submit]").click();
+  await page.locator("[data-co-resident-state]").waitFor({ state: "attached" });
+}
+
+async function navigateConsoleRoute(page: Page, path: string) {
+  await page.evaluate((target) => {
+    window.history.pushState(null, "", target);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, path);
+}
+
+async function openAccessibilityRoute(context: BrowserContext, route: AccessibilityRoute) {
+  const origin = accessibilityOrigin(route);
   const page = await context.newPage();
 
-  if (route.authenticated) {
-    await page.addInitScript(() => {
-      const networkFetch = window.fetch.bind(window);
-      const fixtureFetch = (input: URL | RequestInfo, init?: RequestInit) => {
-        const url = input instanceof Request ? input.url : String(input);
-        if (url.endsWith("/v1/account-sessions") && init?.method === "POST") {
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                account: { accountId: "account_a11y", actorId: "actor_a11y" },
-                csrfToken: "a11y-csrf",
-                expiresAtMs: 4_102_444_800_000,
-              }),
-              { headers: { "content-type": "application/json" }, status: 200 },
-            ),
-          );
-        }
-        return networkFetch(input, init);
-      };
-      Object.defineProperty(window, "fetch", { configurable: true, value: fixtureFetch });
-    });
-    await page.goto(`http://127.0.0.1:${surface.port}/sign-in`, {
-      waitUntil: "domcontentloaded",
-    });
-    await page.getByLabel("One-time sign-in code").fill("accessibility-fixture");
-    await page.getByRole("button", { name: "Enter private workspace" }).click();
-    await page.getByRole("navigation", { name: "Private workspace" }).waitFor();
-    if (route.path === "/session") {
-      await page.getByRole("link", { name: "Session setup" }).click();
-      await page.getByRole("heading", { name: "Session controls" }).waitFor();
-    }
+  if (route.app === "console" && route.authenticated === true) {
+    await signInConsoleFixture(page);
+    if (route.path !== "/") await navigateConsoleRoute(page, route.path);
   } else {
-    await page.goto(`http://127.0.0.1:${surface.port}${route.path}`, {
-      waitUntil: "domcontentloaded",
-    });
+    await page.goto(`${origin}${route.path}`, { waitUntil: "domcontentloaded" });
   }
   await page.locator("main").waitFor({ state: "visible" });
+  if (route.readySelector !== undefined) {
+    await page.locator(route.readySelector).waitFor({ state: "visible" });
+  }
   return page;
 }
 
@@ -791,11 +1109,11 @@ async function assertAccessibilityStructure(page: Page, route: AccessibilityRout
   });
 
   if (
-    structure.mainCount !== 1 ||
-    structure.h1Count !== 1 ||
+    structure.mainCount !== route.landmarks.main ||
+    structure.h1Count !== route.landmarks.h1 ||
+    structure.navigationCount !== route.landmarks.nav ||
     structure.unlabeledControls.length > 0 ||
-    structure.imagesWithoutAlt.length > 0 ||
-    (route.authenticated && structure.navigationCount !== 1)
+    structure.imagesWithoutAlt.length > 0
   ) {
     throw new Error(
       `${route.app}/${route.name} landmark or label failure: ${JSON.stringify(structure)}`,
@@ -807,14 +1125,33 @@ async function assertKeyboardFocusOrder(page: Page, route: AccessibilityRoute) {
   const focusableCount = await page.evaluate(() => {
     document.body.tabIndex = -1;
     document.body.focus();
-    const candidates = [
-      ...document.querySelectorAll<HTMLElement>(
-        'a[href], button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])',
-      ),
-    ].filter(
-      (element) =>
-        getComputedStyle(element).visibility !== "hidden" && element.getClientRects().length > 0,
-    );
+    // Chrome's sequential tab order covers more than focusable selectors: any element that has
+    // become a scroll container (overflow not visible/clip AND actually overflowing) is also a
+    // tab stop, exactly where it sits in the DOM. Model both so the traversal expectation
+    // matches what the browser really does.
+    const scrollable = (element: HTMLElement) => {
+      const style = getComputedStyle(element);
+      // Scroll containers for tab order are the CSS kind: auto/scroll only. overflow:hidden
+      // clips without becoming a scroll container, and Chromium skips it.
+      const scrolls = (value: string) => value === "auto" || value === "scroll";
+      if (!scrolls(style.overflowX) && !scrolls(style.overflowY)) return false;
+      return (
+        element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth
+      );
+    };
+    const candidates = [...document.querySelectorAll<HTMLElement>("body *")].filter((element) => {
+      if (
+        getComputedStyle(element).visibility === "hidden" ||
+        element.getClientRects().length === 0
+      ) {
+        return false;
+      }
+      return (
+        element.matches(
+          'a[href], button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])',
+        ) || scrollable(element)
+      );
+    });
     candidates.forEach((element, index) => {
       element.dataset.a11yOrder = String(index);
     });
@@ -956,16 +1293,17 @@ async function assertAccessibilityMedia(page: Page, route: AccessibilityRoute) {
   }
 
   await page.emulateMedia({ forcedColors: "active", reducedMotion: "reduce" });
-  const forcedColorFailure = await page
-    .locator(".ui-button, .ui-panel, .ui-brand__mark, .ui-badge")
-    .evaluateAll(
-      (elements) =>
-        elements.length === 0 ||
-        elements.some((element) => {
-          const style = getComputedStyle(element);
-          return style.borderTopStyle === "none" || style.borderTopColor === "rgba(0, 0, 0, 0)";
-        }),
-    );
+  // Routes that paint no interactive chrome (the slide-only Stage surfaces) have nothing to
+  // check; controls-bearing routes must keep at least one bordered target.
+  if (route.forcedColorsSelector === null) return;
+  const forcedColorFailure = await page.locator(route.forcedColorsSelector).evaluateAll(
+    (elements) =>
+      elements.length === 0 ||
+      elements.some((element) => {
+        const style = getComputedStyle(element);
+        return style.borderTopStyle === "none" || style.borderTopColor === "rgba(0, 0, 0, 0)";
+      }),
+  );
   if (forcedColorFailure) {
     throw new Error(`${route.app}/${route.name} forced-colors border fallback failed`);
   }
@@ -989,7 +1327,9 @@ async function verifyAccessibilityMatrix(context: BrowserContext) {
     await page.screenshot({ path: join(artifactPath, `a11y-${route.app}-${route.name}.png`) });
     await page.close();
   }
-  console.log(`Stage accessibility route matrix passed: ${contrastEvidence.join("; ")}.`);
+  console.log(
+    `Console and Stage accessibility route matrix passed: ${contrastEvidence.join("; ")}.`,
+  );
 }
 
 async function verifyReducedMotion(context: BrowserContext) {
@@ -1076,6 +1416,11 @@ async function verifyColdOfflineRestart() {
       closePreviewOrigins.push(cleanup.add(() => server.close()));
     }
 
+    const consoleBackend = await startConsoleFixtureBackend();
+    cleanup.add(() => closeHttpServer(consoleBackend));
+    const consoleProcess = await startConsoleOrigin();
+    cleanup.add(() => stopServiceProcess(consoleProcess));
+
     const embedServer = await startEmbedOrigin();
     const closeEmbedOrigin = cleanup.add(() => closeHttpServer(embedServer));
     const onlineContext = await chromium.launchPersistentContext(profilePath, {
@@ -1136,11 +1481,16 @@ const completedWorkspace = await withBrowserRuntimeWorkspace(
       throw new Error(`Chrome executable not found at ${chromeExecutable}`);
     }
 
-    await buildRuntimeDistributions();
-    await verifyDevResponseHeaders();
-    await verifyUpdateLifecycles();
-    await verifyColdOfflineRestart();
-    return workspace;
+    try {
+      await buildRuntimeDistributions();
+      await verifyDevResponseHeaders();
+      await verifyUpdateLifecycles();
+      await verifyColdOfflineRestart();
+      return workspace;
+    } finally {
+      rmSync(join("apps/console", consoleDistDir), { recursive: true, force: true });
+      rmSync(join("apps/console", consoleTsconfig), { force: true });
+    }
   },
   { retainArtifacts: process.env.BROWSER_RUNTIME_RETAIN_ARTIFACTS === "true" },
 );

@@ -11,7 +11,7 @@ export interface ReferenceDocumentSummaryView {
   readonly contentType: string;
   readonly byteLength: number;
   readonly chunkCount: number;
-  readonly status: "INDEXED" | "EMPTY";
+  readonly status: "INDEXED" | "STORED_INDEX_PENDING" | "EMPTY";
 }
 
 export type ReferenceDocumentUploadView =
@@ -34,7 +34,7 @@ function referenceDocumentSummary(value: unknown): ReferenceDocumentSummaryView 
     typeof contentType !== "string" ||
     typeof byteLength !== "number" ||
     typeof chunkCount !== "number" ||
-    (status !== "INDEXED" && status !== "EMPTY")
+    (status !== "INDEXED" && status !== "STORED_INDEX_PENDING" && status !== "EMPTY")
   ) {
     return null;
   }

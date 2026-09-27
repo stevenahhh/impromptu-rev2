@@ -1,0 +1,32 @@
+# task-4 cleanup record — authorization/private-public boundary baseline
+# captured 2026-09-27T17:15-17:20Z against loopback demo stack impromptu-ulw-g003-demo-*
+
+Scope of probe side effects (the plan's "no writes" clause covers product code; the
+acceptance criteria's "establish owner A, separately signed-in B" necessarily mints rows —
+each is listed here):
+
+WRITES THIS BASELINE PERFORMED
+- POST /v1/accounts -> created account "boundary-probe-b"
+  (accountId account_607f4dfb6dc4382606411f488004c640) on private-backend Postgres.
+  The private backend exposes NO account-delete route, so the row persists; password was a
+  random per-run value, now discarded. Sessions for it are revoked (below).
+- POST /v1/account-sessions -> 2 sign-ins for owner A (account_production),
+  2 sign-ins for B. All four sessions revoked via DELETE /v1/account-session -> 200.
+- POST /v1/display-joins on gateway -> one positive-control join
+  (displayId display_boundary_probe, deckVersion deck_boundary_probe).
+  Joins carry a 90 s TTL (prepared-evidence.ts joinTtlMs default 90_000) and are
+  claimable only once via /v1/display-session; never claimed, expired ~17:17Z, inert.
+- GET/POST denial probes recorded no state: all B/C attempts answered 4xx before mutation.
+- No product files modified (git status: no tracked source changes attributable to this run;
+  only this evidence dir is new).
+
+CLEANUP PERFORMED
+- Revoked all 4 probe account sessions (DELETE /v1/account-session -> 200 each).
+- Deleted local cookie jars /tmp/pb-a*.jar, /tmp/pb-b.jar.
+- Verified no response body in the recorded probes contains the private marker
+  "private://tenant-alpha/boundary-probe" or any credential/cookie value (redaction applied
+  at capture time; artifact files contain <redacted> placeholders).
+
+KNOWN NON-REVERTIBLE RESIDUE
+- boundary-probe-b account row in Postgres (no delete route exists).
+- Postgres outbox/session history rows for the revoked sessions.

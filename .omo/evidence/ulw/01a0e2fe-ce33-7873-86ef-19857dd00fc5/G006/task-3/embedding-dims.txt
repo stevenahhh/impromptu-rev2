@@ -1,0 +1,4 @@
+# in-container embedding probe (docker exec private-backend bun /tmp/embed.mjs)
+# POST https://embedding-tls:8443/v1/embeddings  model=$EMBEDDING_MODEL  input="task-3 baseline probe"
+http_status 200
+dims 768 model embeddinggemma

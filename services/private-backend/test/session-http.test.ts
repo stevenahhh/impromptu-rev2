@@ -19,7 +19,12 @@ import type {
   SessionReportRepository,
   SessionReportState,
 } from "../src/report/postgres-session-report-repository.ts";
+import { createProvisionedSessionReportRepository } from "../src/report/provisioned-session-report-repository.ts";
 import { SessionReportFinalizer } from "../src/report/session-report-finalizer.ts";
+import {
+  fakeProvisioningSql,
+  OwnershipCheckedReportRepository,
+} from "./support/provisioning-harness.ts";
 
 const origin = "https://console.example.test";
 const config = parsePrivateBackendConfig({ CONSOLE_ORIGIN: origin });
@@ -359,13 +364,13 @@ describe("presentation end lifecycle wiring", () => {
     }
   }
 
-  function wiredEndFlow(withCoordinator: boolean) {
+  function wiredEndFlow(withCoordinator: boolean, reports?: SessionReportRepository) {
     const store = createPreparedEvidenceStore();
     const coordinator = new PreparedEvidenceCoordinator(
       new PreparedEvidenceProjectionGateway(),
       store,
     );
-    const finalizer = new SessionReportFinalizer(new MemoryReportRepository());
+    const finalizer = new SessionReportFinalizer(reports ?? new MemoryReportRepository());
     const sessionReportRead = withCoordinator
       ? createSessionReportRead({
           store,
@@ -573,6 +578,51 @@ describe("presentation end lifecycle wiring", () => {
       expect(rejected?.status).toBe(409);
       expect(await rejected?.json()).toEqual({ error: "presentation_end_conflict" });
     }
+  });
+
+  // Live-baseline F2: ending a session that never recorded a slide visit or Q&A exchange
+  // died with an unhandled SessionReportAccessDeniedError (HTTP 500) because the owning
+  // presentation_sessions row only existed after a write. Through the real provisioning
+  // adapter, the owner must get 202 on /end and a durable finalized report on /report.
+  test("zero-activity end and report stay owner-successful through the provisioning adapter", async () => {
+    const rows = {
+      tenants: new Map<string, string>(),
+      sessions: new Map<string, { readonly ownerSubject: string; readonly epoch: number }>(),
+    };
+    const { sql } = fakeProvisioningSql(rows);
+    const reports = createProvisionedSessionReportRepository(
+      sql,
+      new OwnershipCheckedReportRepository(rows.sessions),
+    );
+    const flow = wiredEndFlow(true, reports);
+    const auth = await signIn(flow.handler, "alpha@example.test", "alpha-password");
+    const presentationSessionId = await activePresentation(flow.coordinator, auth.accountSessionId);
+
+    const ended = await endPost(flow.handler, presentationSessionId, auth);
+    expect(ended.status).toBe(202);
+    expect(flow.store.presentations.get(presentationSessionId)?.lifecycle.status).toBe("ENDED");
+
+    const report = await flow.handler(
+      request(`/v1/presentation-sessions/${presentationSessionId}/report`, {
+        headers: { Cookie: auth.cookie },
+      }),
+    );
+    expect(report.status).toBe(200);
+    const payload = await report.json();
+    expect(payload.report.presentationSessionId).toBe(presentationSessionId);
+    expect(payload.report.ownerAccountId).toBe("account_alpha");
+    expect(payload.report.slideVisits).toEqual([]);
+    expect(payload.report.qaDefense?.exchanges).toEqual([]);
+    expect(payload.report.finalizedAtMs).toBeGreaterThan(0);
+
+    // The report is durable state, not a one-shot render: a second read returns the same body.
+    const reread = await flow.handler(
+      request(`/v1/presentation-sessions/${presentationSessionId}/report`, {
+        headers: { Cookie: auth.cookie },
+      }),
+    );
+    expect(reread.status).toBe(200);
+    expect(await reread.json()).toEqual(payload);
   });
 
   test("without an injected coordinator the end route behaves exactly as before", async () => {

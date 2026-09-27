@@ -44,9 +44,11 @@ export function createSpokenQuestionStt(options: {
   readonly adapterId?: string;
 }): SpokenQuestionStt {
   const adapterId = options.adapterId ?? WHISPER_CPP_ADAPTER_ID;
-  const now = Date.now();
   return async (identity, audio) => {
     const requestId = `question-clip:${crypto.randomUUID()}`;
+    // The deadline is per request: a factory-scoped now() expires one minute after boot and
+    // rejects every later clip as deadline_exceeded.
+    const now = Date.now();
     const context = createTrustedModelContext({
       tenantId: identity.tenantId,
       principalId: identity.principalId,

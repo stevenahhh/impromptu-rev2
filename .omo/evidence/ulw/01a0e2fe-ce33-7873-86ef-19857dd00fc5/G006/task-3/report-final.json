@@ -1,0 +1,42 @@
+{
+  "reportVersion": 2,
+  "presentationSessionId": "ps_57565c7b75497505f16ae2f1b32aa5aa",
+  "ownerAccountId": "account_production",
+  "finalizedAtMs": 1790530782237,
+  "totalDurationMs": 0,
+  "slideVisits": [],
+  "speech": {
+    "derivedSummary": "3개 최종 발화에서 9개 단어를 집계했습니다.",
+    "wordCount": 9,
+    "speakingDurationMs": 5160,
+    "timingAggregate": {
+      "finalCount": 3,
+      "measuredFinalCount": 3
+    },
+    "coachingAggregate": {
+      "cueCount": 0,
+      "latestCurrentWordsPerMinute": null,
+      "latestPreviousWordsPerMinute": null
+    }
+  },
+  "preparedEvidence": {
+    "label": "준비된 근거",
+    "items": []
+  },
+  "qaDefense": {
+    "label": "질의응답",
+    "exchanges": [
+      {
+        "exchangeId": "qa-ccff11a6-afaa-4524-8c04-1e2d87af5095",
+        "askedAtMs": 1790530777314,
+        "question": "한빛유통의 2025년 매출은 얼마였나?",
+        "origin": "TYPED",
+        "defense": {
+          "outcome": "ABSTAINED",
+          "abstainReason": "DEADLINE_EXCEEDED",
+          "retryable": true
+        }
+      }
+    ]
+  }
+}

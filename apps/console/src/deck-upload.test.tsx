@@ -1,13 +1,15 @@
-import { afterAll, afterEach, describe, expect, test } from "bun:test";
-import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import { afterEach, describe, expect, test } from "bun:test";
+import { registerDom } from "@impromptu/test-harness";
 
-GlobalRegistrator.register();
-afterAll(() => GlobalRegistrator.unregister());
+registerDom();
 
 const { act, cleanup, fireEvent, render } = await import("@testing-library/react");
 const { MemoryRouter } = await import("react-router-dom");
 
 const { AuthProvider, ConsoleRoutes } = await import("./App");
+const { getDebugLogger } = await import("./debug-log");
+const { messages } = await import("./i18n");
+const { DeckUploadError } = await import("./session-client");
 
 import type { ConsoleDeckUploadClient, DeckUploadView } from "./session-client";
 
@@ -70,7 +72,6 @@ function renderSession(client: ConsoleDeckUploadClient) {
 
 function selectDeckFile(name = "rehearsal.pptx") {
   const input = document.querySelector("[data-deck-file-input]") as HTMLInputElement | null;
-  expect(input).not.toBeNull();
   if (input === null) throw new Error("deck file input missing");
   expect(input.type).toBe("file");
   expect(input.accept).toBe(".pptx,.pdf");
@@ -80,13 +81,30 @@ function selectDeckFile(name = "rehearsal.pptx") {
   Object.defineProperty(input, "files", { configurable: true, value: [deck] });
   fireEvent.change(input);
   const uploadButton = document.querySelector("[data-deck-upload-submit]");
-  expect(uploadButton).not.toBeNull();
   if (uploadButton === null) throw new Error("deck upload button missing");
   fireEvent.click(uploadButton);
   return { deck };
 }
 
 describe("deck upload from the authenticated Session page", () => {
+  test("asks for the deck exactly once on the first screen", () => {
+    renderSession(createUploadClient().client);
+
+    const dropzone = document.querySelector("[data-upload-dropzone]");
+    expect(dropzone).not.toBeNull();
+    // The page h1 owns the upload ask; the dropzone must not repeat it as a second heading.
+    expect(dropzone?.querySelectorAll("h1, h2, h3, h4").length).toBe(0);
+
+    const ask = messages("ko").uploadTitle;
+    const askHeadings = [...document.querySelectorAll("h1, h2, h3")].filter(
+      (heading) => heading.textContent?.trim() === ask,
+    );
+    expect(askHeadings.length).toBe(1);
+    expect(askHeadings[0]?.tagName).toBe("H1");
+
+    // Screen readers still receive the ask through the dropzone's own label.
+    expect(dropzone?.getAttribute("aria-label")).toBe(ask);
+  });
   test("accepts .pptx/.pdf, shows progress, and confirms the ready presentation and stage link", async () => {
     const harness = createUploadClient();
     renderSession(harness.client);
@@ -146,5 +164,81 @@ describe("deck upload from the authenticated Session page", () => {
     expect(errorText.className).toContain("console-status-line--attention");
     expect(document.querySelector("[data-upload-status='SUCCESS']")).toBeNull();
     expect(document.querySelector("[data-stage-open]")).toBeNull();
+  });
+
+  test("records every deck upload in the debug overlay under the upload source", async () => {
+    const harness = createUploadClient();
+    const log = getDebugLogger();
+    log.clear();
+    renderSession(harness.client);
+    selectDeckFile();
+
+    expect(
+      log
+        .entries()
+        .some((entry) => entry.source === "upload" && entry.message === "deck.upload.start"),
+    ).toBe(true);
+
+    await act(async () => {
+      harness.release();
+      await harness.settled;
+    });
+
+    const uploadEntries = log.entries().filter((entry) => entry.source === "upload");
+    expect(uploadEntries.map((entry) => entry.message)).toEqual([
+      "deck.upload.start",
+      "deck.upload.ok",
+    ]);
+    const startedEntry = uploadEntries[0];
+    expect(startedEntry?.detail?.filename).toBe("rehearsal.pptx");
+  });
+
+  test("tells the presenter when a deck exceeds the upload size limit", async () => {
+    const harness = createUploadClient({
+      failWith: new DeckUploadError("input_too_large", { status: 413 }),
+    });
+    renderSession(harness.client);
+    selectDeckFile("too-large.pptx");
+
+    await act(async () => {
+      harness.release();
+      await harness.settled.catch(() => undefined);
+    });
+
+    const errorText = document.querySelector("[data-upload-status='ERROR']");
+    expect(errorText?.textContent).toContain(messages("ko").uploadTooLarge);
+    // The typed rejection must stay localized: no raw codes leak to the presenter.
+    expect(errorText?.textContent).not.toContain("input_too_large");
+  });
+
+  test("clears the picker so the same deck can be chosen again after a failed upload", async () => {
+    // After an ERROR the panel stays mounted; a real browser only fires change when the
+    // selection differs, so the stale fake-path value must be reset after each pick.
+    const harness = createUploadClient({
+      failWith: new DeckUploadError("unsafe_filename", { status: 400 }),
+    });
+    renderSession(harness.client);
+
+    const input = document.querySelector("[data-deck-file-input]") as HTMLInputElement;
+    let recordedReset = false;
+    Object.defineProperty(input, "value", {
+      configurable: true,
+      get: () => "C:\\fakepath\\rehearsal.pptx",
+      set: (assigned) => {
+        if (assigned === "") recordedReset = true;
+      },
+    });
+    const deck = new File(["fake bytes"], "rehearsal.pptx", {
+      type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    });
+    Object.defineProperty(input, "files", { configurable: true, value: [deck] });
+    await act(async () => {
+      fireEvent.change(input);
+      harness.release();
+      await harness.settled.catch(() => undefined);
+    });
+
+    expect(harness.uploads).toHaveLength(1);
+    expect(recordedReset).toBe(true);
   });
 });

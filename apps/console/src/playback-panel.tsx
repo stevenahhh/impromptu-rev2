@@ -8,7 +8,6 @@ import { messages } from "./i18n";
 import { type PlaybackStatusKind, PlaybackStatusLine } from "./playback-status-line";
 import { PlaybackCommandRejectedError } from "./session-client";
 import { orderedSlides } from "./slide-preview";
-import { stageUrl } from "./stage-origin";
 
 export function PlaybackPanel({
   audience,
@@ -39,7 +38,9 @@ export function PlaybackPanel({
   // command went out with a superseded baseRevision and came back REVISION_MISMATCH. A failed
   // command never advances the revision either, so once that happened every later slide change
   // failed the same way and the audience display stayed frozen for the rest of the talk.
-  const controlRevisionRef = useRef("cr_0");
+  // A resumed presentation seeds the ref with the server's current revision (the panel remounts
+  // per session identity via key), so re-entry commands chain onto persisted state, not cr_0.
+  const controlRevisionRef = useRef(activePresentation?.controlRevision ?? "cr_0");
   const commandQueueRef = useRef<Promise<unknown>>(Promise.resolve());
   const [presentationStarted, setPresentationStarted] = useState(false);
   useEffect(() => {
@@ -212,7 +213,11 @@ export function PlaybackPanel({
                 : text.startPresentation}
           </Button>
           <p className="console-caption">
-            {displayBindingEpoch === null ? text.audienceOpensBeside : text.audienceConnected}
+            {/* A refused rebind must not keep claiming a connected screen: the held epoch is
+                what the server just called stale. */}
+            {displayBindingEpoch === null || audience.status === "BIND_FAILED"
+              ? text.audienceOpensBeside
+              : text.audienceConnected}
           </p>
           {recovery === null ? null : (
             <output className="console-status-line console-status-line--attention">
@@ -224,7 +229,15 @@ export function PlaybackPanel({
                 <Button
                   variant="quiet"
                   onClick={() =>
-                    void navigator.clipboard?.writeText(stageUrl(activePresentation.deckVersion))
+                    void audience.copyInvitationLink().then((url) => {
+                      if (url === null) {
+                        // The blocked-popup fallback is the invitation link itself: if it
+                        // cannot be minted the panel's ISSUE_FAILED copy says what is wrong.
+                        setStatus({ kind: "PROBLEM", text: text.stageInviteIssueFailed });
+                        return;
+                      }
+                      void navigator.clipboard?.writeText(url);
+                    })
                   }
                 >
                   {text.copyStage}

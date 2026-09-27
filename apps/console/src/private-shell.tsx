@@ -9,18 +9,20 @@ function PrivateNavigation() {
   const location = useLocation();
   const text = messages(locale);
   const isWorkspace = location.pathname === "/" || location.pathname === "/session";
+  const isLibrary = location.pathname === "/presentations";
+  // Every private route can reach the persisted library; the workspace skips its own
+  // workspace link, and the library page skips its own — only cross-links render.
 
   return (
     <div className="console-header console-app-bar">
       <Brand eyebrow={text.presenterConsole} />
       <nav aria-label={text.privateWorkspace} className="console-nav">
-        {isWorkspace ? (
-          <NavLink to="/live-publication">{text.evidenceApproval}</NavLink>
-        ) : (
+        {isWorkspace ? null : (
           <NavLink to="/" end>
             {text.workspace}
           </NavLink>
         )}
+        {isLibrary ? null : <NavLink to="/presentations">{text.myPresentations}</NavLink>}
       </nav>
       <div className="console-header__actions">
         <LanguagePicker />

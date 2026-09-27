@@ -32,7 +32,7 @@ SELECT pg_temp.assert_true(
 );
 SELECT pg_temp.assert_true(
   (
-    SELECT count(*) = 6 AND bool_and(relrowsecurity) AND bool_and(relforcerowsecurity)
+    SELECT count(*) = 7 AND bool_and(relrowsecurity) AND bool_and(relforcerowsecurity)
     FROM pg_class AS relation
     JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
     WHERE namespace.nspname = 'public_projection'
@@ -42,14 +42,15 @@ SELECT pg_temp.assert_true(
         'display_receipts',
         'publication_inbox',
         'applied_publications',
-        'gateway_state'
+        'gateway_state',
+        'display_invitation_state'
       )
   ),
   'all projection base tables must force row-level security'
 );
 SELECT pg_temp.assert_true(
   (
-    SELECT count(*) = 6
+    SELECT count(*) = 7
     FROM pg_policies
     WHERE schemaname = 'public_projection'
       AND policyname = 'owner_internal'
@@ -157,15 +158,34 @@ SELECT pg_temp.assert_true(
   'projection runtime must access gateway state only through narrow functions'
 );
 SELECT pg_temp.assert_true(
+  NOT has_table_privilege(
+    'projection_app',
+    'public_projection.display_invitation_state',
+    'SELECT,INSERT,UPDATE,DELETE'
+  )
+    AND has_function_privilege(
+      'projection_app',
+      'public_projection.read_invitation_state(text)',
+      'EXECUTE'
+    )
+    AND has_function_privilege(
+      'projection_app',
+      'public_projection.write_invitation_state(text,bigint,jsonb)',
+      'EXECUTE'
+    ),
+  'projection runtime must access invitation state only through narrow functions'
+);
+SELECT pg_temp.assert_true(
   (
-    SELECT count(*) = 5
+    SELECT count(*) = 6
     FROM _migrations.applied_migrations
     WHERE migration_name IN (
       '0001_projection_foundation.sql',
       '0002_publication_inbox.sql',
       '0003_dispatcher_only_writes.sql',
       '0004_retention_cascade.sql',
-      '0005_gateway_state.sql'
+      '0005_gateway_state.sql',
+      '0006_display_invitations.sql'
     )
       AND checksum ~ '^[0-9a-f]{64}$'
   ),

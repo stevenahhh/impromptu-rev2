@@ -126,6 +126,8 @@ interface Harness {
 
 function harness(
   options: {
+    /** Mutable injected clock; defaults to the fixed 9_000 the pre-existing suite relies on. */
+    readonly clock?: { value: number };
     readonly lifecycle?: PresentationSessionLifecycle;
     readonly beginQuestions?: (
       accountSessionId: string,
@@ -190,7 +192,7 @@ function harness(
         }
       );
     },
-    now: () => 9_000,
+    now: () => options.clock?.value ?? 9_000,
   };
   return { dependencies, ingested, beginQuestionsCalls };
 }
@@ -208,12 +210,12 @@ function questionHarness(
   return harness({ ...rest, recommend: recommendResult });
 }
 
-function context(path: string, body?: unknown): AuthedRouteContext {
+function context(path: string, body?: unknown, method = "POST"): AuthedRouteContext {
   return {
     request: new Request(`https://private.example.test${path}`, {
-      method: "POST",
+      method,
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(body ?? {}),
+      ...(method === "GET" ? {} : { body: JSON.stringify(body ?? {}) }),
     }),
     url: new URL(`https://private.example.test${path}`),
     origin: new Headers({ origin: config.allowedOrigin }),
@@ -238,11 +240,17 @@ describe("qa defense open route", () => {
     );
     expect(response?.status).toBe(200);
     const body = (await response?.json()) as { lifecycle?: Record<string, unknown> };
+    // Exactly the fields the Console's qaLifecycle parser reads, plus the typed ask window
+    // the cockpit needs to arm its expiry recheck.
     expect(body.lifecycle).toEqual({
       presentationSessionId,
       presentationSessionEpoch: "pse_1",
       deckVersion: DeckVersionIdSchema.parse("deck_2026launch"),
       status: "ACTIVE",
+      qaWindow: {
+        status: "LIVE",
+        askableUntilMs: 9_000 + 300_000,
+      },
     });
   });
 
@@ -579,6 +587,136 @@ describe("qa defense open route", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// FIVE-MINUTE ASK WINDOW (task 14). An opened Q&A window carries a typed
+// askableUntilMs = qaStartedAtMs + 5 minutes; accepted submissions echo it, asks
+// past it answer exactly 409 qa_expired BEFORE the model runs, and the read-only
+// recheck route reports the window LIVE -> EXPIRED so a clip whose window lapses
+// while the presenter waits can never sit silently as 'asking'.
+// ---------------------------------------------------------------------------
+describe("qa ask window expiry", () => {
+  const QA_ASK_WINDOW_MS = 300_000;
+
+  test("opening Q&A reports a LIVE window whose askableUntilMs is qaStartedAtMs + 5 minutes", async () => {
+    const clock = { value: 9_000 };
+    const h = harness({ lifecycle: lifecycle({ status: "ENDED" }), clock });
+    const response = await qaDefenseRoutes(
+      context(`/v1/presentation-sessions/${presentationSessionId}/qa-defense`, {
+        presentationSessionId,
+      }),
+      h.dependencies,
+    );
+    expect(response?.status).toBe(200);
+    const body = (await response?.json()) as {
+      lifecycle?: { qaWindow?: Record<string, unknown> };
+    };
+    expect(body.lifecycle?.qaWindow).toEqual({
+      status: "LIVE",
+      askableUntilMs: openedAtMs + QA_ASK_WINDOW_MS,
+    });
+  });
+
+  test("an accepted submission carries the typed askableUntilMs expiry", async () => {
+    const h = questionHarness({
+      lifecycle: lifecycle({ status: "ENDED", qaStartedAtMs: openedAtMs }),
+      recommendResult: async () => recommend(),
+    });
+    const response = await qaDefenseRoutes(
+      context("/v1/qa-defense", {
+        presentationSessionId,
+        questionText: "What was revenue?",
+        origin: "TYPED",
+      }),
+      h.dependencies,
+    );
+    expect(response?.status).toBe(200);
+    const body = (await response?.json()) as Record<string, unknown>;
+    expect(body.outcome).toBe("ANSWERED");
+    expect(body.askableUntilMs).toBe(openedAtMs + QA_ASK_WINDOW_MS);
+  });
+
+  test("an ask at or past the deadline answers exactly 409 qa_expired without model spend or a ledger row", async () => {
+    const clock = { value: openedAtMs + QA_ASK_WINDOW_MS };
+    let modelCalls = 0;
+    const h = questionHarness({
+      lifecycle: lifecycle({ status: "ENDED", qaStartedAtMs: openedAtMs }),
+      clock,
+      recommendResult: async () => {
+        modelCalls += 1;
+        return recommend();
+      },
+    });
+    const response = await qaDefenseRoutes(
+      context("/v1/qa-defense", {
+        presentationSessionId,
+        questionText: "What was revenue?",
+        origin: "TYPED",
+      }),
+      h.dependencies,
+    );
+    expect(response?.status).toBe(409);
+    expect(await response?.json()).toEqual({ error: "qa_expired" });
+    expect(modelCalls).toBe(0);
+    expect(h.ingested).toHaveLength(0);
+  });
+
+  test("the recheck read reports LIVE before the deadline and EXPIRED at it", async () => {
+    const clock = { value: openedAtMs + 60_000 };
+    const h = harness({
+      lifecycle: lifecycle({ status: "ENDED", qaStartedAtMs: openedAtMs }),
+      clock,
+    });
+    const path = `/v1/presentation-sessions/${presentationSessionId}/qa-defense`;
+    const live = await qaDefenseRoutes(context(path, undefined, "GET"), h.dependencies);
+    expect(live?.status).toBe(200);
+    const liveBody = (await live?.json()) as {
+      lifecycle?: { qaWindow?: Record<string, unknown> };
+    };
+    expect(liveBody.lifecycle?.qaWindow).toEqual({
+      status: "LIVE",
+      askableUntilMs: openedAtMs + QA_ASK_WINDOW_MS,
+    });
+
+    clock.value = openedAtMs + QA_ASK_WINDOW_MS + 1;
+    const expired = await qaDefenseRoutes(context(path, undefined, "GET"), h.dependencies);
+    expect(expired?.status).toBe(200);
+    const expiredBody = (await expired?.json()) as {
+      lifecycle?: { qaWindow?: Record<string, unknown> };
+    };
+    expect(expiredBody.lifecycle?.qaWindow).toEqual({
+      status: "EXPIRED",
+      askableUntilMs: openedAtMs + QA_ASK_WINDOW_MS,
+    });
+  });
+
+  test("a never-opened session reads EMPTY with a null deadline — terminal, never LIVE", async () => {
+    const h = harness({ lifecycle: lifecycle({ status: "ENDED", qaStartedAtMs: null }) });
+    const response = await qaDefenseRoutes(
+      context(`/v1/presentation-sessions/${presentationSessionId}/qa-defense`, undefined, "GET"),
+      h.dependencies,
+    );
+    expect(response?.status).toBe(200);
+    const body = (await response?.json()) as {
+      lifecycle?: { qaWindow?: Record<string, unknown> };
+    };
+    expect(body.lifecycle?.qaWindow).toEqual({ status: "EMPTY", askableUntilMs: null });
+  });
+
+  test("the recheck read stays owner-checked and typed on the 4xx edges", async () => {
+    const h = harness({ lifecycle: lifecycle({ status: "ENDED", qaStartedAtMs: openedAtMs }) });
+    const missing = await qaDefenseRoutes(
+      context(`/v1/presentation-sessions/${unknownPresentationId}/qa-defense`, undefined, "GET"),
+      h.dependencies,
+    );
+    expect(missing?.status).toBe(404);
+    const foreign = await qaDefenseRoutes(
+      context(`/v1/presentation-sessions/${foreignPresentationId}/qa-defense`, undefined, "GET"),
+      h.dependencies,
+    );
+    expect(foreign?.status).toBe(403);
+  });
+});
+
 describe("wire-to-ledger citation seam", () => {
   const fullWire = {
     kind: "DECK_SLIDE",
@@ -755,6 +893,8 @@ describe("registered Q&A routes through createPrivateBackendHandler", () => {
         bindDisplay: () => ({ outcome: "REJECTED", reason: "unused" }),
         projectPlayback: () => false,
         recordPlaybackApplied: () => false,
+        issueDisplayInvitation: () => ({ outcome: "REJECTED", reason: "unused" }),
+        readDisplayInvitation: () => ({ outcome: "REJECTED", reason: "unused" }),
       },
       store,
     );
@@ -852,12 +992,17 @@ describe("registered Q&A routes through createPrivateBackendHandler", () => {
     const body = (await openResponse.json()) as {
       lifecycle?: Record<string, unknown>;
     };
-    // Exactly what the Console's qaLifecycle parser demands, with status now ENDED.
+    // Exactly what the Console's qaLifecycle parser demands, with status now ENDED —
+    // plus the typed ask window opened at the harness clock's open tick (2_000).
     expect(body.lifecycle).toEqual({
       presentationSessionId: presentationId,
       presentationSessionEpoch: "pse_1",
       deckVersion: DeckVersionIdSchema.parse("deck_qa_e2e"),
       status: "ENDED",
+      qaWindow: {
+        status: "LIVE",
+        askableUntilMs: 1_000 + 300_000,
+      },
     });
 
     h.clock.value = 9_000;

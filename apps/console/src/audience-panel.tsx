@@ -4,7 +4,6 @@ import type { AudienceScreenController, AudienceScreenStatus } from "./audience-
 import { useAuth } from "./auth-session";
 import { messages } from "./i18n";
 import type { DisplayJoinView } from "./session-client";
-import { stageUrl } from "./stage-origin";
 
 function decodeDisplayJoin(value: string): DisplayJoinView | null {
   try {
@@ -46,6 +45,11 @@ export function audienceRecovery(
  * matched on source as well as origin. Everything in here serves the cases that gesture cannot
  * cover: a second device, a blocked popup, or a join reported by a window this Console did not
  * open - which never binds without the explicit approval below.
+ *
+ * The second-device path is a one-use <=90s invitation link: minting it grants nothing, it
+ * only lets another Stage ask. The asker lands on the owner-scoped pending read, and this
+ * panel shows its exact display id, fingerprint, deck and binding CAS next to the only
+ * control that can bind it.
  */
 export function AudienceScreenPanel({
   audience,
@@ -58,27 +62,61 @@ export function AudienceScreenPanel({
   const text = messages(locale);
   const [connectionCode, setConnectionCode] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [linkCopyFailed, setLinkCopyFailed] = useState(false);
   if (activePresentation === null) return null;
 
+  // A failed or absent bind must never keep the "connected" badge warm: the badge only shows
+  // while the held epoch is both present and not known to be dead.
+  const bound = displayBindingEpoch !== null && audience.status !== "BIND_FAILED";
+
   // Mid-talk with a live binding the pre-talk pairing paths are dead weight and misread as
-  // required: the only honest surface is the connected badge and a way to hand the link to
-  // someone else. Unbound mid-talk keeps everything - that state IS the recovery path.
-  const collapsedToLink = presenting && displayBindingEpoch !== null;
-  const copyStageLink = () =>
-    void navigator.clipboard?.writeText(stageUrl(activePresentation.deckVersion));
+  // required - but the moment an invitation exists or a pending join needs a decision the
+  // full surface must come back, because the second device is exactly this panel's job.
+  const collapsedToLink =
+    presenting && bound && audience.invitation.kind === "NONE" && audience.pendingJoin === null;
+
+  // Minting is async, so the clipboard write happens after the promise resolves; browsers
+  // still accept it inside the click's gesture. When copying is impossible the link is
+  // printed in the readonly field below so the presenter can carry it by hand.
+  const copyStageLink = () => {
+    setLinkCopied(false);
+    setLinkCopyFailed(false);
+    void (async () => {
+      const url = await audience.copyInvitationLink();
+      if (url === null) return;
+      try {
+        if (typeof navigator === "undefined" || navigator.clipboard === undefined) {
+          throw new Error("clipboard unavailable");
+        }
+        await navigator.clipboard.writeText(url);
+        setLinkCopied(true);
+      } catch {
+        setLinkCopyFailed(true);
+      }
+    })();
+  };
 
   // A join this Console did not open has nowhere else to surface, so it opens the disclosure
   // rather than waiting silently behind it.
   const expanded = advancedOpen || audience.pendingJoin !== null;
+  const invitation = audience.invitation;
+  const invitationOpen = invitation.kind === "OPEN" || invitation.kind === "JOINED";
+
+  const expiryText = (expiresAtMs: number) =>
+    text.stageInviteExpiry.replace(
+      "{time}",
+      new Date(expiresAtMs).toLocaleTimeString(locale === "ko" ? "ko-KR" : "en-US"),
+    );
 
   return (
     <Panel
       className="console-stage-setup"
       title={text.stageTitle}
       tone="inset"
-      data-audience-screen-panel={displayBindingEpoch === null ? "PENDING" : "CONNECTED"}
+      data-audience-screen-panel={bound ? "CONNECTED" : "PENDING"}
     >
-      {displayBindingEpoch === null ? null : <Badge tone="success">{text.audienceConnected}</Badge>}
+      {bound ? <Badge tone="success">{text.audienceConnected}</Badge> : null}
       {collapsedToLink ? (
         <div className="console-stage-actions">
           <Button variant="quiet" data-copy-stage onClick={copyStageLink}>
@@ -96,10 +134,52 @@ export function AudienceScreenPanel({
             <Button data-stage-open onClick={() => void audience.openAndBind()}>
               {text.openStagePreview}
             </Button>
-            <Button variant="quiet" onClick={copyStageLink}>
+            <Button
+              variant="quiet"
+              data-copy-stage
+              disabled={invitation.kind === "ISSUING"}
+              onClick={copyStageLink}
+            >
               {text.copyStage}
             </Button>
           </div>
+          {invitation.kind === "NONE" ? null : (
+            <div className="console-stage-invitation" data-stage-invitation={invitation.kind}>
+              {invitation.kind === "ISSUING" ? (
+                <p className="console-caption">{text.stageInviteIssuing}</p>
+              ) : null}
+              {invitationOpen ? (
+                <>
+                  <p className="console-caption">{expiryText(invitation.expiresAtMs)}</p>
+                  <label className="console-field">
+                    <span>{text.stageInviteLink}</span>
+                    <input readOnly value={invitation.url} />
+                  </label>
+                  {linkCopied ? <p className="console-caption">{text.stageInviteCopied}</p> : null}
+                  {linkCopyFailed ? (
+                    <p className="console-caption">{text.stageInviteCopyFailed}</p>
+                  ) : null}
+                  {invitation.checkFailed ? (
+                    <p className="console-caption">{text.stageInviteCheckFailed}</p>
+                  ) : null}
+                  <Button
+                    variant="quiet"
+                    data-invitation-check
+                    disabled={invitation.checking}
+                    onClick={() => void audience.checkInvitation()}
+                  >
+                    {invitation.checking ? text.stageInviteChecking : text.stageInviteCheck}
+                  </Button>
+                  {invitation.kind === "JOINED" ? null : (
+                    <p className="console-caption">{text.stageInviteWaiting}</p>
+                  )}
+                </>
+              ) : null}
+              {invitation.kind === "EXPIRED" ? <p>{text.stageInviteExpired}</p> : null}
+              {invitation.kind === "OUTDATED" ? <p>{text.stageInviteOutdated}</p> : null}
+              {invitation.kind === "ISSUE_FAILED" ? <p>{text.stageInviteIssueFailed}</p> : null}
+            </div>
+          )}
           <div
             className="console-stage-pairing"
             data-stage-pairing={audience.pendingJoin === null ? "WAITING" : "DETECTED"}
@@ -109,9 +189,36 @@ export function AudienceScreenPanel({
               <p className="console-caption">{text.stageHandshakeWaiting}</p>
             ) : (
               <>
-                <p>{text.stagePairPending}</p>
+                <p>
+                  {audience.pendingEpoch === null ? text.stagePairPending : text.stageInviteJoined}
+                </p>
+                <dl className="console-stage-identity" data-pending-identity>
+                  <div>
+                    <dt>{text.stageDisplayId}</dt>
+                    <dd data-identity-display-id>{audience.pendingJoin.displayId}</dd>
+                  </div>
+                  <div>
+                    <dt>{text.stageDisplayFingerprint}</dt>
+                    <dd data-identity-fingerprint>{audience.pendingJoin.displayFingerprint}</dd>
+                  </div>
+                  <div>
+                    <dt>{text.stageDisplayDeck}</dt>
+                    <dd data-identity-deck>{audience.pendingJoin.deckVersion}</dd>
+                  </div>
+                  {audience.pendingEpoch === null ? null : (
+                    <div>
+                      <dt>{text.stageBindingEpoch}</dt>
+                      <dd data-identity-epoch>{audience.pendingEpoch}</dd>
+                    </div>
+                  )}
+                </dl>
+                {audience.status === "BIND_FAILED" &&
+                audience.failureReason === "STALE_DISPLAY_BINDING" ? (
+                  <p className="console-caption">{text.stageApprovalStale}</p>
+                ) : null}
                 <Button
                   data-display-approve
+                  disabled={audience.status === "BINDING"}
                   onClick={() => void audience.approve(audience.pendingJoin)}
                 >
                   {text.approveHandshake}

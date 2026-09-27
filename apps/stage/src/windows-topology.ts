@@ -46,36 +46,22 @@ export function windowsDisplayMode(value: string | null): WindowsDisplayMode {
   return value === "duplicate" || value === "single" ? value : "extend";
 }
 
-export function topologyInstructions(mode: WindowsDisplayMode): readonly string[] {
-  if (mode === "extend") {
-    return [
-      "발표 PC에는 청중 화면만 여세요.",
-      "이 화면을 프로젝터로 옮긴 뒤 전체 화면을 시작하세요.",
-      "비공개 발표자 제어는 별도의 휴대폰, 태블릿 또는 노트북에서 사용하세요.",
-    ];
-  }
-  if (mode === "duplicate") {
-    return [
-      "이 PC에는 청중 화면만 열린 깨끗한 브라우저 프로필을 사용하세요.",
-      "비공개 발표자 제어는 별도의 휴대폰, 태블릿 또는 노트북에서 사용하세요.",
-      "Win+P로 화면 구성이 바뀌면 청중 화면만 남기고 전체 화면을 다시 시작하세요.",
-    ];
-  }
-  return [
-    "공유 청중 화면에는 이 화면만 표시하세요.",
-    "비공개 발표자 제어는 별도의 휴대폰, 태블릿 또는 노트북에서 사용하세요.",
-    "비상 키보드 탐색은 공개 슬라이드만 변경합니다.",
-  ];
-}
-
-export function manualPlacementSummary(mode: WindowsDisplayMode): string {
-  if (mode === "duplicate") {
-    return "수동 배치: 이 PC에는 청중 화면만 남기고 별도 기기에서 제어한 뒤 전체 화면을 시작하세요.";
-  }
-  if (mode === "single") {
-    return "수동 배치: 청중 화면에는 이 화면만 남긴 뒤 전체 화면을 시작하세요.";
-  }
-  return "수동 배치: 이 화면을 대상 화면으로 옮긴 뒤 전체 화면을 시작하세요.";
+/**
+ * Placement summary for the sr-only status line. The catalog strings live in stage-i18n
+ * (locales/*.json) so the audience surface speaks the device's language; the caller passes
+ * the three translated sentences in.
+ */
+export function manualPlacementSummary(
+  mode: WindowsDisplayMode,
+  copy: Readonly<{
+    placementExtend: string;
+    placementDuplicate: string;
+    placementSingle: string;
+  }>,
+): string {
+  if (mode === "duplicate") return copy.placementDuplicate;
+  if (mode === "single") return copy.placementSingle;
+  return copy.placementExtend;
 }
 
 export function emergencyPublicSlideSet(

@@ -718,6 +718,89 @@ test("session end subscribes first and awaits the exact REPORT_READY event witho
   }
 });
 
+test("session end resolves the version-2 report carrying the qa defense section", async () => {
+  const originalFetch = globalThis.fetch;
+  const source = new FakeReportEventSource();
+  let resolveTimeout: (timer: ReturnType<typeof setTimeout>) => void = () => {};
+  const timeoutInstalled = new Promise<ReturnType<typeof setTimeout>>((resolve) => {
+    resolveTimeout = resolve;
+  });
+  globalThis.fetch = (async () =>
+    new Response(JSON.stringify({ status: "accepted" }), {
+      status: 202,
+      headers: { "content-type": "application/json" },
+    })) as unknown as typeof fetch;
+  try {
+    const client = createConsoleSessionClient("https://private.example.test", {
+      createReportEventSource() {
+        return source;
+      },
+    });
+    const finalizedPromise = client.endPresentationAndAwaitReport?.("csrf-report", "ps_report");
+    if (finalizedPromise === undefined) throw new Error("report finalization client is missing");
+
+    source.emit("open");
+    source.emit("REPORT_READY", {
+      kind: "REPORT_READY",
+      presentationSessionId: "ps_report",
+      report: {
+        ...finalizedReport,
+        reportVersion: 2,
+        qaDefense: {
+          label: "질의응답",
+          exchanges: [
+            {
+              exchangeId: "qa-1",
+              askedAtMs: 5_000,
+              question: "올해 매출 목표가 있나요?",
+              origin: "TYPED",
+              defense: {
+                outcome: "ANSWERED",
+                answerText: "목표 매출은 100억입니다.",
+                citations: [{ kind: "DECK_SLIDE", slideOrdinal: 2 }],
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    // The regression this test names: an unparseable v2 report left this promise pending until
+    // the bounded signal, so the presenter saw 리포트를 마무리하지 못했습니다 and stayed on the
+    // cockpit. The timer is only a failure backstop; it is cleared when either side settles.
+    const bounded = new Promise<never>((_, reject) => {
+      const timer = setTimeout(() => reject(new Error("v2 REPORT_READY was not accepted")), 2_000);
+      resolveTimeout(timer);
+    });
+    const report = await Promise.race([finalizedPromise, bounded]);
+    expect(report).toEqual({
+      ...finalizedReport,
+      reportVersion: 2,
+      qaDefense: {
+        status: "READY",
+        label: "질의응답",
+        exchanges: [
+          {
+            exchangeId: "qa-1",
+            askedAtMs: 5_000,
+            question: "올해 매출 목표가 있나요?",
+            origin: "TYPED",
+            defense: {
+              outcome: "ANSWERED",
+              answerText: "목표 매출은 100억입니다.",
+              citations: [{ kind: "DECK_SLIDE", slideOrdinal: 2 }],
+            },
+          },
+        ],
+      },
+    });
+  } finally {
+    const timer = await timeoutInstalled;
+    clearTimeout(timer);
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("reload GET parses finalized reports and exposes owner denial without report data", async () => {
   const originalFetch = globalThis.fetch;
   let owner = true;
@@ -815,6 +898,48 @@ test("uploadReferenceDocuments surfaces a closed rejection reason instead of thr
       new File(["x"], "virus.exe", { type: "application/octet-stream" }),
     ]);
     expect(outcome).toEqual({ outcome: "REJECTED", reason: "UNSUPPORTED_TYPE" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("transcribeQuestionClip carries a server askableUntil verbatim and defaults to none", async () => {
+  const originalFetch = globalThis.fetch;
+  const bodies: unknown[] = [
+    { outcome: "TRANSCRIBED", text: "질문입니다.", askableUntilMs: 1_700_000 },
+    { outcome: "TRANSCRIBED", text: "두 번째 질문입니다." },
+    { outcome: "TRANSCRIBED", text: "세 번째 질문입니다.", askableUntilMs: "soon" },
+  ];
+  globalThis.fetch = (async () =>
+    new Response(JSON.stringify(bodies.shift()), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    })) as unknown as typeof fetch;
+  try {
+    const { transcribeQuestionClip } = createConsoleSessionClient("https://private.example.test");
+    if (transcribeQuestionClip === undefined) throw new Error("client lacks clip transcription");
+    const clip = new Blob([new Uint8Array([1])], { type: "audio/webm;codecs=opus" });
+
+    // A server-declared deadline flows through verbatim; absent or malformed values degrade
+    // to `askableUntilMs: null` so the console applies its own bound instead of a garbage one.
+    const withDeadline = await transcribeQuestionClip("csrf_1", clip, 1_200);
+    expect(withDeadline).toEqual({
+      outcome: "TRANSCRIBED",
+      text: "질문입니다.",
+      askableUntilMs: 1_700_000,
+    });
+    const withoutDeadline = await transcribeQuestionClip("csrf_1", clip, 1_200);
+    expect(withoutDeadline).toEqual({
+      outcome: "TRANSCRIBED",
+      text: "두 번째 질문입니다.",
+      askableUntilMs: null,
+    });
+    const malformed = await transcribeQuestionClip("csrf_1", clip, 1_200);
+    expect(malformed).toEqual({
+      outcome: "TRANSCRIBED",
+      text: "세 번째 질문입니다.",
+      askableUntilMs: null,
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }

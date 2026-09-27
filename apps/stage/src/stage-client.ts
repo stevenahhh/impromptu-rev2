@@ -83,8 +83,29 @@ interface BrowserWebSocket extends EventTarget {
 
 export type WebSocketFactory = (url: string) => BrowserWebSocket;
 
+/**
+ * A rejected `/v1/display-joins` exchange. `status`/`reason` carry the gateway's public
+ * rejection (for example 410 + INVITATION_EXPIRED); `status === undefined` means the request
+ * never got an answer (network/abort), which is the only kind the UI may retry.
+ */
+export class DisplayJoinError extends Error {
+  readonly status: number | undefined;
+  readonly reason: string | undefined;
+
+  constructor(message: string, status?: number, reason?: string) {
+    super(message);
+    this.name = "DisplayJoinError";
+    this.status = status;
+    this.reason = reason;
+  }
+}
+
 export interface StageSessionClient {
-  createJoin(identity: DisplayIdentity, deckVersion: string): Promise<DisplayJoinView>;
+  createJoin(
+    identity: DisplayIdentity,
+    deckVersion: string,
+    invitationToken?: string,
+  ): Promise<DisplayJoinView>;
   claim(join: DisplayJoinView): Promise<void>;
   snapshot(pins?: StageSnapshotView): Promise<StageSnapshotView>;
   subscribe(observer: StageEventObserver, timeoutMs?: number): Promise<StageSubscription>;
@@ -312,21 +333,39 @@ export function createStageSessionClient(
 ): StageSessionClient {
   const headers = { "content-type": "application/json" };
   return {
-    async createJoin(identity, deckVersion) {
+    async createJoin(identity, deckVersion, invitationToken) {
+      // The one-use invitation token travels only inside the JSON body — never in the URL,
+      // where access logs, referrers or history would capture it. `referrerPolicy` pins a
+      // same-origin Referer on this mutation because the invitation page itself ships a
+      // `no-referrer` policy and the gateway still requires an exact Origin+Referer match.
       const response = await fetch(`${baseUrl}/v1/display-joins`, {
         method: "POST",
         credentials: "include",
+        referrerPolicy: "same-origin",
         headers,
-        body: JSON.stringify({ ...identity, deckVersion }),
+        body: JSON.stringify(
+          invitationToken === undefined
+            ? { ...identity, deckVersion }
+            : { ...identity, deckVersion, invitationToken },
+        ),
       });
-      const body = displayJoin(await json(response));
-      if (!response.ok || body === null) throw new Error("Display join could not be created.");
+      const raw = await json(response);
+      const body = displayJoin(raw);
+      if (!response.ok || body === null) {
+        const rejection = record(raw);
+        throw new DisplayJoinError(
+          "Display join could not be created.",
+          response.status,
+          typeof rejection?.reason === "string" ? rejection.reason : undefined,
+        );
+      }
       return body;
     },
     async claim(join) {
       const response = await fetch(`${baseUrl}/v1/display-session`, {
         method: "POST",
         credentials: "include",
+        referrerPolicy: "same-origin",
         headers,
         body: JSON.stringify(join),
       });
@@ -478,6 +517,7 @@ export function createStageSessionClient(
       const response = await fetch(`${baseUrl}/v1/stage-applied`, {
         method: "POST",
         credentials: "include",
+        referrerPolicy: "same-origin",
         headers,
         body: JSON.stringify({
           commandId: event.commandId,

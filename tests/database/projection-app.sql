@@ -127,4 +127,16 @@ FROM public_projection.read_gateway_state('database-test') \gset
   \quit 1
 \endif
 
+SELECT (
+  count(*) = 1
+  AND bool_and(revision >= 1)
+  AND bool_and(snapshot ->> 'stateKind' = 'DISPLAY_INVITATION_STATE_SNAPSHOT')
+)::integer AS invitation_state_visible
+FROM public_projection.read_invitation_state('database-test') \gset
+\if :invitation_state_visible
+\else
+  \echo 'projection_app could not read invitation state through the narrow function'
+  \quit 1
+\endif
+
 SELECT 'projection_app permitted surface passed' AS result;

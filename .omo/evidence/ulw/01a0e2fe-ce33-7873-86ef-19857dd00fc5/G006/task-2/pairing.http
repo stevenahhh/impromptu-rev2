@@ -1,0 +1,216 @@
+### join-malformed
+HTTP 400
+{"error":"invalid_request"}
+
+### join-invitation-token-malformed
+HTTP 400
+{"error":"invalid_request"}
+
+### snapshot-no-cookie
+HTTP 401
+{"error":"display_session_required"}
+
+### events-no-cookie
+HTTP 401
+{"error":"display_session_required"}
+
+### invitation-mint-no-auth
+HTTP 401
+{"error":"<cookie>"}
+
+### login-node
+HTTP 201
+{"accountId":"account_production","csrfToken":"<redacted>"}
+
+BROWSER-REQ profile-a-presenter POST https://impromptu-rev2-console.vercel.app/v1/account-sessions
+BROWSER-RES profile-a-presenter 201 https://impromptu-rev2-console.vercel.app/v1/account-sessions
+BROWSER-REQ profile-a-presenter POST https://impromptu-rev2-console.vercel.app/v1/deck-uploads
+BROWSER-RES profile-a-presenter 201 https://impromptu-rev2-console.vercel.app/v1/deck-uploads
+BROWSER-REQ profile-a-presenter GET https://impromptu-rev2-console.vercel.app/v1/deck-assets/3cfc6704b44a3756f80f9aa1a8598cf1e3bc3f8705b896b6689b8baecb572f67/slides/slide-1.svg
+BROWSER-REQ profile-a-presenter GET https://impromptu-rev2-console.vercel.app/v1/reference-documents
+BROWSER-REQ profile-a-presenter POST https://impromptu-rev2-console.vercel.app/v1/recommendations
+BROWSER-REQ profile-a-presenter POST https://impromptu-rev2-console.vercel.app/v1/recommendations
+BROWSER-REQ profile-a-presenter POST https://impromptu-rev2-console.vercel.app/v1/recommendations
+BROWSER-REQ profile-a-presenter POST https://impromptu-rev2-console.vercel.app/v1/recommendations
+BROWSER-REQ profile-a-presenter POST https://impromptu-rev2-console.vercel.app/v1/recommendations
+BROWSER-REQ profile-a-presenter POST https://impromptu-rev2-console.vercel.app/v1/recommendations
+BROWSER-RES profile-a-presenter 200 https://impromptu-rev2-console.vercel.app/v1/deck-assets/3cfc6704b44a3756f80f9aa1a8598cf1e3bc3f8705b896b6689b8baecb572f67/slides/slide-1.svg
+BROWSER-RES profile-a-presenter 200 https://impromptu-rev2-console.vercel.app/v1/reference-documents
+BROWSER-RES profile-a-presenter 200 https://impromptu-rev2-console.vercel.app/v1/recommendations
+BROWSER-RES profile-a-presenter 200 https://impromptu-rev2-console.vercel.app/v1/recommendations
+BROWSER-RES profile-a-presenter 200 https://impromptu-rev2-console.vercel.app/v1/recommendations
+BROWSER-RES profile-a-presenter 200 https://impromptu-rev2-console.vercel.app/v1/recommendations
+BROWSER-RES profile-a-presenter 200 https://impromptu-rev2-console.vercel.app/v1/recommendations
+BROWSER-RES profile-a-presenter 200 https://impromptu-rev2-console.vercel.app/v1/recommendations
+### ui-upload-result
+HTTP 201
+{"presentationSessionId":"ps_eb258db2667f8f804c650796f364844f","presentationSessionEpoch":"pse_1","deckVersion":"deck_<hex64>","slides":6,"imageUrlSample":"http://projection-gateway:3002/v1/deck-assets/<hex64>/slides/slide-1.svg"}
+
+BROWSER-REQ profile-a-presenter POST https://impromptu-rev2-stage.vercel.app/v1/display-joins
+BROWSER-RES profile-a-presenter 201 https://impromptu-rev2-stage.vercel.app/v1/display-joins
+BROWSER-REQ profile-a-presenter POST https://impromptu-rev2-console.vercel.app/v1/display-bindings
+BROWSER-RES profile-a-presenter 201 https://impromptu-rev2-console.vercel.app/v1/display-bindings
+BROWSER-REQ profile-a-presenter POST https://impromptu-rev2-stage.vercel.app/v1/display-session
+BROWSER-RES profile-a-presenter 201 https://impromptu-rev2-stage.vercel.app/v1/display-session
+BROWSER-REQ profile-a-presenter GET https://impromptu-rev2-stage.vercel.app/v1/events
+BROWSER-RES profile-a-presenter 200 https://impromptu-rev2-stage.vercel.app/v1/events
+BROWSER-REQ profile-a-presenter GET https://impromptu-rev2-stage.vercel.app/v1/snapshot
+BROWSER-RES profile-a-presenter 200 https://impromptu-rev2-stage.vercel.app/v1/snapshot
+BROWSER-REQ profile-a-presenter GET https://impromptu-rev2-stage.vercel.app/v1/deck-assets/3cfc6704b44a3756f80f9aa1a8598cf1e3bc3f8705b896b6689b8baecb572f67/slides/slide-1.svg
+BROWSER-REQ profile-a-presenter GET https://impromptu-rev2-stage.vercel.app/v1/snapshot
+BROWSER-RES profile-a-presenter 200 https://impromptu-rev2-stage.vercel.app/v1/deck-assets/3cfc6704b44a3756f80f9aa1a8598cf1e3bc3f8705b896b6689b8baecb572f67/slides/slide-1.svg
+BROWSER-RES profile-a-presenter 200 https://impromptu-rev2-stage.vercel.app/v1/snapshot
+BROWSER-REQ profile-a-presenter GET https://impromptu-rev2-stage.vercel.app/v1/snapshot
+BROWSER-RES profile-a-presenter 200 https://impromptu-rev2-stage.vercel.app/v1/snapshot
+BROWSER-REQ profile-a-presenter GET https://impromptu-rev2-stage.vercel.app/v1/snapshot
+BROWSER-RES profile-a-presenter 200 https://impromptu-rev2-stage.vercel.app/v1/snapshot
+BROWSER-REQ profile-a-presenter GET https://impromptu-rev2-stage.vercel.app/v1/snapshot
+BROWSER-RES profile-a-presenter 200 https://impromptu-rev2-stage.vercel.app/v1/snapshot
+BROWSER-REQ profile-a-presenter GET https://impromptu-rev2-stage.vercel.app/v1/snapshot
+BROWSER-RES profile-a-presenter 200 https://impromptu-rev2-stage.vercel.app/v1/snapshot
+### ui-first-bind-response
+HTTP 201
+{"audienceDisplaySessionId":"audience_<session>","binding":{"displayBindingId":"binding_b6591d1fa1a7e2370e58f9876a691de6","presentationSessionId":"ps_eb258db2667f8f804c650796f364844f","presentationSessionEpoch":"pse_1","displayId":"display_<id>","displayBindingEpoch":"dbe_1","deckVersion":"deck_<hex64>","manifestHash":"<hex64>"},"expiresAtMs":1790560153211}
+
+BROWSER-REQ profile-a-presenter POST https://impromptu-rev2-stage.vercel.app/v1/display-joins
+BROWSER-RES profile-a-presenter 201 https://impromptu-rev2-stage.vercel.app/v1/display-joins
+BROWSER-REQ profile-a-presenter POST https://impromptu-rev2-console.vercel.app/v1/display-bindings
+BROWSER-RES profile-a-presenter 409 https://impromptu-rev2-console.vercel.app/v1/display-bindings
+### ui-rebind-response
+HTTP 409
+{"error":"STALE_DISPLAY_BINDING"}
+
+BROWSER-REQ profile-a-presenter POST https://impromptu-rev2-stage.vercel.app/v1/display-session
+BROWSER-RES profile-a-presenter 409 https://impromptu-rev2-stage.vercel.app/v1/display-session
+BROWSER-REQ profile-a-presenter POST https://impromptu-rev2-stage.vercel.app/v1/display-session
+BROWSER-RES profile-a-presenter 409 https://impromptu-rev2-stage.vercel.app/v1/display-session
+### independent-device-createJoin
+HTTP 201
+{"displayJoinId":"join_<id>","displayId":"display_task2indep01","deckVersion":"deck_<hex64>","displayFingerprint":"fp_task2independent","expiresAtMs":1790531464638}
+
+### independent-device-claim-unapproved
+HTTP 409
+{"error":"display_not_approved"}
+
+### join-invitation-token-forged
+HTTP 400
+{"error":"invalid_request"}
+
+### invitation-mint
+HTTP 201
+{"invitationId":"dinvite_9a48fc0a5648cd923443f33022bb405c","token":"<redacted>","deckVersion":"deck_<hex64>","expiresAtMs":1790531466963,"stagePath":"/?deck=<v>#invite=dinv_<redacted>"}
+
+### invitation-exchange-first
+HTTP 400
+{"error":"invalid_request"}
+
+### invitation-exchange-replay
+HTTP 400
+{"error":"invalid_request"}
+
+BROWSER-REQ profile-e-asset-fail POST https://impromptu-rev2-stage.vercel.app/v1/display-joins
+BROWSER-RES profile-e-asset-fail 201 https://impromptu-rev2-stage.vercel.app/v1/display-joins
+### approve-join3-assetfail
+HTTP 201
+{"audienceDisplaySessionId":"audience_<session>","binding":{"displayBindingId":"binding_1d54747e83256f7cd7cadcd9bd616aa7","presentationSessionId":"ps_eb258db2667f8f804c650796f364844f","presentationSessionEpoch":"pse_1","displayId":"display_<id>","displayBindingEpoch":"dbe_2","deckVersion":"deck_<hex64>","manifestHash":"<hex64>"},"expiresAtMs":1790560180105}
+
+BROWSER-REQ profile-e-asset-fail POST https://impromptu-rev2-stage.vercel.app/v1/display-session
+BROWSER-RES profile-e-asset-fail 201 https://impromptu-rev2-stage.vercel.app/v1/display-session
+BROWSER-REQ profile-e-asset-fail GET https://impromptu-rev2-stage.vercel.app/v1/events
+BROWSER-RES profile-e-asset-fail 200 https://impromptu-rev2-stage.vercel.app/v1/events
+BROWSER-REQ profile-e-asset-fail GET https://impromptu-rev2-stage.vercel.app/v1/snapshot
+BROWSER-RES profile-e-asset-fail 200 https://impromptu-rev2-stage.vercel.app/v1/snapshot
+BROWSER-REQ profile-e-asset-fail GET https://impromptu-rev2-stage.vercel.app/v1/deck-assets/3cfc6704b44a3756f80f9aa1a8598cf1e3bc3f8705b896b6689b8baecb572f67/slides/slide-1.svg
+BROWSER-ABORT asset slide-1.svg
+BROWSER-REQ profile-e-asset-fail GET https://impromptu-rev2-stage.vercel.app/v1/deck-assets/3cfc6704b44a3756f80f9aa1a8598cf1e3bc3f8705b896b6689b8baecb572f67/slides/slide-1.svg
+BROWSER-ABORT asset slide-1.svg
+BROWSER-REQ profile-e-asset-fail GET https://impromptu-rev2-stage.vercel.app/v1/snapshot
+BROWSER-RES profile-e-asset-fail 200 https://impromptu-rev2-stage.vercel.app/v1/snapshot
+BROWSER-REQ profile-f-asset-fail-mobile POST https://impromptu-rev2-stage.vercel.app/v1/display-joins
+BROWSER-RES profile-f-asset-fail-mobile 201 https://impromptu-rev2-stage.vercel.app/v1/display-joins
+### approve-join4-mobile
+HTTP 201
+{"audienceDisplaySessionId":"audience_<session>","binding":{"displayBindingId":"binding_2d74fce6019b6f3c60835bdff926daf7","presentationSessionId":"ps_eb258db2667f8f804c650796f364844f","presentationSessionEpoch":"pse_1","displayId":"display_<id>","displayBindingEpoch":"dbe_3","deckVersion":"deck_<hex64>","manifestHash":"<hex64>"},"expiresAtMs":1790560185067}
+
+BROWSER-REQ profile-f-asset-fail-mobile POST https://impromptu-rev2-stage.vercel.app/v1/display-session
+BROWSER-RES profile-f-asset-fail-mobile 201 https://impromptu-rev2-stage.vercel.app/v1/display-session
+BROWSER-REQ profile-f-asset-fail-mobile GET https://impromptu-rev2-stage.vercel.app/v1/events
+BROWSER-RES profile-f-asset-fail-mobile 200 https://impromptu-rev2-stage.vercel.app/v1/events
+BROWSER-REQ profile-f-asset-fail-mobile GET https://impromptu-rev2-stage.vercel.app/v1/snapshot
+BROWSER-RES profile-f-asset-fail-mobile 200 https://impromptu-rev2-stage.vercel.app/v1/snapshot
+BROWSER-REQ profile-f-asset-fail-mobile GET https://impromptu-rev2-stage.vercel.app/v1/deck-assets/3cfc6704b44a3756f80f9aa1a8598cf1e3bc3f8705b896b6689b8baecb572f67/slides/slide-1.svg
+BROWSER-REQ profile-f-asset-fail-mobile GET https://impromptu-rev2-stage.vercel.app/v1/deck-assets/3cfc6704b44a3756f80f9aa1a8598cf1e3bc3f8705b896b6689b8baecb572f67/slides/slide-1.svg
+BROWSER-REQ profile-f-asset-fail-mobile GET https://impromptu-rev2-stage.vercel.app/v1/snapshot
+BROWSER-REQ profile-e-asset-fail GET https://impromptu-rev2-stage.vercel.app/v1/snapshot
+BROWSER-RES profile-e-asset-fail 401 https://impromptu-rev2-stage.vercel.app/v1/snapshot
+BROWSER-REQ profile-e-asset-fail GET https://impromptu-rev2-stage.vercel.app/v1/snapshot
+BROWSER-RES profile-f-asset-fail-mobile 200 https://impromptu-rev2-stage.vercel.app/v1/snapshot
+BROWSER-RES profile-e-asset-fail 401 https://impromptu-rev2-stage.vercel.app/v1/snapshot
+BROWSER-REQ profile-e-asset-fail GET https://impromptu-rev2-stage.vercel.app/v1/snapshot
+BROWSER-RES profile-e-asset-fail 401 https://impromptu-rev2-stage.vercel.app/v1/snapshot
+### cleanup-end-presentation
+HTTP 500
+{"error":"internal_error"}
+
+### cleanup-revoke-session
+HTTP 200
+{"status":"revoked"}
+
+
+# supplementary invitation battery (schema-valid bodies)
+### supp-login
+HTTP 201
+{"accountId":"account_production"}
+
+### supp-mint
+HTTP 409
+{"error":"presentation_ended","token":"<redacted>","stagePath":"<redacted>"}
+
+### supp-revoke-session
+HTTP 200
+{"status":"revoked"}
+
+# supplementary invitation battery (schema-valid bodies)
+### supp-login
+HTTP 201
+{"accountId":"account_production"}
+
+### supp-deck-artifacts
+HTTP 201
+{"deckVersion":"deck_b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"}
+
+### supp-presentation-create
+HTTP 201
+{"presentationSessionId":"ps_faea109098902c69342c761527884034","presentationSessionEpoch":"pse_1","ownerAccountId":"account_production","deckVersion":"deck_b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2","status":"ACTIVE","createdAtMs":1790531634283,"endedAtMs":null,"qaStartedAtMs":null}
+
+### supp-mint
+HTTP 201
+{"invitationId":"dinvite_6d107cbb1c7bad2d90746ef51025561f","token":"<redacted>","deckVersion":"deck_b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2","expiresAtMs":1790531725053,"stagePath":"<redacted>"}
+
+### invitation-exchange-first
+HTTP 201
+{"displayJoinId":"join_<id>","displayId":"display_task2invitedA1","deckVersion":"deck_b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2","displayFingerprint":"fp_task2invited_validshape","expiresAtMs":1790531725355}
+
+### invitation-exchange-replay
+HTTP 409
+{"outcome":"REJECTED","reason":"INVITATION_CONSUMED"}
+
+### invited-join-claim-unapproved
+HTTP 409
+{"error":"display_not_approved"}
+
+### invitation-exchange-forged
+HTTP 404
+{"outcome":"REJECTED","reason":"INVITATION_UNKNOWN"}
+
+### supp-mint-2
+HTTP 201
+{"invitationId":"dinvite_7d04bb3501d6eec9fdd3e685883bf05b","token":"<redacted>","deckVersion":"deck_b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2","expiresAtMs":1790531725752,"stagePath":"<redacted>"}
+
+### invitation-exchange-wrong-deck
+HTTP 409
+{"outcome":"REJECTED","reason":"INVITATION_DECK_MISMATCH"}
+
+### supp-revoke-session
+HTTP 200
+{"status":"revoked"}

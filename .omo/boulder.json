@@ -9,8 +9,20 @@
       "session_ids": [
         "senpi:019ffc7b-6978-774d-9a3b-fe7c3015ec5b"
       ],
-      "status": "active",
-      "worktree_path": null
+      "status": "paused",
+      "worktree_path": null,
+      "session_origins": {},
+      "stale_since": "2026-09-22T09:48:41.404Z",
+      "task_sessions": {}
     }
-  }
+  },
+  "session_ids": [
+    "senpi:019ffc7b-6978-774d-9a3b-fe7c3015ec5b"
+  ],
+  "session_origins": {},
+  "task_sessions": {},
+  "active_plan": ".omo/plans/impromptu-r2-hyperplan.md",
+  "plan_name": "impromptu-r2-hyperplan",
+  "status": "paused",
+  "worktree_path": null
 }

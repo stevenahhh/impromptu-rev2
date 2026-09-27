@@ -38,6 +38,10 @@ const permissionsPolicy = [
 ].join(", ");
 
 const config: NextConfig = {
+  ...(process.env.IMPROMPTU_NEXT_DIST_DIR ? { distDir: process.env.IMPROMPTU_NEXT_DIST_DIR } : {}),
+  ...(process.env.IMPROMPTU_NEXT_TSCONFIG
+    ? { typescript: { tsconfigPath: process.env.IMPROMPTU_NEXT_TSCONFIG } }
+    : {}),
   experimental: {
     optimizePackageImports: ["@impromptu/ui"],
   },

@@ -9,7 +9,9 @@ const hash = new Bun.CryptoHasher("sha256").update(content).digest("hex");
 const manifestHash = "a".repeat(64);
 const request = { query: "revenue", deckVersion: "deck_v1", manifestHash, maxResults: 3 };
 
-function fixture() {
+function fixture(
+  overrides: Partial<ConstructorParameters<typeof InternalRetrievalService>[0]> = {},
+) {
   let current = true;
   let allowed = true;
   let metadata: RetrievalObjectMetadata = {
@@ -92,6 +94,7 @@ function fixture() {
         return tenantId === "tenant-a" && objectId === "object-1" ? storedContent : null;
       },
     },
+    ...overrides,
   });
   return {
     service,
@@ -115,6 +118,93 @@ function required<Value>(value: Value | undefined): Value {
   if (value === undefined) throw new Error("fixture value is required");
   return value;
 }
+
+describe("corpus preparation during retrieval", () => {
+  // A freshly uploaded deck triggers a burst of recommendations. Preparation used to run
+  // inline inside `retrieve`, so every concurrent request waited on (or duplicated) the same
+  // advisory-locked embedding pass and burned its whole model budget before ANN could start.
+  // Retrieval now kicks one background preparation per deck scope and reads whatever is
+  // already committed; the recommendation abstains fast on a cold corpus instead of timing
+  // out, and the committed waves make the index converge.
+  function corpusFixture() {
+    const prepared: string[] = [];
+    const gates: Array<() => void> = [];
+    const startsWaiters: Array<() => void> = [];
+    const corpus = {
+      async prepare(_principal: unknown, retrieval: { deckVersion: string }) {
+        prepared.push(retrieval.deckVersion);
+        for (const waiter of startsWaiters.splice(0)) waiter();
+        await new Promise<void>((resolve) => gates.push(resolve));
+      },
+    };
+    const { service } = fixture({ corpus });
+    // Deterministic signal that a preparation has actually started: subscribe before the
+    // triggering retrieval, never poll or sleep for it.
+    const waitForPrepares = async (count: number) => {
+      while (prepared.length < count) {
+        await new Promise<void>((resolve) => startsWaiters.push(resolve));
+      }
+    };
+    const releaseAll = () => {
+      for (const gate of gates.splice(0)) gate();
+    };
+    return { service, prepared, gates, waitForPrepares, releaseAll };
+  }
+
+  test("retrieve resolves without waiting for a pending preparation", async () => {
+    const { service, prepared, waitForPrepares, releaseAll } = corpusFixture();
+    const retrieved = await Promise.race([
+      service.retrieve("session-a", request).then((value) => ({ outcome: "done", value })),
+      new Promise<{ outcome: "timeout" }>((resolve) =>
+        setTimeout(() => resolve({ outcome: "timeout" }), 2_000),
+      ),
+    ]);
+    expect(retrieved.outcome).toBe("done");
+    expect(retrieved.outcome === "done" ? retrieved.value : []).toHaveLength(1);
+    await waitForPrepares(1);
+    expect(prepared).toEqual(["deck_v1"]);
+    releaseAll();
+  });
+
+  test("concurrent retrievals share one in-flight preparation per deck scope", async () => {
+    const { service, prepared, waitForPrepares, releaseAll } = corpusFixture();
+    const other = { ...request, deckVersion: "deck_v2" };
+    const pending = [
+      service.retrieve("session-a", request),
+      service.retrieve("session-a", request),
+      service.retrieve("session-a", other),
+    ];
+    // Both scopes' preparations start before either is released.
+    await waitForPrepares(2);
+    releaseAll();
+    const results = await Promise.all(pending);
+    expect(prepared.sort()).toEqual(["deck_v1", "deck_v2"]);
+    expect(results[0]).toHaveLength(1);
+    expect(results[1]).toHaveLength(1);
+    // The fixture's stored object carries deck_v1, so the other scope authorizes nothing.
+    expect(results[2]).toEqual([]);
+    // A settled preparation is retried by the next retrieval rather than wedged forever.
+    // The dedup entry clears in a microtask when the shared run settles, so this tick just
+    // drains already-queued continuations - it is not a timing wait.
+    await Bun.sleep(0);
+    const retried = service.retrieve("session-a", request);
+    await waitForPrepares(3);
+    expect(prepared.sort()).toEqual(["deck_v1", "deck_v1", "deck_v2"]);
+    releaseAll();
+    await retried;
+  });
+
+  test("a rejected preparation does not fail the retrieval that triggered it", async () => {
+    const { service } = fixture({
+      corpus: {
+        async prepare() {
+          throw new Error("indexing backend offline");
+        },
+      },
+    });
+    expect(await service.retrieve("session-a", request)).toHaveLength(1);
+  });
+});
 
 describe("ACL-first internal retrieval", () => {
   test("derives the principal, applies tenant and ReBAC prefilter before ANN, then post-authorizes", async () => {

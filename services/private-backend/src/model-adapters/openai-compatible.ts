@@ -89,6 +89,9 @@ const usageSchema = z
     prompt_tokens_details: z
       .object({
         cached_tokens: z.number().int().nonnegative().optional(),
+        // OpenCode Go emits both cache-usage counters; dropping one breaks strict parsing
+        // against the live provider.
+        cache_creation_input_tokens: z.number().int().nonnegative().nullable().optional(),
         cache_write_tokens: z.number().int().nonnegative().nullable().optional(),
         audio_tokens: z.number().int().nonnegative().optional(),
       })

@@ -1,0 +1,30 @@
+# task-3: live deck-upload outcomes (POST /v1/deck-uploads, multipart field "file")
+# Target: http://127.0.0.1:3001 (impromptu-ulw-g003-demo-private-backend-1)
+# Auth: __Host-account cookie + x-csrf-token + Origin/Referer = $CONSOLE_ORIGIN (all redacted here)
+# Fixtures: tests/fixtures/format-neutral-decks/{korean-text-layer.pdf,korean-scanned.pdf,
+#           korean-structural.pptx} plus a 47-byte text file renamed .pdf (invalid).
+# Full bodies are truncated; the receipt shape is privateDeck/publicDeck + session ids.
+
+## valid text-layer PDF (4,329 bytes) — pass A container
+HTTP 201 in ~1.1-1.4s
+{"presentationSessionId":"ps_90cbc63ef9519fc77b88fcb4b4bc33a1","presentationSessionEpoch":"pse_1",
+ "deckVersion":"deck_1495ab6922290f7a1ae111f0a6b79969e9beeb37da0f326ef52e3c79b426e46c",
+ "privateDeck":{"manifestHash":"0fac4a24e859a344e781a0befab9fd447de44eb8834e926827c6858166443b07",
+ "title":"Korean text layer","slides":[6 slides, extractedText:"" on each],
+ "publicDeck":{"title":"Korean text layer", 6 public slides}}
+(pass B/HEAD: identical outcome, ps_57565c7b…, 1043ms; pass C ps_c107de6d…)
+
+## scanned PDF (210,711 bytes) — pass A container
+HTTP 201 in ~42s  (render + six Tesseract OCR pages inside the render deadline)
+{"presentationSessionId":"ps_b3d83b2a1822a7f83f6b4adf528b4780","presentationSessionEpoch":"pse_1",
+ "deckVersion":"deck_642dc70609f3b11ea63424404e801d0fdf622ff361bd0d5960b559ba6c2990ae",
+ "privateDeck":{"manifestHash":"74261b9f611552bdf9240625337d2a3bed5cc9efa47fdebd957411b3a6200632",
+ "title":"Korean scanned", 6 slides}}
+OCR availability is NOT visible in the HTTP receipt (extractedText:"" on every slide).
+In-container artifact proof (ingestion.json for source_sha256 642dc706…, pass A):
+  slide 1..6 all carry warning "ocr_applied"; slide 1 first text element is the
+  sentinel "형식 중립 근거 자료 2026" — OCR text restored on the live stack.
+
+## invalid PDF (47 bytes of plain text) — pass A container
+HTTP 400 in 2ms
+{"error":"deck_upload_rejected","code":"malformed_input"}

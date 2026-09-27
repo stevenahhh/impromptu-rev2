@@ -1,7 +1,10 @@
 import { SQL } from "bun";
 import { PreparedEvidenceCoordinator } from "../../services/private-backend/src/prepared-evidence.ts";
 import { createPostgresPreparedEvidencePersistence } from "../../services/private-backend/src/prepared-evidence-store-postgres.ts";
-import { createPostgresProjectionGatewayPersistence } from "../../services/projection-gateway/src/ports/postgres-projection-store.ts";
+import {
+  createPostgresDisplayInvitationPersistence,
+  createPostgresProjectionGatewayPersistence,
+} from "../../services/projection-gateway/src/ports/postgres-projection-store.ts";
 import { PreparedEvidenceProjectionGateway } from "../../services/projection-gateway/src/prepared-evidence.ts";
 
 const privateDatabaseUrl = Bun.env.PRIVATE_DATABASE_URL;
@@ -23,8 +26,11 @@ const projectionStub = {
   recordPlaybackApplied() {
     return false;
   },
-  projectCard() {
-    return false;
+  issueDisplayInvitation() {
+    return { outcome: "REJECTED" as const, reason: "unused" };
+  },
+  readDisplayInvitation() {
+    return { outcome: "REJECTED" as const, reason: "unused" };
   },
 };
 
@@ -74,6 +80,46 @@ try {
     throw new Error("projection gateway state did not survive a repository reload");
   }
   await expectConflict(() => projectionStale.persist(), "projection");
+
+  const invitationFirst = await createPostgresDisplayInvitationPersistence(
+    projectionSql,
+    projectionFirst.store,
+    { stateKey: "database-test" },
+  );
+  const invitationStale = await createPostgresDisplayInvitationPersistence(
+    projectionSql,
+    projectionFirst.store,
+    { stateKey: "database-test" },
+  );
+  const issued = gateway.issueDisplayInvitation(
+    { presentationSessionId: "ps_database_test", deckVersion: "deck_database_test" },
+    Date.now(),
+  );
+  if (issued.outcome !== "ISSUED") {
+    throw new Error("display invitation issuance failed in the state test fixture");
+  }
+  await invitationFirst.persist();
+  if (!projectionFirst.store.invitations.has(issued.invitation.invitationId)) {
+    throw new Error("display invitation was not recorded in the gateway store");
+  }
+  if (
+    JSON.stringify([...projectionFirst.store.invitations.values()]).includes(
+      issued.invitation.token,
+    )
+  ) {
+    throw new Error("display invitation token leaked into persisted state");
+  }
+
+  const invitationRestored = await createPostgresDisplayInvitationPersistence(
+    projectionSql,
+    projectionRestored.store,
+    { stateKey: "database-test" },
+  );
+  await invitationRestored.persist();
+  if (!projectionRestored.store.invitations.has(issued.invitation.invitationId)) {
+    throw new Error("display invitation state did not survive a repository reload");
+  }
+  await expectConflict(() => invitationStale.persist(), "display invitation");
 
   console.log("PostgreSQL prepared-evidence state repositories verified.");
 } finally {

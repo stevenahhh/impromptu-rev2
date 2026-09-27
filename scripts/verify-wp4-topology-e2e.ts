@@ -23,7 +23,9 @@ for (const mode of ["extend", "duplicate", "single"] as const) {
     modeRuns.length !== 3 ||
     modeRuns.some(
       (run) =>
-        run.faults.length !== 8 ||
+        // Six live faults per rehearsal; the two fullscreen faults were retired with the
+        // slide-only Stage (no Stage-owned fullscreen control remains to break or restore).
+        run.faults.length !== 6 ||
         run.observedTransition !== run.requestedTransition ||
         run.outcome !== "SUCCESS",
     )

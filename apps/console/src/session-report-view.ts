@@ -2,6 +2,7 @@
 // drops any field outside the shipped contract.
 
 import { externalSourceUrl } from "./private-transport";
+import { type QaDefenseSectionReportView, qaDefenseSection } from "./qa-defense-report";
 
 export interface SessionReportView {
   readonly reportVersion: 1 | 2;
@@ -41,6 +42,8 @@ export interface SessionReportView {
       provenance: "CURATED_PREAPPROVED" | "LIVE_VERIFIED";
     }>[];
   }>;
+  /** Additive v2 section; absent on v1 reports. Present-but-unreadable degrades to UNREADABLE. */
+  readonly qaDefense?: QaDefenseSectionReportView;
 }
 
 export type SessionReportReadView =
@@ -172,5 +175,8 @@ export function sessionReport(value: unknown): SessionReportView | null {
     },
     preparedEvidence: { label: "준비된 근거", items },
   };
-  return view;
+  // A present-but-unreadable qaDefense degrades to UNREADABLE instead of losing the whole
+  // report: v1 payloads stay exactly as before, and the Q&A section fails alone.
+  const qaDefense = qaDefenseSection(report.qaDefense);
+  return qaDefense === undefined ? view : { ...view, qaDefense };
 }

@@ -1,0 +1,141 @@
+
+### POST /v1/display-invitations (owner+CSRF+exact origin)
+HTTP/1.1 201 Created
+Access-Control-Allow-Origin: https://impromptu-rev2-console.vercel.app
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, DELETE
+Access-Control-Allow-Headers: content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: b9d09cb7-069d-4d02-b8a3-48913d781055
+Date: Sun, 27 Sep 2026 17:47:18 GMT
+Content-Length: 421
+{"invitationId":"dinvite_188cc7f052aab2714d55d46803c7ab9d","token":"dinv_<redacted-64hex>","deckVersion":"deck_f4eb802c185ef3fc035fe52a0f90f79a6f2cfb728ade59083aa1d79bf42f9988","expiresAtMs":1790531328732,"stagePath":"/?deck=deck_f4eb802c185ef3fc035fe52a0f90f79a6f2cfb728ade59083aa1d79bf42f9988#invite=dinv_<redacted-64hex>"}
+
+### GET pending before exchange
+{"invitationId":"dinvite_188cc7f052aab2714d55d46803c7ab9d","presentationSessionId":"ps_890a23ac7e4be5f7caaf0224e0f316f3","deckVersion":"deck_f4eb802c185ef3fc035fe52a0f90f79a6f2cfb728ade59083aa1d79bf42f9988","expiresAtMs":1790531328732,"status":"PENDING","displayBindingEpoch":"dbe_0","join":null}
+
+### POST /v1/display-joins invitation exchange
+HTTP/1.1 201 Created
+Access-Control-Allow-Origin: https://impromptu-rev2-stage.vercel.app
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST
+Access-Control-Allow-Headers: content-type, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: e27381eb-23dd-41b7-98cd-94a76427a340
+Date: Sun, 27 Sep 2026 17:47:18 GMT
+Content-Length: 258
+{"displayJoinId":"join_d634f801002596c31a96a0f524cdce9a","displayId":"display_curl_probe","deckVersion":"deck_f4eb802c185ef3fc035fe52a0f90f79a6f2cfb728ade59083aa1d79bf42f9988","displayFingerprint":"fingerprint-curl-probe-display","expiresAtMs":1790531328826}
+
+### replayed token
+HTTP/1.1 409 Conflict
+Access-Control-Allow-Origin: https://impromptu-rev2-stage.vercel.app
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST
+Access-Control-Allow-Headers: content-type, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 3304cecd-bbc6-4497-ae20-478cb414e27d
+Date: Sun, 27 Sep 2026 17:47:18 GMT
+Content-Length: 53
+{"outcome":"REJECTED","reason":"INVITATION_CONSUMED"}
+
+### GET pending after join
+{"invitationId":"dinvite_188cc7f052aab2714d55d46803c7ab9d","presentationSessionId":"ps_890a23ac7e4be5f7caaf0224e0f316f3","deckVersion":"deck_f4eb802c185ef3fc035fe52a0f90f79a6f2cfb728ade59083aa1d79bf42f9988","expiresAtMs":1790531328732,"status":"JOINED","displayBindingEpoch":"dbe_0","join":{"displayJoinId":"join_d634f801002596c31a96a0f524cdce9a","displayId":"display_curl_probe","deckVersion":"deck_f4eb802c185ef3fc035fe52a0f90f79a6f2cfb728ade59083aa1d79bf42f9988","displayFingerprint":"fingerprint-curl-probe-display","expiresAtMs":1790531328826}}
+
+### forged fingerprint
+HTTP/1.1 409 Conflict
+Access-Control-Allow-Origin: https://impromptu-rev2-console.vercel.app
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, DELETE
+Access-Control-Allow-Headers: content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 7f931cc2-1eb7-49a9-86f2-d15d29444f01
+Date: Sun, 27 Sep 2026 17:47:18 GMT
+Content-Length: 37
+{"error":"DISPLAY_IDENTITY_MISMATCH"}
+
+### approved bind at dbe_0
+HTTP/1.1 201 Created
+Access-Control-Allow-Origin: https://impromptu-rev2-console.vercel.app
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, DELETE
+Access-Control-Allow-Headers: content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: b0bb803d-2744-4eb9-aa03-24d77bd3f9ac
+Date: Sun, 27 Sep 2026 17:47:18 GMT
+Content-Length: 518
+{"audienceDisplaySessionId":"audience_<redacted>","binding":{"displayBindingId":"binding_4f4f3560551a20862e643942244441e7","presentationSessionId":"ps_890a23ac7e4be5f7caaf0224e0f316f3","presentationSessionEpoch":"pse_1","displayId":"display_curl_probe","displayBindingEpoch":"dbe_1","deckVersion":"deck_f4eb802c185ef3fc035fe52a0f90f79a6f2cfb728ade59083aa1d79bf42f9988","manifestHash":"33a5e4b92ab976839c7853096fe382429cd14feb0d93bf1b7af3108fd2604663"},"expiresAtMs":1790560038900}
+
+### pending read after rotation
+{"invitationId":"dinvite_84c65a4828af875a923e519b434ba570","presentationSessionId":"ps_890a23ac7e4be5f7caaf0224e0f316f3","deckVersion":"deck_f4eb802c185ef3fc035fe52a0f90f79a6f2cfb728ade59083aa1d79bf42f9988","expiresAtMs":1790531366172,"status":"JOINED","displayBindingEpoch":"dbe_1","join":{"displayJoinId":"join_a40489326a7aad91e689e4709800646f","displayId":"display_spare","deckVersion":"deck_f4eb802c185ef3fc035fe52a0f90f79a6f2cfb728ade59083aa1d79bf42f9988","displayFingerprint":"fingerprint-spare-projector","expiresAtMs":1790531366218}}
+
+### stale dbe_0 rebind
+HTTP/1.1 409 Conflict
+Access-Control-Allow-Origin: https://impromptu-rev2-console.vercel.app
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, DELETE
+Access-Control-Allow-Headers: content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 2a8aafea-4c79-46f5-b011-0109967c5faa
+Date: Sun, 27 Sep 2026 17:47:55 GMT
+Content-Length: 33
+{"error":"STALE_DISPLAY_BINDING"}
+
+### claim before approval
+HTTP/1.1 409 Conflict
+Access-Control-Allow-Origin: https://impromptu-rev2-stage.vercel.app
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST
+Access-Control-Allow-Headers: content-type, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: f7741788-d83c-458a-9c75-9536f0a79b45
+Date: Sun, 27 Sep 2026 17:47:56 GMT
+Content-Length: 32
+{"error":"display_not_approved"}
+
+### fresh dbe_1 rebind
+HTTP/1.1 201 Created
+Access-Control-Allow-Origin: https://impromptu-rev2-console.vercel.app
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, DELETE
+Access-Control-Allow-Headers: content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: c765fd8c-a04a-436b-b1ec-526fd99e2f95
+Date: Sun, 27 Sep 2026 17:47:55 GMT
+Content-Length: 513
+{"audienceDisplaySessionId":"audience_<redacted>","binding":{"displayBindingId":"binding_1bd025db3b8e1331e6cb5e067e9a177b","presentationSessionId":"ps_890a23ac7e4be5f7caaf0224e0f316f3","presentationSessionEpoch":"pse_1","displayId":"display_spare","displayBindingEpoch":"dbe_2","deckVersion":"deck_f4eb802c185ef3fc035fe52a0f90f79a6f2cfb728ade59083aa1d79bf42f9988","manifestHash":"33a5e4b92ab976839c7853096fe382429cd14feb0d93bf1b7af3108fd2604663"},"expiresAtMs":1790560076323}
+
+### wrong origin issuance
+{"error":"origin_forbidden"}
+
+### no cookie issuance
+{"error":"account_session_required"}
+
+### stranger pending read
+HTTP/1.1 403 Forbidden
+Access-Control-Allow-Origin: https://impromptu-rev2-console.vercel.app
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, DELETE
+Access-Control-Allow-Headers: content-type, x-audio-duration-ms, x-audio-sequence, x-csrf-token
+Vary: Origin
+Cache-Control: no-store
+Content-Type: application/json; charset=utf-8
+x-request-id: 79d6cb73-c75b-4f63-8300-4de9fb6b8c51
+Date: Sun, 27 Sep 2026 17:47:56 GMT
+Content-Length: 24
+{"error":"unauthorized"}

@@ -17,6 +17,14 @@ export interface ActivePresentationView {
   readonly presentationSessionEpoch: string;
   readonly deckVersion: string;
   readonly manifestHash?: string;
+  // Server-restored fields carried by a resumed presentation (never present on a fresh
+  // upload): the display title, the CAS fields playback commands must build on, and the
+  // slide the room is already showing.
+  readonly title?: string;
+  readonly status?: "ACTIVE" | "ENDED";
+  readonly displayBindingEpoch?: string;
+  readonly controlRevision?: string;
+  readonly currentSlideKey?: string;
   readonly slides: readonly Readonly<{
     publicSlideKey: string;
     ordinal: number;

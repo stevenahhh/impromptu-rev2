@@ -1,13 +1,12 @@
-import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import type { PublishedSlideRuntime } from "@impromptu/contracts";
+import { registerDom } from "@impromptu/test-harness";
 import { createRef } from "react";
 
 import { RenderedSlidePlayer, type RenderedSlidePlayerHandle } from "./rendered-slide-player";
 
-GlobalRegistrator.register();
-afterAll(() => GlobalRegistrator.unregister());
+registerDom();
 
 const { act, cleanup, fireEvent, render } = await import("@testing-library/react");
 

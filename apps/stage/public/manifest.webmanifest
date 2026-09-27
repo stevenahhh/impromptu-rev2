@@ -1,8 +1,8 @@
 {
   "id": "/?app=stage",
-  "name": "Impromptu 청중 화면",
-  "short_name": "청중 화면",
-  "description": "Audience-safe presentation evidence display.",
+  "name": "Impromptu 발표 화면",
+  "short_name": "발표 화면",
+  "description": "청중에게 발표 슬라이드를 보여 주는 화면이에요.",
   "start_url": "/",
   "scope": "/",
   "display": "fullscreen",

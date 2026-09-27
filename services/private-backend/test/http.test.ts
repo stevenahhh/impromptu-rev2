@@ -50,6 +50,8 @@ describe("private backend HTTP boundary", () => {
         bindDisplay: () => ({ outcome: "REJECTED", reason: "unused" }),
         projectPlayback: () => false,
         recordPlaybackApplied: () => false,
+        issueDisplayInvitation: () => ({ outcome: "REJECTED", reason: "unused" }),
+        readDisplayInvitation: () => ({ outcome: "REJECTED", reason: "unused" }),
       },
       store,
     );

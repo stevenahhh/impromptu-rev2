@@ -1,54 +1,43 @@
 import { Badge, Panel } from "@impromptu/ui";
+import type { PresentationReportText } from "./presentation-report-text";
+import { ReportQaDefense } from "./report-qa-defense";
 import type { SessionReportView } from "./session-client";
-
-export type PresentationReportText = Readonly<{
-  title: string;
-  lead: string;
-  finalized: string;
-  totalDuration: string;
-  durationUnit: string;
-  slideVisits: string;
-  slide: string;
-  occurrence: string;
-  dwell: string;
-  revisit: string;
-  firstVisit: string;
-  speech: string;
-  speechSummary: string;
-  wordCount: string;
-  speakingDuration: string;
-  timingAggregate: string;
-  finalCount: string;
-  measuredFinalCount: string;
-  coachingAggregate: string;
-  cueCount: string;
-  currentPace: string;
-  previousPace: string;
-  unavailable: string;
-  preparedEvidence: string;
-  evidenceEmpty: string;
-  evidenceItem: string;
-  evidenceSourceUrl: string;
-  evidenceProvenance: string;
-  sourceUnavailable: string;
-  curatedEvidence: string;
-  liveEvidence: string;
-}>;
 
 export interface PresentationReportProps {
   readonly report: SessionReportView;
   readonly text: PresentationReportText;
+  /** Deck slides keyed by publicSlideKey; the host derives it from the in-session deck. */
+  readonly slides?: ReadonlyMap<string, PresentationSlideEntry> | undefined;
+}
+
+export interface PresentationSlideEntry {
+  readonly ordinal: number;
+  readonly label: string;
 }
 
 function duration(value: number, unit: string): string {
   return `${(value / 1_000).toFixed(1)}${unit}`;
 }
 
+/**
+ * Human slide identifier for a visit: the deck label when the deck is in session, otherwise
+ * the deck ordinal, otherwise the visit's occurrence order. The raw key never reaches text.
+ */
+function slideTitle(
+  visit: SessionReportView["slideVisits"][number],
+  slides: ReadonlyMap<string, PresentationSlideEntry> | undefined,
+  slideWord: string,
+): string {
+  const slide = slides?.get(visit.publicSlideKey);
+  if (slide !== undefined && slide.label.trim().length > 0) return slide.label;
+  return `${slideWord} ${slide !== undefined ? slide.ordinal : visit.sequence}`;
+}
+
 function pace(value: number | null, unavailable: string): string {
   return value === null ? unavailable : `${value} WPM`;
 }
 
-export function PresentationReport({ report, text }: PresentationReportProps) {
+export function PresentationReport({ report, text, slides }: PresentationReportProps) {
   return (
     <article className="console-stack ui-reveal" data-presentation-report="ready">
       <header>
@@ -74,9 +63,7 @@ export function PresentationReport({ report, text }: PresentationReportProps) {
                 data-report-occurrence={visit.occurrenceSequence}
                 data-report-dwell-ms={visit.dwellMs}
               >
-                <h3>
-                  {text.slide} {visit.publicSlideKey}
-                </h3>
+                <h3 data-report-slide-title>{slideTitle(visit, slides, text.slide)}</h3>
                 <Badge tone="neutral">
                   {text.occurrence} {visit.occurrenceSequence}
                 </Badge>
@@ -191,6 +178,26 @@ export function PresentationReport({ report, text }: PresentationReportProps) {
           </ul>
         )}
       </Panel>
+
+      {/* Additive v2 section: v1 reports carry no qaDefense and render nothing here. */}
+      {report.qaDefense === undefined ? null : (
+        <ReportQaDefense
+          section={report.qaDefense}
+          text={{
+            title: text.reportQaTitle,
+            empty: text.reportQaEmpty,
+            unavailable: text.reportQaUnavailable,
+            typed: text.reportQaTyped,
+            spoken: text.reportQaSpoken,
+            askedAt: text.reportQaAskedAt,
+            answerHeading: text.reportQaAnswerHeading,
+            retryable: text.reportQaRetryable,
+            final: text.reportQaFinal,
+            qaSourceSlide: text.qaSourceSlide,
+            qaSourceReference: text.qaSourceReference,
+          }}
+        />
+      )}
     </article>
   );
 }

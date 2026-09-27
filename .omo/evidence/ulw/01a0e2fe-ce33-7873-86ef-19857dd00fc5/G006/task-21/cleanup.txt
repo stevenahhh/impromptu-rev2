@@ -1,0 +1,32 @@
+# task-21/41 cleanup record — docs-only edit
+
+## Writes this task performed
+
+- `docs/DEMO-SCOPE.md` — rewritten (slide-only demo contract, topology, release gate).
+- `docs/final-manual-qa.md` — rewritten (invitation flow, negative card checks, task-53
+  historical citation, physical-only gate preserved).
+- `docs/runbooks/venue-failure-recovery.md` — rewritten (slide-only selectors, invitation
+  failure section, Vercel/tunnel loss section).
+- `docs/runbooks/vercel-demo.md` — created (Vercel + Compose + Cloudflare quick-tunnel demo).
+- `docs/samples/README.md` — rewritten demo path section.
+- `.omo/evidence/ulw/01a0e2fe-ce33-7873-86ef-19857dd00fc5/G006/task-21/` — this evidence set
+  (`read-review.md`, `repo-check.log`, `browser-boundary.log`, `cleanup.txt`).
+
+No source files, tests, manifests, other workers' evidence directories, or staged/index state
+were touched. Nothing was staged or committed; `git status` for `docs/` shows only the four
+modifications plus the one new runbook listed above (untracked `vercel-demo.md`).
+
+## External reads performed (no writes)
+
+- `curl` GETs against `impromptu-rev2-console.vercel.app` (`/sign-in` → 200, static chunks)
+  and `impromptu-rev2-stage.vercel.app` (`/` → 200, bundle JS, `/internal/display-invitations`
+  → 404, `/v1/snapshot` → 401). No cookies, credentials, tokens, or bodies were stored; the
+  fetched bundle in `/tmp/stage-deployed.js` is a read-only public artifact.
+
+## Verification commands run
+
+- `bun run check:browser-boundary` → exit 0 (see `browser-boundary.log`).
+- `bun run check:repo` → exit 0 after restoring the required `## Preregistered evaluation`
+  heading the reference patch had removed (see `repo-check.log`).
+- `git diff --check -- docs/` → clean.
+- Stale-claim greps over the five docs → zero hits (list in `read-review.md`).

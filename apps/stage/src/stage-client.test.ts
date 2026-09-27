@@ -103,6 +103,109 @@ const playback = {
 };
 
 describe("Stage slide-only network client", () => {
+  test("posts the invitation token inside the join body and keeps it out of the URL", async () => {
+    const token = `dinv_${"e".repeat(64)}`;
+    const locator = {
+      displayJoinId: `join_${"a".repeat(32)}`,
+      displayId: "display_invited",
+      deckVersion: "deck_alpha",
+      displayFingerprint: "stage-browser-fingerprint",
+      expiresAtMs: 1_700_000_000_000,
+    };
+    const requests: Array<{
+      url: string;
+      init: RequestInit | undefined;
+      body(): Promise<unknown>;
+    }> = [];
+    const fetchMock = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      requests.push({
+        url: request.url,
+        init,
+        async body() {
+          return request.json();
+        },
+      });
+      return new Response(JSON.stringify(locator), {
+        status: 201,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    globalThis.fetch = Object.assign(fetchMock, { preconnect: originalFetch.preconnect });
+
+    const client = createStageSessionClient("https://projection.example.test");
+    const join = await client.createJoin(
+      { displayId: "display_invited", displayFingerprint: "stage-browser-fingerprint" },
+      "deck_alpha",
+      token,
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const request = requests[0];
+    if (request === undefined) throw new Error("join request missing");
+    expect(request.url).toBe("https://projection.example.test/v1/display-joins");
+    // The token rides only inside the JSON body — never in the request URL where access logs
+    // or referrers could capture it — and the mutation keeps a same-origin Referer so the
+    // gateway's Origin/Referer check stays intact under the page's no-referrer policy.
+    const body = (await request.body()) as Record<string, unknown>;
+    expect(body.invitationToken).toBe(token);
+    expect(request.url).not.toContain(token);
+    expect(request.init?.referrerPolicy).toBe("same-origin");
+    expect(join.displayJoinId).toBe(locator.displayJoinId);
+  });
+
+  test("omits invitationToken for console-led joins and pins same-origin referrers on mutations", async () => {
+    const requests: Array<{
+      url: string;
+      init: RequestInit | undefined;
+      body(): Promise<unknown>;
+    }> = [];
+    const fetchMock = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      requests.push({
+        url: request.url,
+        init,
+        async body() {
+          return request.json();
+        },
+      });
+      return new Response("{}", {
+        status: 201,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    globalThis.fetch = Object.assign(fetchMock, { preconnect: originalFetch.preconnect });
+
+    const client = createStageSessionClient("https://projection.example.test");
+    const join = {
+      displayJoinId: "join_console",
+      displayId: "display_console",
+      displayFingerprint: "stage-browser-fingerprint",
+      deckVersion: "deck_alpha",
+      expiresAtMs: 1_700_000_000_000,
+    };
+    await expect(client.createJoin(join, "deck_alpha")).rejects.toThrow(
+      "Display join could not be created.",
+    );
+    await client.claim(join);
+    await client.recordApplied({
+      commandId: "cmd_alpha",
+      presentationSessionEpoch: "pse_1",
+      displayBindingEpoch: "dbe_1",
+      acceptedControlRevision: "cr_1",
+      publicPlaybackRevision: "pbr_1",
+      occurrence: { publicSlideKey: "slide_one", occurrenceSeq: 2 },
+      blackout: false,
+    });
+
+    expect(requests.length).toBe(3);
+    const joinBody = (await requests[0]?.body()) as Record<string, unknown>;
+    expect(joinBody).not.toHaveProperty("invitationToken");
+    for (const request of requests) {
+      expect(request.init?.referrerPolicy).toBe("same-origin");
+    }
+  });
+
   test("accepts only snapshots whose card and tombstone arrays are empty", async () => {
     const valid = await hashed(absoluteState());
     const fetchMock = mock(

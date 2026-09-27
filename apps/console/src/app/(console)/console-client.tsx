@@ -13,7 +13,9 @@ export function ConsoleClient() {
 
   return (
     <BrowserRouter>
-      <AuthProvider>
+      {/* Session hydration restores the signed-in workspace after a reload; the server list,
+          not storage, decides what the presenter sees. */}
+      <AuthProvider hydrateSession>
         <ConsoleRoutes coResident={process.env.NEXT_PUBLIC_CO_RESIDENT_CONSOLE === "true"} />
       </AuthProvider>
     </BrowserRouter>

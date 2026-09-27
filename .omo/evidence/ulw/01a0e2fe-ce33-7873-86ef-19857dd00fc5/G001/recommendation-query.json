@@ -1,0 +1,3 @@
+query="how did Acme expand?"
+{"outcome":"RECOMMEND","recommendation":{"claim":"Acme expanded through its presentation-assistance product line.","evidenceIds":["internal:6a8e8ff400f077684e115863369cfa1607920082d285617274770e997be82c8d:78e2ffa62e57a4b3e24609efdb22953827f4820ee3a850b69c164f1e8818b55d"],"facts":{"numbers":[],"units":[],"dates":[],"entities":["Acme"]}},"evidence":[{"evidenceId":"internal:6a8e8ff4...","sourceId":"b424a3832af143a1637fa722f97b70c97f13aedbe48d60cb71f08b3d7122a6bc","sourceRevision":"78e2ffa62e57a4b3e24609efdb22953827f4820ee3a850b69c164f1e8818b55d"}]}
++ same query family returned RECOMMEND twice more; backend log shows embedding INFERENCE 200 + rerank/llm SUCCESS.

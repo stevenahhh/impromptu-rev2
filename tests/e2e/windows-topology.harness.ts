@@ -78,7 +78,13 @@ interface CoResidentCycleEvidence {
 }
 
 type ServiceProcess = ChildProcessByStdio<null, Readable, Readable>;
-const chromeExecutable = process.env.CHROME_EXECUTABLE_PATH ?? chromium.executablePath();
+// Empty CHROME_EXECUTABLE_PATH must fall back to the installed Playwright Chromium, not a
+// literal "" path: `.env` exports the variable blank.
+const configuredChromeExecutable = process.env.CHROME_EXECUTABLE_PATH;
+const chromeExecutable =
+  configuredChromeExecutable === undefined || configuredChromeExecutable === ""
+    ? chromium.executablePath()
+    : configuredChromeExecutable;
 async function availablePort(): Promise<number> {
   const server = createNetServer();
   await new Promise<void>((resolve, reject) => {
@@ -102,24 +108,25 @@ const consoleOrigin = `http://127.0.0.1:${consolePort}`;
 const controllerUsername = "topology-controller";
 const controllerPassword = "topology-controller-password";
 const evidenceRoot = resolve(process.env.WP4_EVIDENCE_DIR ?? "artifacts/wp4-topology");
+// Strings that only private Console surfaces may render; any occurrence on a public Stage
+// frame is a private-pixel leak. Keep entries console-exclusive — Stage copy shares words like
+// "발표자 화면" that are legitimate audience-facing text.
 export const privateSurfaceVocabulary = [
   "PRIVATE_CANARY_WP4",
-  "Presenter Console",
-  "Local preview",
-  "Private origin",
-  "Private presentation control",
-  "One-time sign-in code",
-  "Enter private workspace",
-  "일회용 로그인 코드",
-  "비공개 워크스페이스 입장",
-  "Private workspace",
-  "Room overview",
-  "Session setup",
-  "Leave workspace",
-  "Ready for the room",
-  "Prepare a session",
-  "Session controls",
-  "Choose the room",
+  "Sign in to Impromptu",
+  "Impromptu에 로그인",
+  "Create account",
+  "계정 만들고 시작하기",
+  "Upload your presentation",
+  "발표 자료를 올려 주세요",
+  "Presentation results",
+  "발표 결과",
+  "Sign out",
+  "로그아웃",
+  "Username",
+  "Password",
+  "아이디",
+  "비밀번호",
   "Co-resident convenience mode",
   "No-private-pixel protection does not apply",
   "preview-csrf",
@@ -253,8 +260,8 @@ async function installEventBuffer(context: BrowserContext): Promise<void> {
       "impromptu:public-slide-set",
       "impromptu:co-resident-disabled",
       "impromptu:controller-lifecycle",
-      "fullscreenchange",
-      "fullscreenerror",
+      "impromptu:target-screen-placement",
+      "impromptu:target-screen-recovery",
     ]) {
       window.addEventListener(name, (event) => {
         records.push({ name, detail: event instanceof CustomEvent ? event.detail : null });
@@ -336,23 +343,17 @@ async function observeAudienceReady(
   };
 }
 
-async function enterFullscreen(page: Page): Promise<void> {
-  if (await page.evaluate(() => document.fullscreenElement !== null)) return;
-  await clearBufferedEvent(page, "fullscreenchange");
-  const changed = await prepareEvent(page, "fullscreenchange");
-  await page.locator("[data-stage-fullscreen]").click();
-  await changed();
-  if (!(await page.evaluate(() => document.fullscreenElement !== null))) {
-    throw new Error("Stage did not restore fullscreen locally");
+/**
+ * The slide-only Stage publishes its target-screen placement automatically on mount
+ * (`impromptu:target-screen-placement`); there is no button to press. The mount-time event is
+ * captured by the init-script buffer, so this just reads the recorded detail.
+ */
+async function awaitMountPlacement(page: Page): Promise<Record<string, unknown>> {
+  const detail = await (await prepareEvent(page, "impromptu:target-screen-placement"))();
+  if (typeof detail !== "object" || detail === null) {
+    throw new Error("target-screen placement detail missing");
   }
-}
-
-async function exitFullscreen(page: Page): Promise<void> {
-  if (!(await page.evaluate(() => document.fullscreenElement !== null))) return;
-  await clearBufferedEvent(page, "fullscreenchange");
-  const changed = await prepareEvent(page, "fullscreenchange");
-  await page.evaluate(() => document.exitFullscreen());
-  await changed();
+  return detail as Record<string, unknown>;
 }
 
 function percentile(samples: readonly number[], fraction: number): number {
@@ -509,7 +510,13 @@ async function rehearse(
     });
     const ready = await prepareEvent(page, "impromptu:stage-ready", 10_000);
     await ready();
-    await enterFullscreen(page);
+    // Slide-only Stage contract: no Stage-owned fullscreen or placement control may exist;
+    // placement publishes automatically on mount. Physical fullscreen is exercised on venue
+    // hardware (F3), never inferred from headless Chrome.
+    if ((await page.locator("[data-stage-fullscreen]").count()) !== 0) {
+      throw new Error("Stage reintroduced a local fullscreen control");
+    }
+    const mountPlacement = await awaitMountPlacement(page);
     const audienceReadyMs = performance.now() - setupStarted;
     const initialObservation = await observeAudienceReady(page);
     let privatePixelCount = initialObservation.privatePixelCount;
@@ -535,27 +542,21 @@ async function rehearse(
       };
     });
     let manualPlacementFallback: ModeRehearsalEvidence["manualPlacementFallback"] = "NOT_REQUIRED";
-    if (mode === "duplicate" || mode === "single") {
-      await clearBufferedEvent(page, "impromptu:target-screen-placement");
-      const placement = await prepareEvent(page, "impromptu:target-screen-placement");
-      await page.locator("[data-stage-placement]").click();
-      const detail = await placement();
-      if (
-        typeof detail !== "object" ||
-        detail === null ||
-        (detail as Record<string, unknown>).privatePixelCount !== 0
-      ) {
-        throw new Error("target-screen placement was not observed cleanly");
+    const mountPlacementStatus = mountPlacement.status;
+    if (mountPlacement.privatePixelCount !== 0) {
+      throw new Error("target-screen placement was not observed cleanly");
+    }
+    if (mountPlacementStatus === "MANUAL_FALLBACK") {
+      // Manual instructions ride an assistive-only live region, never a visible banner.
+      const announced = (
+        await page.locator(".stage-display [aria-live='polite']").textContent()
+      )?.trim();
+      if (announced === undefined || announced === "") {
+        throw new Error(`${mode} manual placement summary was not announced`);
       }
-      const status = (detail as Record<string, unknown>).status;
-      if (status === "MANUAL_FALLBACK") {
-        if ((await page.locator(`[data-manual-placement-mode="${mode}"]`).count()) !== 1) {
-          throw new Error(`${mode} manual placement instructions were not rendered`);
-        }
-        manualPlacementFallback = "VERIFIED";
-      } else if (status !== "TARGET_PLACED") {
-        throw new Error(`unexpected target-screen placement status: ${String(status)}`);
-      }
+      manualPlacementFallback = "VERIFIED";
+    } else if (mountPlacementStatus !== "TARGET_PLACED") {
+      throw new Error(`unexpected target-screen placement status: ${String(mountPlacementStatus)}`);
     }
     const faults: FaultEvidence[] = [];
     let targetScreenLossRecovery: ModeRehearsalEvidence["targetScreenLossRecovery"] =
@@ -598,7 +599,6 @@ async function rehearse(
     ) => {
       const startedAt = performance.now();
       await inject();
-      await enterFullscreen(page);
       const observation = await observeAudienceReady(page);
       privatePixelCount += observation.privatePixelCount;
       const recoveryMs = performance.now() - startedAt;
@@ -608,32 +608,9 @@ async function rehearse(
       faults.push({ fault, injectionKind, injectionMechanism, recoveryMs });
     };
 
-    await recordFault(
-      "popup-blocked",
-      "REAL",
-      "detached-element-requestFullscreen-rejection",
-      async () => {
-        await exitFullscreen(page);
-        const rejection = await page.evaluate(async () => {
-          const detached = document.createElement("div");
-          try {
-            await detached.requestFullscreen();
-            return null;
-          } catch (error) {
-            document.dispatchEvent(new Event("fullscreenerror"));
-            return error instanceof DOMException ? error.name : "Error";
-          }
-        });
-        if (rejection === null) throw new Error("requestFullscreen unexpectedly succeeded");
-        const message = page.getByText("Fullscreen was blocked. Use the browser menu.");
-        await message.waitFor({ state: "visible", timeout: 5_000 });
-      },
-    );
-
-    await recordFault("fullscreen-exit", "REAL", "document.exitFullscreen", async () => {
-      await exitFullscreen(page);
-    });
-
+    // popup-blocked and fullscreen-exit were retired with the Stage fullscreen control: on a
+    // slide-only display there is nothing for the harness to restore or block, and real F11 /
+    // Esc placement behavior stays a physical F3 check.
     await recordFault(
       "monitor-unplug",
       "SIMULATED",

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import copy from "./locales/ko.json";
 import { publishStageEvent } from "./stage-events";
+import { useStageCopy } from "./stage-i18n";
 import {
   manualPlacementSummary,
   observeWindowsTopology,
@@ -21,8 +21,11 @@ export function useScreenTopology(requestedMode: WindowsDisplayMode): {
   readonly mode: WindowsDisplayMode;
   readonly placementMessage: string;
 } {
+  const copy = useStageCopy();
   const [mode, setMode] = useState(requestedMode);
-  const [placementMessage, setPlacementMessage] = useState(manualPlacementSummary(requestedMode));
+  const [placementMessage, setPlacementMessage] = useState(() =>
+    manualPlacementSummary(requestedMode, copy),
+  );
   const detailsRef = useRef<ScreenDetailsLike | null>(null);
   const targetRef = useRef<ScreenLike | null>(null);
 
@@ -45,7 +48,7 @@ export function useScreenTopology(requestedMode: WindowsDisplayMode): {
           ? copy.targetPlaced
           : status === "TARGET_LOST_RECOVERED"
             ? copy.targetRecovered
-            : manualPlacementSummary(requestedMode),
+            : manualPlacementSummary(requestedMode, copy),
       );
     };
     const sync = async () => {
@@ -132,7 +135,7 @@ export function useScreenTopology(requestedMode: WindowsDisplayMode): {
       window.removeEventListener("impromptu:platform-topology-change", onPlatformTopology);
       window.removeEventListener("impromptu:target-screen-placement-request", onPlacementRequest);
     };
-  }, [requestedMode]);
+  }, [requestedMode, copy]);
 
   return { mode, placementMessage };
 }

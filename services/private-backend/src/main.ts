@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { SQL } from "bun";
 import postgres from "postgres";
+import type { AccountStore } from "./account-directory.ts";
 import { createAccountDirectory } from "./account-directory.ts";
 import { createPostgresAccountSessionStore } from "./account-session-store-postgres.ts";
 import { createPostgresAccountStore } from "./account-store-postgres.ts";
@@ -17,6 +18,7 @@ import { createQaDefense } from "./bootstrap/qa-defense.ts";
 import { createRecommendations } from "./bootstrap/recommendations.ts";
 import { createRetrievalStack } from "./bootstrap/retrieval-stack.ts";
 import { createSessionReportRead } from "./bootstrap/session-reports.ts";
+import { createTeamQuestions } from "./bootstrap/team-questions.ts";
 import { parsePrivateBackendConfig } from "./config.ts";
 import { createDeckRenderSubprocess } from "./deck-render-subprocess.ts";
 import { createDeckUploadService } from "./deck-upload-service.ts";
@@ -35,6 +37,7 @@ import {
   createPreparedEvidenceReportObserver,
   SessionReportFinalizer,
 } from "./report/session-report-finalizer.ts";
+import { createPostgresTeamQuestionStore } from "./team-question-grants-postgres.ts";
 
 const DEFAULT_INGESTION_PROJECT = fileURLToPath(
   new URL("../../../services/ingestion", import.meta.url),
@@ -90,7 +93,8 @@ const reportObserver = createPreparedEvidenceReportObserver(sessionReportFinaliz
     errorType: error instanceof Error ? error.name : "UnknownError",
   });
 });
-const accountDirectory = createAccountDirectory(createPostgresAccountStore(privateSql));
+const accountStore: AccountStore = createPostgresAccountStore(privateSql);
+const accountDirectory = createAccountDirectory(accountStore);
 let coordinator: PreparedEvidenceCoordinator;
 // The recommendation pipeline needs the coordinator (session contexts) while the coordinator
 // needs the pipeline (publication authorization); closures resolve the cycle lazily.
@@ -153,6 +157,15 @@ const qaDefense = createQaDefense({
 const spokenQuestions = {
   transcribe: createSpokenQuestionStt({ router: modelRouter }),
 };
+// Teammate question grants: a session-scoped, revocable question-only capability for an
+// independently signed-in teammate. Persistence lives in private_app.team_question_grants /
+// team_questions; the account store resolves the teammate's username at issue time.
+const teamQuestions = createTeamQuestions({
+  store,
+  coordinator,
+  questionStore: createPostgresTeamQuestionStore(privateSql),
+  resolveAccount: async (username) => await accountStore.readByUsername(username),
+});
 const metrics = createMetricsRegistry("private_backend");
 const loginRateLimiters = {
   account: createTokenBucketRateLimiter({
@@ -188,6 +201,7 @@ const server = Bun.serve({
     sessionReportRead,
     qaDefense,
     spokenQuestions,
+    teamQuestions,
     persist: persistence.persist,
     uploads: deckUploadService,
     referenceDocuments: retrievalStack.referenceDocuments,

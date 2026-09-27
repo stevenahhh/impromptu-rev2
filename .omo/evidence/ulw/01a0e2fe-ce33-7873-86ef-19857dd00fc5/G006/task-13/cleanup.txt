@@ -1,0 +1,4 @@
+vite preview pid=24946 killed
+gateway Bun.serve on :3999 stopped
+chromium contexts closed
+exit: all checks passed

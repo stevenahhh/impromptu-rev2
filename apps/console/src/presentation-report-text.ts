@@ -34,6 +34,17 @@ export type PresentationReportText = Readonly<{
   sourceUnavailable: string;
   curatedEvidence: string;
   liveEvidence: string;
+  reportQaTitle: string;
+  reportQaEmpty: string;
+  reportQaUnavailable: string;
+  reportQaTyped: string;
+  reportQaSpoken: string;
+  reportQaAskedAt: string;
+  reportQaAnswerHeading: string;
+  reportQaRetryable: string;
+  reportQaFinal: string;
+  qaSourceSlide: string;
+  qaSourceReference: string;
 }>;
 
 /** Maps the page's message keys onto the report surface so callers stay declarative. */
@@ -70,5 +81,16 @@ export function presentationReportText(m: Messages): PresentationReportText {
     sourceUnavailable: m.sourceUnavailable,
     curatedEvidence: m.reportCuratedEvidence,
     liveEvidence: m.reportLiveEvidence,
+    reportQaTitle: m.reportQaTitle,
+    reportQaEmpty: m.reportQaEmpty,
+    reportQaUnavailable: m.reportQaUnavailable,
+    reportQaTyped: m.reportQaTyped,
+    reportQaSpoken: m.reportQaSpoken,
+    reportQaAskedAt: m.reportQaAskedAt,
+    reportQaAnswerHeading: m.reportQaAnswerHeading,
+    reportQaRetryable: m.reportQaRetryable,
+    reportQaFinal: m.reportQaFinal,
+    qaSourceSlide: m.qaSourceSlide,
+    qaSourceReference: m.qaSourceReference,
   };
 }

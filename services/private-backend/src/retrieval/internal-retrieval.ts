@@ -94,6 +94,7 @@ export class InternalRetrievalService {
   readonly #ann: AuthorizedAnnIndex;
   readonly #objects: PrivateRetrievalObjectStore;
   readonly #corpus: RetrievalCorpusPreparer | undefined;
+  readonly #preparations = new Map<string, Promise<void>>();
 
   constructor(dependencies: {
     readonly principals: RetrievalPrincipalAuthority;
@@ -109,6 +110,27 @@ export class InternalRetrievalService {
     this.#corpus = dependencies.corpus;
   }
 
+  /**
+   * Starts corpus preparation without awaiting it. Preparation embeds and writes deck chunks
+   * under an advisory lock, so awaiting it inline serialized every concurrent first-wave
+   * recommendation behind one multi-second provider pass and burned each run's own deadline -
+   * the baseline's every-request DEADLINE_EXCEEDED. Kicking it off once per deck scope and
+   * reading whatever is already committed keeps retrieval fail-closed (a cold or partially
+   * built corpus just produces no candidates) while the committed waves converge; the map
+   * entry clears on settle so a failed run is retried by the next retrieval instead of wedging.
+   */
+  #prepareInBackground(principal: RetrievalPrincipal, request: RetrievalRequest): void {
+    const preparer = this.#corpus;
+    if (preparer === undefined) return;
+    const scope = `${principal.tenantId}:${request.deckVersion}:${request.manifestHash}`;
+    if (this.#preparations.has(scope)) return;
+    const run = preparer.prepare(principal, request).catch(() => undefined);
+    this.#preparations.set(scope, run);
+    void run.finally(() => {
+      if (this.#preparations.get(scope) === run) this.#preparations.delete(scope);
+    });
+  }
+
   async retrieve(
     accountSessionId: string,
     input: unknown,
@@ -119,7 +141,7 @@ export class InternalRetrievalService {
     try {
       const principal = await this.#principals.resolve(accountSessionId);
       if (principal === null) return [];
-      await this.#corpus?.prepare(principal, request.data);
+      this.#prepareInBackground(principal, request.data);
       const snapshot = await this.#policy.prefilter(principal, request.data);
       if (
         !snapshot.current ||

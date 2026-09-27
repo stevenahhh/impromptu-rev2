@@ -18,6 +18,24 @@ RUN bun install --frozen-lockfile --production --filter @impromptu/private-backe
 
 FROM ghcr.io/astral-sh/uv:0.9.24 AS uv
 
+# whisper.cpp commit 371b5a7561823ab2bb32142d2751e35e7534727b (WHISPER_CPP_TAG b4938 in
+# src/model-adapters/stt-whisper-cpp.ts). BuildKit verifies the pinned tarball hash before
+# it enters the build; the runtime verifies the pinned model hash at boot.
+FROM debian:bookworm-slim AS whisper-build
+ARG WHISPER_CPP_COMMIT=371b5a7561823ab2bb32142d2751e35e7534727b
+ARG WHISPER_CPP_TARBALL_SHA256=89051d8fca516a3ad1f5c2f8f9d2fccb089afbaec338fca3f8731999babc6f81
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends ca-certificates cmake g++ make \
+    && rm -rf /var/lib/apt/lists/*
+ADD --checksum=sha256:${WHISPER_CPP_TARBALL_SHA256} \
+  https://github.com/ggml-org/whisper.cpp/archive/${WHISPER_CPP_COMMIT}.tar.gz \
+  /tmp/whisper.tar.gz
+RUN tar -xzf /tmp/whisper.tar.gz -C /tmp \
+    && mv "/tmp/whisper.cpp-${WHISPER_CPP_COMMIT}" /src
+WORKDIR /src
+RUN cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF \
+    && cmake --build build --config Release -j --target whisper-cli
+
 FROM python:3.14.0-slim-bookworm AS ingestion-dependencies
 COPY --from=uv /uv /uvx /usr/local/bin/
 WORKDIR /app
@@ -43,7 +61,9 @@ ENV NODE_ENV=production \
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
       ca-certificates \
+      ffmpeg \
       fonts-dejavu-core \
+      libgomp1 \
       libreoffice-impress \
       tesseract-ocr \
       tini \
@@ -71,6 +91,14 @@ COPY --from=ingestion-dependencies /usr/local/bin/python /usr/local/bin/python3 
 COPY --from=ingestion-dependencies /usr/local/lib/libpython3.14.so* /usr/local/lib/
 COPY --from=ingestion-dependencies /usr/local/lib/python3.14 /usr/local/lib/python3.14
 COPY --from=ingestion-dependencies /opt/ingestion-venv /opt/ingestion-venv
+
+# Pinned local STT assets: the adapter checks the binary is executable and the model matches
+# this exact byte size and SHA-256 before audio routes open.
+ADD --checksum=sha256:ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin \
+  /opt/whisper/ggml-small-q5_1.bin
+COPY --from=whisper-build /src/build/bin/whisper-cli /opt/whisper/whisper-cli
+RUN chmod 0755 /opt/whisper/whisper-cli && chmod 0644 /opt/whisper/ggml-small-q5_1.bin
 
 WORKDIR /app
 COPY --from=bun-dependencies --chown=app:app /app/node_modules ./node_modules

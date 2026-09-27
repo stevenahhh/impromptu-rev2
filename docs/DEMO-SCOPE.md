@@ -1,31 +1,113 @@
 # Demo and acceptance scope
 
+## What this demo is
+
+The current demo is a signed-in presenter using Console to prepare a deck and drive a separate,
+public Stage. Stage renders public slides only. It does not render evidence cards, candidate data,
+transcripts, questions, private notes, account data, or provider details.
+
 ## Terminology
 
-- **First demo:** curated, pre-approved evidence reveal. This is not the final MVP.
-- **Guarded-pilot MVP:** both secure display modes, private live recommendations, and a feature-flagged supervised path from an eligible live candidate to the public Stage.
-- **Deferred enhancement:** automatic display placement, public live evidence before its gates, coaching, and generated report summaries.
+- **First demo:** Upload the sample deck, connect one public Stage, approve the exact display
+  identity, and advance slides from Console. This is a slide demo, not a public evidence reveal.
+- **Guarded-pilot MVP:** Private preparation, recommendations, coaching, and question review stay
+  in Console. A bound Stage receives only the public slide snapshot for the active deck.
+- **Deferred enhancement:** Public live evidence, public cards, generated report summaries, and
+  venue automation beyond the documented fallback are not part of this demo.
 
 ## Supported environment
 
-- Windows 11
-- current stable Chrome and Edge
-- wired Extend
-- Duplicate with a separate private controller
-- single-screen public Stage fallback
+- The venue target is Windows 11 with current stable Chrome or Edge.
+- Supported venue arrangements are wired Extend, Duplicate with a separate private controller,
+  and a single-screen public Stage fallback.
+- Keep Console on the private controller. Keep the clean Stage browser profile on the projectable
+  device. Never rely on a co-resident Console when Duplicate could expose private pixels.
+- Stage has no local presentation, placement, or fullscreen controls. Display placement runs
+  automatically through the Window Management API when the browser supports it; otherwise the
+  browser window and Windows display mode are operator responsibilities, not Stage actions.
+- macOS is suitable for source review, API checks, and browser checks. This host cannot verify a
+  Windows projector, Extend or Duplicate behavior, GPU or EDID handling, captive portals, clickers,
+  screen-reader hardware, or physical audience pixels. Those remain open venue gates.
 
-Manual Stage placement and a Stage-local fullscreen click are canonical. Browser Window Management is an optional enhancement.
+## Current demo topology
 
-## Secure display baseline
+The review demo uses this topology, not the single-VM Caddy production topology:
 
-Both Extend and Duplicate use:
+- Console is served by Vercel at `https://impromptu-rev2-console.vercel.app`.
+- Stage is served by Vercel at `https://impromptu-rev2-stage.vercel.app`.
+- PostgreSQL, migrations, private-backend on port 3001, and projection-gateway on port 3002 run
+  in the local `compose.production.yaml` stack.
+- One Cloudflare HTTPS quick tunnel exposes private-backend to the Vercel Console server proxy.
+  A separate Cloudflare HTTPS quick tunnel exposes projection-gateway to Stage and to the Console
+  deck-asset proxy.
+- Stage keeps `/v1` on the Stage origin through its Vercel rewrite. This preserves the display
+  session cookie and the SSE event and HTTP receipt paths. Tunnel hostnames are temporary and must
+  not be treated as stable product URLs.
 
-1. a clean public Stage browser profile on the presentation machine;
-2. an already authenticated private controller on another device;
-3. a short-lived, non-authorizing display join locator;
-4. server-side display binding and an AudienceDisplaySession.
+The rotation procedure, Vercel environment names, and smoke checks are in
+`docs/runbooks/vercel-demo.md`.
 
-A co-resident Console in Extend mode is convenience-only and has no no-private-pixel claim.
+## Secure display flow
+
+1. The owner signs in to Console and selects the active deck. A deck is not ready until the upload
+   and public slide render complete.
+2. For a separate Stage device, the owner creates a short-lived, one-use invitation for that
+   deck (the contract caps it at 90 seconds). The invitation is non-authorizing. Its secret
+   travels only in the Stage URL fragment, with a shape such as
+   `/?deck=<deckVersion>#invite=<token>`.
+3. Stage exchanges the invitation at `POST /v1/display-joins`. The exchange creates a pending
+   join locator only. It does not create a display cookie, a binding, or account authority.
+4. Console reads the pending display identity through
+   `GET /v1/display-invitations/:invitationId/pending`. The owner checks the exact display ID,
+   fingerprint, deck version, and current binding epoch before approving
+   `POST /v1/display-bindings`.
+5. Only the owner approval can advance the binding. Stage then claims
+   `POST /v1/display-session` and reads the public snapshot, event stream, and applied receipts.
+6. During the talk, Console sends absolute slide selections. Stage is ready only when the
+   validated snapshot paints the requested public slide. A successful HTTP command without a
+   visible slide is not a presentation success.
+
+A bare Stage URL is not a pairing credential. An invitation does not authorize a display by
+itself. Do not put account cookies, CSRF values, invitation secrets, or private deck data in a
+query string, browser storage, logs, screenshots, or support tickets.
+
+The backend contract and a live HTTP receipt at the production aliases support this flow, and
+this working tree carries the matching UI: the Console invitation panel plus the pending
+fingerprint approval, and Stage `#invite` fragment consumption. The deployed Vercel build still
+predates that UI wiring — the served Stage bundle has no `location.hash` invitation handling and
+the served Console chunks contain no `display-invitations` call — so on production today only
+the same-device opener path pairs a display. Until both aliases are redeployed and the one-use
+invitation is exercised in a real browser, the separate-device invitation path is a release
+gate, not a customer promise. Do not replace it with a bare URL or a copied join object.
+
+## Private and public data boundary
+
+- Console and the private backend own the account session, CSRF token, deck preparation, questions,
+  recommendations, transcripts, and reports.
+- Stage receives only the closed public slide DTO and its display session state.
+- The public gateway rejects `POST /internal/cards` with `410 stage_cards_disabled`. There is no
+  public card approval or retraction flow in this demo.
+- A Stage snapshot, event stream, receipt, or asset response must not contain candidate IDs,
+  private source URLs, source hashes, transcripts, questions, prompts, account IDs, tenant IDs,
+  cookies, or authorization tokens.
+- A separately authenticated teammate, when that feature is enabled, may submit a question only.
+  The owner reviews and submits it through the private question flow. The teammate cannot read
+  the deck or report, control slides, invoke recommendations, or publish anything to Stage.
+
+## Required negative checks
+
+Run the checks from a private operations context and save redacted status lines only:
+
+- An invitation expires and a second exchange of the same invitation is rejected.
+- A wrong deck, forged fingerprint, wrong owner, or stale display binding epoch is rejected.
+- A Stage claim before owner approval is rejected.
+- `GET /v1/snapshot` and `GET /v1/events` without an approved display cookie return a typed denial
+  and no private bytes.
+- `POST /internal/cards` remains disabled with `stage_cards_disabled`.
+- A Stage-origin request for private account, presentation, or invitation data does not return
+  private data. `/internal/*` is not a public Vercel route.
+- Reconnect and service restart restore the authoritative slide state without resurrecting cards
+  or private content.
 
 ## Preregistered evaluation
 
@@ -38,225 +120,53 @@ Before unblinding a frozen acceptance corpus, record:
 - formulas, thresholds, exclusions, and failure treatment;
 - evaluator and rubric versions.
 
-Development, provider bake-off, and acceptance data are disjoint by claim/paraphrase, source version, speaker recording, and deck instance.
+Development, provider bake-off, and acceptance data are disjoint by claim/paraphrase, source
+version, speaker recording, and deck instance.
 
-Provisional live recommendation gates:
+## Recommendation and evidence gates
 
-- semantic-audio-end to eligible Console render p95 <= 5 seconds;
-- at most 3 results;
+These thresholds remain product gates for private assistance. They are not permission to expose
+live evidence on Stage:
+
+- semantic audio end to eligible Console render p95 <= 5 seconds;
+- no more than 3 results;
 - eligible yield >= 60% for supportable, fetchable claims;
-- direct top-3 usefulness >= 80% for answerable events;
+- direct top 3 usefulness >= 80% for answerable events;
 - abstention >= 95% for intentionally unanswerable events;
 - zero critical numeric, date, entity, and security escapes;
 - at least 299 representative non-supportable cases with zero false-support escapes.
 
-Live public evidence remains off until the signed evaluation record passes every applicable safety, usefulness, approval-load, lease, and recovery gate.
+Keep public evidence disabled until the signed safety, usefulness, approval-load, lease, and
+recovery record passes every applicable gate. A 200 response or an automated receipt is not a
+visible Stage result.
 
-## 48-hour observable acceptance vs. September hardening
+## Current evidence status
 
-The five-feature compressed merge-train plan (`.omo/plans/impromptu-five-features-48h.md`) asked
-the user to choose, before execution, whether the 48-hour window itself would be treated as the
-completion boundary (`guarded-48h`) or whether September system-integration hardening would be
-folded into that boundary (`include-hardening`). The user's recorded decision is
-**`include-hardening`** (`.omo/evidence/decisions/completion-boundary.json`, decided 2026-08-21).
+The task-53 receipt at commit `283369767974194c7fa29cac8a604ad3e56e40a7` records 13/13 gates,
+577 passing tests, two 10-run cohorts at p95 4,606.0 ms and 4,627.2 ms, and `STAGE_ZERO_CARDS`.
+It is historical evidence at that commit. It does not certify this working tree, a Vercel
+redeploy, or physical venue hardware. The current tree and the physical 10-run venue gate must be
+checked again before release.
 
-Consequences of that decision, stated explicitly so this document cannot be read as a completion
-claim it does not make:
+## Physical venue acceptance
 
-- **48-hour completion is not declared.** This document does not assert that the guarded 48-hour
-  acceptance is complete, and the expanded five-feature request is not marked done.
-- **Completion is held open**, deferred to the September hardening pass. It becomes assertable
-  only when `CORE5_GREEN`, `OCR_GREEN`, `COACHING_WORD_TIMING_GREEN`, and `STAGE_ZERO_CARDS` are
-  each independently true (see plan "Owner-input gates" and final receipt section) — `OCR_GREEN`
-  is now `true` (below), but `CORE5_GREEN` is still `false`, so that bar is not yet met.
-- **The 48-hour constraint is lifted.** Work on core-5, OCR, coaching, and the report is not cut
-  off at the 48-hour mark to force a same-day completion claim; it continues under normal
-  engineering cadence into the September hardening pass.
+Before calling the venue release gate complete:
 
-### What the 48-hour window produced (evidence-backed, not a completion claim)
+1. Run the complete flow 10 consecutive times on the target Windows venue and hardware. Record
+   P0 failures and privacy mistakes. The task-53 automated record is not a substitute.
+2. Inspect real projector and confidence-monitor pixels in Extend, Duplicate, and the supported
+   single-screen fallback during startup, reconnect, monitor unplug, and topology changes.
+3. Check the actual cable, adapter, dock, GPU, EDID, resolution, refresh rate, overscan,
+   contrast, forced colors, 200% zoom, 320 px layout, keyboard, screen reader, remote, and focus
+   path.
+4. Check venue Wi-Fi or Ethernet, captive portal, DNS, firewall, service-worker cold start, and
+   production supervisor and database recovery.
+5. Check invitation handoff, fingerprint matching, operator changes, audience sightlines, and
+   notification suppression. A neighboring display must not receive the binding.
+6. Exercise the approved emergency PDF or URL on a public-only backup device and time the human
+   switchover.
+7. Run the approved provider prewarm, quota, region, retention, deletion, and escalation checks
+   in `docs/runbooks/vendor-prewarm.md`.
 
-- Core-5 functional wiring (local Korean STT, external evidence search, lexical+dense retrieval,
-  real-time coaching, post-presentation report) exists and is exercised end-to-end; positive
-  `RECOMMEND` outcomes remain non-deterministic under real chat providers
-  (`.omo/evidence/task-29/abstain-root-cause.json`, `.omo/evidence/task-25/core5-run-summary.json`)
-  and that gap is not closed by this document.
-- Performance regression measurement (task-27, `.omo/evidence/task-27/performance-and-scope.json`):
-  two independent 10-run cohorts against real chat/embedding providers and the real local
-  whisper.cpp adapter, both 10/10 HTTP-complete with p95 <= 5,000ms — confirmed-FINAL-to-Console
-  recommendation (SSE audio-ingest auto-trigger) p50 4,027.3ms / p95 4,503.8ms, and the existing
-  direct `/v1/recommendations` flow p50 3,122.7ms / p95 4,505.0ms. Both cohorts abstained on every
-  run (`DEADLINE_EXCEEDED` or `DETERMINISTIC_MISMATCH`); "10/10" here means 10/10 bounded HTTP/SSE
-  responses, not 10/10 `RECOMMEND` verdicts — verdict rate is the separate, already-documented,
-  unresolved gap above. A prior fake-provider figure cited in planning (p50 3,038.6ms / p95
-  4,164.3ms / 10-of-10) does not reflect real provider tail latency; see the evidence JSON for the
-  full caveat and source discrepancy note.
-- Representative PDF/PPTX cold/warm smoke was recorded as measured values only
-  (`.omo/evidence/task-27/pdf-pptx-cold-warm-smoke.json`); per plan scope this is not used to
-  reach a cold/concurrent-capacity or long-run p95 conclusion.
-
-### What is deferred to September hardening
-
-- Cold/concurrent production capacity, soak testing, and any long-run p95 conclusion.
-- OCR production hardening (accuracy, throughput, and cost — see below).
-- The combined `CORE5_GREEN` / `OCR_GREEN` / `COACHING_WORD_TIMING_GREEN` / `STAGE_ZERO_CARDS`
-  receipt that this document's completion language is gated on.
-
-## OCR status and cost
-
-OCR is tracked as its own status and cost line, separate from `CORE5_GREEN`; an OCR shortfall does
-not change the core-5 latency/functional results above, and it is why overall completion remains
-held open under `include-hardening`.
-
-- **`OCR_GREEN = true`.** Current measurement (`.omo/evidence/task-26/ocr-resource-psm6.json`):
-  the pinned Tesseract path restores the fixture sentinel exactly on all 10 pages
-  (`exactSentinelPages: 10`). The earlier garbling (`형식 ron —| 근거 자료 2026`) was not an image
-  quality problem — PSM 11 (sparse text) split the wide-letter-spaced Korean title across lines;
-  switching to PSM 6 (uniform block) in `services/ingestion/ocr.py` resolved it. The PSM 11
-  baseline is retained at `.omo/evidence/task-26/psm11-baseline-resource.json`
-  (`exactSentinelPages: 0`). Vertical probe exits 0 with a single DB chunk, anchor
-  `slide=1&chunk=1`, lexical match true, and live upload returns 201.
-- No thermal or performance warning was recorded before or after the OCR run (`pmset`: "No thermal
-  warning level has been recorded" / "No performance warning level has been recorded").
-- Four OCR failure paths are confirmed mapped to `422 OCR_UNAVAILABLE`: missing Tesseract binary,
-  missing pinned `kor` model, non-zero Tesseract exit, and empty TSV output. Encrypted PDFs are a
-  separate, distinct rejection (`encrypted_document`), not counted among the four.
-- Four OCR failure paths are confirmed mapped to `422 OCR_UNAVAILABLE` (unchanged): missing Tesseract binary, missing pinned
-  `kor` model, non-zero Tesseract exit, and empty TSV output all return `422 OCR_UNAVAILABLE`;
-  encrypted PDFs stay a separate, distinct rejection (`encrypted_document`).
-- Cost: pinned Tesseract models total 5,790,503 bytes (`eng` 4,113,088 + `kor` 1,677,415); the
-  PSM 6 run used 1.82s wall and 149,471,232 bytes max RSS versus the PSM 11 baseline's
-  219,332,608 bytes; rasterizing a scanned page for OCR adds 17,805,650 bytes of image data per
-  the measured fixture.
-
-
-## Recommendation latency after slot hedging
-
-The plan originally forbade any retry, queue, circuit breaker or budget scheduler outside the
-existing five second recommendation deadline. That guardrail was relaxed by explicit decision for
-the `rerank` and `llm` slots only: at most one duplicate call per slot, inside the same deadline
-signal, against the same model, schema and trusted context. The 5,000ms budget, the 500ms terminal
-guard, deterministic evidence reconciliation, verifier verdict handling, ACL, source revision and
-idempotency are unchanged, and a primary that settles with an error never starts a new call.
-
-Measured on the frozen text-layer fixture, 20 direct recommendations per stage:
-
-| Stage | RECOMMEND | Deadline aborts | Wall p95 |
-| --- | --- | --- | --- |
-| Before hedging | 10/20 | 9 | 4,505ms |
-| Hedge introduced | 15/20 | 5 | 4,505ms |
-| Verifier tail reserved | 17/20 | 3 | 4,504ms |
-| Duplicate starts at once when delay cannot avoid it | 19/20 | 1 | 4,301ms |
-
-Core-5 acceptance was then run three times in a row and every round finished `exitCode 0` with
-positive 2/2, negative 6/6 and stt 2/2. The same suite produced 2/12 positive across six rounds
-before hedging.
-
-### Ten-run cohorts
-
-| Cohort | Success | p50 | p95 | Verdict |
-| --- | --- | --- | --- | --- |
-| Existing recommendation flow | 10/10 | 3,637ms | 4,497ms | meets the bar |
-| Confirmed FINAL to Console | 8/10 | 3,360ms | 3,623ms | p95 meets the bar, 10/10 does not |
-
-Both cohorts sit inside the 5,000ms p95 requirement. The two shortfalls in the FINAL to Console
-cohort were `CONFLICTING_EVIDENCE` at 3,623ms and `DETERMINISTIC_MISMATCH` at 1,944ms, neither of
-which came close to the 4,500ms abort, so neither is a latency failure and no amount of further
-hedging moves them. That cohort derives its query from the whisper transcript, which differs run
-to run, and on some transcripts the generation slot asserts a fact that is absent from the
-evidence or the verifier reports a conflict. The evidence gate rejecting those claims is the
-behaviour the gate exists for, and it was not weakened to raise the number.
-
-Closing that remaining gap is a grounding-quality question rather than a latency one. The
-full-catalogue model bakeoff found no configuration that combines grounded output with a response
-time that fits the budget, the deck fixtures are frozen, and the evidence gate stays as it is.
-It therefore stays open as September hardening, consistent with holding completion open here.
-
-
-### Criterion 6 repeatability, measured over 100 runs
-
-Five consecutive sets of the ten-run cohorts were measured at one commit and every set is recorded.
-
-| Set | FINAL to Console | p95 | Existing flow | p95 |
-| --- | --- | --- | --- | --- |
-| 1 | 8/10 | 4,504ms | 6/10 | 4,509ms |
-| 2 | 6/10 | 4,503ms | 8/10 | 4,504ms |
-| 3 | 7/10 | 4,504ms | 8/10 | 4,504ms |
-| 4 | 7/10 | 4,503ms | 0/10 | 4,507ms |
-| 5 | 8/10 | 4,502ms | 7/10 | 4,505ms |
-
-The p95 requirement holds without exception: the worst p95 across all one hundred runs was 4,509ms
-against a 5,000ms bar. The ten-of-ten requirement was not reached in any set, in either cohort.
-
-A standalone twenty-run profile at the same commit produced nineteen recommendations, so the
-per-run rate is not fixed. Sustained batches are worse than isolated ones, and set four saw every
-run in a cohort abort with a median already past the guard, which is a provider-wide slow window
-rather than a code path. Hedging duplicates the generation call, so a long batch adds load to the
-provider whose variance the hedge exists to absorb: it rescues an isolated slow call and cannot
-rescue a uniformly slow window.
-
-Everything available inside the guardrails has been applied. Hedging carried the standalone
-profile from ten to nineteen recommendations out of twenty and deadline aborts from nine to one.
-The full model catalogue was measured and no configuration combines grounded output with a
-response that fits the budget. Stating the gate's grounding rule in the generation instruction was
-tried, measured worse, and reverted. What remains is a product decision rather than an
-implementation one, and completion stays open here accordingly.
-
-
-### Grounding after the fixtures were unfrozen
-
-The deck fixtures were replaced with a six-slide Korean business deck. Both formats still extract
-byte-identical text and the scanned sentinel still restores exactly, so the OCR receipt is intact.
-
-Giving the deck real figures to quote immediately exposed two defects in fact extraction, both of
-the same kind: the extractor understood Latin and ISO notation only. A figure boundary treated any
-letter as a continuation, so 482억 and 2026년 disappeared and 12,400명 was truncated to 12 - which
-had been letting a claim of "12" pass against evidence that never said it. The date reader knew
-only ISO and slash forms, so a model normalizing the deck's own 2026년 1월 15일 to 2026-01-15 was
-rejected; that single token accounted for every rejection in a twenty-run probe. Both are fixed and
-pinned, and every fabricated-fact case still rejects, so the gate only tightened.
-
-| Measurement | Before | After |
-| --- | --- | --- |
-| Deterministic rejections in a 20-run profile | 20/20 | 0/20 |
-| Recommendations in that profile | 0/20 | 19/20 |
-| Existing-flow cohort | 0/10 | 28/30, one set at 10/10 |
-| FINAL-to-Console cohort | 0/10 | 23/30 |
-
-All sixty cohort runs stayed inside the 5,000ms p95 bar. The existing-flow cohort met the plan bar
-outright in one set, at 10/10 with a p95 of 4,394.7ms. The FINAL-to-Console cohort remains lower
-because its query is the whisper transcript and therefore differs on every run, so what is left is
-provider latency tail and query variation rather than grounding.
-
-### Connecting the audience screen
-
-Pairing used to take six steps across two windows and required reading a join code off the audience
-screen and typing it into the Console. The Console now opens the audience screen itself, that window
-reports its own join over a origin-checked message, and the presenter approves once. Two clicks.
-The approval gate is unchanged - an audience screen still cannot join without an explicit presenter
-action, a forged-origin handshake is ignored, and the typed-code path remains for a screen opened on
-another machine or when the popup is blocked.
-
-
-### Where the recommendation budget stands
-
-Every model slot on the critical path now hedges a single duplicate inside the existing five second
-deadline, the fact extractor reads the language the decks are written in, and the external branch no
-longer blocks a model pair it cannot reach. Grounding is resolved outright: a twenty-run profile
-recorded no deterministic rejections at all, against twenty out of twenty before this work.
-
-The p95 requirement holds without exception - the worst run measured in this session finished at
-4,509ms against a 5,000ms bar. The ten-of-ten requirement does not. The best rested measurement puts
-both cohorts at nine out of ten, each missing on a single deadline abort. Each cohort has reached ten
-out of ten on its own in an isolated set, but never both in the same set.
-
-What remains is provider tail latency. The same commit measured twenty-nine out of thirty on a rested
-provider and seventeen out of thirty immediately after several hundred consecutive recommendations,
-with the saturated run pushing median latency to the abort itself. Two further adjustments were tried
-and both measured worse: stating the gate's grounding rule in the generation instruction collapsed
-both cohorts to zero, and shrinking the verifier reserve delayed the pair's hedge rather than helping
-it. Both were reverted.
-
-Closing the gap needs one of three product decisions: raise the five second budget, move the model
-slots to a faster tier, or carry the residual into September hardening. The third is what the
-include-hardening boundary already records, and completion stays held open here accordingly.
-
+No macOS browser run, headless result, fixture, or historical receipt can close these physical
+checks.

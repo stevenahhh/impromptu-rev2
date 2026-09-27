@@ -5,9 +5,6 @@ export type EvidenceCardText = Readonly<{
   summary: string;
   sourceUrl: string;
   sourceDate: string;
-  rights: string;
-  sourceUnavailable: string;
-  dateUnavailable: string;
   internalApproved: string;
   externalUnknown: string;
 }>;
@@ -17,14 +14,15 @@ export interface EvidenceCardProps {
   readonly text: EvidenceCardText;
 }
 
-function displayDate(value: string | null, unavailable: string): string {
-  if (value === null) return unavailable;
+function displayDate(value: string | null): string | null {
+  if (value === null) return null;
   const timestamp = Date.parse(value);
-  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString().slice(0, 10) : unavailable;
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString().slice(0, 10) : null;
 }
 
 export function EvidenceCard({ card, text }: EvidenceCardProps) {
   const rightsLabel = card.kind === "EXTERNAL" ? text.externalUnknown : text.internalApproved;
+  const sourceDate = displayDate(card.sourceDate);
   return (
     <article
       className="console-evidence-card"
@@ -32,32 +30,33 @@ export function EvidenceCard({ card, text }: EvidenceCardProps) {
       data-evidence-kind={card.kind}
     >
       <h3>{card.title}</h3>
-      <Badge tone={card.kind === "INTERNAL" ? "success" : "neutral"}>{rightsLabel}</Badge>
+      {/* An uploaded card reads "internal", never "verified": success tone would imply the
+          content was checked. EXTERNAL gets the warning tone because its usage terms genuinely
+          need a look — accuracy is claimed by neither. */}
+      <Badge data-evidence-badge tone={card.kind === "INTERNAL" ? "neutral" : "warning"}>
+        {rightsLabel}
+      </Badge>
       <dl>
         <div>
           <dt>{text.summary}</dt>
           <dd>{card.summary}</dd>
         </div>
-        <div>
-          <dt>{text.sourceUrl}</dt>
-          <dd>
-            {card.sourceUrl === null ? (
-              text.sourceUnavailable
-            ) : (
+        {card.sourceUrl === null ? null : (
+          <div>
+            <dt>{text.sourceUrl}</dt>
+            <dd>
               <a href={card.sourceUrl} rel="noreferrer" target="_blank">
                 {card.sourceUrl}
               </a>
-            )}
-          </dd>
-        </div>
-        <div>
-          <dt>{text.sourceDate}</dt>
-          <dd>{displayDate(card.sourceDate, text.dateUnavailable)}</dd>
-        </div>
-        <div>
-          <dt>{text.rights}</dt>
-          <dd>{rightsLabel}</dd>
-        </div>
+            </dd>
+          </div>
+        )}
+        {sourceDate === null ? null : (
+          <div>
+            <dt>{text.sourceDate}</dt>
+            <dd>{sourceDate}</dd>
+          </div>
+        )}
       </dl>
     </article>
   );

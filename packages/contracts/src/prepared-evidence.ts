@@ -45,6 +45,12 @@ export const PresentationSessionLifecycleSchema = z
     // accept its own pre-S1 output while full-fidelity snapshots round-trip the real
     // timestamp. Parsed output type remains required: number | null.
     qaStartedAtMs: TimestampMsSchema.nullable().default(null),
+    // Additive GAP-10 fields, same backfill rule as qaStartedAtMs: snapshots persisted
+    // before the presentation library lack both keys. A null presentationTitle means
+    // "the deck title is the display title"; a null updatedAtMs means "never mutated
+    // after creation", so both resolve from the lifecycle/deck at read time.
+    presentationTitle: z.string().min(1).max(500).nullable().default(null),
+    updatedAtMs: TimestampMsSchema.nullable().default(null),
   })
   .strict();
 

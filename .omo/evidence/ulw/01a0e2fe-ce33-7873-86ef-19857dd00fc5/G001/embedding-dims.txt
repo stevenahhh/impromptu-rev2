@@ -1,0 +1,2 @@
+in-container backend -> https://embedding-tls:8443/v1/embeddings
+dims: 768 model: embeddinggemma

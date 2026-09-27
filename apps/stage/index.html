@@ -4,9 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#eee4c9" />
+    <!-- The invitation landing carries a one-use secret in the URL fragment; no referrer of any
+         kind may leak from this page. Same-origin /v1 mutations pin their own referrerPolicy so
+         the gateway's Origin/Referer checks still pass. -->
+    <meta name="referrer" content="no-referrer" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <title>Impromptu 청중 화면</title>
+    <title>Impromptu 발표 화면</title>
   </head>
   <body>
     <div id="root"></div>
