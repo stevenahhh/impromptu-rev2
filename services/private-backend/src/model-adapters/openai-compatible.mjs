@@ -1,11 +1,11 @@
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
-async function post(path, payload, transport) {
+async function post(path, payload, transport, extraHeaders = {}) {
   const response = await transport.request({
     method: "POST",
     path,
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...extraHeaders },
     body: encoder.encode(JSON.stringify(payload)),
   });
   if (response.status < 200 || response.status >= 300) {
@@ -19,15 +19,32 @@ function endpoint(configuration, suffix) {
   return `${prefix}${suffix}`;
 }
 
-export async function embedding(input, { configuration, transport }) {
+export async function embedding(input, { configuration, transport, context }) {
   return await post(
     endpoint(configuration, "/embeddings"),
     { model: configuration.model, input: input.query, encoding_format: "float" },
     transport,
+    sessionHeaders(context),
   );
 }
 
-async function chat(input, configuration, transport, outputShape, jsonSchema, maxCompletionTokens) {
+// OpenCode Go requires a stable session id on every request for routing/prompt caching and
+// rejects calls that omit it outright. The trusted trace id is unique per logical call and
+// carries no user data, so it doubles as the session token.
+function sessionHeaders(context) {
+  const traceId = context?.traceId;
+  return typeof traceId === "string" && traceId.length > 0 ? { "x-opencode-session": traceId } : {};
+}
+
+async function chat(
+  input,
+  configuration,
+  transport,
+  context,
+  outputShape,
+  jsonSchema,
+  maxCompletionTokens,
+) {
   const messages = [
     {
       role: "system",
@@ -51,14 +68,16 @@ async function chat(input, configuration, transport, outputShape, jsonSchema, ma
       messages,
     },
     transport,
+    sessionHeaders(context),
   );
 }
 
-export async function rerank(input, { configuration, transport }) {
+export async function rerank(input, { configuration, transport, context }) {
   return await chat(
     input,
     configuration,
     transport,
+    context,
     '{"orderedEvidenceIds":["up to two evidenceIds, best first"]}',
     {
       type: "object",
@@ -77,11 +96,12 @@ export async function rerank(input, { configuration, transport }) {
   );
 }
 
-export async function llm(input, { configuration, transport }) {
+export async function llm(input, { configuration, transport, context }) {
   return await chat(
     input,
     configuration,
     transport,
+    context,
     '{"claim":"one concise answer sentence grounded only in evidence","evidenceIds":["the supporting evidenceId"],"facts":{"numbers":[],"units":[],"dates":[],"entities":[]}}. Keep claim under 180 characters and in the query language. Facts describe the claim only; use empty arrays unless an exact machine-readable fact is necessary.',
     {
       type: "object",
@@ -128,11 +148,12 @@ export async function llm(input, { configuration, transport }) {
   );
 }
 
-export async function verifier(input, { configuration, transport }) {
+export async function verifier(input, { configuration, transport, context }) {
   return await chat(
     input,
     configuration,
     transport,
+    context,
     '{"verdict":"SUPPORTED|INSUFFICIENT|CONFLICTING","rationaleCode":"short-string"}',
     {
       type: "object",

@@ -96,7 +96,7 @@ let coordinator: PreparedEvidenceCoordinator;
 // needs the pipeline (publication authorization); closures resolve the cycle lazily.
 const readCoordinator = () => coordinator;
 const whisperPaths = optionalWhisperCppPaths();
-const modelRouter = await createModelRouter(whisperPaths);
+const { router: modelRouter, fallbackAdapterIds } = await createModelRouter(whisperPaths);
 const retrievalStack = createRetrievalStack({
   privateSql,
   store,
@@ -108,6 +108,7 @@ const retrievalStack = createRetrievalStack({
 });
 const recommendations = createRecommendations({
   modelRouter,
+  fallbackAdapterIds,
   slideText: retrievalStack.retrievalStore,
   internalRetrieval: retrievalStack.internalRetrieval,
   externalSearch: retrievalStack.externalSearch,

@@ -1,4 +1,4 @@
-import type { ServerModelRouter } from "@impromptu/model-router";
+import type { ModelCapability, ServerModelRouter } from "@impromptu/model-router";
 import type { JsonLogger } from "../observability.ts";
 import type { PreparedEvidenceCoordinator } from "../prepared-evidence.ts";
 import type { SafeExternalEvidenceFetcher } from "../retrieval/external-fetch.ts";
@@ -10,6 +10,8 @@ import { PrivateRecommendationPipeline } from "../verifier/recommendation-pipeli
 /** Wires the recommendation pipeline with its stage/hedge/reconciliation observers. */
 export function createRecommendations(options: {
   readonly modelRouter: ServerModelRouter;
+  /** Registered non-default fallback adapter ids, retried once on retryable slot failure. */
+  readonly fallbackAdapterIds?: Partial<Record<ModelCapability, string>>;
   readonly slideText: PostgresDeckRetrievalStore;
   readonly internalRetrieval: InternalRetrievalService;
   readonly externalSearch: KeylessFirstExternalSearchBoundary;
@@ -21,6 +23,7 @@ export function createRecommendations(options: {
   const { logger } = options;
   return new PrivateRecommendationPipeline({
     router: options.modelRouter,
+    fallbackAdapterIds: options.fallbackAdapterIds,
     slideText: options.slideText,
     contexts: {
       async resolve(accountSessionId) {
