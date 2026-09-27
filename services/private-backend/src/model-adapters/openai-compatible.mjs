@@ -42,7 +42,9 @@ async function chat(
   transport,
   context,
   outputShape,
-  jsonSchema,
+  // Kept for signature readability: documents the intended response shape even though the
+  // wire now uses json_object (OpenCode Go rejects json_schema + reasoning_effort together).
+  _jsonSchema,
   maxCompletionTokens,
 ) {
   const messages = [
@@ -58,10 +60,11 @@ async function chat(
       model: configuration.model,
       temperature: 0,
       max_completion_tokens: maxCompletionTokens,
-      response_format: {
-        type: "json_schema",
-        json_schema: { name: "result", strict: true, schema: jsonSchema },
-      },
+      // json_schema is intentionally absent: OpenCode-compatible gateways reject it outright
+      // (HTTP 400) whenever reasoning_effort is also set, and the adapter's own zod schema still
+      // enforces the response shape — server-side schema enforcement was advisory-only.
+      // json_object keeps provider-level "reply must be JSON" enforcement without the rejection.
+      response_format: { type: "json_object" },
       ...(configuration.reasoningEffort === undefined
         ? {}
         : { reasoning_effort: configuration.reasoningEffort }),

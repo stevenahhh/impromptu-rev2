@@ -266,15 +266,14 @@ describe("OpenAI-compatible isolated adapters", () => {
     expect(bodies["openai-compatible-rerank"].max_completion_tokens).toBe(256);
     expect(bodies["openai-compatible-llm"].max_completion_tokens).toBe(512);
     expect(bodies["openai-compatible-verifier"].max_completion_tokens).toBe(256);
+    // The provider wire must ask for a JSON object without coupling to the json_schema
+    // strict flag: OpenCode Go rejects json_schema when reasoning_effort is set, so the
+    // adapter keeps server-side JSON enforcement to json_object while the zod output schema
+    // remains the closed contract.
     expect(
-      chatRequests.every((request) => {
-        const responseFormat = bodies[request.adapterId].response_format;
-        return (
-          responseFormat.type === "json_schema" &&
-          responseFormat.json_schema.strict === true &&
-          responseFormat.json_schema.schema.additionalProperties === false
-        );
-      }),
+      chatRequests.every(
+        (request) => bodies[request.adapterId].response_format.type === "json_object",
+      ),
     ).toBe(true);
     expect(
       chatRequests.every(
