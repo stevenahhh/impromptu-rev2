@@ -1,0 +1,20 @@
+=== G006 dirty-tree gate capture ===
+Date: 2026-09-27T13:51:55Z
+Repo: /Users/gahn/projects/impromptu-rev2
+
+--- bun run typecheck (tail) ---
+$ tsc --noEmit && bun run --cwd packages/ui typecheck && bun run --cwd apps/console typecheck && bun run --cwd apps/stage typecheck
+services/private-backend/test/recommendation-model-slots.test.ts(12,3): error TS2353: Object literal may only specify known properties, and 'now' does not exist in type 'DeadlineScheduler'.
+typecheck exit code: 2
+
+--- bun run lint (tail) ---
+$ biome check .
+Checked 503 files in 76ms. No fixes applied.
+lint exit code: 0
+
+--- audit-map.md coverage statement ---
+audit-map.md exists at .omo/evidence/ulw/01a0e2fe-ce33-7873-86ef-19857dd00fc5/G006/audit-map.md.
+Coverage check vs 'git status --porcelain': all 25 modified files and all 12 new
+product-relevant untracked files are individually listed in section (a); remaining
+untracked paths (.omo/*, docs/paper/, .tmp-docx/) are covered as non-product.
+Conclusion: audit-map.md covers all dirty files.
