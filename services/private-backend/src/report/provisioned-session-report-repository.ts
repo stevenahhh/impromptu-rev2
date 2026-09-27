@@ -9,8 +9,16 @@
  * finalized for any account.
  *
  * This adapter closes that gap in one place: it maps the product's identifiers onto the schema's
- * uuid identity and makes the owning rows exist before the first write, leaving authentication,
- * the presentation lifecycle and the report repository itself untouched.
+ * uuid identity and makes the owning rows exist before ANY repository access, leaving
+ * authentication, the presentation lifecycle and the report repository itself untouched.
+ *
+ * Reads must provision too, not just writes: every store method opens with `assertOwner`, which
+ * denies when the `presentation_sessions` row is absent. A session that ends without a single
+ * slide visit or Q&A exchange therefore used to fail its `endSession`/`readForOwner` probes with
+ * `SessionReportAccessDeniedError` — HTTP 500 on `/end` and `/report` for the owner. Read-side
+ * provisioning is safe because the principal only ever reaches this adapter after route-level
+ * owner resolution, and `ON CONFLICT DO NOTHING` never rewrites an existing row: a session row
+ * already owned by another subject still fails `assertOwner` on the very next statement.
  */
 import { createHash } from "node:crypto";
 
@@ -131,6 +139,7 @@ export function createProvisionedSessionReportRepository(
       return await inner.appendQaExchange(withUuidIdentity(input));
     },
     async readQaExchanges(principal: SessionReportPrincipal) {
+      await ensureOwningRows(principal, 1);
       return await inner.readQaExchanges(withUuidIdentity(principal));
     },
     async compareAndSetState(input: CompareAndSetSessionReportStateInput) {
@@ -140,9 +149,13 @@ export function createProvisionedSessionReportRepository(
       return await inner.compareAndSetState(withUuidIdentity(input));
     },
     async readSlideVisits(principal: SessionReportPrincipal) {
+      await ensureOwningRows(principal, 1);
       return await inner.readSlideVisits(withUuidIdentity(principal));
     },
     async readForOwner(principal: SessionReportPrincipal) {
+      // The report read/end paths probe state before writing; without owning rows that probe
+      // denies the real owner, so the rows are ensured here before the read runs.
+      await ensureOwningRows(principal, 1);
       return await inner.readForOwner(withUuidIdentity(principal));
     },
   };

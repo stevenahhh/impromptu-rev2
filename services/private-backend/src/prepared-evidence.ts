@@ -17,8 +17,12 @@ import {
   type EvidenceCandidate,
   EvidenceCandidateSchema,
   PlaybackLeaseTakeoverSchema,
+  type PresentationDetailResponse,
+  type PresentationListResponse,
+  PresentationRenameRequestSchema,
   type PresentationSessionLifecycle,
   PresentationSessionLifecycleSchema,
+  type PresentationSummary,
   type PrivateDeckContext,
   PrivateDeckContextSchema,
   type PublicationAuthority,
@@ -610,6 +614,10 @@ export class PreparedEvidenceCoordinator {
       createdAtMs: nowMs,
       endedAtMs: null,
       qaStartedAtMs: null,
+      // Additive library fields, set explicitly so the created row's updatedAtMs starts at
+      // creation and its title falls back to the uploaded deck title until renamed.
+      presentationTitle: null,
+      updatedAtMs: nowMs,
     });
     const lease = PlaybackControlLeaseSchema.parse({
       leaseId: `lease_${opaqueHex(16)}`,
@@ -677,7 +685,11 @@ export class PreparedEvidenceCoordinator {
     const lifecycle = presentation.lifecycle;
     // Idempotent repeat while Q&A is open: return the ORIGINAL timestamp, write nothing.
     if (lifecycle.qaStartedAtMs !== null) return { outcome: "APPLIED", value: lifecycle };
-    const opened = PresentationSessionLifecycleSchema.parse({ ...lifecycle, qaStartedAtMs: nowMs });
+    const opened = PresentationSessionLifecycleSchema.parse({
+      ...lifecycle,
+      qaStartedAtMs: nowMs,
+      updatedAtMs: nowMs,
+    });
     presentation.lifecycle = opened;
     return { outcome: "APPLIED", value: opened };
   }
@@ -705,8 +717,111 @@ export class PreparedEvidenceCoordinator {
       ...presentation.lifecycle,
       status: "ENDED",
       endedAtMs: nowMs,
+      updatedAtMs: nowMs,
     });
     return { outcome: "APPLIED", value: presentation.lifecycle };
+  }
+
+  /**
+   * Owner-scoped library read: the caller's presentations, most recently created first, with
+   * the opaque cursor continuing strictly after the last returned row. A cursor this account
+   * never received is rejected rather than silently restarted.
+   */
+  async listPresentations(
+    accountSessionId: string,
+    options: { readonly limit: number; readonly cursor?: string },
+    nowMs: number,
+  ): Promise<OperationResult<PresentationListResponse>> {
+    const account = await this.readAccountSession(accountSessionId, nowMs);
+    if (account.outcome === "REJECTED") return account;
+    const owned = Array.from(this.#store.presentations.values())
+      .filter((record) => record.lifecycle.ownerAccountId === account.value.accountId)
+      .sort(
+        (left, right) =>
+          right.lifecycle.createdAtMs - left.lifecycle.createdAtMs ||
+          right.lifecycle.presentationSessionId.localeCompare(left.lifecycle.presentationSessionId),
+      );
+    let startIndex = 0;
+    if (options.cursor !== undefined) {
+      const cursor = this.#presentationCursor(options.cursor);
+      if (cursor === null) {
+        return { outcome: "REJECTED", reason: "INVALID_CURSOR" };
+      }
+      const cursorIndex = owned.findIndex(
+        (record) =>
+          record.lifecycle.createdAtMs === cursor.createdAtMs &&
+          record.lifecycle.presentationSessionId === cursor.presentationSessionId,
+      );
+      if (cursorIndex < 0) return { outcome: "REJECTED", reason: "INVALID_CURSOR" };
+      startIndex = cursorIndex + 1;
+    }
+    const page = owned.slice(startIndex, startIndex + options.limit);
+    const tail = owned[startIndex + page.length];
+    return {
+      outcome: "APPLIED",
+      value: {
+        presentations: page.map((record) => this.#presentationSummary(record)),
+        nextCursor:
+          tail === undefined || page.length === 0
+            ? null
+            : this.#encodePresentationCursor(page[page.length - 1] as PresentationRecord),
+      },
+    };
+  }
+
+  /**
+   * Owner-scoped resume read: everything the Console needs to re-enter a deck it already
+   * uploaded — the public deck plus the current playback authority state — and nothing else.
+   * ENDED presentations resolve (their report is the meaningful re-entry), unlike
+   * #authorizedPresentation which exists to gate ACTIVE-only mutations.
+   */
+  async readPresentation(
+    accountSessionId: string,
+    presentationSessionId: string,
+    nowMs: number,
+  ): Promise<OperationResult<PresentationDetailResponse>> {
+    const owned = await this.#ownedPresentation(accountSessionId, presentationSessionId, nowMs);
+    if (owned.outcome === "REJECTED") return owned;
+    const record = owned.value;
+    const { playback } = record;
+    return {
+      outcome: "APPLIED",
+      value: {
+        presentation: this.#presentationSummary(record),
+        publicDeck: record.publicDeck,
+        playback: {
+          displayBindingEpoch: playback.displayBindingEpoch,
+          controlRevision: playback.controlRevision,
+          stageStatus: playback.stageStatus,
+          occurrence: playback.occurrence,
+          activeLease: {
+            actorId: playback.activeLease.actorId,
+            expiresAtMs: playback.activeLease.expiresAtMs,
+          },
+        },
+      },
+    };
+  }
+
+  /** Owner-scoped rename: the only mutable field of a library row. */
+  async renamePresentation(
+    accountSessionId: string,
+    presentationSessionId: string,
+    input: unknown,
+    nowMs: number,
+  ): Promise<OperationResult<PresentationSummary>> {
+    const rename = PresentationRenameRequestSchema.safeParse(input);
+    if (!rename.success) {
+      return { outcome: "REJECTED", reason: "INVALID_PRESENTATION_TITLE" };
+    }
+    const owned = await this.#ownedPresentation(accountSessionId, presentationSessionId, nowMs);
+    if (owned.outcome === "REJECTED") return owned;
+    owned.value.lifecycle = PresentationSessionLifecycleSchema.parse({
+      ...owned.value.lifecycle,
+      presentationTitle: rename.data.title,
+      updatedAtMs: nowMs,
+    });
+    return { outcome: "APPLIED", value: this.#presentationSummary(owned.value) };
   }
 
   async approveDisplay(
@@ -758,6 +873,7 @@ export class PreparedEvidenceCoordinator {
       ),
       "READY",
     );
+    this.#touch(authorized.value, nowMs);
     return { outcome: "APPLIED", value: session.data };
   }
 
@@ -930,6 +1046,7 @@ export class PreparedEvidenceCoordinator {
     }
     const replaced = replacePlaybackLease(authorized.value.playback, replacementLease);
     authorized.value.playback = replaced;
+    this.#touch(authorized.value, nowMs);
     const supersededReceipts = Object.values(replaced.acceptedCommands).flatMap((record) =>
       record.supersededReceipt !== null &&
       record.supersededReceipt.supersededByLeaseId === replacementLease.leaseId
@@ -1015,6 +1132,7 @@ export class PreparedEvidenceCoordinator {
       authorized.value.playback = playback;
       return { outcome: "REJECTED", reason: "PROJECTION_REJECTED" };
     }
+    this.#touch(authorized.value, nowMs);
     if (this.#reportObserver !== undefined) {
       try {
         this.#reportObserver.onAcceptedSlideSet({
@@ -1310,5 +1428,89 @@ export class PreparedEvidenceCoordinator {
       return { outcome: "REJECTED", reason: "UNAUTHORIZED" };
     }
     return { outcome: "APPLIED", value: presentation };
+  }
+
+  /**
+   * The ownership check the library reads share: account session plus ownership, with NO
+   * ACTIVE-only phase gate. Read and rename paths must reach ENDED presentations too.
+   */
+  async #ownedPresentation(
+    accountSessionId: string,
+    presentationSessionId: string,
+    nowMs: number,
+  ): Promise<OperationResult<PresentationRecord>> {
+    const account = await this.readAccountSession(accountSessionId, nowMs);
+    if (account.outcome === "REJECTED") return account;
+    const presentation = this.#store.presentations.get(presentationSessionId);
+    if (presentation === undefined)
+      return { outcome: "REJECTED", reason: "PRESENTATION_NOT_FOUND" };
+    if (presentation.lifecycle.ownerAccountId !== account.value.accountId) {
+      return { outcome: "REJECTED", reason: "UNAUTHORIZED" };
+    }
+    return { outcome: "APPLIED", value: presentation };
+  }
+
+  /** Display title falls back to the uploaded deck title until the presenter renames it. */
+  #presentationSummary(record: PresentationRecord): PresentationSummary {
+    const { lifecycle } = record;
+    return {
+      presentationSessionId: lifecycle.presentationSessionId,
+      presentationSessionEpoch: lifecycle.presentationSessionEpoch,
+      title: lifecycle.presentationTitle ?? record.privateDeck.title,
+      status: lifecycle.status,
+      createdAtMs: lifecycle.createdAtMs,
+      updatedAtMs: lifecycle.updatedAtMs ?? lifecycle.createdAtMs,
+      endedAtMs: lifecycle.endedAtMs,
+      deckVersion: lifecycle.deckVersion,
+      slideCount: record.publicDeck.slides.length,
+    };
+  }
+
+  /** Rewrites only the library timestamp; lifecycle shape itself is untouched. */
+  #touch(record: PresentationRecord, nowMs: number): void {
+    record.lifecycle = PresentationSessionLifecycleSchema.parse({
+      ...record.lifecycle,
+      updatedAtMs: nowMs,
+    });
+  }
+
+  #encodePresentationCursor(record: PresentationRecord): string {
+    return Buffer.from(
+      JSON.stringify({
+        createdAtMs: record.lifecycle.createdAtMs,
+        presentationSessionId: record.lifecycle.presentationSessionId,
+      }),
+      "utf8",
+    ).toString("base64url");
+  }
+
+  /**
+   * Decodes a cursor this account was issued. Anything malformed, fabricated, or pointing at
+   * a row outside the owner's ordering fails closed so a foreign session id can never steer
+   * the scan.
+   */
+  #presentationCursor(
+    value: string,
+  ): { readonly createdAtMs: number; readonly presentationSessionId: string } | null {
+    let decoded: unknown;
+    try {
+      decoded = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+    } catch {
+      return null;
+    }
+    if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) return null;
+    const candidate = decoded as Record<string, unknown>;
+    if (
+      typeof candidate.createdAtMs !== "number" ||
+      !Number.isInteger(candidate.createdAtMs) ||
+      typeof candidate.presentationSessionId !== "string" ||
+      !/^ps_[A-Za-z0-9][A-Za-z0-9._-]*$/.test(candidate.presentationSessionId)
+    ) {
+      return null;
+    }
+    return {
+      createdAtMs: candidate.createdAtMs,
+      presentationSessionId: candidate.presentationSessionId,
+    };
   }
 }

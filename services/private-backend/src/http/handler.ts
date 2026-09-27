@@ -9,10 +9,12 @@ import { coordinatorCommandRoutes } from "./routes/coordinator-commands.ts";
 import { deckUploadRoutes } from "./routes/deck-uploads.ts";
 import { displayInvitationRoutes } from "./routes/display-invitations.ts";
 import { playbackReadRoutes } from "./routes/playback-read.ts";
+import { presentationRoutes } from "./routes/presentations.ts";
 import { qaDefenseRoutes } from "./routes/qa-defense.ts";
 import { referenceDocumentRoutes } from "./routes/reference-documents.ts";
 import { spokenQuestionRoutes } from "./routes/spoken-question.ts";
 import { systemRoutes } from "./routes/system.ts";
+import { teamQuestionRoutes } from "./routes/team-questions.ts";
 import { accountCookie, csrfToken } from "./session-cookies.ts";
 import type { PrivateBackendHandler, PrivateBackendHttpDependencies } from "./types.ts";
 
@@ -90,6 +92,12 @@ export function createPrivateBackendHandler(
     const referenceDocuments = await referenceDocumentRoutes(ctx);
     if (referenceDocuments !== null) return referenceDocuments;
 
+    // Owner-scoped presentation library (list/resume/rename). Same cookie + CSRF boundary as
+    // every private route; it must resolve before the coordinator-command fallthrough, which
+    // would otherwise answer the POST rename as an unparseable command.
+    const presentations = await presentationRoutes(ctx);
+    if (presentations !== null) return presentations;
+
     // Q&A defense must dispatch BEFORE the coordinator-command fallthrough so a browser can
     // reach it at all. It sits inside the same cookie + CSRF boundary as every route above.
     const qaDefense = await qaDefenseRoutes(ctx, dependencies.qaDefense);
@@ -105,6 +113,11 @@ export function createPrivateBackendHandler(
     // POST as its own.
     const displayInvitation = await displayInvitationRoutes(ctx);
     if (displayInvitation !== null) return displayInvitation;
+
+    // Teammate question grants share the same cookie + CSRF boundary and must resolve
+    // before the fallthrough claims their POST bodies.
+    const teamQuestion = await teamQuestionRoutes(ctx, dependencies.teamQuestions);
+    if (teamQuestion !== null) return teamQuestion;
 
     return coordinatorCommandRoutes(ctx);
   };

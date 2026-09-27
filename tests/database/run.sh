@@ -228,6 +228,7 @@ if [[ "$rerun_output" != *"SKIP private/0001_private_foundation.sql"* \
   || "$rerun_output" != *"SKIP private/0009_session_reports.sql"* \
   || "$rerun_output" != *"SKIP private/0010_reference_documents.sql"* \
   || "$rerun_output" != *"SKIP private/0011_qa_exchanges.sql"* \
+  || "$rerun_output" != *"SKIP private/0012_team_questions.sql"* \
   || "$rerun_output" != *"SKIP projection/0001_projection_foundation.sql"* \
   || "$rerun_output" != *"SKIP projection/0002_publication_inbox.sql"* \
   || "$rerun_output" != *"SKIP projection/0003_dispatcher_only_writes.sql"* \
@@ -268,6 +269,8 @@ PRIVATE_DATABASE_URL="$PRIVATE_DRIVER_URL" \
   bun run "$REPO_ROOT/tests/database/session-report-store-integration.ts"
 PRIVATE_DATABASE_URL="$PRIVATE_DRIVER_URL" \
   bun run "$REPO_ROOT/tests/database/deck-retrieval-integration.ts"
+PRIVATE_DATABASE_URL="$PRIVATE_DRIVER_URL" \
+  bun run "$REPO_ROOT/tests/database/team-question-store-integration.ts"
 
 run_real_dispatch valid
 

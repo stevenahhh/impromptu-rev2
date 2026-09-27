@@ -33,5 +33,7 @@ export {
 export { createPostgresProjectionDispatchBoundary } from "./publication/postgres-projection-dispatch.ts";
 export * from "./retrieval/external-fetch.ts";
 export * from "./retrieval/internal-retrieval.ts";
+export * from "./team-question-grants.ts";
+export { createPostgresTeamQuestionStore } from "./team-question-grants-postgres.ts";
 export * from "./verifier/deterministic-evidence.ts";
 export * from "./verifier/recommendation-pipeline.ts";

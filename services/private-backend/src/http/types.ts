@@ -14,6 +14,7 @@ import type { RateLimiter } from "../rate-limit.ts";
 import type { SessionReportReadRouteHandler } from "../report/http.ts";
 import type { QaDefenseRouteDependencies } from "./routes/qa-defense.ts";
 import type { SpokenQuestionRouteDependencies } from "./routes/spoken-question.ts";
+import type { TeamQuestionRouteDependencies } from "./routes/team-questions.ts";
 
 export type { ReferenceDocumentSummary };
 
@@ -113,6 +114,8 @@ export interface PrivateBackendHttpDependencies {
   /** Optional exactly like `recommendations?`: the handler answers Q&A routes with 503 without it. */
   readonly qaDefense?: QaDefenseRouteDependencies;
   readonly spokenQuestions?: SpokenQuestionRouteDependencies;
+  /** Optional like `qaDefense?`: without it the teammate-grant routes answer a typed 503. */
+  readonly teamQuestions?: TeamQuestionRouteDependencies;
   readonly persist?: () => Promise<void>;
   readonly uploads?: DeckUploadService;
   readonly referenceDocuments?: ReferenceDocumentService;

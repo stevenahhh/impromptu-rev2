@@ -112,6 +112,60 @@ VALUES (
   array_fill(0.1::double precision, ARRAY[768]),
   'acl-1'
 );
+
+-- Accounts are an authentication boundary without tenant scoping; the grant rows below
+-- reference them via the account-id foreign keys on team_question_grants/team_questions.
+INSERT INTO private_app.accounts (account_id, username, password_hash, created_at)
+VALUES
+  ('account_seed_owner_a', 'seed-owner-a', 'seed-hash-not-a-credential', transaction_timestamp()),
+  ('account_seed_owner_b', 'seed-owner-b', 'seed-hash-not-a-credential', transaction_timestamp()),
+  ('account_seed_teammate_b', 'seed-teammate-b', 'seed-hash-not-a-credential', transaction_timestamp()),
+  ('account_seed_teammate_c', 'seed-teammate-c', 'seed-hash-not-a-credential', transaction_timestamp());
+
+-- Tenant A grant: teammate B holds a question-only capability on A's session; one recorded
+-- question exercises the inbox read path.
+INSERT INTO private_app.team_question_grants (
+  tenant_id,
+  session_id,
+  grant_id,
+  owner_account_id,
+  teammate_account_id,
+  teammate_username,
+  invitation_digest,
+  idempotency_key,
+  expires_at,
+  accepted_at
+)
+VALUES (
+  '10000000-0000-4000-8000-000000000001',
+  '11111111-1111-4111-8111-111111111111',
+  'tqg_' || repeat('0', 32),
+  'account_seed_owner_a',
+  'account_seed_teammate_b',
+  'seed-teammate-b',
+  repeat('9', 64),
+  'seed-issue-a-b',
+  transaction_timestamp() + interval '1 hour',
+  transaction_timestamp()
+);
+INSERT INTO private_app.team_questions (
+  tenant_id,
+  session_id,
+  question_id,
+  grant_id,
+  submitted_by_account_id,
+  question,
+  idempotency_key
+)
+VALUES (
+  '10000000-0000-4000-8000-000000000001',
+  '11111111-1111-4111-8111-111111111111',
+  'tqq_' || repeat('1', 32),
+  'tqg_' || repeat('0', 32),
+  'account_seed_teammate_b',
+  'seeded tenant-A question',
+  'seed-q-a-1'
+);
 COMMIT;
 
 BEGIN;
@@ -161,5 +215,30 @@ VALUES (
   'beta retrieval canary',
   array_fill(0.2::double precision, ARRAY[768]),
   'acl-1'
+);
+
+-- Tenant B grant targeted at teammate C, so the teammate-scoped read policy has one row
+-- per teammate across two tenants to distinguish.
+INSERT INTO private_app.team_question_grants (
+  tenant_id,
+  session_id,
+  grant_id,
+  owner_account_id,
+  teammate_account_id,
+  teammate_username,
+  invitation_digest,
+  idempotency_key,
+  expires_at
+)
+VALUES (
+  '20000000-0000-4000-8000-000000000002',
+  '44444444-4444-4444-8444-444444444444',
+  'tqg_' || repeat('2', 32),
+  'account_seed_owner_b',
+  'account_seed_teammate_c',
+  'seed-teammate-c',
+  repeat('8', 64),
+  'seed-issue-b-c',
+  transaction_timestamp() + interval '1 hour'
 );
 COMMIT;
