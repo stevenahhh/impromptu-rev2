@@ -257,6 +257,49 @@ describe("spoken question STT service", () => {
     ).toEqual({ outcome: "REJECTED", reason: "TRANSCRIPTION_FAILED" });
   });
 
+  test("mints the deadline per call — a clip long after construction still transcribes", async () => {
+    // Regression: the deadline used to be minted once at factory scope, so every clip submitted
+    // more than a minute after boot carried an expired deadline. The fake router reproduces the
+    // real CancellationScope check (now >= deadlineAtMs -> deadline_exceeded).
+    const realNow = Date.now;
+    let fakeNow = 1_000_000;
+    Date.now = () => fakeNow;
+    try {
+      const router = {
+        streamStt: async function* (
+          _chunks: AsyncIterable<unknown>,
+          context: { readonly deadlineAtMs: number },
+        ) {
+          if (Date.now() >= context.deadlineAtMs) {
+            yield {
+              kind: "complete",
+              result: {
+                ok: false,
+                error: { code: "deadline_exceeded", message: "expired", retryable: true },
+              },
+            };
+            return;
+          }
+          yield finalEvent("늦은 질문입니다.", 0, 1000);
+        },
+      } as unknown as ServerModelRouter;
+      const stt = createSpokenQuestionStt({ router });
+      fakeNow += 120_000;
+      const first = await stt(clipIdentity(), webmClip(64));
+      fakeNow += 120_000;
+      const second = await stt(clipIdentity(), webmClip(64));
+      expect(first.outcome).toBe("TRANSCRIBED");
+      expect(second).toEqual({
+        outcome: "TRANSCRIBED",
+        text: "늦은 질문입니다.",
+        language: "ko",
+        durationMs: 1000,
+      });
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
   test("silence is never fabricated into text — it stays EMPTY_AUDIO", async () => {
     const stt = createSpokenQuestionStt({
       router: routerOf([finalEvent("", 0, 900)]),
