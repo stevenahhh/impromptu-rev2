@@ -173,6 +173,7 @@ function libraryHarness(
   database: ReturnType<typeof fakeSql>,
   extracted?: Map<string, string>,
   scope = { deckVersion: `deck_${"a".repeat(64)}`, manifestHash: "b".repeat(64) },
+  embed?: (text: string) => Promise<readonly number[]>,
 ) {
   const embedded: string[] = [];
   const extractor = createReferenceTextExtractorStub(extracted ?? new Map());
@@ -181,6 +182,7 @@ function libraryHarness(
     extractor,
     embedding: {
       async embed(text) {
+        if (embed !== undefined) return embed(text);
         embedded.push(text);
         return [1, 0];
       },
@@ -316,6 +318,68 @@ describe("reference document library", () => {
     expect(referenceRows.length).toBe(1);
     expect(String(referenceRows[0]?.content)).toContain("second version");
     expect(database.documentRows).toHaveLength(1);
+  });
+
+  test("stores documents unindexed when the embedding provider is unavailable", async () => {
+    const database = fakeSql();
+    const { library } = libraryHarness(database, undefined, undefined, async () => {
+      throw new Error("embedding provider unavailable");
+    });
+    const outcome = await library.acceptReferenceDocuments({
+      accountId: principal.tenantId,
+      actorId: principal.principalId,
+      presentationSessionId: "ps_reference",
+      documents: [document("notes.md", "Zephyr quartz contingency reserve notes.")],
+    });
+
+    expect(outcome.outcome).toBe("ACCEPTED");
+    if (outcome.outcome !== "ACCEPTED") return;
+    expect(outcome.documents[0]?.status).toBe("STORED_INDEX_PENDING");
+    expect(outcome.documents[0]?.chunkCount).toBe(0);
+    expect(database.chunkRows).toHaveLength(0);
+
+    const listed = await library.listReferenceDocuments({
+      accountId: principal.tenantId,
+      presentationSessionId: "ps_reference",
+    });
+    expect(listed).toHaveLength(1);
+    expect(listed[0]).toMatchObject({ status: "STORED_INDEX_PENDING", chunkCount: 0 });
+  });
+
+  test("a degraded re-upload atomically removes the previously indexed chunks", async () => {
+    const database = fakeSql();
+    let providerDown = false;
+    const { library } = libraryHarness(database, undefined, undefined, async () => {
+      if (providerDown) throw new Error("embedding provider unavailable");
+      return [1, 0];
+    });
+    const upload = (text: string) =>
+      library.acceptReferenceDocuments({
+        accountId: principal.tenantId,
+        actorId: principal.principalId,
+        presentationSessionId: "ps_reference",
+        documents: [document("notes.md", text)],
+      });
+
+    const first = await upload("first version mentioning zephyr quartz");
+    expect(first.outcome).toBe("ACCEPTED");
+    expect(database.chunkRows.some((row) => row.corpus_kind === "REFERENCE_DOCUMENT")).toBe(true);
+
+    providerDown = true;
+    const second = await upload("second version mentioning zephyr quartz");
+    expect(second.outcome).toBe("ACCEPTED");
+    if (second.outcome !== "ACCEPTED") return;
+    expect(second.documents[0]?.status).toBe("STORED_INDEX_PENDING");
+    // No stale reference chunks may survive the supersession; otherwise retrieval
+    // could still cite a document listed as not searchable.
+    expect(database.chunkRows.some((row) => row.corpus_kind === "REFERENCE_DOCUMENT")).toBe(false);
+
+    const listed = await library.listReferenceDocuments({
+      accountId: principal.tenantId,
+      presentationSessionId: "ps_reference",
+    });
+    expect(listed).toHaveLength(1);
+    expect(listed[0]).toMatchObject({ status: "STORED_INDEX_PENDING", chunkCount: 0 });
   });
 
   test("records documents whose extracted text is empty as EMPTY without chunk rows", async () => {

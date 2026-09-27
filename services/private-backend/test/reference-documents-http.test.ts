@@ -148,6 +148,43 @@ describe("reference document HTTP boundary", () => {
     expect(received[0]?.documents[0]?.bytes.byteLength).toBeGreaterThan(0);
   });
 
+  test("carries the stored-not-indexed terminal state through the closed upload contract", async () => {
+    const outcomes = new Map<string, unknown>([
+      [
+        "accept",
+        {
+          outcome: "ACCEPTED",
+          documents: [
+            {
+              documentId: "d".repeat(64),
+              presentationSessionId: "ps_reference",
+              filename: "notes.md",
+              contentType: "text/markdown",
+              byteLength: 32,
+              chunkCount: 0,
+              status: "STORED_INDEX_PENDING",
+            },
+          ],
+        },
+      ],
+    ]);
+    const { handler } = referenceHarness(outcomes);
+    const auth = await signIn(handler);
+
+    const response = await handler(
+      request("/v1/reference-documents", {
+        method: "POST",
+        headers: { Cookie: auth.cookie, "X-CSRF-Token": auth.csrfToken },
+        body: referenceForm(),
+      }),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(() => ReferenceDocumentUploadOutcomeSchema.parse(payload)).not.toThrow();
+    expect(payload.documents[0]?.status).toBe("STORED_INDEX_PENDING");
+  });
+
   test("requires an account session cookie for uploads", async () => {
     const { handler } = referenceHarness();
     const response = await handler(

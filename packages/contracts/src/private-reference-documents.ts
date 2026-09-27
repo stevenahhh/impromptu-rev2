@@ -8,7 +8,13 @@ import { Sha256Schema } from "./common.ts";
  * uses, so recommendations can cite an uploaded reference document.
  */
 
-export const ReferenceDocumentStatusSchema = z.enum(["INDEXED", "EMPTY"]);
+/**
+ * INDEXED: extracted text chunks were embedded and are searchable.
+ * STORED_INDEX_PENDING: the document is stored and has extractable text, but
+ *   zero chunks were indexed (e.g. the embedding provider was unavailable).
+ * EMPTY: the document is stored but extraction produced no chunkable text.
+ */
+export const ReferenceDocumentStatusSchema = z.enum(["INDEXED", "STORED_INDEX_PENDING", "EMPTY"]);
 export type ReferenceDocumentStatus = z.infer<typeof ReferenceDocumentStatusSchema>;
 
 export const ReferenceDocumentRejectionReasonSchema = z.enum([

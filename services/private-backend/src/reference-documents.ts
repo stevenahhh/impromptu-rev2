@@ -16,7 +16,10 @@ import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ReferenceDocumentSummary } from "@impromptu/contracts/private";
+import type {
+  ReferenceDocumentStatus,
+  ReferenceDocumentSummary,
+} from "@impromptu/contracts/private";
 import { IngestionJsonSchema } from "./deck-render-subprocess.ts";
 import type { RetrievalPrincipal } from "./retrieval/internal-retrieval.ts";
 import {
@@ -235,6 +238,19 @@ function sha256Hex(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
 
+/**
+ * Honest per-document terminal state: INDEXED only when searchable chunk rows were
+ * actually written; STORED_INDEX_PENDING when text was extracted but indexing wrote
+ * nothing (e.g. embedding provider unavailable); EMPTY when no text was extracted.
+ */
+function referenceDocumentStatus(
+  extractedChunkCount: number,
+  indexedChunkCount: number,
+): ReferenceDocumentStatus {
+  if (indexedChunkCount > 0) return "INDEXED";
+  return extractedChunkCount > 0 ? "STORED_INDEX_PENDING" : "EMPTY";
+}
+
 export class PostgresReferenceDocumentLibrary {
   readonly #repository: TenantScopedPostgresRepository;
   readonly #extractor: ReferenceTextExtractor;
@@ -362,9 +378,25 @@ export class PostgresReferenceDocumentLibrary {
             `${principal.tenantId}:${scope.deckVersion}:${scope.manifestHash}:reference:${document.documentId}:${offset}:${sourceHash}`,
           )
           .digest("hex");
-        const embedding = [...(await this.#embedding(content, principal))];
-        if (embedding.length === 0 || embedding.some((value) => !Number.isFinite(value))) {
-          throw new Error("Reference document embedding provider returned an invalid vector");
+        // Degrade, don't reject: with no embedding provider the reference still stores
+        // its extracted text and lists under STORED_INDEX_PENDING so the presenter
+        // keeps the file; only the vector-citation path is skipped.
+        let embedding: readonly number[] = [];
+        let embeddable = true;
+        try {
+          embedding = [...(await this.#embedding(content, principal))];
+        } catch {
+          embeddable = false;
+        }
+        if (
+          embeddable &&
+          (embedding.length === 0 || embedding.some((value) => !Number.isFinite(value)))
+        ) {
+          embeddable = false;
+        }
+        if (!embeddable) {
+          rows.length = 0;
+          break;
         }
         rows.push({
           object_id: objectId,
@@ -379,16 +411,18 @@ export class PostgresReferenceDocumentLibrary {
 
     await this.#repository.transaction(principal.tenantId, async (sql) => {
       for (const { document, rows } of embeddedRows.values()) {
+        // Re-uploads supersede exactly their own prior chunks and never touch other
+        // rows. The delete is unconditional so a degraded re-upload (zero new rows)
+        // still purges stale vectors/FTS rows in the same transaction.
+        await sql`
+          DELETE FROM private_app.deck_retrieval_chunks
+          WHERE tenant_id = ${principal.tenantId}
+            AND deck_version = ${scope.deckVersion}
+            AND manifest_hash = ${scope.manifestHash}
+            AND corpus_kind = ${REFERENCE_DOCUMENT_CORPUS_KIND}
+            AND source_id = ${document.documentId}
+        `;
         if (rows.length > 0) {
-          // Re-uploads replace exactly their own prior chunks and never touch other rows.
-          await sql`
-            DELETE FROM private_app.deck_retrieval_chunks
-            WHERE tenant_id = ${principal.tenantId}
-              AND deck_version = ${scope.deckVersion}
-              AND manifest_hash = ${scope.manifestHash}
-              AND corpus_kind = ${REFERENCE_DOCUMENT_CORPUS_KIND}
-              AND source_id = ${document.documentId}
-          `;
           for (const row of rows) {
             await insertChunkRow(sql, {
               tenant_id: principal.tenantId,
@@ -415,28 +449,32 @@ export class PostgresReferenceDocumentLibrary {
             ${principal.tenantId}, ${document.documentId}, ${input.presentationSessionId},
             ${document.filename}, ${document.contentType}, ${document.byteLength},
             ${document.sourceRevision}, ${rows.length > 0 ? "INDEXED" : "EMPTY"},
-            ${rows.length}
+            ${document.chunks.length}
           )
           ON CONFLICT (tenant_id, document_id) DO UPDATE SET
             content_type = EXCLUDED.content_type,
             byte_length = EXCLUDED.byte_length,
             status = EXCLUDED.status,
-            chunk_count = EXCLUDED.chunk_count
+            chunk_count = EXCLUDED.chunk_count,
+            source_revision = EXCLUDED.source_revision
         `;
       }
     });
 
     return {
       outcome: "ACCEPTED",
-      documents: prepared.map((document) => ({
-        documentId: document.documentId,
-        presentationSessionId: input.presentationSessionId,
-        filename: document.filename,
-        contentType: document.contentType,
-        byteLength: document.byteLength,
-        chunkCount: document.chunks.length,
-        status: document.chunks.length > 0 ? ("INDEXED" as const) : ("EMPTY" as const),
-      })),
+      documents: prepared.map((document) => {
+        const rows = embeddedRows.get(document.documentId)?.rows ?? [];
+        return {
+          documentId: document.documentId,
+          presentationSessionId: input.presentationSessionId,
+          filename: document.filename,
+          contentType: document.contentType,
+          byteLength: document.byteLength,
+          chunkCount: rows.length,
+          status: referenceDocumentStatus(document.chunks.length, rows.length),
+        };
+      }),
     };
   }
 
@@ -473,8 +511,15 @@ export class PostgresReferenceDocumentLibrary {
           filename: String(row.filename),
           contentType: String(row.content_type),
           byteLength,
-          chunkCount,
-          status: row.status === "EMPTY" ? ("EMPTY" as const) : ("INDEXED" as const),
+          // chunkCount reports searchable chunks; the persisted column counts extracted
+          // chunks, which distinguishes "stored but unindexed" from "no text".
+          chunkCount: row.status === "INDEXED" ? chunkCount : 0,
+          status:
+            row.status === "INDEXED"
+              ? ("INDEXED" as const)
+              : chunkCount > 0
+                ? ("STORED_INDEX_PENDING" as const)
+                : ("EMPTY" as const),
         },
       ];
     });
