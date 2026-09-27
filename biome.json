@@ -8,6 +8,7 @@
       "!node_modules",
       "!**/dist",
       "!**/.next",
+      "!**/.vercel",
       "!docs/*.html",
       "!docs/*.pdf",
       "!.omo/boulder.json",

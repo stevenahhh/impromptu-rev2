@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/v1/:path*",
+      "destination": "https://surround-brand-metals-soap.trycloudflare.com/v1/:path*"
+    }
+  ]
+}
