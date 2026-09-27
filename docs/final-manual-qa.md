@@ -2,82 +2,103 @@
 
 ## Release posture and evidence
 
-Use the release build with `LIVE_PUBLICATION_GATE_STATE` unset. Live-public publication remains default-off. Do not convert an automated result below into a claim that physical venue hardware was rehearsed.
+Use a release build with `LIVE_PUBLICATION_GATE_STATE` unset or `BLOCKED`. Public evidence and
+public cards are disabled. The public Stage is slide-only. Do not turn an automated receipt into a
+claim about venue hardware.
 
-Automated venue-equivalent record:
+The task-53 receipt at commit `283369767974194c7fa29cac8a604ad3e56e40a7` is historical evidence:
 
-- Command: `bun run test:aggregate:10`
-- Evidence: `tests/evidence/wp10-aggregate-runs.json`
-- Consecutive aggregate runs: **10/10 passed**
-- P0 failures: **0/10**
-- Setup/publish/retract/recovery completion: **40/40 tasks, 100%**
-- Privacy-critical mistakes: **0**
-- Each run executed, in order: full `bun run check`, prepared-evidence/topology E2E, the dedicated topology suite, and the realtime soak suite.
-- Physical venue hardware exercised by this record: **no**
+- 13/13 recorded gates exited successfully.
+- 577 tests passed in the recorded run.
+- The two recommendation cohorts were 10/10 with p95 values of 4,606.0 ms and 4,627.2 ms.
+- `STAGE_ZERO_CARDS` was true.
 
-Release-security matrix record:
+This record does not certify the current working tree, the current Vercel aliases, a redeploy, or a
+physical venue. Run the current release checks again. Physical acceptance stays open until the
+Windows venue run is signed.
 
-- Public routes rejecting private-scope bodies: **7/7**
-- Private routes rejecting anonymous/Public Stage reachability: **16/16**
-- Cross-tenant private reads denied: **1/1**
-- Stage-compromise checks passed: **4/4** (stale live ingress rejected, forged durable snapshot rejected, direct write rejected, post-compromise public cards zero)
-- Privacy-critical exposures across the 28 reachability/compromise attempts: **0**
-- Deletion/restore checks: active content removed, backup tombstone restored, revoked projection resurrection denied
+The release security checks must continue to cover private-scope rejection, anonymous Stage
+reachability, cross-account reads, forged display state, direct public writes, and zero private
+bytes in public responses. `POST /internal/cards` must remain a negative check with
+`410 stage_cards_disabled`, not a presentation step.
 
 ## Venue record header
 
-Complete this header for each physical rehearsal. Do not include participant data, transcripts, private deck content, credentials, or provider secrets.
+Complete this header for each physical rehearsal. Do not include participant data, transcripts,
+private deck content, credentials, provider secrets, invitation tokens, or private screenshots.
 
-- Date/time (UTC):
-- Venue/room:
+- Date and time UTC:
+- Venue and room:
 - Release ID and build hash:
-- Operator / privacy observer:
-- Console device, OS, browser version:
-- Stage device, OS, browser version:
-- Projector/display model and connection path:
-- Windows mode tested: Extend / Duplicate / single-display fallback
-- Network path and captive-portal status:
-- Emergency public PDF/URL prepared:
-- Result: PASS / FAIL
+- Operator and privacy observer:
+- Console device, OS, and browser version:
+- Stage device, OS, and browser version:
+- Projector or display model and connection path:
+- Windows mode: Extend, Duplicate, or single-screen fallback
+- Network path and captive portal status:
+- Emergency public PDF or URL prepared:
+- Result: PASS or FAIL
 - P0 failures:
 - Privacy-critical mistakes:
-- Evidence links (public-only screenshots and receipts):
+- Evidence links using public-only screenshots and redacted receipts:
 
 ## Target venue flow
 
-A physical rehearsal passes only when every row passes in one uninterrupted flow. Stop projection immediately on a privacy-critical failure and record the rehearsal as failed.
+A physical rehearsal passes only when every row passes in one uninterrupted flow. Stop projection
+on a privacy-critical failure and record the rehearsal as failed.
 
-| Step | Operator action | Explicit pass criteria | Automated gate mapping | Physical execution required |
-|---|---|---|---|---|
-| 1. Setup | Connect the approved controller and public Stage devices. Select the intended Windows display mode. Open only Console on the private display and Stage on the projectable display. Keep the emergency public artifact ready. | Stage shows its public landing surface; Console is not visible on the projector; no private pixel, notification, browser chrome leak, terminal, log, speaker note, or private filename is visible. The release/build IDs match and the live-public gate remains unset. | Full check; browser runtime; topology E2E; public/private matrix. | **Yes.** Validate the actual GPU, cable/adapter, projector, EDID, Windows topology, overscan, and line of sight. |
-| 2. Join | From Stage, create the display join and transfer the locator through the approved room procedure. | Locator expires as configured, grants no authority by itself, contains no account/private data, and replay is rejected. Stage receives only the `__Host-display` public cookie. | Release-security public payload matrix; Stage display-session tests; prepared-evidence E2E `display-join`. | **Yes.** Validate QR/readability, room distance, operator handoff, and captive-portal behavior. |
-| 3. Bind | In Console, verify the displayed identity/fingerprint and approve the exact display/deck pair. | The intended Stage binds once; wrong deck, wrong fingerprint, stale CAS, and old binding are rejected. Rebinding closes the old channel with no private exposure. | Prepared-evidence gateway tests; topology and Stage-compromise gates. | **Yes.** Confirm the fingerprint on the actual two devices and that no neighboring display is approved. |
-| 4. Slide control | Send an absolute slide selection from Console, then exercise the Stage-only emergency keyboard fallback. | The exact command is accepted and receives `STAGE_APPLIED`; Stage shows one visible effect; no relative/offline replay occurs; emergency keys select only cached public slides. | Prepared-evidence E2E accepted/applied prefixes; realtime soak (>=500 commands, duplicate effects 0, stale epoch acceptance 0); topology E2E. | **Yes.** Judge projector response, remote/keyboard mapping, focus, readability, and operator timing on venue hardware. |
-| 5. Approve | Approve a curated recommendation from the authoritative Console state. Do not enable live-public. | Publication requires authenticated authority and current CAS identity; only the declassified public card appears; no candidate ID, private URI, source hash, transcript, note, or tenant identifier appears on Stage. | Release-security matrix; prepared-evidence E2E `candidate-approved`/`published-card-visible`; privacy scanners; live-public default-off config tests. | **Yes.** A privacy observer must inspect the physical projector and audience sightlines for private pixels or notifications. |
-| 6. Retract | Retract the visible card once, then attempt stale/replayed publication from the old state. | Tombstone is ordered and visible within the gate; card disappears; replay and resurrection are rejected; reconnect snapshot contains zero active revoked cards. | Prepared-evidence E2E retract/expiry and 20-sample Chrome retract gate; deletion/backup tombstone test; Stage `STALE_LIVE_BINDING` gate. | **Yes.** Confirm disappearance on the real projector and any confidence monitor, including during display switching. |
-| 7. Recovery | With the card revoked, restart/drop the projection service and exercise the approved emergency PDF/URL path. Restore connectivity and signal recovery. | Stage fails public-only, never shows Console or stale private content, restores an authoritative snapshot and tombstones, resurrects zero revoked cards, and resumes absolute slide control. If recovery fails, remain on the emergency public artifact. | Durable-main restart; prepared-evidence restart/tombstone E2E; event-driven topology recovery; realtime reconnect soak; `docs/runbooks/venue-failure-recovery.md`. | **Yes.** Measure production supervisor/database/network recovery, projector reacquisition, captive portal, and emergency artifact handoff. |
+| Step | Operator action | Explicit pass criteria | Automated or HTTP check | Physical execution |
+| --- | --- | --- | --- | --- |
+| 1. Setup | Start the approved Compose services. Open only the authenticated Console on the private controller and a clean Stage profile on the projectable device. Prepare the emergency public artifact. | Console is not visible on the public output. The Stage origin and release ID are the intended values. No private pixel, notification, terminal, log, speaker note, or private filename is visible. | Compose health and readiness checks. Console `/sign-in`, Console `/`, and Stage `/` respond. | Yes. Confirm the actual display mode, cable, adapter, projector, and audience view. |
+| 2. Account and deck | Sign in at Console `/sign-in`. In Console `/` or `/session`, upload the approved PDF or PPTX and wait for public slide rendering to finish. | The owner account is correct, the deck belongs to that owner, and the public slide manifest is ready. Private preparation remains on Console. | Upload response is successful. A task-owned deck is used. No production account or participant data is used. | Yes. Check the operator handoff and the emergency artifact. |
+| 3. Invitation and exchange | Create a short-lived, one-use invitation for the active deck. Open its Stage path on the independent public device. | The token is only in the URL fragment. The Stage exchange creates a pending join only. No display cookie, binding, account session, or private data is granted by the invitation. Replay, expiry, wrong deck, and malformed token fail closed. | `POST /v1/display-invitations`, `POST /v1/display-joins`, and the replay and expiry negatives. | Yes. Check readability, room distance, captive portal behavior, and the human handoff. |
+| 4. Fingerprint approval | Read the pending display ID and fingerprint in the owner Console. Approve only the exact display, deck version, and current binding epoch. | A Stage claim before approval is rejected. A forged fingerprint, wrong display, wrong owner, or stale epoch is rejected. The approved Stage receives its public display cookie only after the owner action. | `GET /v1/display-invitations/:invitationId/pending`, `POST /v1/display-bindings`, and `POST /v1/display-session`. | Yes. Confirm the fingerprint on both devices and verify that a neighboring display is not approved. |
+| 5. Slide control | Send absolute slide selections from Console. Wait for the matching Stage-applied receipt and the visible slide. | Stage reports a ready public snapshot and shows the selected slide. The public DOM and network responses contain slides only. A command receipt without a visible slide is a failure. | `GET /v1/snapshot`, `GET /v1/events`, `POST /v1/stage-applied`, and the existing topology and receipt checks. | Yes. Judge projected readability, response, focus, and operator timing. |
+| 6. Public boundary negative | Do not attempt to publish public evidence. Probe the retired card ingress from a private operations context and inspect the public response shape with no display cookie. | `POST /internal/cards` returns `410 stage_cards_disabled`. Snapshot and event requests without an approved display cookie return typed denial and no private bytes. The Stage never shows a card, candidate, question, transcript, or source detail. | Release security suite, public payload matrix, `GET /v1/snapshot` without a display cookie, and `GET /v1/events` without a display cookie. | Yes. A privacy observer checks the actual projected pixels and audience sightlines. |
+| 7. Recovery and fallback | Drop the approved network or restart the projection service under the approved supervisor. Keep the emergency public artifact ready. | Stage stays public-only while unavailable, returns to an authoritative slide snapshot after recovery, and receives the next applied receipt. If any identity, snapshot, receipt, or visible slide is uncertain, remain on the emergency artifact. | Health, reconnect, revision, asset, stale epoch, and service restart checks. | Yes. Measure projector reacquisition, network recovery, and the human fallback time. |
 
-## Physical-only checks that automation cannot satisfy
+The backend invitation routes and a live HTTP receipt at the production aliases support steps 3-4,
+and this working tree carries the matching Console and Stage UI. The deployed Vercel build predates
+that UI: the served Stage bundle never reads the `#invite` fragment and the served Console chunks
+never call `/v1/display-invitations`. Do not sign the separate-device row until the deployed build
+exposes the one-use flow and it has been exercised in a real browser. Do not replace that row with
+a copied join object.
 
-These checks remain mandatory before claiming the target venue/hardware release gate:
+## Physical-only checks
 
-1. Run the complete flow above **10 consecutive times on the target venue and hardware** with P0 failures 0, task completion 100%, and privacy-critical mistakes 0. The checked-in 10-run record is an automated stand-in only.
-2. Inspect real projector/confidence-monitor pixels in Extend, Duplicate, and supported single-display fallback, including boot, reconnect, fullscreen exit, monitor unplug, and topology switching.
-3. Verify the actual cable, adapter, dock, GPU, EDID, resolution, refresh rate, overscan, color/contrast, forced-colors behavior, 200% zoom, 320 px layout, keyboard, screen reader, remote/clicker, and physical focus path.
-4. Verify venue Wi-Fi/Ethernet, captive portal, DNS, firewall/proxy, service-worker cold start, and production supervisor/database failover timing.
-5. Verify room-distance join readability, device fingerprint matching, operator handoffs, audience sightlines, notification suppression, and that no adjacent display receives the binding.
-6. Exercise the approved emergency PDF/URL on the public-only backup device and time the human switchover.
-7. Perform the vendor prewarm, quota, region, retention, deletion-receipt, and escalation procedure against the approved production account under `docs/runbooks/vendor-prewarm.md`.
+These checks are mandatory before claiming the target venue and hardware release gate:
+
+1. Run the complete flow above 10 consecutive times on the target Windows venue and hardware.
+   Record P0 failures and privacy-critical mistakes. The task-53 record is an automated historical
+   stand-in only.
+2. Inspect real projector and confidence-monitor pixels in Extend, Duplicate, and the supported
+   single-screen fallback during startup, reconnect, monitor unplug, and topology switching.
+3. Verify the cable, adapter, dock, GPU, EDID, resolution, refresh rate, overscan, contrast,
+   forced colors, 200% zoom, 320 px layout, keyboard, screen reader, remote, and physical focus
+   path.
+4. Verify venue Wi-Fi or Ethernet, captive portal, DNS, firewall, service-worker cold start, and
+   production supervisor and database recovery timing.
+5. Verify invitation readability, fingerprint matching, operator handoffs, audience sightlines,
+   notification suppression, and that no adjacent display receives the binding.
+6. Exercise the approved emergency PDF or URL on a public-only backup device and time the human
+   switchover.
+7. Run the vendor prewarm, quota, region, retention, deletion receipt, and escalation procedure
+   in `docs/runbooks/vendor-prewarm.md`.
+
+The present host is macOS arm64 with headless Chromium. Its browser and API results do not verify
+Windows display modes, projectors, physical pixels, clickers, screen readers, captive portals, or
+human response time.
 
 ## Final sign-off
 
 - [ ] Every target-flow row passed in one uninterrupted physical run.
-- [ ] Ten consecutive physical target-venue/hardware runs passed.
+- [ ] Ten consecutive physical target-venue runs passed.
 - [ ] P0 failures are 0/10.
-- [ ] Setup/publish/retract/recovery completion is 100%.
 - [ ] Privacy-critical mistakes are 0.
-- [ ] Public/private negative matrix and Stage-compromise suite are green.
-- [ ] Deletion cascade, backup tombstone restore, and resurrection denial are green.
-- [ ] Full check, strict TypeScript, both boundary scanners, E2E, topology, and soak are green.
-- [ ] Live-public remains default-off with gate state unset.
+- [ ] Invitation expiry, replay, wrong fingerprint, stale epoch, and pre-approval negatives are
+      green.
+- [ ] Public card ingress is disabled and public snapshots contain no cards or private data.
+- [ ] Recovery restored the authoritative slide state without private exposure.
+- [ ] Release security, E2E, topology, soak, and boundary checks are green for the current tree.
+- [ ] The live-publication gate remains unset or `BLOCKED`.
 - [ ] Operator and privacy observer signed the venue record.
