@@ -69,7 +69,16 @@ export function ReferenceDocumentPanel({ onIndexed }: { readonly onIndexed: () =
       }
       setDocuments(outcome.documents);
       setPhase("IDLE");
-      setMessage(text.referenceIndexed.replace("{count}", String(outcome.documents.length)));
+      const unindexed = outcome.documents.filter(
+        (document) => document.status !== "INDEXED",
+      ).length;
+      setMessage(
+        unindexed === 0
+          ? text.referenceIndexed.replace("{count}", String(outcome.documents.length))
+          : text.referenceStoredUnindexed
+              .replace("{total}", String(outcome.documents.length))
+              .replace("{unindexed}", String(unindexed)),
+      );
       onIndexed();
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
@@ -132,7 +141,9 @@ export function ReferenceDocumentPanel({ onIndexed }: { readonly onIndexed: () =
                   <Badge tone="neutral">
                     {document.status === "INDEXED"
                       ? text.referenceChunks.replace("{count}", String(document.chunkCount))
-                      : text.referenceEmptyDocument}
+                      : document.status === "EMPTY"
+                        ? text.referenceEmptyDocument
+                        : text.referenceNotSearchable}
                   </Badge>
                 </article>
               </li>
