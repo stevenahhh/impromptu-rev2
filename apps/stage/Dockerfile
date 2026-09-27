@@ -49,6 +49,11 @@ server {
   server_name _;
   root /usr/share/nginx/html;
 
+  # The invitation token lives in the URL fragment, invisible to this server, so every Stage
+  # document is served as if it could be the invitation landing: no referrer may leak and the
+  # page is never stored. Same-origin /v1 mutations pin their own referrerPolicy client-side.
+  add_header Referrer-Policy "no-referrer" always;
+
   location = /health {
     access_log off;
     add_header Content-Type text/plain;
@@ -76,6 +81,14 @@ server {
 
   location / {
     try_files $uri $uri/ /index.html;
+  }
+
+  # SPA fallback and direct document hits land here; add_header directives do not inherit into
+  # a location that declares its own, so Referrer-Policy is repeated. Hashed assets keep their
+  # default cacheability.
+  location = /index.html {
+    add_header Referrer-Policy "no-referrer" always;
+    add_header Cache-Control "no-store" always;
   }
 }
 EOF

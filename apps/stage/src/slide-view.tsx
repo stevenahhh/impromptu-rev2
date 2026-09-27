@@ -37,15 +37,20 @@ export function renderedSlideRuntime(
  * Raster slides (PDF decks render to PNG) keep the `<img>` path, which has no such restriction.
  */
 export function StaticSlide({
+  onFailure,
   slide,
 }: {
   readonly slide: StageSnapshotView["deckSlides"][number];
+  /** Called once when this slide's bytes cannot be verified or rendered — never auto-retried. */
+  readonly onFailure?: () => void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const { imageUrl, imageContentHash, accessibilityLabel } = slide;
   // String-only on purpose: a resolution failure would silently degrade the slide to the raster
   // path, which is what drops its background.
   const vector = (imageUrl.split(/[?#]/)[0] ?? "").toLowerCase().endsWith(".svg");
+  const onFailureRef = useRef(onFailure);
+  onFailureRef.current = onFailure;
 
   useEffect(() => {
     if (!vector) return;
@@ -58,7 +63,10 @@ export function StaticSlide({
         if (active) hostRef.current?.replaceChildren(svg);
       })
       .catch(() => {
-        // The surface stays empty rather than showing a room a slide whose bytes did not verify.
+        if (!active || controller.signal.aborted) return;
+        // Unverified bytes never reach the room: the host stays empty and the surface reports
+        // the failure up so it can stop claiming a slide is on screen.
+        onFailureRef.current?.();
       });
     return () => {
       active = false;
@@ -69,6 +77,12 @@ export function StaticSlide({
   return vector ? (
     <div className="stage-slide-host" ref={hostRef} />
   ) : (
-    <img className="stage-slide" data-slide-fit="contain" src={imageUrl} alt={accessibilityLabel} />
+    <img
+      className="stage-slide"
+      data-slide-fit="contain"
+      src={imageUrl}
+      alt={accessibilityLabel}
+      onError={() => onFailureRef.current?.()}
+    />
   );
 }

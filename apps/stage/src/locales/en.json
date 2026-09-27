@@ -1,5 +1,12 @@
 {
+  "pageTitle": "Impromptu presentation screen",
   "waitingApproval": "Waiting for the presenter to connect this screen.",
+  "invitationInvalid": "This connection link can no longer be used. Open a fresh link from the presenter view.",
+  "invitationExpired": "This connection link has expired. Open a fresh link from the presenter view.",
+  "invitationRetryable": "The connection request could not be sent. Check the network and try again.",
+  "invitationRetry": "Try again",
+  "displayIdLabel": "Display ID",
+  "displayFingerprintLabel": "Screen fingerprint",
   "consoleOnlyNotice": "Open this presentation screen from the presenter view. Opening this page alone won't start it.",
   "joinFailed": "The presentation screen could not start. Close it and open it again from the presenter view.",
   "approvalFailed": "The presentation screen could not be connected. Close it and open it again.",
@@ -10,6 +17,10 @@
   "fullscreenBlocked": "The browser blocked full screen. Use the browser menu instead.",
   "fullscreenUnavailable": "Full screen isn't available in this browser.",
   "placeTarget": "Move to the presentation screen",
+  "slideUnavailable": "The slide could not be shown. Please check the presenter view.",
   "targetPlaced": "Moved this window to the selected screen.",
-  "targetRecovered": "The target screen was disconnected. This window moved to an available screen."
+  "targetRecovered": "The target screen was disconnected. This window moved to an available screen.",
+  "placementExtend": "Manual placement: move this window to the target display, then go full screen.",
+  "placementDuplicate": "Manual placement: keep only the presentation screen on this PC, open the presenter view on another device, then go full screen.",
+  "placementSingle": "Manual placement: keep only this window on the presentation screen, then go full screen."
 }

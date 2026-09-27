@@ -28,6 +28,11 @@ interface RenderedSlidePlayerProps {
   readonly runtime: PublishedSlideRuntime;
   readonly occurrenceSeq?: number;
   readonly onAllClickGroupsExhausted?: () => void;
+  /**
+   * Called when even the last-resort still image cannot render — the slide is not on screen
+   * at all, so the surface must stop claiming it is.
+   */
+  readonly onFailure?: () => void;
 }
 
 type RuntimeStatus = "loading" | "active" | "error";
@@ -70,7 +75,13 @@ function isAbortError(error: unknown): boolean {
 }
 
 function RenderedSlidePlayerComponent(
-  { slide, runtime, occurrenceSeq = 0, onAllClickGroupsExhausted }: RenderedSlidePlayerProps,
+  {
+    slide,
+    runtime,
+    occurrenceSeq = 0,
+    onAllClickGroupsExhausted,
+    onFailure,
+  }: RenderedSlidePlayerProps,
   ref: Ref<RenderedSlidePlayerHandle>,
 ) {
   const { publicSlideKey, imageUrl, imageContentHash, accessibilityLabel } = slide;
@@ -269,7 +280,12 @@ function RenderedSlidePlayerComponent(
     >
       <div ref={canvasRef} className="stage-slide-runtime" />
       {status === "error" ? (
-        <img className="stage-slide" src={imageUrl} alt={accessibilityLabel} />
+        <img
+          className="stage-slide"
+          src={imageUrl}
+          alt={accessibilityLabel}
+          onError={() => onFailure?.()}
+        />
       ) : null}
     </div>
   );

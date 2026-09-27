@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import ko from "./locales/ko.json";
 import {
   emergencyPublicSlideSet,
   manualPlacementSummary,
   observeWindowsTopology,
   placeStageOnTargetScreen,
   recoverTargetScreenLoss,
-  topologyInstructions,
   windowsDisplayMode,
 } from "./windows-topology";
 
@@ -24,11 +24,11 @@ describe("Windows Stage topology", () => {
     expect(windowsDisplayMode("duplicate")).toBe("duplicate");
     expect(windowsDisplayMode("single")).toBe("single");
     expect(windowsDisplayMode("unknown")).toBe("extend");
-    expect(topologyInstructions("extend").join(" ")).toContain("프로젝터로 옮긴 뒤");
-    expect(topologyInstructions("duplicate").join(" ")).toContain("발표 화면만 열린");
-    expect(topologyInstructions("single").join(" ")).toContain("공개 슬라이드만");
-    expect(manualPlacementSummary("duplicate")).toContain("발표 화면만 남기고");
-    expect(manualPlacementSummary("single")).toContain("발표 화면에는 이 화면만");
+    // The placement summary is catalog text now: the module selects the right sentence and
+    // the caller supplies the resolved audience locale.
+    expect(manualPlacementSummary("duplicate", ko)).toBe(ko.placementDuplicate);
+    expect(manualPlacementSummary("single", ko)).toBe(ko.placementSingle);
+    expect(manualPlacementSummary("extend", ko)).toBe(ko.placementExtend);
   });
 
   test("maps the emergency keyboard fallback only to absolute public slide sets", () => {

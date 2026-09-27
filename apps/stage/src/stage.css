@@ -7,10 +7,61 @@
   place-items: center;
 }
 
-.stage-console-only p {
+.stage-console-only p,
+.stage-console-only output {
+  display: block;
+  max-inline-size: var(--size-stage-copy);
   margin: var(--space-0);
+  padding-inline: var(--space-stage);
   color: var(--text-secondary);
-  font-size: var(--text-lead);
+  font-family: var(--font-display);
+  font-size: var(--text-stage-display);
+  line-height: var(--line-tight);
+  letter-spacing: var(--tracking-tight);
+  text-align: center;
+}
+
+/* The invited second screen is operated on by a person, so unlike the opener-facing pairing
+   surface it may show what it is waiting on: the status line plus the display identity the
+   presenter is about to approve. Public, non-authorizing fields only. */
+.stage-invitation {
+  display: grid;
+  gap: var(--space-4);
+  justify-items: center;
+  max-width: 32rem;
+  padding-inline: var(--space-stage);
+  text-align: center;
+}
+
+.stage-invitation-identity {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-0);
+}
+
+.stage-invitation-identity > div {
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: auto 1fr;
+  text-align: start;
+}
+
+.stage-invitation-identity dt {
+  color: var(--text-secondary);
+  font-size: var(--text-caption);
+}
+
+.stage-invitation-identity dd {
+  margin: var(--space-0);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-caption);
+  overflow-wrap: anywhere;
+}
+
+.stage-invitation button {
+  padding: var(--space-2) var(--space-4);
+  font: inherit;
+  cursor: pointer;
 }
 
 .stage-display {

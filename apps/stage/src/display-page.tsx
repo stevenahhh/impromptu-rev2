@@ -1,17 +1,22 @@
-import { useCallback, useEffect, useId, useRef } from "react";
-import copy from "./locales/ko.json";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { RenderedSlidePlayer, type RenderedSlidePlayerHandle } from "./rendered-slide-player";
 import { normalizeDeckAssetUrl, renderedSlideRuntime, StaticSlide } from "./slide-view";
 import type { StageSessionClient } from "./stage-client";
 import { publishStageEvent } from "./stage-events";
+import { useStageCopy } from "./stage-i18n";
 import { useScreenTopology } from "./use-screen-topology";
 import { useStageSubscription } from "./use-stage-subscription";
 import { emergencyPublicSlideSet, windowsDisplayMode } from "./windows-topology";
 
 function DisplayPage({ client }: { readonly client: StageSessionClient }) {
+  const copy = useStageCopy();
   const titleId = useId();
   const requestedMode = windowsDisplayMode(new URL(window.location.href).searchParams.get("mode"));
   const { mode, placementMessage } = useScreenTopology(requestedMode);
+  // Truthful slide failure: the identity (slide key + occurrence) of the one occurrence whose
+  // verified bytes could not be rendered. A later occurrence — even of the same slide — clears
+  // it because the keyed player remounts and gets a fresh chance.
+  const [failedSlide, setFailedSlide] = useState<string | null>(null);
   const renderedSlidePlayerRef = useRef<RenderedSlidePlayerHandle>(null);
   const { snapshot, unavailable, setSnapshot } = useStageSubscription(client, mode, requestedMode);
 
@@ -86,40 +91,59 @@ function DisplayPage({ client }: { readonly client: StageSessionClient }) {
       : { ...projectedSlide, imageUrl: normalizeDeckAssetUrl(projectedSlide.imageUrl) };
   const currentSlideRuntime =
     currentSlide === undefined ? null : renderedSlideRuntime(currentSlide);
+  const currentOccurrenceKey =
+    currentSlide === undefined || snapshot === null
+      ? null
+      : `${currentSlide.publicSlideKey}:${snapshot.occurrence.occurrenceSeq}`;
+  const slideFailed = currentOccurrenceKey !== null && failedSlide === currentOccurrenceKey;
+  const visibleSlide = slideFailed ? undefined : currentSlide;
 
   return (
     <div
       className="stage-display"
-      data-audience-readiness={snapshot === null ? "RECOVERING" : "READY"}
+      data-audience-readiness={
+        snapshot === null ? "RECOVERING" : slideFailed ? "SLIDE_FAILED" : "READY"
+      }
       data-blackout={snapshot?.blackout === true ? "true" : "false"}
       data-stage-chrome="hidden"
     >
       <main
         className={`stage-display__content${currentSlide === undefined ? "" : " stage-display__content--slide"}`}
-        aria-labelledby={currentSlide === undefined ? titleId : undefined}
+        aria-labelledby={visibleSlide === undefined ? titleId : undefined}
       >
-        {currentSlide === undefined ? (
-          <section className="stage-claim ui-reveal">
+        {visibleSlide === undefined ? (
+          <section
+            className="stage-claim ui-reveal"
+            data-stage-state={slideFailed ? "SLIDE_FAILED" : undefined}
+          >
             <h1 id={titleId}>
-              {unavailable === null ? copy.awaitingPresentation : copy.audienceUnavailable}
+              {slideFailed
+                ? copy.slideUnavailable
+                : unavailable === null
+                  ? copy.awaitingPresentation
+                  : copy.audienceUnavailable}
             </h1>
           </section>
         ) : (
           <section
             className="stage-slide-surface ui-reveal"
             data-stage-slide-surface="uploaded"
-            aria-label={currentSlide.accessibilityLabel}
+            aria-label={currentSlide?.accessibilityLabel}
           >
             {currentSlideRuntime !== null ? (
               <RenderedSlidePlayer
-                key={`${currentSlide.publicSlideKey}:${snapshot?.occurrence.occurrenceSeq ?? 0}`}
+                key={currentOccurrenceKey}
                 ref={renderedSlidePlayerRef}
-                slide={currentSlide}
+                slide={visibleSlide}
                 runtime={currentSlideRuntime}
                 occurrenceSeq={snapshot?.occurrence.occurrenceSeq ?? 0}
+                onFailure={() => setFailedSlide(currentOccurrenceKey)}
               />
             ) : (
-              <StaticSlide slide={currentSlide} />
+              <StaticSlide
+                slide={visibleSlide}
+                onFailure={() => setFailedSlide(currentOccurrenceKey)}
+              />
             )}
           </section>
         )}
