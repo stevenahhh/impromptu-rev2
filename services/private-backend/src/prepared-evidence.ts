@@ -10,7 +10,10 @@ import {
 import {
   type AccountSession,
   AccountSessionSchema,
+  CreateDisplayInvitationRequestSchema,
+  type CreateDisplayInvitationResponse,
   DisplayApprovalSchema,
+  DisplayInvitationIdSchema,
   type EvidenceCandidate,
   EvidenceCandidateSchema,
   PlaybackLeaseTakeoverSchema,
@@ -25,7 +28,11 @@ import {
   type AudienceDisplaySession,
   AudienceDisplaySessionSchema,
   DisplayBindingEpochSchema,
+  type DisplayInvitationPendingView,
+  DisplayInvitationPendingViewSchema,
+  DisplayInvitationViewSchema,
   displayBindingEpoch,
+  IssuedDisplayInvitationSchema,
   type PublicationTombstone,
   PublicationTombstoneSchema,
   PublicSlideKeySchema,
@@ -59,6 +66,31 @@ import {
 type MaybePromise<Value> = Value | Promise<Value>;
 
 export interface PreparedEvidenceProjectionPort {
+  /**
+   * Mints a one-use, <=90s, non-authorizing display invitation at the gateway. The returned
+   * token is shown to the presenter once; the gateway persists only its digest.
+   */
+  issueDisplayInvitation(
+    input: {
+      readonly presentationSessionId: string;
+      readonly deckVersion: string;
+    },
+    nowMs: number,
+  ): MaybePromise<
+    | Readonly<{ outcome: "ISSUED"; invitation: unknown }>
+    | Readonly<{ outcome: "REJECTED"; reason: string }>
+  >;
+  /**
+   * Reads the owner-facing invitation view (pending join identity, expiry, status). The
+   * token and its digest must never appear in the value.
+   */
+  readDisplayInvitation(
+    invitationId: string,
+    nowMs: number,
+  ): MaybePromise<
+    | Readonly<{ outcome: "FOUND"; invitation: unknown }>
+    | Readonly<{ outcome: "REJECTED"; reason: string }>
+  >;
   bindDisplay(
     input: {
       readonly displayJoinId: string;
@@ -693,6 +725,14 @@ export class PreparedEvidenceCoordinator {
     if (approval.data.expectedDeckVersion !== authorized.value.publicDeck.deckVersion) {
       return { outcome: "REJECTED", reason: "WRONG_DECK" };
     }
+    // The display-binding CAS is decided by private authority before any public side
+    // effect: a stale expected epoch fails closed here instead of round-tripping to the
+    // gateway. GAP-11: the client must echo the epoch from the pending read, not "dbe_0".
+    if (
+      approval.data.expectedDisplayBindingEpoch !== authorized.value.playback.displayBindingEpoch
+    ) {
+      return { outcome: "REJECTED", reason: "STALE_DISPLAY_BINDING" };
+    }
     const result = await this.#projection.bindDisplay(
       {
         displayJoinId: approval.data.displayJoinId,
@@ -719,6 +759,91 @@ export class PreparedEvidenceCoordinator {
       "READY",
     );
     return { outcome: "APPLIED", value: session.data };
+  }
+
+  /**
+   * Issues a short-lived, non-authorizing Stage invitation for a presentation the caller
+   * owns. The gateway mints the token; this boundary only ever returns the minted DTO —
+   * no session, cookie, or binding material travels with it.
+   */
+  async issueDisplayInvitation(
+    accountSessionId: string,
+    input: unknown,
+    nowMs: number,
+  ): Promise<OperationResult<CreateDisplayInvitationResponse>> {
+    const request = CreateDisplayInvitationRequestSchema.safeParse(input);
+    if (!request.success) {
+      return { outcome: "REJECTED", reason: "INVALID_DISPLAY_INVITATION" };
+    }
+    const authorized = await this.#authorizedPresentation(
+      accountSessionId,
+      request.data.presentationSessionId,
+      nowMs,
+    );
+    if (authorized.outcome === "REJECTED") return authorized;
+    const issued = await this.#projection.issueDisplayInvitation(
+      {
+        presentationSessionId: authorized.value.lifecycle.presentationSessionId,
+        deckVersion: authorized.value.publicDeck.deckVersion,
+      },
+      nowMs,
+    );
+    if (issued.outcome === "REJECTED") return issued;
+    const minted = IssuedDisplayInvitationSchema.safeParse(issued.invitation);
+    if (!minted.success || minted.data.deckVersion !== authorized.value.publicDeck.deckVersion) {
+      return { outcome: "REJECTED", reason: "INVALID_PROJECTION_RESPONSE" };
+    }
+    // The Stage URL the Console copies: fragment-carried token only, so the secret never
+    // appears in a query string, referrer, or server access log. Exact origin composition
+    // stays with the Console's own stage resolution.
+    return {
+      outcome: "APPLIED",
+      value: {
+        ...minted.data,
+        stagePath: `/?deck=${minted.data.deckVersion}#invite=${minted.data.token}`,
+      },
+    };
+  }
+
+  /**
+   * Owner-only read of an invitation's pending state: the exact visible display identity
+   * awaiting approval plus the authoritative display binding epoch the approval CAS is
+   * written against. The projection record pins the presentation session, so a token minted
+   * for one session can never surface as a pending request on another.
+   */
+  async readDisplayInvitation(
+    accountSessionId: string,
+    invitationId: string,
+    nowMs: number,
+  ): Promise<OperationResult<DisplayInvitationPendingView>> {
+    const invitation = DisplayInvitationIdSchema.safeParse(invitationId);
+    if (!invitation.success) {
+      return { outcome: "REJECTED", reason: "INVITATION_UNKNOWN" };
+    }
+    const projectionView = await this.#projection.readDisplayInvitation(invitation.data, nowMs);
+    if (projectionView.outcome === "REJECTED") {
+      return { outcome: "REJECTED", reason: projectionView.reason };
+    }
+    const view = DisplayInvitationViewSchema.safeParse(projectionView.invitation);
+    if (!view.success) return { outcome: "REJECTED", reason: "INVALID_PROJECTION_RESPONSE" };
+    const authorized = await this.#authorizedPresentation(
+      accountSessionId,
+      view.data.presentationSessionId,
+      nowMs,
+    );
+    if (authorized.outcome === "REJECTED") return authorized;
+    return {
+      outcome: "APPLIED",
+      value: DisplayInvitationPendingViewSchema.parse({
+        invitationId: view.data.invitationId,
+        presentationSessionId: view.data.presentationSessionId,
+        deckVersion: view.data.deckVersion,
+        expiresAtMs: view.data.expiresAtMs,
+        status: view.data.status,
+        displayBindingEpoch: authorized.value.playback.displayBindingEpoch,
+        join: view.data.join,
+      }),
+    };
   }
 
   async connectPlaybackController(

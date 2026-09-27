@@ -434,6 +434,14 @@ describe("private audio ingest HTTP transport", () => {
           projectionCalls.push("recordPlaybackApplied");
           return false;
         },
+        issueDisplayInvitation() {
+          projectionCalls.push("issueDisplayInvitation");
+          return { outcome: "REJECTED" as const, reason: "unused" };
+        },
+        readDisplayInvitation() {
+          projectionCalls.push("readDisplayInvitation");
+          return { outcome: "REJECTED" as const, reason: "unused" };
+        },
       },
       store,
     );

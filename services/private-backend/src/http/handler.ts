@@ -7,6 +7,7 @@ import { accountEntryRoutes, accountSessionDeleteRoute } from "./routes/accounts
 import { audioRoutes } from "./routes/audio.ts";
 import { coordinatorCommandRoutes } from "./routes/coordinator-commands.ts";
 import { deckUploadRoutes } from "./routes/deck-uploads.ts";
+import { displayInvitationRoutes } from "./routes/display-invitations.ts";
 import { playbackReadRoutes } from "./routes/playback-read.ts";
 import { qaDefenseRoutes } from "./routes/qa-defense.ts";
 import { referenceDocumentRoutes } from "./routes/reference-documents.ts";
@@ -98,6 +99,12 @@ export function createPrivateBackendHandler(
     // is optional and answers a typed STT_UNAVAILABLE when the deployment runs without local STT.
     const spokenQuestion = await spokenQuestionRoutes(ctx, dependencies.spokenQuestions);
     if (spokenQuestion !== null) return spokenQuestion;
+
+    // Display invitations sit inside the same cookie + CSRF boundary; issuance must resolve
+    // before the coordinator-command fallthrough, which treats every unmatched body-parsed
+    // POST as its own.
+    const displayInvitation = await displayInvitationRoutes(ctx);
+    if (displayInvitation !== null) return displayInvitation;
 
     return coordinatorCommandRoutes(ctx);
   };

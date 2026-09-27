@@ -1,4 +1,7 @@
 import {
+  DisplayInvitationIssueRequestSchema,
+  IssuedDisplayInvitationSchema,
+  PublicDisplayJoinRequestSchema,
   type PublishedDeckArtifact,
   PublishedDeckArtifactSchema,
 } from "@impromptu/contracts/public";
@@ -128,6 +131,12 @@ export interface ProjectionGatewayHttpDependencies {
   readonly now: () => number;
   readonly stageReceiptWriter: StageReceiptWriter;
   readonly persist?: () => Promise<void>;
+  /**
+   * Invitation records persist into a separately versioned record from the main gateway
+   * snapshot, so they carry their own callback. Absent means invitation state is volatile
+   * (tests); production wires this to the display_invitation_state table.
+   */
+  readonly persistInvitations?: () => Promise<void>;
   readonly deckAssets?: DeckAssetReader;
   readonly logger?: JsonLogger;
   readonly metrics?: MetricsRegistry;
@@ -394,6 +403,35 @@ export function createProjectionGatewayHandler(
       if (decision.outcome === "REJECTED") return rateLimited(decision.retryAfterMs, origin);
     }
 
+    if (url.pathname === "/internal/display-invitations") {
+      if (request.method !== "POST") return json({ error: "not_found" }, 404);
+      if (request.headers.get("authorization") !== `Bearer ${dependencies.internalAuthToken}`) {
+        return json({ error: "internal_unauthorized" }, 401);
+      }
+      const body = await requestBody(request);
+      const parsed = DisplayInvitationIssueRequestSchema.safeParse(body);
+      if (!parsed.success) return json({ error: "invalid_request" }, 400);
+      const issued = dependencies.gateway.issueDisplayInvitation(
+        {
+          presentationSessionId: parsed.data.presentationSessionId,
+          deckVersion: parsed.data.deckVersion,
+        },
+        parsed.data.nowMs,
+      );
+      if (issued.outcome !== "ISSUED") return json({ error: "invalid_request" }, 400);
+      await dependencies.persistInvitations?.();
+      return json(IssuedDisplayInvitationSchema.parse(issued.invitation), 201);
+    }
+    if (request.method === "GET" && url.pathname.startsWith("/internal/display-invitations/")) {
+      if (request.headers.get("authorization") !== `Bearer ${dependencies.internalAuthToken}`) {
+        return json({ error: "internal_unauthorized" }, 401);
+      }
+      const invitationId = url.pathname.slice("/internal/display-invitations/".length);
+      const result = dependencies.gateway.readDisplayInvitation(invitationId, dependencies.now());
+      return result.outcome === "FOUND"
+        ? json(result.invitation, 200)
+        : json({ error: "not_found" }, 404);
+    }
     if (request.method === "POST" && url.pathname.startsWith("/internal/")) {
       if (request.headers.get("authorization") !== `Bearer ${dependencies.internalAuthToken}`) {
         return json({ error: "internal_unauthorized" }, 401);
@@ -493,21 +531,44 @@ export function createProjectionGatewayHandler(
     }
 
     if (request.method === "POST" && url.pathname === "/v1/display-joins") {
-      const body = await requestBody(request);
-      if (
-        body === null ||
-        !hasOnlyKeys(body, ["displayId", "deckVersion", "displayFingerprint"]) ||
-        typeof body.displayId !== "string" ||
-        typeof body.deckVersion !== "string" ||
-        typeof body.displayFingerprint !== "string"
-      ) {
+      const body = PublicDisplayJoinRequestSchema.safeParse(await requestBody(request));
+      if (!body.success) {
         return json({ error: "invalid_request" }, 400, origin);
+      }
+      // A presented invitation token is the two-device path: it consumes the one-use
+      // invitation and creates the pending join atomically. No invitation keeps the
+      // Console-opener handshake working. Either way the answer is a locator only — never
+      // a display cookie or a binding; authority still waits for the presenter gesture.
+      if (body.data.invitationToken !== undefined) {
+        const exchange = dependencies.gateway.exchangeDisplayInvitation(
+          {
+            invitationToken: body.data.invitationToken,
+            displayId: body.data.displayId,
+            deckVersion: body.data.deckVersion,
+            displayFingerprint: body.data.displayFingerprint,
+          },
+          dependencies.now(),
+        );
+        if (exchange.outcome === "REJECTED") {
+          const status =
+            exchange.reason === "INVITATION_UNKNOWN"
+              ? 404
+              : exchange.reason === "INVITATION_EXPIRED"
+                ? 410
+                : 409;
+          return json({ outcome: exchange.outcome, reason: exchange.reason }, status, origin);
+        }
+        // Consume first, then the join row: a torn write must fail closed (token lost)
+        // rather than allow a replay that mints a second join.
+        await dependencies.persistInvitations?.();
+        await dependencies.persist?.();
+        return json(exchange.locator, 201, origin);
       }
       const join = dependencies.gateway.createDisplayJoin(
         {
-          displayId: body.displayId,
-          deckVersion: body.deckVersion,
-          displayFingerprint: body.displayFingerprint,
+          displayId: body.data.displayId,
+          deckVersion: body.data.deckVersion,
+          displayFingerprint: body.data.displayFingerprint,
         },
         dependencies.now(),
       );

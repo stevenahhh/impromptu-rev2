@@ -2,7 +2,9 @@ import {
   createProjectionGatewayStore,
   ProjectionGatewaySnapshotError,
   type ProjectionGatewayStore,
+  restoreDisplayInvitationState,
   restoreProjectionGatewayStore,
+  snapshotDisplayInvitationState,
   snapshotProjectionGatewayStore,
 } from "../prepared-evidence.ts";
 
@@ -91,6 +93,74 @@ export async function createPostgresProjectionGatewayPersistence(
 
   return {
     store,
+    persist() {
+      const pending = writeQueue.then(write);
+      writeQueue = pending.catch(() => {});
+      return pending;
+    },
+  };
+}
+
+export interface DisplayInvitationPersistence {
+  persist(): Promise<void>;
+}
+
+/**
+ * Loads the invitation record set into an existing gateway store and returns a CAS-backed
+ * persist callback for it. Invitation state is versioned apart from the main gateway
+ * snapshot so a previous binary still restores its own document unchanged.
+ */
+export async function createPostgresDisplayInvitationPersistence(
+  sql: PostgresStateSql,
+  store: ProjectionGatewayStore,
+  options: { readonly stateKey?: string } = {},
+): Promise<DisplayInvitationPersistence> {
+  const stateKey = options.stateKey ?? "display-invitations";
+  const rows = await sql<readonly StateRow[]>`
+    SELECT revision, snapshot
+    FROM public_projection.read_invitation_state(${stateKey})
+  `;
+  const row = rows[0];
+  let revision = 0;
+  if (row !== undefined) {
+    if (restoreDisplayInvitationState(store, row.snapshot).outcome !== "RESTORED") {
+      throw new ProjectionGatewaySnapshotError("display invitation snapshot failed validation");
+    }
+    revision = revisionNumber(row.revision);
+  }
+
+  let writeQueue = Promise.resolve();
+  const write = async () => {
+    const snapshot = snapshotDisplayInvitationState(store);
+    try {
+      const written = await sql<readonly Readonly<{ revision: number | string }>[]>`
+        SELECT public_projection.write_invitation_state(
+          ${stateKey},
+          ${revision},
+          ${snapshot}::jsonb
+        ) AS revision
+      `;
+      const next = written[0];
+      if (next === undefined) {
+        throw new Error("display invitation state write returned no revision");
+      }
+      revision = revisionNumber(next.revision);
+    } catch (error) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        (("code" in error && error.code === "40001") ||
+          ("errno" in error && error.errno === "40001"))
+      ) {
+        throw new PreparedEvidenceStateConflictError(
+          `display invitation state ${stateKey} was changed by another instance`,
+        );
+      }
+      throw error;
+    }
+  };
+
+  return {
     persist() {
       const pending = writeQueue.then(write);
       writeQueue = pending.catch(() => {});

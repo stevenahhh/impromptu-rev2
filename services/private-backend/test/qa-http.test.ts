@@ -755,6 +755,8 @@ describe("registered Q&A routes through createPrivateBackendHandler", () => {
         bindDisplay: () => ({ outcome: "REJECTED", reason: "unused" }),
         projectPlayback: () => false,
         recordPlaybackApplied: () => false,
+        issueDisplayInvitation: () => ({ outcome: "REJECTED", reason: "unused" }),
+        readDisplayInvitation: () => ({ outcome: "REJECTED", reason: "unused" }),
       },
       store,
     );

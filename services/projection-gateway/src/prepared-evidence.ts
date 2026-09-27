@@ -1,6 +1,13 @@
 import {
+  type DisplayInvitationStatus,
+  type DisplayInvitationView,
+  DisplayJoinSchema,
+  type IssuedDisplayInvitation,
+  IssuedDisplayInvitationSchema,
   type PublishedDeckArtifact,
   PublishedDeckArtifactSchema,
+  type StoredDisplayInvitation,
+  StoredDisplayInvitationSchema,
 } from "@impromptu/contracts/public";
 
 export type PublicDeckArtifact = PublishedDeckArtifact;
@@ -60,6 +67,8 @@ export interface AudienceProjectionSnapshot {
   readonly tombstoneRetentionMs: number;
 }
 
+export type { StoredDisplayInvitation };
+
 type JoinState = {
   readonly locator: DisplayJoinLocator;
   consumed: boolean;
@@ -79,10 +88,16 @@ type ProjectionState = {
 export interface ProjectionGatewayStore {
   readonly joins: Map<string, JoinState>;
   readonly projections: Map<string, ProjectionState>;
+  /**
+   * One-use display invitations keyed by invitation id. Deliberately outside the durable
+   * gateway snapshot: invitations persist through snapshotDisplayInvitationState into a
+   * separately versioned record so the previous binary can still restore joins/projections.
+   */
+  readonly invitations: Map<string, StoredDisplayInvitation>;
 }
 
 export function createProjectionGatewayStore(): ProjectionGatewayStore {
-  return { joins: new Map(), projections: new Map() };
+  return { joins: new Map(), projections: new Map(), invitations: new Map() };
 }
 
 export class ProjectionGatewaySnapshotError extends Error {
@@ -330,6 +345,54 @@ export function restoreProjectionGatewayStore(input: unknown): ProjectionGateway
   return { outcome: "RESTORED", store };
 }
 
+const DISPLAY_INVITATION_SNAPSHOT_KIND = "DISPLAY_INVITATION_STATE_SNAPSHOT";
+
+export function snapshotDisplayInvitationState(store: ProjectionGatewayStore): unknown {
+  return {
+    stateKind: DISPLAY_INVITATION_SNAPSHOT_KIND,
+    invitations: [...store.invitations.values()],
+  };
+}
+
+export type DisplayInvitationRestoreResult =
+  | Readonly<{ outcome: "RESTORED" }>
+  | Readonly<{ outcome: "INVALID_SNAPSHOT" }>;
+
+/**
+ * Restores invitation records into an existing gateway store. The envelope and records are
+ * closed; records carrying a join must be marked consumed and vice versa, which
+ * StoredDisplayInvitationSchema refines for us.
+ */
+export function restoreDisplayInvitationState(
+  store: ProjectionGatewayStore,
+  input: unknown,
+): DisplayInvitationRestoreResult {
+  if (
+    !snapshotRecord(input) ||
+    !exactKeys(input, ["stateKind", "invitations"]) ||
+    input.stateKind !== DISPLAY_INVITATION_SNAPSHOT_KIND ||
+    !Array.isArray(input.invitations)
+  ) {
+    return { outcome: "INVALID_SNAPSHOT" };
+  }
+  const restored: StoredDisplayInvitation[] = [];
+  for (const invitationInput of input.invitations) {
+    const record = StoredDisplayInvitationSchema.safeParse(invitationInput);
+    if (
+      !record.success ||
+      restored.some((item) => item.invitationId === record.data.invitationId)
+    ) {
+      return { outcome: "INVALID_SNAPSHOT" };
+    }
+    restored.push(record.data);
+  }
+  store.invitations.clear();
+  for (const record of restored) {
+    store.invitations.set(record.invitationId, record);
+  }
+  return { outcome: "RESTORED" };
+}
+
 export type BindDisplayResult =
   | Readonly<{ outcome: "BOUND"; session: AudienceDisplaySessionRecord }>
   | Readonly<{
@@ -340,7 +403,23 @@ export type BindDisplayResult =
         | "JOIN_REPLAYED"
         | "WRONG_DECK"
         | "DISPLAY_IDENTITY_MISMATCH"
+        | "JOIN_SESSION_MISMATCH"
         | "BINDING_CAS_CONFLICT";
+    }>;
+
+export type IssueDisplayInvitationResult =
+  | Readonly<{ outcome: "ISSUED"; invitation: IssuedDisplayInvitation }>
+  | Readonly<{ outcome: "REJECTED"; reason: "INVALID_INVITATION_REQUEST" }>;
+
+export type ExchangeDisplayInvitationResult =
+  | Readonly<{ outcome: "CREATED"; locator: DisplayJoinLocator }>
+  | Readonly<{
+      outcome: "REJECTED";
+      reason:
+        | "INVITATION_UNKNOWN"
+        | "INVITATION_EXPIRED"
+        | "INVITATION_CONSUMED"
+        | "INVITATION_DECK_MISMATCH";
     }>;
 
 export interface ReconnectSnapshotPins {
@@ -381,16 +460,28 @@ function opaqueHex(byteLength: number): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+function sha256Hex(value: string): string {
+  return new Bun.CryptoHasher("sha256").update(value).digest("hex");
+}
+
 function revisionValue(revision: unknown, prefix: string): number | null {
   if (typeof revision !== "string" || !revision.startsWith(prefix)) return null;
   const value = Number(revision.slice(prefix.length));
   return Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
+/**
+ * Hard ceiling on display-invitation lifetime, pinned by plan task 6: an invitation is a
+ * non-authorizing, one-use locator the presenter hands to a Stage, so its validity window
+ * must never exceed 90 seconds regardless of configuration.
+ */
+export const MAX_DISPLAY_INVITATION_TTL_MS = 90_000;
+
 export class PreparedEvidenceProjectionGateway {
   readonly #store: ProjectionGatewayStore;
   readonly #sockets = new Map<string, Set<MutableStageSocket>>();
   readonly #joinTtlMs: number;
+  readonly #invitationTtlMs: number;
   readonly #displaySessionTtlMs: number;
   readonly #tombstoneRetentionMs: number;
 
@@ -398,14 +489,139 @@ export class PreparedEvidenceProjectionGateway {
     store: ProjectionGatewayStore = createProjectionGatewayStore(),
     options: {
       readonly joinTtlMs?: number;
+      readonly invitationTtlMs?: number;
       readonly displaySessionTtlMs?: number;
       readonly tombstoneRetentionMs?: number;
     } = {},
   ) {
     this.#store = store;
     this.#joinTtlMs = options.joinTtlMs ?? 90_000;
+    const invitationTtlMs = options.invitationTtlMs ?? MAX_DISPLAY_INVITATION_TTL_MS;
+    if (
+      !Number.isSafeInteger(invitationTtlMs) ||
+      invitationTtlMs <= 0 ||
+      invitationTtlMs > MAX_DISPLAY_INVITATION_TTL_MS
+    ) {
+      throw new Error("display invitation TTL must be a positive integer within 90000 ms");
+    }
+    this.#invitationTtlMs = invitationTtlMs;
     this.#displaySessionTtlMs = options.displaySessionTtlMs ?? 8 * 60 * 60 * 1_000;
     this.#tombstoneRetentionMs = options.tombstoneRetentionMs ?? 24 * 60 * 60 * 1_000;
+  }
+
+  /**
+   * Mints the one-use invitation token and stores only its digest. The token leaves this
+   * process exactly once, in the ISSUED result; it is never reachable from the store.
+   */
+  issueDisplayInvitation(
+    input: {
+      readonly presentationSessionId: string;
+      readonly deckVersion: string;
+    },
+    nowMs: number,
+  ): IssueDisplayInvitationResult {
+    if (!validId(input.presentationSessionId, "ps_") || !validId(input.deckVersion, "deck_")) {
+      return { outcome: "REJECTED", reason: "INVALID_INVITATION_REQUEST" };
+    }
+    const token = `dinv_${opaqueHex(32)}`;
+    const stored = StoredDisplayInvitationSchema.safeParse({
+      invitationId: `dinvite_${opaqueHex(16)}`,
+      tokenDigest: sha256Hex(token),
+      presentationSessionId: input.presentationSessionId,
+      deckVersion: input.deckVersion,
+      expiresAtMs: nowMs + this.#invitationTtlMs,
+      consumedAtMs: null,
+      join: null,
+    });
+    if (!stored.success) return { outcome: "REJECTED", reason: "INVALID_INVITATION_REQUEST" };
+    this.#store.invitations.set(stored.data.invitationId, stored.data);
+    return {
+      outcome: "ISSUED",
+      invitation: IssuedDisplayInvitationSchema.parse({
+        invitationId: stored.data.invitationId,
+        token,
+        deckVersion: stored.data.deckVersion,
+        expiresAtMs: stored.data.expiresAtMs,
+      }),
+    };
+  }
+
+  /**
+   * Public, non-authorizing exchange: the token resolves to exactly one pending join.
+   * Consumption is committed in the same synchronous turn that creates the join, so a
+   * replayed token can never mint a second locator.
+   */
+  exchangeDisplayInvitation(
+    input: {
+      readonly invitationToken: string;
+      readonly displayId: string;
+      readonly deckVersion: string;
+      readonly displayFingerprint: string;
+    },
+    nowMs: number,
+  ): ExchangeDisplayInvitationResult {
+    const digest = sha256Hex(input.invitationToken);
+    const invitation = [...this.#store.invitations.values()].find(
+      (candidate) => candidate.tokenDigest === digest,
+    );
+    if (invitation === undefined) {
+      return { outcome: "REJECTED", reason: "INVITATION_UNKNOWN" };
+    }
+    if (invitation.consumedAtMs !== null) {
+      return { outcome: "REJECTED", reason: "INVITATION_CONSUMED" };
+    }
+    if (nowMs >= invitation.expiresAtMs) {
+      return { outcome: "REJECTED", reason: "INVITATION_EXPIRED" };
+    }
+    if (invitation.deckVersion !== input.deckVersion) {
+      return { outcome: "REJECTED", reason: "INVITATION_DECK_MISMATCH" };
+    }
+    const locator = this.createDisplayJoin(
+      {
+        displayId: input.displayId,
+        deckVersion: input.deckVersion,
+        displayFingerprint: input.displayFingerprint,
+      },
+      nowMs,
+    );
+    this.#store.invitations.set(invitation.invitationId, {
+      ...invitation,
+      consumedAtMs: nowMs,
+      join: DisplayJoinSchema.parse(locator),
+    });
+    return { outcome: "CREATED", locator };
+  }
+
+  /**
+   * Internal read for the private backend's owner-facing pending endpoint. The token and
+   * its digest never appear in the view.
+   */
+  readDisplayInvitation(
+    invitationId: string,
+    nowMs: number,
+  ):
+    | Readonly<{ outcome: "FOUND"; invitation: DisplayInvitationView }>
+    | Readonly<{
+        outcome: "REJECTED";
+        reason: "INVITATION_UNKNOWN";
+      }> {
+    const record = this.#store.invitations.get(invitationId);
+    if (record === undefined) {
+      return { outcome: "REJECTED", reason: "INVITATION_UNKNOWN" };
+    }
+    const status: DisplayInvitationStatus =
+      record.join !== null ? "JOINED" : nowMs >= record.expiresAtMs ? "EXPIRED" : "PENDING";
+    return {
+      outcome: "FOUND",
+      invitation: {
+        invitationId: record.invitationId,
+        presentationSessionId: record.presentationSessionId,
+        deckVersion: record.deckVersion,
+        expiresAtMs: record.expiresAtMs,
+        status,
+        join: record.join === null ? null : DisplayJoinSchema.parse(record.join),
+      },
+    };
   }
 
   createDisplayJoin(
@@ -461,6 +677,18 @@ export class PreparedEvidenceProjectionGateway {
       join.locator.displayFingerprint !== input.approvedDisplayFingerprint
     ) {
       return { outcome: "REJECTED", reason: "DISPLAY_IDENTITY_MISMATCH" };
+    }
+    // An invitation-minted join is pinned to the presentation session it was issued for:
+    // a presenter approving "the display in front of me" can never slide a token minted for
+    // a previous or sibling session onto a different one.
+    const invitation = [...this.#store.invitations.values()].find(
+      (candidate) => candidate.join?.displayJoinId === join.locator.displayJoinId,
+    );
+    if (
+      invitation !== undefined &&
+      invitation.presentationSessionId !== input.presentationSessionId
+    ) {
+      return { outcome: "REJECTED", reason: "JOIN_SESSION_MISMATCH" };
     }
 
     const current = this.#store.projections.get(input.presentationSessionId);

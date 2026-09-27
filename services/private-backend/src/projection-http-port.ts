@@ -37,6 +37,54 @@ export class ProjectionHttpPort implements PreparedEvidenceProjectionPort {
     });
   }
 
+  async #get(path: string): Promise<Response> {
+    return fetch(`${this.#baseUrl}${path}`, {
+      method: "GET",
+      headers: { authorization: this.#authorization },
+    });
+  }
+
+  async issueDisplayInvitation(
+    input: {
+      readonly presentationSessionId: string;
+      readonly deckVersion: string;
+    },
+    nowMs: number,
+  ) {
+    try {
+      const response = await this.#post("/internal/display-invitations", {
+        presentationSessionId: input.presentationSessionId,
+        deckVersion: input.deckVersion,
+        nowMs,
+      });
+      const body = await responseJson(response);
+      if (response.ok && isRecord(body)) {
+        return { outcome: "ISSUED" as const, invitation: body };
+      }
+      return { outcome: "REJECTED" as const, reason: "PROJECTION_UNAVAILABLE" };
+    } catch {
+      return { outcome: "REJECTED" as const, reason: "PROJECTION_UNAVAILABLE" };
+    }
+  }
+
+  async readDisplayInvitation(invitationId: string) {
+    try {
+      const response = await this.#get(
+        `/internal/display-invitations/${encodeURIComponent(invitationId)}`,
+      );
+      const body = await responseJson(response);
+      if (response.ok && isRecord(body)) {
+        return { outcome: "FOUND" as const, invitation: body };
+      }
+      return {
+        outcome: "REJECTED" as const,
+        reason: response.status === 404 ? "INVITATION_UNKNOWN" : "PROJECTION_UNAVAILABLE",
+      };
+    } catch {
+      return { outcome: "REJECTED" as const, reason: "PROJECTION_UNAVAILABLE" };
+    }
+  }
+
   async bindDisplay(
     input: {
       readonly displayJoinId: string;
