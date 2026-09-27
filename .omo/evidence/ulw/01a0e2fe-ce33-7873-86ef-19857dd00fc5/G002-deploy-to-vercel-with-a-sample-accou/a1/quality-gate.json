@@ -1,0 +1,17 @@
+{
+  "qualityGate": {
+    "typecheck": "exit 0 (547 files)",
+    "lint": "exit 0",
+    "boundaries": "valid",
+    "browserBoundary": "verified",
+    "repoPolicy": "verified"
+  },
+  "manualQa": {
+    "inviteLink": "console mint -> separate-profile #invite join -> pending read -> CAS approve -> READY pixels (naturalWidth 2560)",
+    "reentry": "GET /v1/presentations 200 with 17 rows + resume after fresh sign-in",
+    "screenshots": "qa-browser-invite/screenshots 11-16"
+  },
+  "gateReview": "merged lanes: 37/12-13/18/10/19/G004 sweep; each failing-first then green on the merged tree",
+  "iteration": "invite join held 409 pending until approve -> 201; stale-tunnel origin env corrected then re-verified",
+  "criteriaCoverage": "C001 pass via production aliases on live stack"
+}
