@@ -2,7 +2,7 @@
   "id": "/?app=console",
   "name": "Impromptu",
   "short_name": "Impromptu",
-  "description": "Prepare your presentation materials, then present and answer questions.",
+  "description": "Prepare your presentation, present it, and answer questions.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

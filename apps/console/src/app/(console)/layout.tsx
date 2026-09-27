@@ -10,7 +10,7 @@ import type { ReactNode } from "react";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  description: "Prepare presentation materials, then present and answer questions.",
+  description: "Prepare your presentation, present it, and answer questions.",
   manifest: "/manifest.webmanifest",
   title: "Impromptu",
 };

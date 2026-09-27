@@ -1,15 +1,15 @@
 {
   "waitingApproval": "발표자가 이 화면을 연결할 때까지 기다려 주세요.",
-  "consoleOnlyNotice": "발표 화면은 발표자 화면에서 열립니다. 주소만으로는 이 화면이 시작되지 않습니다.",
-  "joinFailed": "발표 화면 연결을 시작하지 못했습니다. 화면을 닫고 발표자 화면에서 다시 열어 주세요.",
-  "approvalFailed": "발표 화면 연결을 확인하지 못했습니다. 화면을 닫고 다시 열어 주세요.",
-  "awaitingPresentation": "발표가 시작되기를 기다리고 있습니다.",
-  "audienceUnavailable": "발표자 화면과의 연결이 끊겼습니다.",
+  "consoleOnlyNotice": "발표자 화면에서 발표 화면을 열어 주세요. 이 페이지만 열면 시작되지 않아요.",
+  "joinFailed": "발표 화면을 시작하지 못했어요. 화면을 닫고 발표자 화면에서 다시 열어 주세요.",
+  "approvalFailed": "발표 화면을 연결하지 못했어요. 화면을 닫고 다시 열어 주세요.",
+  "awaitingPresentation": "발표가 시작되기를 기다리고 있어요.",
+  "audienceUnavailable": "발표자 화면 연결이 끊겼어요.",
   "exitFullscreen": "전체 화면 나가기",
   "enterFullscreen": "전체 화면으로 보기",
-  "fullscreenBlocked": "브라우저가 전체 화면을 막았습니다. 브라우저 메뉴를 사용해 주세요.",
-  "fullscreenUnavailable": "이 브라우저에서는 전체 화면을 사용할 수 없습니다.",
-  "placeTarget": "대상 화면으로 옮기기",
-  "targetPlaced": "선택한 발표 화면으로 옮겼습니다.",
-  "targetRecovered": "대상 화면 연결이 끊겨 남아 있는 발표 화면으로 복구했습니다."
+  "fullscreenBlocked": "브라우저가 전체 화면을 막았어요. 브라우저 메뉴를 사용해 주세요.",
+  "fullscreenUnavailable": "이 브라우저에서는 전체 화면을 사용할 수 없어요.",
+  "placeTarget": "발표 화면으로 옮기기",
+  "targetPlaced": "이 창을 선택한 화면으로 옮겼어요.",
+  "targetRecovered": "대상 화면 연결이 끊겨 사용할 수 있는 화면으로 옮겼어요."
 }

@@ -7,6 +7,7 @@ const { act, cleanup, fireEvent, render, within } = await import("@testing-libra
 const { MemoryRouter } = await import("react-router-dom");
 
 const { AuthProvider, ConsoleRoutes } = await import("./App");
+const { messages } = await import("./i18n");
 const { STAGE_ORIGIN } = await import("./stage-origin");
 
 import type {
@@ -101,7 +102,7 @@ test("renders a routine slide change in the neutral state, never the problem sta
   expect(document.querySelector("[data-playback-status='PROBLEM']")).toBeNull();
   // Routine success is a quiet receipt: shown, but outside every live region.
   const receipt = [...document.querySelectorAll(".console-present__status *")].find(
-    (element) => element.textContent === "발표 화면의 슬라이드를 변경했습니다.",
+    (element) => element.textContent === messages("ko").slideChanged,
   );
   expect(receipt).toBeDefined();
   expect(receipt?.hasAttribute("aria-live")).toBe(false);
@@ -141,7 +142,7 @@ test("renders a dead-binding expiry in the problem state and keeps the anti-stra
       document.querySelector("[data-playback-status]")?.getAttribute("data-playback-status"),
     ).toBe("PROBLEM");
     expect(document.querySelector("[data-playback-status='PROBLEM']")?.textContent).toContain(
-      "발표 화면 연결이 만료되었습니다.",
+      messages("ko").bindingExpired,
     );
     // The dead binding was cleared: relative controls disable instead of looping on 409.
     expect(
@@ -199,10 +200,10 @@ test("renders a slide failure in the problem state with its own announced region
   });
 
   const problem = document.querySelector("[data-playback-status='PROBLEM']");
-  expect(problem?.textContent).toContain("슬라이드 변경에 실패했습니다.");
+  expect(problem?.textContent).toContain(messages("ko").slideFailed);
   // Real problems reach assistive tech: the live region carries them.
   const announcer = [...document.querySelectorAll(".console-present__status [aria-live]")].find(
-    (element) => element.textContent?.includes("슬라이드 변경에 실패했습니다."),
+    (element) => element.textContent?.includes(messages("ko").slideFailed),
   );
   expect(announcer).toBeDefined();
 });
@@ -276,7 +277,7 @@ test("the end summary opens with the report in flight and lands on the generated
   // While the report is still being generated the summary says so - and shows no report.
   expect(endCalls).toBe(1);
   const status = document.querySelector("[data-playback-status]");
-  expect(status?.textContent).toContain("발표를 종료하고 결과를 정리하고 있습니다.");
+  expect(status?.textContent).toContain(messages("ko").reportFinalizing);
   expect(document.querySelector("[data-presentation-report]")).toBeNull();
 
   await act(async () => {
@@ -306,7 +307,7 @@ test("a failed end stays on the talk with bounded recovery copy, never a fabrica
   await startTalkAndEnd(client);
 
   const problem = document.querySelector("[data-playback-status='PROBLEM']");
-  expect(problem?.textContent).toContain("발표 결과를 정리하지 못했습니다.");
+  expect(problem?.textContent).toContain(messages("ko").reportFinalizeFailed);
   // Bounded recovery: the summary names the one action that retries the end, and the control
   // that performs it is live again - no dead panel, no second implicit mutation.
   expect(problem?.textContent).toContain("발표 종료");

@@ -529,13 +529,17 @@ describe("Console route boundary", () => {
 
     // The retired public-approval surface now renders a guide-and-return step in the
     // presenter's language, never the old approval chrome and never an English gap.
-    expect(within(document.body).getByRole("heading", { name: "화면 안내" })).toBeTruthy();
+    expect(
+      within(document.body).getByRole("heading", { name: messages("ko").liveApproval }),
+    ).toBeTruthy();
     expect(document.querySelector("[data-live-publication-interstitial]")).toBeTruthy();
     const returnLinks = within(document.body)
       .getAllByRole("link", { name: "발표 준비" })
       .filter((link) => link.getAttribute("href") === "/");
     expect(returnLinks.length).toBeGreaterThan(0);
-    expect(within(document.body).queryByRole("button", { name: "카드 승인" })).toBeNull();
+    expect(
+      within(document.body).queryByRole("button", { name: messages("ko").approveCard }),
+    ).toBeNull();
     expect(within(document.body).queryByText("Authoritative snapshot")).toBeNull();
     expect(within(document.body).queryByRole("button", { name: "승인" })).toBeNull();
   });
@@ -718,7 +722,7 @@ describe("Console route boundary", () => {
     expect(cards[0]?.textContent).toContain("Origin annual report");
     expect(cards[0]?.textContent).toContain("Revenue increased year over year.");
     expect(cards[0]?.textContent).toContain("https://example.test/annual-report");
-    expect(cards[0]?.textContent).toContain("기준일");
+    expect(cards[0]?.textContent).toContain(messages("ko").evidenceSourceDate);
     expect(cards[0]?.textContent).toContain("2025-03-04");
     expect(cards[0]?.textContent).toContain("이용 조건 확인 필요");
     expect(cards[0]?.textContent).not.toContain("SEARCH_SNIPPET_SENTINEL");
@@ -858,7 +862,7 @@ describe("Console route boundary", () => {
     expect(cards).toHaveLength(1);
     expect(cards[0]?.getAttribute("data-evidence-kind")).toBe("INTERNAL");
     expect(cards[0]?.textContent).toContain("업로드한 자료");
-    expect(cards[0]?.textContent).not.toContain("출처 정보가 없습니다.");
+    expect(cards[0]?.textContent).not.toContain(messages("ko").sourceUnavailable);
     expect(document.querySelector("[data-evidence-kind='EXTERNAL']")).toBeNull();
   });
 
@@ -885,7 +889,7 @@ describe("Console route boundary", () => {
 
     switchToEnglish();
     expect(
-      within(document.body).getByRole("button", { name: "Open presentation screen first" }),
+      within(document.body).getByRole("button", { name: messages("en").openStagePreview }),
     ).toBeTruthy();
     expect(
       within(document.body).getByRole("button", { name: "Copy presentation screen link" }),
@@ -1034,7 +1038,9 @@ describe("Console route boundary", () => {
     );
     await act(async () => {});
 
-    expect(within(document.body).getByRole("navigation", { name: "발표자 화면" })).toBeTruthy();
+    expect(
+      within(document.body).getByRole("navigation", { name: messages("ko").privateWorkspace }),
+    ).toBeTruthy();
     expect(within(document.body).getByRole("link", { name: "발표 준비" })).toBeTruthy();
     expect(within(document.body).queryByRole("link", { name: "Evidence approval" })).toBeNull();
   });
@@ -1357,7 +1363,9 @@ describe("Console route boundary", () => {
     expect(approvals).toEqual([]);
     expect(document.querySelector("[data-live-publication-interstitial]")).toBeTruthy();
     expect(within(document.body).queryByText("Fresh verified claim")).toBeNull();
-    expect(within(document.body).queryByRole("button", { name: "카드 승인" })).toBeNull();
+    expect(
+      within(document.body).queryByRole("button", { name: messages("ko").approveCard }),
+    ).toBeNull();
     expect(loadEvents.map(({ type }) => type)).toEqual([]);
     window.removeEventListener("impromptu:approval-load", observeLoad);
   });
@@ -1487,7 +1495,9 @@ describe("Console route boundary", () => {
       target: { value: joinCode },
     });
     await act(async () => {
-      fireEvent.click(within(document.body).getByRole("button", { name: "Connect with the code" }));
+      fireEvent.click(
+        within(document.body).getByRole("button", { name: messages("en").approveDisplay }),
+      );
     });
     await act(async () => {
       fireEvent.click(within(document.body).getByRole("button", { name: "Next slide" }));
@@ -1584,7 +1594,9 @@ describe("Console-led audience screen pairing", () => {
 
     try {
       await act(async () => {
-        fireEvent.click(within(document.body).getByRole("button", { name: "발표 화면 미리 열기" }));
+        fireEvent.click(
+          within(document.body).getByRole("button", { name: messages("ko").openStagePreview }),
+        );
       });
       expect(openedUrls).toEqual([`${stageOrigin}/?deck=deck_active`]);
 
@@ -1601,7 +1613,9 @@ describe("Console-led audience screen pairing", () => {
       expect(pairing?.getAttribute("data-join-display-id")).toBe("display_room");
 
       await act(async () => {
-        fireEvent.click(within(document.body).getByRole("button", { name: "이 화면 연결" }));
+        fireEvent.click(
+          within(document.body).getByRole("button", { name: messages("ko").approveHandshake }),
+        );
       });
       expect(approvals).toEqual(["ps_active:display_room:join_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]);
     } finally {
@@ -1647,7 +1661,9 @@ describe("Console-led audience screen pairing", () => {
 
     try {
       await act(async () => {
-        fireEvent.click(within(document.body).getByRole("button", { name: "발표 화면 미리 열기" }));
+        fireEvent.click(
+          within(document.body).getByRole("button", { name: messages("ko").openStagePreview }),
+        );
       });
       // The join arrives from the very window this panel opened, so opening it already was the
       // presenter's explicit action and no second confirmation is asked for.
@@ -1945,7 +1961,9 @@ describe("Console-led audience screen pairing", () => {
 
     try {
       await act(async () => {
-        fireEvent.click(within(document.body).getByRole("button", { name: "발표 화면 미리 열기" }));
+        fireEvent.click(
+          within(document.body).getByRole("button", { name: messages("ko").openStagePreview }),
+        );
       });
       await act(async () => {
         window.dispatchEvent(
@@ -1966,9 +1984,9 @@ describe("Console-led audience screen pairing", () => {
         child.closed = true;
         window.dispatchEvent(new Event("blur"));
       });
-      expect(document.body.textContent).toContain("발표 화면 연결이 끊겼습니다.");
+      expect(document.body.textContent).toContain(messages("ko").audienceDisconnected);
       expect(
-        within(document.body).getByRole("button", { name: "발표 화면 다시 열기" }),
+        within(document.body).getByRole("button", { name: messages("ko").audienceReopen }),
       ).toBeTruthy();
     } finally {
       openStub.restore();
@@ -1987,8 +2005,10 @@ describe("Console-led audience screen pairing", () => {
       });
 
       expect(slideCommands).toEqual([]);
-      expect(document.body.textContent).toContain("브라우저가 발표 화면 창을 막았습니다.");
-      expect(within(document.body).getByRole("button", { name: "다시 시도" })).toBeTruthy();
+      expect(document.body.textContent).toContain(messages("ko").audiencePopupBlocked);
+      expect(
+        within(document.body).getByRole("button", { name: messages("ko").audienceRetry }),
+      ).toBeTruthy();
       expect(document.querySelector("[data-presentation-state='READY']")).toBeTruthy();
     } finally {
       window.open = originalOpen;
@@ -2081,8 +2101,8 @@ describe("Console-led audience screen pairing", () => {
       expect(slideCommands).toEqual(["slide_one"]);
       expect(document.querySelector("[data-presentation-state='PRESENTING']")).toBeNull();
       // Honest copy replaces the silent failure, and the surface stops claiming a connected screen.
-      expect(document.body.textContent).toContain("발표 화면 연결이 만료되었습니다.");
-      expect(document.body.textContent).toContain("발표 화면은 이 창 옆에 열립니다.");
+      expect(document.body.textContent).toContain(messages("ko").bindingExpired);
+      expect(document.body.textContent).toContain(messages("ko").audienceOpensBeside);
       // Recovery must not auto-open: browsers only honour window.open inside a user gesture.
       expect(opens).toHaveLength(0);
     } finally {
@@ -2157,9 +2177,9 @@ describe("Console-led audience screen pairing", () => {
     expect(document.querySelector("[data-presentation-state='PRESENTING']")).toBeNull();
     // The pre-existing generic handling stands, and the binding survives: REVISION_MISMATCH says
     // nothing about the display binding, and controlRevisionRef owns that retry path.
-    expect(document.body.textContent).toContain("슬라이드 변경에 실패했습니다.");
-    expect(document.body.textContent).not.toContain("발표 화면 연결이 만료되었습니다.");
-    expect(document.body.textContent).toContain("발표 화면 연결됨");
+    expect(document.body.textContent).toContain(messages("ko").slideFailed);
+    expect(document.body.textContent).not.toContain(messages("ko").bindingExpired);
+    expect(document.body.textContent).toContain(messages("ko").audienceConnected);
   });
 
   test("clears a dead binding surfaced during slide navigation instead of looping", async () => {
@@ -2176,7 +2196,7 @@ describe("Console-led audience screen pairing", () => {
     });
 
     expect(slideCommands).toEqual(["slide_two"]);
-    expect(document.body.textContent).toContain("발표 화면 연결이 만료되었습니다.");
+    expect(document.body.textContent).toContain(messages("ko").bindingExpired);
     // One surfacing, no loop: with the epoch gone the relative controls disable themselves.
     expect(
       within(document.body).getByRole("button", { name: "다음 슬라이드" }).hasAttribute("disabled"),

@@ -2,7 +2,7 @@
   "id": "/?app=stage",
   "name": "Impromptu 발표 화면",
   "short_name": "발표 화면",
-  "description": "발표 슬라이드를 보여 주는 공개 화면입니다.",
+  "description": "청중에게 발표 슬라이드를 보여 주는 화면이에요.",
   "start_url": "/",
   "scope": "/",
   "display": "fullscreen",

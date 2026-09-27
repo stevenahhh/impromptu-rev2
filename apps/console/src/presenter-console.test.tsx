@@ -86,7 +86,9 @@ describe("presenter console mid-talk surfaces", () => {
 
     const panel = document.querySelector("[data-audience-screen-panel='CONNECTED']");
     expect(panel).toBeTruthy();
-    expect(panel?.querySelector(".ui-badge--success")?.textContent).toContain("발표 화면 연결됨");
+    expect(panel?.querySelector(".ui-badge--success")?.textContent).toContain(
+      messages("ko").audienceConnected,
+    );
     expect(panel?.querySelector("[data-copy-stage]")).toBeTruthy();
     expect(panel?.querySelector("[data-copy-stage]")?.textContent).toContain("발표 화면 링크 복사");
     expect(document.querySelector("[data-stage-open]")).toBeNull();
@@ -121,7 +123,7 @@ describe("presenter console mid-talk surfaces", () => {
     expect(panel?.querySelector("[data-stage-open]")).toBeTruthy();
     expect(panel?.querySelector(".console-advanced-connect")).toBeTruthy();
     expect(panel?.querySelector(".console-field input")).toBeTruthy();
-    expect(panel?.textContent).toContain("다른 기기에서 발표 화면을 열었다면");
+    expect(panel?.textContent).toContain(messages("ko").connectLead);
     // The collapsed live-talk surface is not the recovery surface: no copy-only state here.
     expect(panel?.querySelector("[data-copy-stage]")).toBeNull();
   });
@@ -130,13 +132,13 @@ describe("presenter console mid-talk surfaces", () => {
     renderSession(routineClient(), "dbe_live");
 
     expect(
-      within(document.body).getByRole("button", { name: "다른 발표 자료 업로드" }),
+      within(document.body).getByRole("button", { name: messages("ko").newDeck }),
     ).toBeTruthy();
 
     await startTalk();
 
     expect(
-      within(document.body).queryByRole("button", { name: "다른 발표 자료 업로드" }),
+      within(document.body).queryByRole("button", { name: messages("ko").newDeck }),
     ).toBeNull();
   });
 

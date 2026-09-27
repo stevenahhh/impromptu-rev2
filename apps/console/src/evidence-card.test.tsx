@@ -49,12 +49,12 @@ test("a card with null sourceUrl and null sourceDate renders one badge, no apolo
   const { container } = renderCard(internalCard());
   const badges = container.querySelectorAll("[data-evidence-badge]");
   expect(badges.length).toBe(1);
-  expect(container.textContent).not.toContain("정보 없음");
-  expect(container.textContent).not.toContain("unavailable");
+  expect(container.textContent).not.toContain(messages("ko").sourceUnavailable);
+  expect(container.textContent).not.toContain(messages("en").sourceUnavailable);
   expect(container.textContent).not.toContain("권리 상태");
   expect(container.textContent).not.toContain("Rights status");
   // Summary row stays; only the two absence rows disappear.
-  expect(container.textContent).toContain("핵심 요약");
+  expect(container.textContent).toContain(messages("ko").evidenceSummary);
   expect(container.querySelectorAll("dl > div").length).toBe(1);
 });
 
@@ -70,14 +70,14 @@ test("a card with sourceUrl and a parseable sourceDate renders both rows plus su
   expect(rows.length).toBe(3);
   expect(container.querySelector('a[href="https://example.com/report"]')).not.toBeNull();
   expect(container.textContent).toContain("2026-08-27");
-  expect(container.textContent).toContain("원문 보기");
-  expect(container.textContent).toContain("기준일");
+  expect(container.textContent).toContain(messages("ko").evidenceSourceUrl);
+  expect(container.textContent).toContain(messages("ko").evidenceSourceDate);
 });
 
 test("an unparseable sourceDate is treated as absent, like a null date", () => {
   const { container } = renderCard(internalCard({ sourceDate: "not-a-date" }));
   expect(container.querySelectorAll("dl > div").length).toBe(1);
-  expect(container.textContent).not.toContain("기준일 정보 없음");
+  expect(container.textContent).not.toContain(messages("ko").sourceUnavailable);
 });
 
 test("ko and en locale key sets stay equal", async () => {

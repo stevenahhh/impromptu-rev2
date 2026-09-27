@@ -206,7 +206,7 @@ describe("deck upload from the authenticated Session page", () => {
     });
 
     const errorText = document.querySelector("[data-upload-status='ERROR']");
-    expect(errorText?.textContent).toContain("크기 한도");
+    expect(errorText?.textContent).toContain(messages("ko").uploadTooLarge);
     // The typed rejection must stay localized: no raw codes leak to the presenter.
     expect(errorText?.textContent).not.toContain("input_too_large");
   });

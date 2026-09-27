@@ -1,0 +1,15 @@
+{
+  "waitingApproval": "Waiting for the presenter to connect this screen.",
+  "consoleOnlyNotice": "Open this presentation screen from the presenter view. Opening this page alone won't start it.",
+  "joinFailed": "The presentation screen could not start. Close it and open it again from the presenter view.",
+  "approvalFailed": "The presentation screen could not be connected. Close it and open it again.",
+  "awaitingPresentation": "Waiting for the presentation to start.",
+  "audienceUnavailable": "The connection to the presenter view was lost.",
+  "exitFullscreen": "Exit full screen",
+  "enterFullscreen": "Enter full screen",
+  "fullscreenBlocked": "The browser blocked full screen. Use the browser menu instead.",
+  "fullscreenUnavailable": "Full screen isn't available in this browser.",
+  "placeTarget": "Move to the presentation screen",
+  "targetPlaced": "Moved this window to the selected screen.",
+  "targetRecovered": "The target screen was disconnected. This window moved to an available screen."
+}
