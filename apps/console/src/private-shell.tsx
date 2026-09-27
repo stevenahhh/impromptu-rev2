@@ -13,15 +13,13 @@ function PrivateNavigation() {
   return (
     <div className="console-header console-app-bar">
       <Brand eyebrow={text.presenterConsole} />
-      <nav aria-label={text.privateWorkspace} className="console-nav">
-        {isWorkspace ? (
-          <NavLink to="/live-publication">{text.evidenceApproval}</NavLink>
-        ) : (
+      {isWorkspace ? null : (
+        <nav aria-label={text.privateWorkspace} className="console-nav">
           <NavLink to="/" end>
             {text.workspace}
           </NavLink>
-        )}
-      </nav>
+        </nav>
+      )}
       <div className="console-header__actions">
         <LanguagePicker />
         <Button variant="quiet" onClick={() => void signOut()}>

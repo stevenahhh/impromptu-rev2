@@ -24,6 +24,8 @@ export interface UseAudienceScreenInput {
   readonly deckVersion: string;
   readonly approveJoin: (join: DisplayJoinView) => Promise<{ displayBindingEpoch: string }>;
   readonly onBound: (displayBindingEpoch: string) => void;
+  /** Interval for noticing a closed screen handle; tests may shorten it. */
+  readonly disconnectPollMs?: number;
   readonly joinTimeoutMs?: number;
 }
 
@@ -38,6 +40,12 @@ export interface AudienceScreenController {
 }
 
 const DEFAULT_JOIN_TIMEOUT_MS = 8000;
+/**
+ * Cross-origin windows expose no close event, so a vanished screen is detected through
+ * window.closed. A slow recurrence is enough - focus/blur shifts between the two windows give
+ * an immediate check anyway, and this timer only covers the quiet-while-idle case.
+ */
+const DEFAULT_DISCONNECT_POLL_MS = 2500;
 
 function record(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -74,6 +82,7 @@ export function useAudienceScreen(input: UseAudienceScreenInput): AudienceScreen
   const inputRef = useRef(input);
   inputRef.current = input;
   const openedScreenRef = useRef<Window | null>(null);
+  const screenSurveyRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const joinWaiterRef = useRef<((join: DisplayJoinView) => void) | null>(null);
   const joinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Guards a stale attempt's timer from settling (or cancelling) a newer attempt after a
@@ -88,6 +97,44 @@ export function useAudienceScreen(input: UseAudienceScreenInput): AudienceScreen
     }
     joinWaiterRef.current = null;
   }, []);
+
+  const stopScreenSurvey = useCallback(() => {
+    if (screenSurveyRef.current !== null) {
+      clearTimeout(screenSurveyRef.current);
+      screenSurveyRef.current = null;
+    }
+  }, []);
+
+  const disconnectClosedHandle = useCallback(
+    (handle: Window | null): boolean => {
+      if (mountedRef.current === false || handle?.closed !== true) return false;
+      stopScreenSurvey();
+      setStatus("DISCONNECTED");
+      return true;
+    },
+    [stopScreenSurvey],
+  );
+
+  // Focus and blur pass between the console and its screen while both stay open, so every such
+  // shift re-checks the handle immediately; closing one usually fires it without waiting for
+  // the slow survey.
+  const reportDisconnectedIfClosed = useCallback(() => {
+    disconnectClosedHandle(openedScreenRef.current);
+  }, [disconnectClosedHandle]);
+
+  const watchOpenedScreen = useCallback(
+    (child: Window) => {
+      stopScreenSurvey();
+      const surveyDelay = inputRef.current.disconnectPollMs ?? DEFAULT_DISCONNECT_POLL_MS;
+      screenSurveyRef.current = setTimeout(function survey() {
+        screenSurveyRef.current = null;
+        if (mountedRef.current === false) return;
+        if (disconnectClosedHandle(child)) return;
+        screenSurveyRef.current = setTimeout(survey, surveyDelay);
+      }, surveyDelay);
+    },
+    [disconnectClosedHandle, stopScreenSurvey],
+  );
 
   const bind = useCallback(
     (join: DisplayJoinView, settle: (outcome: AudienceScreenOutcome) => void): void => {
@@ -152,12 +199,19 @@ export function useAudienceScreen(input: UseAudienceScreenInput): AudienceScreen
       setPendingJoin(join);
     };
     window.addEventListener("message", onMessage);
+    const onWindowActivity = () => reportDisconnectedIfClosed();
+    window.addEventListener("focus", onWindowActivity);
+    window.addEventListener("blur", onWindowActivity);
     return () => {
       mountedRef.current = false;
       window.removeEventListener("message", onMessage);
+      window.removeEventListener("focus", onWindowActivity);
+      window.removeEventListener("blur", onWindowActivity);
       clearJoinWait();
+      // The controller is gone; its closed-screen check must never fire again.
+      stopScreenSurvey();
     };
-  }, [clearJoinWait]);
+  }, [clearJoinWait, reportDisconnectedIfClosed, stopScreenSurvey]);
 
   const openAndBind = useCallback((): Promise<AudienceScreenOutcome> => {
     // Browsers only honour window.open inside the user gesture, so this must stay the very
@@ -172,6 +226,7 @@ export function useAudienceScreen(input: UseAudienceScreenInput): AudienceScreen
     clearJoinWait();
     setStatus("OPENING");
     setStatus("WAITING_JOIN");
+    watchOpenedScreen(child);
     return new Promise<AudienceScreenOutcome>((resolve) => {
       joinWaiterRef.current = (join) => {
         if (attemptRef.current !== attempt) return;
@@ -184,7 +239,7 @@ export function useAudienceScreen(input: UseAudienceScreenInput): AudienceScreen
         resolve({ kind: "JOIN_TIMEOUT" });
       }, inputRef.current.joinTimeoutMs ?? DEFAULT_JOIN_TIMEOUT_MS);
     });
-  }, [bind, clearJoinWait]);
+  }, [bind, clearJoinWait, watchOpenedScreen]);
 
   const approve = useCallback(
     async (join: DisplayJoinView | null): Promise<AudienceScreenOutcome> => {

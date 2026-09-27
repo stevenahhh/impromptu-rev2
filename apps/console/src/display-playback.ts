@@ -68,8 +68,9 @@ export async function approveDisplay(
   const body = await responseBody(response);
   const binding =
     typeof body === "object" && body !== null ? (body as Record<string, unknown>).binding : null;
-  const displayBindingEpoch =
-    stringField(body, "displayBindingEpoch") ?? stringField(binding, "displayBindingEpoch");
+  // The endpoint answers an applied approval with the strict AudienceDisplaySession DTO, so
+  // the epoch only ever lives at binding.displayBindingEpoch; anything else fails closed.
+  const displayBindingEpoch = stringField(binding, "displayBindingEpoch");
   if (!response.ok || displayBindingEpoch === null) {
     throw new Error("Audience screen approval failed.");
   }
