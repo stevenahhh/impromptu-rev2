@@ -128,4 +128,40 @@ describe("Console Next.js private API proxy", () => {
       else process.env.CONSOLE_PRIVATE_API_ORIGIN = previousOrigin;
     }
   });
+
+  test("delivers a complete JSON response body for an authenticated read", async () => {
+    const request = new Request("http://localhost:4173/v1/display-invitations/dinvite_1/pending", {
+      headers: { cookie: "__Host-account=session" },
+    });
+    const payload = JSON.stringify({ status: "JOINED", displayBindingEpoch: "dbe_0" });
+
+    const response = await proxyPrivateApi(
+      request,
+      ["display-invitations", "dinvite_1", "pending"],
+      async () => new Response(payload, { headers: { "content-type": "application/json" } }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe(payload);
+  });
+
+  test("does not wait for a private event stream to finish", async () => {
+    const request = new Request("http://localhost:4173/v1/playback/controller-events");
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("event: READY\n\n"));
+      },
+    });
+
+    const response = await proxyPrivateApi(
+      request,
+      ["playback", "controller-events"],
+      async () => new Response(stream, { headers: { "content-type": "text/event-stream" } }),
+    );
+
+    expect(response.headers.get("content-type")).toBe("text/event-stream");
+    const reader = response.body?.getReader();
+    expect(new TextDecoder().decode((await reader?.read())?.value)).toBe("event: READY\n\n");
+    await reader?.cancel();
+  });
 });

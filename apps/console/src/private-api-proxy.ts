@@ -23,7 +23,12 @@ export async function proxyPrivateApi(
     headers,
     ...(hasBody ? { body: request.body, duplex: "half" } : {}),
   });
-  return new Response(upstream.body, {
+  const contentType = upstream.headers.get("content-type");
+  const body =
+    contentType?.includes("text/event-stream") || upstream.body === null
+      ? upstream.body
+      : await upstream.arrayBuffer();
+  return new Response(body, {
     status: upstream.status,
     statusText: upstream.statusText,
     headers: upstream.headers,
