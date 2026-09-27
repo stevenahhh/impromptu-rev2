@@ -1,8 +1,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import { registerDom } from "@impromptu/test-harness";
 
-GlobalRegistrator.register();
-afterAll(() => GlobalRegistrator.unregister());
+registerDom();
 
 const { act, cleanup, fireEvent, render } = await import("@testing-library/react");
 const { AuthProvider } = await import("./auth-session");

@@ -25,10 +25,10 @@ describe("Windows Stage topology", () => {
     expect(windowsDisplayMode("single")).toBe("single");
     expect(windowsDisplayMode("unknown")).toBe("extend");
     expect(topologyInstructions("extend").join(" ")).toContain("프로젝터로 옮긴 뒤");
-    expect(topologyInstructions("duplicate").join(" ")).toContain("청중 화면만 열린");
+    expect(topologyInstructions("duplicate").join(" ")).toContain("발표 화면만 열린");
     expect(topologyInstructions("single").join(" ")).toContain("공개 슬라이드만");
-    expect(manualPlacementSummary("duplicate")).toContain("청중 화면만 남기고");
-    expect(manualPlacementSummary("single")).toContain("청중 화면에는 이 화면만");
+    expect(manualPlacementSummary("duplicate")).toContain("발표 화면만 남기고");
+    expect(manualPlacementSummary("single")).toContain("발표 화면에는 이 화면만");
   });
 
   test("maps the emergency keyboard fallback only to absolute public slide sets", () => {

@@ -1,10 +1,10 @@
-import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import { registerDom } from "@impromptu/test-harness";
 
 const { cleanup, render } = await import("@testing-library/react");
-const { test, expect, afterEach, afterAll } = await import("bun:test");
+const { test, expect, afterEach } = await import("bun:test");
 
-GlobalRegistrator.register();
-afterAll(() => GlobalRegistrator.unregister());
+registerDom();
+
 const { createElement } = await import("react");
 
 import { messages } from "./i18n";

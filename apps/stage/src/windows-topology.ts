@@ -49,33 +49,33 @@ export function windowsDisplayMode(value: string | null): WindowsDisplayMode {
 export function topologyInstructions(mode: WindowsDisplayMode): readonly string[] {
   if (mode === "extend") {
     return [
-      "발표 PC에는 청중 화면만 여세요.",
-      "이 화면을 프로젝터로 옮긴 뒤 전체 화면을 시작하세요.",
-      "비공개 발표자 제어는 별도의 휴대폰, 태블릿 또는 노트북에서 사용하세요.",
+      "발표 PC에는 발표 화면만 여세요.",
+      "이 화면을 프로젝터로 옮긴 뒤 전체 화면으로 보여 주세요.",
+      "발표자 화면은 다른 휴대폰, 태블릿 또는 노트북에서 여세요.",
     ];
   }
   if (mode === "duplicate") {
     return [
-      "이 PC에는 청중 화면만 열린 깨끗한 브라우저 프로필을 사용하세요.",
-      "비공개 발표자 제어는 별도의 휴대폰, 태블릿 또는 노트북에서 사용하세요.",
-      "Win+P로 화면 구성이 바뀌면 청중 화면만 남기고 전체 화면을 다시 시작하세요.",
+      "이 PC에는 발표 화면만 열린 깨끗한 브라우저 프로필을 사용하세요.",
+      "발표자 화면은 다른 휴대폰, 태블릿 또는 노트북에서 여세요.",
+      "Win+P로 화면 구성이 바뀌면 발표 화면만 남기고 전체 화면으로 다시 보여 주세요.",
     ];
   }
   return [
-    "공유 청중 화면에는 이 화면만 표시하세요.",
-    "비공개 발표자 제어는 별도의 휴대폰, 태블릿 또는 노트북에서 사용하세요.",
-    "비상 키보드 탐색은 공개 슬라이드만 변경합니다.",
+    "공유 발표 화면에는 이 화면만 표시하세요.",
+    "발표자 화면은 다른 휴대폰, 태블릿 또는 노트북에서 여세요.",
+    "비상 키보드 조작은 공개 슬라이드만 바꿉니다.",
   ];
 }
 
 export function manualPlacementSummary(mode: WindowsDisplayMode): string {
   if (mode === "duplicate") {
-    return "수동 배치: 이 PC에는 청중 화면만 남기고 별도 기기에서 제어한 뒤 전체 화면을 시작하세요.";
+    return "수동 배치: 이 PC에는 발표 화면만 남기고 발표자 화면은 다른 기기에서 연 뒤 전체 화면으로 보여 주세요.";
   }
   if (mode === "single") {
-    return "수동 배치: 청중 화면에는 이 화면만 남긴 뒤 전체 화면을 시작하세요.";
+    return "수동 배치: 발표 화면에는 이 화면만 남긴 뒤 전체 화면으로 보여 주세요.";
   }
-  return "수동 배치: 이 화면을 대상 화면으로 옮긴 뒤 전체 화면을 시작하세요.";
+  return "수동 배치: 이 화면을 대상 화면으로 옮긴 뒤 전체 화면으로 보여 주세요.";
 }
 
 export function emergencyPublicSlideSet(

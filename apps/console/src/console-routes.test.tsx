@@ -1,8 +1,7 @@
-import { afterAll, afterEach, expect, test } from "bun:test";
-import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import { afterEach, expect, test } from "bun:test";
+import { registerDom } from "@impromptu/test-harness";
 
-GlobalRegistrator.register();
-afterAll(() => GlobalRegistrator.unregister());
+registerDom();
 
 const { cleanup, render, within } = await import("@testing-library/react");
 const { MemoryRouter } = await import("react-router-dom");

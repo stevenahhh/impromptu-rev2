@@ -1,8 +1,8 @@
 {
   "id": "/?app=console",
-  "name": "Impromptu Presenter Console",
-  "short_name": "Console",
-  "description": "Private presentation setup and control workspace.",
+  "name": "Impromptu",
+  "short_name": "Impromptu",
+  "description": "Prepare your presentation materials, then present and answer questions.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

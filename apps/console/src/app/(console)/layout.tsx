@@ -10,9 +10,9 @@ import type { ReactNode } from "react";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  description: "Private presentation setup and control workspace.",
+  description: "Prepare presentation materials, then present and answer questions.",
   manifest: "/manifest.webmanifest",
-  title: "Impromptu Presenter Console",
+  title: "Impromptu",
 };
 
 export default function ConsoleLayout({ children }: { readonly children: ReactNode }) {

@@ -1,8 +1,7 @@
-import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { registerDom } from "@impromptu/test-harness";
 
-GlobalRegistrator.register();
-afterAll(() => GlobalRegistrator.unregister());
+registerDom();
 
 // Testing Library only registers the act environment under the suite that imports it
 // first, so files sharing the happy-dom global must assert it for themselves and

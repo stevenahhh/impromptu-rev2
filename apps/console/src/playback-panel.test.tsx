@@ -1,8 +1,7 @@
-import { afterAll, afterEach, expect, test } from "bun:test";
-import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import { afterEach, expect, test } from "bun:test";
+import { registerDom } from "@impromptu/test-harness";
 
-GlobalRegistrator.register();
-afterAll(() => GlobalRegistrator.unregister());
+registerDom();
 
 const { act, cleanup, fireEvent, render, within } = await import("@testing-library/react");
 const { MemoryRouter } = await import("react-router-dom");
@@ -98,7 +97,7 @@ test("renders a routine slide change in the neutral state, never the problem sta
   expect(document.querySelector("[data-playback-status='PROBLEM']")).toBeNull();
   // Routine success is a quiet receipt: shown, but outside every live region.
   const receipt = [...document.querySelectorAll(".console-present__status *")].find(
-    (element) => element.textContent === "청중 화면의 슬라이드를 변경했습니다.",
+    (element) => element.textContent === "발표 화면의 슬라이드를 변경했습니다.",
   );
   expect(receipt).toBeDefined();
   expect(receipt?.hasAttribute("aria-live")).toBe(false);
@@ -138,7 +137,7 @@ test("renders a dead-binding expiry in the problem state and keeps the anti-stra
       document.querySelector("[data-playback-status]")?.getAttribute("data-playback-status"),
     ).toBe("PROBLEM");
     expect(document.querySelector("[data-playback-status='PROBLEM']")?.textContent).toContain(
-      "청중 화면 연결이 만료되었습니다.",
+      "발표 화면 연결이 만료되었습니다.",
     );
     // The dead binding was cleared: relative controls disable instead of looping on 409.
     expect(

@@ -1,8 +1,7 @@
-import { afterAll, afterEach, describe, expect, test } from "bun:test";
-import { GlobalRegistrator } from "@happy-dom/global-registrator";
+import { afterEach, describe, expect, test } from "bun:test";
+import { registerDom } from "@impromptu/test-harness";
 
-GlobalRegistrator.register();
-afterAll(() => GlobalRegistrator.unregister());
+registerDom();
 
 const { act, cleanup, fireEvent, render, within } = await import("@testing-library/react");
 const { MemoryRouter } = await import("react-router-dom");
@@ -168,7 +167,7 @@ describe("Cockpit rail phases", () => {
 
     expect(document.querySelector(".console-coaching")).toBeNull();
     await act(async () => {
-      fireEvent.click(within(document.body).getByRole("checkbox", { name: "코칭 지표 표시" }));
+      fireEvent.click(within(document.body).getByRole("checkbox", { name: "발표 도움말 표시" }));
     });
     expect(document.querySelector(".console-coaching")).toBeTruthy();
   });
@@ -188,7 +187,7 @@ describe("Cockpit rail phases", () => {
     expect(
       document.querySelector(".console-cockpit__side > .console-evidence-preparation"),
     ).toBeTruthy();
-    expect(within(document.body).getByRole("checkbox", { name: "코칭 지표 표시" })).toBeTruthy();
+    expect(within(document.body).getByRole("checkbox", { name: "발표 도움말 표시" })).toBeTruthy();
 
     await startTalk();
 
@@ -197,7 +196,7 @@ describe("Cockpit rail phases", () => {
     expect(
       document.querySelector(".console-cockpit__side > .console-evidence-preparation"),
     ).toBeTruthy();
-    expect(within(document.body).getByRole("checkbox", { name: "코칭 지표 표시" })).toBeTruthy();
+    expect(within(document.body).getByRole("checkbox", { name: "발표 도움말 표시" })).toBeTruthy();
     expect(document.querySelector("[data-capture-status]")).toBeTruthy();
     const drawer = document.querySelector<HTMLDetailsElement>(
       ".console-cockpit__side > details.console-preparation-drawer",
