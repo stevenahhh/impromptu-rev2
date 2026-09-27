@@ -36,7 +36,7 @@ function formatEntry(entry: DebugLogEntry): string {
   return parts.join(" ");
 }
 
-export function DebugOverlay({ logger }: DebugOverlayProps): React.JSX.Element {
+export function DebugOverlay({ logger }: DebugOverlayProps): React.JSX.Element | null {
   const [open, setOpen] = useState<boolean>(false);
   const [levelFilter, setLevelFilter] = useState<LevelFilter>("ALL");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("ALL");
@@ -85,6 +85,12 @@ export function DebugOverlay({ logger }: DebugOverlayProps): React.JSX.Element {
   const onClear = useCallback(() => {
     logger.clear();
   }, [logger]);
+
+  // Dev-only chrome: NODE_ENV is statically replaced in a production build, so this branch
+  // and the toggle markup are stripped from the shipped bundle regardless of mount site.
+  if (process.env.NODE_ENV === "production") {
+    return null;
+  }
 
   return (
     <div className="debug-overlay" data-debug-overlay={open ? "open" : "closed"}>
