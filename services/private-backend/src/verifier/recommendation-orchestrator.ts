@@ -6,7 +6,11 @@ import {
   type RetrievedEvidence,
   VerifierModelOutputSchema,
 } from "@impromptu/contracts/retrieval";
-import type { DeadlineScheduler, ServerModelRouter } from "@impromptu/model-router";
+import type {
+  DeadlineScheduler,
+  ModelCapability,
+  ServerModelRouter,
+} from "@impromptu/model-router";
 import { createTrustedModelContext, SystemDeadlineScheduler } from "@impromptu/model-router";
 import type { SafeExternalEvidenceFetcher } from "../retrieval/external-fetch.ts";
 import type { ExternalSearchBoundary } from "../retrieval/external-search.ts";
@@ -62,6 +66,9 @@ export class PrivateRecommendationPipeline {
 
   constructor(dependencies: {
     readonly router: Pick<ServerModelRouter, "invoke">;
+    /** Optional per-capability fallback adapter ids retried once on a retryable primary
+     * failure; slots without an entry run exactly as before. */
+    readonly fallbackAdapterIds?: Partial<Record<ModelCapability, string>> | undefined;
     readonly contexts: RecommendationContextAuthority;
     readonly internal: InternalRetrievalService;
     /** Reads what a slide actually says, so a request anchored to a slide is grounded in the
@@ -84,6 +91,7 @@ export class PrivateRecommendationPipeline {
     this.#slots = createRecommendationModelSlots({
       router: dependencies.router,
       scheduler: this.#scheduler,
+      fallbackAdapterIds: dependencies.fallbackAdapterIds,
       stageObserver: this.#stageObserver,
     });
     this.#publication = createRecommendationPublicationAuthorizer({ internal: this.#internal });

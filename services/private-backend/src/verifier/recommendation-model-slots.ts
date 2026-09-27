@@ -2,6 +2,7 @@ import type { RetrievedEvidence } from "@impromptu/contracts/retrieval";
 import { StructuredRecommendationSchema } from "@impromptu/contracts/retrieval";
 import type {
   DeadlineScheduler,
+  ModelCapability,
   ModelErrorCode,
   ServerModelRouter,
   TrustedModelContext,
@@ -180,9 +181,12 @@ export function createRecommendationModelSlots(dependencies: {
   // while a plain-object test double keeps working.
   readonly router: Pick<ServerModelRouter, "invoke">;
   readonly scheduler: DeadlineScheduler;
+  /** Optional non-default adapter ids registered per capability; a configured fallback is
+   * retried once when the primary slot fails with a retryable provider-side error. */
+  readonly fallbackAdapterIds?: Partial<Record<ModelCapability, string>> | undefined;
   readonly stageObserver?: RecommendationStageObserver | undefined;
 }): RecommendationModelSlots {
-  const { router, scheduler, stageObserver } = dependencies;
+  const { router, scheduler, stageObserver, fallbackAdapterIds = {} } = dependencies;
   let inFlightModelCalls = 0;
 
   async function invokeSlot<Output>(
@@ -198,9 +202,22 @@ export function createRecommendationModelSlots(dependencies: {
     inFlightModelCalls += 1;
     // `finally` releases the in-flight slot on both settle paths and passes the router's own
     // result through untouched, so the count stays honest without an untyped binding.
-    const result = await router.invoke({ capability, input }, context).finally(() => {
+    let result = await router.invoke({ capability, input }, context).finally(() => {
       inFlightModelCalls -= 1;
     });
+    // A retryable provider-side failure (transport, provider error, secret) can be answered by
+    // the registered fallback adapter under the same trusted context and deadline. Local faults
+    // (invalid request, policy, budget) would fail identically on the fallback, so retrying them
+    // only burns latency budget.
+    const fallbackAdapterId = fallbackAdapterIds[capability];
+    if (!result.ok && result.error.retryable && fallbackAdapterId !== undefined) {
+      inFlightModelCalls += 1;
+      result = await router
+        .invoke({ capability, input, adapterId: fallbackAdapterId }, context)
+        .finally(() => {
+          inFlightModelCalls -= 1;
+        });
+    }
     if (!result.ok) return fail(result.metadata.latencyMs, result.error.code);
     const parsed = schema.safeParse(result.output);
     if (!parsed.success) return fail(result.metadata.latencyMs, "provider_error");

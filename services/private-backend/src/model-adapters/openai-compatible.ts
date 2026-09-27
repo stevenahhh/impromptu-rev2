@@ -215,6 +215,9 @@ export interface OpenAiCompatibleSlotConfig {
   readonly model: string;
   readonly secretId: string;
   readonly reasoningEffort?: ReasoningEffort;
+  /** Optional second model served by the same origin/secret, registered as a non-default
+   * adapter (`<slot>-fallback`) that callers may retry against on a retryable primary failure. */
+  readonly modelFallback?: string | undefined;
 }
 
 export interface OpenAiCompatibleAdapterConfig {
@@ -275,14 +278,17 @@ export function registerOpenAiCompatibleAdapters(
     },
   ];
   const bindings: OpenAiCompatibleAdapterBinding[] = [];
-  for (const registration of registrations) {
-    const adapterId = `openai-compatible-${registration.capability}`;
+  const registerSlot = (
+    registration: (typeof registrations)[number],
+    model: string,
+    adapterId: string,
+  ) => {
     const failure = registry.registerIsolatedUnary({
       descriptor: {
         adapterId,
         capability: registration.capability,
         provider: "openai-compatible",
-        model: registration.slot.model,
+        model,
         modelVersion: "api-v1",
         estimatedCostUnits: 1,
         requirement: {
@@ -298,7 +304,7 @@ export function registerOpenAiCompatibleAdapters(
         allowedReadPaths: [],
         configuration: {
           apiPrefix: registration.slot.apiPrefix,
-          model: registration.slot.model,
+          model,
           ...(registration.slot.reasoningEffort === undefined
             ? {}
             : { reasoningEffort: registration.slot.reasoningEffort }),
@@ -306,13 +312,22 @@ export function registerOpenAiCompatibleAdapters(
       },
     });
     if (failure !== undefined)
-      throw new Error(`Failed to register ${registration.capability} adapter`);
+      throw new Error(`Failed to register ${registration.capability} adapter ${adapterId}`);
     bindings.push({
       adapterId,
       capability: registration.capability,
       origin: registration.slot.origin,
       secretId: registration.slot.secretId,
     });
+  };
+  for (const registration of registrations) {
+    const adapterId = `openai-compatible-${registration.capability}`;
+    registerSlot(registration, registration.slot.model, adapterId);
+    if (registration.slot.modelFallback !== undefined) {
+      // Registered non-default so the registry never resolves it implicitly; callers opt in per
+      // retry. The fallback shares the primary's origin and secret.
+      registerSlot(registration, registration.slot.modelFallback, `${adapterId}-fallback`);
+    }
   }
   return Object.freeze(bindings.map((binding) => Object.freeze(binding)));
 }
