@@ -354,6 +354,181 @@ describe("display invitation boundary", () => {
     ).toBe("dbe_2");
   });
 
+  test("the pending read returns the authoritative epoch after a binding rotates", async () => {
+    const { handler, gateway, owner } = await createHarness();
+    const presentationSessionId = await createPresentation(handler, owner);
+
+    const first = await issueInvitation(handler, owner, presentationSessionId);
+    const firstInvitation = (await first.json()) as { token: string };
+    const firstJoin = gateway.exchangeDisplayInvitation(
+      {
+        invitationToken: firstInvitation.token,
+        displayId: "display_projector",
+        deckVersion: publicDeck.deckVersion,
+        displayFingerprint: "fingerprint-visible-projector",
+      },
+      2_000,
+    );
+    if (firstJoin.outcome !== "CREATED") throw new Error("first exchange fixture failed");
+    const bound = await approveDisplay(handler, owner, {
+      presentationSessionId,
+      displayJoinId: firstJoin.locator.displayJoinId,
+      expectedDisplayBindingEpoch: "dbe_0",
+      expectedDeckVersion: publicDeck.deckVersion,
+      approvedDisplayId: "display_projector",
+      approvedDisplayFingerprint: "fingerprint-visible-projector",
+    });
+    expect(bound.status).toBe(201);
+
+    // A reopened Stage pairs through a fresh invitation; its pending read must answer the
+    // CURRENT epoch (dbe_1), never the constant "dbe_0" the retired client replayed.
+    const second = await issueInvitation(handler, owner, presentationSessionId);
+    const secondInvitation = (await second.json()) as { invitationId: string; token: string };
+    const secondJoin = gateway.exchangeDisplayInvitation(
+      {
+        invitationToken: secondInvitation.token,
+        displayId: "display_spare",
+        deckVersion: publicDeck.deckVersion,
+        displayFingerprint: "fingerprint-spare-display",
+      },
+      3_000,
+    );
+    if (secondJoin.outcome !== "CREATED") throw new Error("second exchange fixture failed");
+
+    const pending = await pendingInvitation(handler, owner, secondInvitation.invitationId);
+    expect(pending.status).toBe(200);
+    const view = (await pending.json()) as {
+      status: string;
+      displayBindingEpoch: string;
+      join: { displayJoinId: string; displayId: string; displayFingerprint: string } | null;
+    };
+    expect(view.status).toBe("JOINED");
+    expect(view.displayBindingEpoch).toBe("dbe_1");
+    // The pending identity is the fresh display that just asked to join, not the bound one.
+    expect(view.join?.displayId).toBe("display_spare");
+    expect(view.join?.displayFingerprint).toBe("fingerprint-spare-display");
+
+    const rebound = await approveDisplay(handler, owner, {
+      presentationSessionId,
+      displayJoinId: view.join?.displayJoinId,
+      expectedDisplayBindingEpoch: view.displayBindingEpoch,
+      expectedDeckVersion: publicDeck.deckVersion,
+      approvedDisplayId: "display_spare",
+      approvedDisplayFingerprint: "fingerprint-spare-display",
+    });
+    expect(rebound.status).toBe(201);
+    expect(
+      ((await rebound.json()) as { binding: { displayBindingEpoch: string } }).binding
+        .displayBindingEpoch,
+    ).toBe("dbe_2");
+  });
+
+  test("a rebound display revokes the previous projection", async () => {
+    const { handler, gateway, owner } = await createHarness();
+    const presentationSessionId = await createPresentation(handler, owner);
+
+    const issued = await issueInvitation(handler, owner, presentationSessionId);
+    const invitation = (await issued.json()) as { token: string };
+    const join = gateway.exchangeDisplayInvitation(
+      {
+        invitationToken: invitation.token,
+        displayId: "display_projector",
+        deckVersion: publicDeck.deckVersion,
+        displayFingerprint: "fingerprint-visible-projector",
+      },
+      2_000,
+    );
+    if (join.outcome !== "CREATED") throw new Error("exchange fixture failed");
+    const bound = await approveDisplay(handler, owner, {
+      presentationSessionId,
+      displayJoinId: join.locator.displayJoinId,
+      expectedDisplayBindingEpoch: "dbe_0",
+      expectedDeckVersion: publicDeck.deckVersion,
+      approvedDisplayId: "display_projector",
+      approvedDisplayFingerprint: "fingerprint-visible-projector",
+    });
+    expect(bound.status).toBe(201);
+    const session = (await bound.json()) as { audienceDisplaySessionId: string };
+
+    const closeReasons: string[] = [];
+    const socket = gateway.connectStage(
+      session.audienceDisplaySessionId,
+      { onPlayback: () => {}, onClose: (reason) => closeReasons.push(reason) },
+      4_000,
+    );
+    expect(socket?.closed).toBe(false);
+
+    const reissue = await issueInvitation(handler, owner, presentationSessionId);
+    const reissued = (await reissue.json()) as { token: string };
+    const secondJoin = gateway.exchangeDisplayInvitation(
+      {
+        invitationToken: reissued.token,
+        displayId: "display_spare",
+        deckVersion: publicDeck.deckVersion,
+        displayFingerprint: "fingerprint-spare-display",
+      },
+      5_000,
+    );
+    if (secondJoin.outcome !== "CREATED") throw new Error("rebind exchange fixture failed");
+    const rebound = await approveDisplay(handler, owner, {
+      presentationSessionId,
+      displayJoinId: secondJoin.locator.displayJoinId,
+      expectedDisplayBindingEpoch: "dbe_1",
+      expectedDeckVersion: publicDeck.deckVersion,
+      approvedDisplayId: "display_spare",
+      approvedDisplayFingerprint: "fingerprint-spare-display",
+    });
+    expect(rebound.status).toBe(201);
+
+    // The old Stage loses authority the moment the new binding lands: its realtime socket is
+    // closed as REBOUND and the superseded display session can no longer read a snapshot.
+    expect(socket?.closed).toBe(true);
+    expect(closeReasons).toEqual(["REBOUND"]);
+    expect(gateway.snapshot(session.audienceDisplaySessionId, 6_000)).toBeNull();
+  });
+
+  test("the approval body never carries invitation token material", async () => {
+    const { handler, gateway, gatewayStore, owner } = await createHarness();
+    const presentationSessionId = await createPresentation(handler, owner);
+    const issued = await issueInvitation(handler, owner, presentationSessionId);
+    const invitation = (await issued.json()) as { token: string };
+    const join = gateway.exchangeDisplayInvitation(
+      {
+        invitationToken: invitation.token,
+        displayId: "display_projector",
+        deckVersion: publicDeck.deckVersion,
+        displayFingerprint: "fingerprint-visible-projector",
+      },
+      2_000,
+    );
+    if (join.outcome !== "CREATED") throw new Error("exchange fixture failed");
+
+    // A URL secret pasted into the approval body is not display authority: the closed DTO
+    // rejects the smuggled field before any projection call, leaving the join untouched.
+    const smuggled = await approveDisplay(handler, owner, {
+      presentationSessionId,
+      displayJoinId: join.locator.displayJoinId,
+      expectedDisplayBindingEpoch: "dbe_0",
+      expectedDeckVersion: publicDeck.deckVersion,
+      approvedDisplayId: "display_projector",
+      approvedDisplayFingerprint: "fingerprint-visible-projector",
+      invitationToken: invitation.token,
+    });
+    expect(smuggled.status).toBe(409);
+    expect(await smuggled.json()).toEqual({ error: "INVALID_DISPLAY_APPROVAL" });
+    expect(gatewayStore.joins.get(join.locator.displayJoinId)?.consumed).toBe(false);
+
+    const clean = await approveDisplay(handler, owner, {
+      presentationSessionId,
+      displayJoinId: join.locator.displayJoinId,
+      expectedDisplayBindingEpoch: "dbe_0",
+      expectedDeckVersion: publicDeck.deckVersion,
+      approvedDisplayId: "display_projector",
+      approvedDisplayFingerprint: "fingerprint-visible-projector",
+    });
+    expect(clean.status).toBe(201);
+  });
+
   test("a forged display identity never reaches the projection", async () => {
     const { handler, gateway, owner } = await createHarness();
     const presentationSessionId = await createPresentation(handler, owner);
