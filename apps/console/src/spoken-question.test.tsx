@@ -24,7 +24,8 @@ const { MemoryRouter } = await import("react-router-dom");
 
 const { AuthProvider } = await import("./auth-session");
 const { messages } = await import("./i18n");
-const { QaDefensePanel } = await import("./qa-defense-panel");
+const { QaDefensePanel, QA_CLIP_ASKABLE_MS } = await import("./qa-defense-panel");
+const { QaDefenseNotOpenError } = await import("./session-client");
 
 import type { QuestionClipRecorderMediaRecorder } from "./question-clip-recorder";
 import type {
@@ -175,6 +176,33 @@ interface CapturedAsk {
   };
 }
 
+/** Manual clock: `schedule` queues callbacks by delay so a test fires the exact timer it means
+    to (1_000 ms expiry tick vs the ask deadline), never a wall-clock sleep. */
+function manualClock(startMs: number) {
+  const timers: Array<{ callback: () => void; delayMs: number }> = [];
+  const state = { current: startMs };
+  return {
+    state,
+    timers,
+    clock: {
+      now: () => state.current,
+      schedule: (callback: () => void, delayMs: number) => {
+        timers.push({ callback, delayMs });
+        return () => {
+          const index = timers.findIndex((timer) => timer.callback === callback);
+          if (index >= 0) timers.splice(index, 1);
+        };
+      },
+    },
+    /** Fires every queued timer with the given delay once, in schedule order. */
+    fire(delayMs: number) {
+      for (const timer of timers.splice(0).filter((timer) => timer.delayMs === delayMs)) {
+        timer.callback();
+      }
+    },
+  };
+}
+
 async function openQa(client: ConsoleDeckUploadClient, seam?: Seams) {
   const screen = render(
     <MemoryRouter>
@@ -260,7 +288,7 @@ describe("spoken questions in the Q&A defense panel", () => {
     const input = document.querySelector("[data-qa-question-input]") as HTMLInputElement;
     const spokenText = "2분기 매출이 왜 하락했나요?";
     await act(async () => {
-      transcriptions[0]?.({ outcome: "TRANSCRIBED", text: spokenText });
+      transcriptions[0]?.({ outcome: "TRANSCRIBED", text: spokenText, askableUntilMs: null });
     });
 
     // The transcript lands in the editable field for review — and NOTHING was submitted.
@@ -321,7 +349,11 @@ describe("spoken questions in the Q&A defense panel", () => {
       fireEvent.click(recordButton());
     });
     await act(async () => {
-      resolutions[0]?.({ outcome: "TRANSCRIBED", text: "음성으로 물어본 질문입니다." });
+      resolutions[0]?.({
+        outcome: "TRANSCRIBED",
+        text: "음성으로 물어본 질문입니다.",
+        askableUntilMs: null,
+      });
     });
     await act(async () => {
       fireEvent.click(document.querySelector("[data-qa-submit]") as Element);
@@ -498,6 +530,333 @@ describe("spoken questions in the Q&A defense panel", () => {
     // Teardown is part of the feature: leaving the page mid-recording may not leave a live mic.
     expect(trackStops(seam)).toBe(2);
     expect(seam.recorders.every((recorder) => recorder.state === "inactive")).toBe(true);
+  });
+
+  test("a transcribed clip is a verbatim pending question with an honest expiry card", async () => {
+    const seam = seams();
+    withTracks(seam, 1);
+    const rig = manualClock(1_000_000);
+    const transcriptions: Array<(outcome: SpokenQuestionTranscription) => void> = [];
+    render(
+      <MemoryRouter>
+        <AuthProvider
+          initialAuthenticated
+          client={baseClient({
+            transcribeQuestionClip() {
+              return new Promise((resolve) => {
+                transcriptions.push(resolve);
+              });
+            },
+          })}
+        >
+          <QaDefensePanel
+            presentationSessionId="ps_spoken"
+            clock={rig.clock}
+            recorderSeams={{
+              mediaDevices: seam.mediaDevices,
+              createRecorder: recorderFactory(seam),
+              isTypeSupported: () => true,
+            }}
+          />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: ko.qaOpen }));
+    });
+    const recordButton = () =>
+      document.querySelector("[data-qa-record-button]") as HTMLButtonElement;
+    await act(async () => {
+      fireEvent.click(recordButton());
+    });
+    await act(async () => {
+      fireEvent.click(recordButton());
+    });
+
+    // Verbatim: the transcript element carries the STT text byte-for-byte — spacing included —
+    // and the editable field holds the same text for review.
+    const transcript = "  2분기 매출이 왜 하락했나요?  ";
+    await act(async () => {
+      transcriptions[0]?.({ outcome: "TRANSCRIBED", text: transcript, askableUntilMs: null });
+    });
+
+    const card = document.querySelector("[data-qa-clip-state='LIVE']");
+    expect(card).toBeTruthy();
+    expect(card?.querySelector("[data-qa-clip-transcript]")?.textContent).toBe(transcript);
+    const input = document.querySelector("[data-qa-question-input]") as HTMLInputElement;
+    expect(input.value).toBe(transcript);
+
+    // Expiry is present and honest: without a server askableUntil the console's own bound
+    // applies, so the card never pretends a deadline the wire did not carry.
+    const expiry = card?.querySelector("[data-qa-clip-expiry]");
+    expect(expiry).toBeTruthy();
+    expect(expiry?.getAttribute("data-qa-clip-deadline")).toBe(
+      String(1_000_000 + QA_CLIP_ASKABLE_MS),
+    );
+  });
+
+  test("a server-provided askableUntil replaces the console expiry bound", async () => {
+    const seam = seams();
+    withTracks(seam, 1);
+    const rig = manualClock(1_000_000);
+    const transcriptions: Array<(outcome: SpokenQuestionTranscription) => void> = [];
+    render(
+      <MemoryRouter>
+        <AuthProvider
+          initialAuthenticated
+          client={baseClient({
+            transcribeQuestionClip() {
+              return new Promise((resolve) => {
+                transcriptions.push(resolve);
+              });
+            },
+          })}
+        >
+          <QaDefensePanel
+            presentationSessionId="ps_spoken"
+            clock={rig.clock}
+            recorderSeams={{
+              mediaDevices: seam.mediaDevices,
+              createRecorder: recorderFactory(seam),
+              isTypeSupported: () => true,
+            }}
+          />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: ko.qaOpen }));
+    });
+    const recordButton = () =>
+      document.querySelector("[data-qa-record-button]") as HTMLButtonElement;
+    await act(async () => {
+      fireEvent.click(recordButton());
+    });
+    await act(async () => {
+      fireEvent.click(recordButton());
+    });
+    await act(async () => {
+      transcriptions[0]?.({
+        outcome: "TRANSCRIBED",
+        text: "서버 시한이 붙은 질문",
+        askableUntilMs: 1_234_567,
+      });
+    });
+    const expiry = document.querySelector("[data-qa-clip-expiry]");
+    expect(expiry?.getAttribute("data-qa-clip-deadline")).toBe("1234567");
+  });
+
+  test("a clip that expires while pending exposes no ask action and cannot be submitted", async () => {
+    const seam = seams();
+    withTracks(seam, 1);
+    const rig = manualClock(1_000_000);
+    const transcriptions: Array<(outcome: SpokenQuestionTranscription) => void> = [];
+    const asks: CapturedAsk[] = [];
+    render(
+      <MemoryRouter>
+        <AuthProvider
+          initialAuthenticated
+          client={baseClient({
+            transcribeQuestionClip() {
+              return new Promise((resolve) => {
+                transcriptions.push(resolve);
+              });
+            },
+            submitQaDefenseQuestion(_csrf, request) {
+              asks.push({ request });
+              return new Promise<QaDefenseAnswer>(() => {});
+            },
+          })}
+        >
+          <QaDefensePanel
+            presentationSessionId="ps_spoken"
+            clock={rig.clock}
+            recorderSeams={{
+              mediaDevices: seam.mediaDevices,
+              createRecorder: recorderFactory(seam),
+              isTypeSupported: () => true,
+            }}
+          />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: ko.qaOpen }));
+    });
+    const recordButton = () =>
+      document.querySelector("[data-qa-record-button]") as HTMLButtonElement;
+    await act(async () => {
+      fireEvent.click(recordButton());
+    });
+    await act(async () => {
+      fireEvent.click(recordButton());
+    });
+    await act(async () => {
+      transcriptions[0]?.({
+        outcome: "TRANSCRIBED",
+        text: "시간 안에 못 물은 질문",
+        askableUntilMs: null,
+      });
+    });
+    expect(document.querySelector("[data-qa-clip-state]")?.getAttribute("data-qa-clip-state")).toBe(
+      "LIVE",
+    );
+
+    // The presenter waits past the deadline; the next tick turns the clip honestly EXPIRED.
+    rig.state.current = 1_000_000 + QA_CLIP_ASKABLE_MS;
+    await act(async () => {
+      rig.fire(1_000);
+    });
+
+    const card = document.querySelector("[data-qa-clip-state='EXPIRED']");
+    expect(card).toBeTruthy();
+    expect(card?.textContent).toContain(ko.qaClipExpired);
+    expect(card?.textContent).not.toContain(ko.qaSubmit);
+    // The composer ask control is bound to the expired clip's question, so it is disabled —
+    // no stale transcript can reach the evidence pipeline.
+    const submit = document.querySelector("[data-qa-submit]") as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    await act(async () => {
+      fireEvent.click(submit);
+    });
+    expect(asks.length).toBe(0);
+  });
+
+  test("discarding a pending clip ends it and leaves no ask or discard action", async () => {
+    const seam = seams();
+    withTracks(seam, 1);
+    const rig = manualClock(5_000);
+    const transcriptions: Array<(outcome: SpokenQuestionTranscription) => void> = [];
+    const asks: CapturedAsk[] = [];
+    render(
+      <MemoryRouter>
+        <AuthProvider
+          initialAuthenticated
+          client={baseClient({
+            transcribeQuestionClip() {
+              return new Promise((resolve) => {
+                transcriptions.push(resolve);
+              });
+            },
+            submitQaDefenseQuestion(_csrf, request) {
+              asks.push({ request });
+              return new Promise<QaDefenseAnswer>(() => {});
+            },
+          })}
+        >
+          <QaDefensePanel
+            presentationSessionId="ps_spoken"
+            clock={rig.clock}
+            recorderSeams={{
+              mediaDevices: seam.mediaDevices,
+              createRecorder: recorderFactory(seam),
+              isTypeSupported: () => true,
+            }}
+          />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: ko.qaOpen }));
+    });
+    const recordButton = () =>
+      document.querySelector("[data-qa-record-button]") as HTMLButtonElement;
+    await act(async () => {
+      fireEvent.click(recordButton());
+    });
+    await act(async () => {
+      fireEvent.click(recordButton());
+    });
+    await act(async () => {
+      transcriptions[0]?.({
+        outcome: "TRANSCRIBED",
+        text: "묻지 않기로 한 질문",
+        askableUntilMs: null,
+      });
+    });
+
+    await act(async () => {
+      fireEvent.click(document.querySelector("[data-qa-discard-clip]") as Element);
+    });
+
+    const ended = document.querySelector("[data-qa-clip-state='ENDED']");
+    expect(ended).toBeTruthy();
+    expect(ended?.textContent).toContain(ko.qaClipEnded);
+    // An ended clip keeps its verbatim transcript but exposes no way to ask or act further.
+    expect(ended?.querySelector("[data-qa-clip-transcript]")?.textContent).toBe(
+      "묻지 않기로 한 질문",
+    );
+    expect(ended?.querySelector("[data-qa-discard-clip]")).toBeNull();
+    const submit = document.querySelector("[data-qa-submit]") as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    const input = document.querySelector("[data-qa-question-input]") as HTMLInputElement;
+    expect(input.value).toBe("");
+
+    // A fresh typed question asks as TYPED, proving the console is not stuck on the ended clip.
+    fireEvent.change(input, { target: { value: "새로 입력한 질문" } });
+    await act(async () => {
+      fireEvent.click(submit);
+    });
+    expect(asks.map((entry) => entry.request.origin)).toEqual(["TYPED"]);
+    expect(asks[0]?.request.questionText).toBe("새로 입력한 질문");
+  });
+
+  test("a not-open refusal ends the pending clip honestly instead of leaving it askable", async () => {
+    const seam = seams();
+    withTracks(seam, 1);
+    const rig = manualClock(7_000);
+    const transcriptions: Array<(outcome: SpokenQuestionTranscription) => void> = [];
+    render(
+      <MemoryRouter>
+        <AuthProvider
+          initialAuthenticated
+          client={baseClient({
+            transcribeQuestionClip() {
+              return new Promise((resolve) => {
+                transcriptions.push(resolve);
+              });
+            },
+            async submitQaDefenseQuestion() {
+              throw new QaDefenseNotOpenError("qa_not_open");
+            },
+          })}
+        >
+          <QaDefensePanel
+            presentationSessionId="ps_spoken"
+            clock={rig.clock}
+            recorderSeams={{
+              mediaDevices: seam.mediaDevices,
+              createRecorder: recorderFactory(seam),
+              isTypeSupported: () => true,
+            }}
+          />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: ko.qaOpen }));
+    });
+    const recordButton = () =>
+      document.querySelector("[data-qa-record-button]") as HTMLButtonElement;
+    await act(async () => {
+      fireEvent.click(recordButton());
+    });
+    await act(async () => {
+      fireEvent.click(recordButton());
+    });
+    await act(async () => {
+      transcriptions[0]?.({
+        outcome: "TRANSCRIBED",
+        text: "세션이 닫힌 질문",
+        askableUntilMs: null,
+      });
+    });
+    await act(async () => {
+      fireEvent.click(document.querySelector("[data-qa-submit]") as Element);
+    });
+
+    expect(document.querySelector("[data-qa-clip-state='ENDED']")).toBeTruthy();
+    expect(document.body.textContent).toContain(ko.qaNotOpen);
   });
 
   test("ko and en locale catalogs keep identical key sets", async () => {

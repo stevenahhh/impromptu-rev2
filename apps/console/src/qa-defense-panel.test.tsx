@@ -25,7 +25,7 @@ const { MemoryRouter } = await import("react-router-dom");
 const { AuthProvider } = await import("./auth-session");
 const { ConsoleRoutes } = await import("./App");
 const { messages } = await import("./i18n");
-const { QaDefensePanel } = await import("./qa-defense-panel");
+const { QA_ASK_TIMEOUT_MS, QaDefensePanel } = await import("./qa-defense-panel");
 
 import type { ConsoleDeckUploadClient, QaDefenseAnswer, SessionReportView } from "./session-client";
 
@@ -353,8 +353,13 @@ describe("Q&A defense panel", () => {
         askableUntilMs: Date.now() + 300_000,
       });
     });
-    expect(document.querySelector("[data-qa-answer='ANSWERED']")).toBeTruthy();
-    expect(document.querySelector("[data-qa-retry]")).toBeNull();
+    // The retried ask settled into its own synced row; the earlier abstention row stays on
+    // record (it is still the persisted outcome of that exchange) and keeps its honest retry.
+    const rows = [...document.querySelectorAll("[data-qa-synced-row]")];
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.querySelector("[data-qa-abstained='RETRYABLE']")).toBeTruthy();
+    expect(rows[1]?.querySelector("[data-qa-answer='ANSWERED']")).toBeTruthy();
+    expect(rows[1]?.querySelector("[data-qa-retry]")).toBeNull();
   });
 
   test("a terminal abstention says the materials cannot support the question and offers no retry", async () => {
@@ -497,6 +502,159 @@ describe("Q&A defense panel", () => {
       document.querySelector("[data-qa-abstained='TERMINAL']")?.querySelector("[data-qa-question]")
         ?.textContent,
     ).toBe("내년 주가 전망은 어떤가요?");
+  });
+
+  test("a settled ask becomes a synced row carrying the persisted question verbatim", async () => {
+    const asks: CapturedAsk[] = [];
+    render(
+      <MemoryRouter>
+        <AuthProvider
+          initialAuthenticated
+          client={client({
+            async openQaDefense(_csrfToken, sessionId) {
+              return { ...endedLifecycle, presentationSessionId: sessionId };
+            },
+            async submitQaDefenseQuestion(_csrfToken, request) {
+              asks.push({ csrfToken: _csrfToken, request });
+              return {
+                outcome: "ANSWERED",
+                answer: "근거 기반 답변입니다.",
+                citations: [
+                  {
+                    kind: "DECK_SLIDE",
+                    evidenceId: "ev_sync_1",
+                    slideOrdinal: 2,
+                    title: "매출",
+                    quote: "q",
+                  },
+                ],
+                latencyMs: 10,
+                completedAtMs: 100,
+              };
+            },
+          })}
+        >
+          <QaDefensePanel presentationSessionId="ps_synced" />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: ko.qaOpen }));
+    });
+    const input = document.querySelector("[data-qa-question-input]");
+    if (!(input instanceof HTMLInputElement)) throw new Error("question input is missing");
+
+    // Two asks in order: every settled exchange must appear as its own persisted row, not a
+    // single overwritten card.
+    fireEvent.change(input, { target: { value: "첫 번째 질문" } });
+    await act(async () => {
+      fireEvent.click(document.querySelector("[data-qa-submit]") as Element);
+    });
+    fireEvent.change(input, { target: { value: "두 번째 질문" } });
+    await act(async () => {
+      fireEvent.click(document.querySelector("[data-qa-submit]") as Element);
+    });
+
+    const rows = [...document.querySelectorAll("[data-qa-synced-row]")];
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.getAttribute("data-qa-origin")).toBe("TYPED");
+    // The row shows the question that was actually persisted — the sent text, verbatim —
+    // never whatever the input happened to hold afterwards.
+    expect(rows[0]?.querySelector("[data-qa-question]")?.textContent).toBe("첫 번째 질문");
+    expect(rows[1]?.querySelector("[data-qa-question]")?.textContent).toBe("두 번째 질문");
+  });
+
+  test("an in-flight ask is bounded: it resolves to an honest timeout, never a stuck spinner", async () => {
+    const timers: Array<{ callback: () => void; delayMs: number }> = [];
+    const clock = {
+      now: () => 100_000,
+      schedule: (callback: () => void, delayMs: number) => {
+        timers.push({ callback, delayMs });
+        return () => {};
+      },
+    };
+    const asks: CapturedAsk[] = [];
+    render(
+      <MemoryRouter>
+        <AuthProvider
+          initialAuthenticated
+          client={client({
+            async openQaDefense(_csrfToken, sessionId) {
+              return { ...endedLifecycle, presentationSessionId: sessionId };
+            },
+            submitQaDefenseQuestion(_csrfToken, request) {
+              asks.push({ csrfToken: _csrfToken, request });
+              // A stub that never settles mirrors a hung network call; only the console's own
+              // deadline may end the pending UI.
+              return new Promise<QaDefenseAnswer>(() => {});
+            },
+          })}
+        >
+          <QaDefensePanel presentationSessionId="ps_bound" clock={clock} />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: ko.qaOpen }));
+    });
+    const input = document.querySelector("[data-qa-question-input]");
+    if (!(input instanceof HTMLInputElement)) throw new Error("question input is missing");
+    fireEvent.change(input, { target: { value: "응답이 오지 않는 질문" } });
+    await act(async () => {
+      fireEvent.click(document.querySelector("[data-qa-submit]") as Element);
+    });
+
+    // The ask is pending: bounded, with the deadline already scheduled through the clock.
+    expect((document.querySelector("[data-qa-submit]") as HTMLButtonElement).textContent).toBe(
+      ko.qaAsking,
+    );
+    expect(timers.some((timer) => timer.delayMs === QA_ASK_TIMEOUT_MS)).toBe(true);
+
+    await act(async () => {
+      for (const timer of timers.splice(0)) timer.callback();
+    });
+
+    // Bounded: the control is actionable again, the copy admits the ask was not confirmed,
+    // and no fabricated row appears.
+    expect(document.body.textContent).toContain(ko.qaAskTimeout);
+    expect((document.querySelector("[data-qa-submit]") as HTMLButtonElement).textContent).toBe(
+      ko.qaSubmit,
+    );
+    expect(document.querySelectorAll("[data-qa-synced-row]")).toHaveLength(0);
+  });
+
+  test("an empty question exposes no ask action", async () => {
+    const asks: CapturedAsk[] = [];
+    render(
+      <MemoryRouter>
+        <AuthProvider
+          initialAuthenticated
+          client={client({
+            async openQaDefense(_csrfToken, sessionId) {
+              return { ...endedLifecycle, presentationSessionId: sessionId };
+            },
+            submitQaDefenseQuestion(_csrfToken, request) {
+              asks.push({ csrfToken: _csrfToken, request });
+              return new Promise<QaDefenseAnswer>(() => {});
+            },
+          })}
+        >
+          <QaDefensePanel presentationSessionId="ps_empty" />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: ko.qaOpen }));
+    });
+    const submit = document.querySelector("[data-qa-submit]") as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    const input = document.querySelector("[data-qa-question-input]") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "   " } });
+    expect(submit.disabled).toBe(true);
+    await act(async () => {
+      fireEvent.click(submit);
+    });
+    expect(asks.length).toBe(0);
   });
 
   test("retry resubmits the retained question and the re-rendered card still shows it", async () => {

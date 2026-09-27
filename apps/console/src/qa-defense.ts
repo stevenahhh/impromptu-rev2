@@ -90,9 +90,12 @@ export class QaDefenseExpiredError extends Error {}
 /**
  * Closed view of ONE spoken-question clip transcription. TRANSCRIBED carries the presenter-
  * editable transcript; REJECTED preserves the typed reason so failure copy can be honest.
+ * `askableUntilMs` is the server-declared ask deadline when the wire carries one and null
+ * otherwise — the console honors a real deadline verbatim and falls back to its own bound
+ * rather than rendering a fake one.
  */
 export type SpokenQuestionTranscription =
-  | Readonly<{ outcome: "TRANSCRIBED"; text: string }>
+  | Readonly<{ outcome: "TRANSCRIBED"; text: string; askableUntilMs: number | null }>
   | Readonly<{ outcome: "REJECTED"; reason: string }>;
 
 function citation(value: unknown): QaDefenseCitation | null {
@@ -321,7 +324,17 @@ export async function transcribeQuestionClip(
   const outcome = Reflect.get(body, "outcome");
   if (outcome === "TRANSCRIBED") {
     const text = Reflect.get(body, "text");
-    if (typeof text === "string" && text.trim().length > 0) return { outcome, text };
+    if (typeof text === "string" && text.trim().length > 0) {
+      const askableUntilMs = Reflect.get(body, "askableUntilMs");
+      return {
+        outcome,
+        text,
+        askableUntilMs:
+          typeof askableUntilMs === "number" && Number.isFinite(askableUntilMs)
+            ? askableUntilMs
+            : null,
+      };
+    }
     throw new Error("The question clip transcription was unreadable.");
   }
   if (outcome === "REJECTED") {

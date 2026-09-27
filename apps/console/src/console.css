@@ -895,6 +895,26 @@ html[data-surface="console"] [contenteditable="true"] {
   font-size: var(--text-caption);
 }
 
+/* Pending spoken-question clips carry a verbatim transcript and an expiry card; ended and
+   expired clips stay visible but quiet, with no ask affordance. */
+.console-qa__clip {
+  padding: var(--space-3);
+  border: var(--size-hairline) solid var(--border-emphasis);
+  border-radius: var(--radius-md);
+  background: var(--surface-inset);
+}
+
+.console-qa__clip[data-qa-clip-state="EXPIRED"],
+.console-qa__clip[data-qa-clip-state="ENDED"] {
+  border-color: var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+.console-qa__rows {
+  display: grid;
+  gap: var(--space-3);
+}
+
 .console-qa__quote {
   margin: var(--space-0);
   padding-inline-start: var(--space-3);

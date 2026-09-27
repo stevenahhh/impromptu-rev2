@@ -902,3 +902,45 @@ test("uploadReferenceDocuments surfaces a closed rejection reason instead of thr
     globalThis.fetch = originalFetch;
   }
 });
+
+test("transcribeQuestionClip carries a server askableUntil verbatim and defaults to none", async () => {
+  const originalFetch = globalThis.fetch;
+  const bodies: unknown[] = [
+    { outcome: "TRANSCRIBED", text: "질문입니다.", askableUntilMs: 1_700_000 },
+    { outcome: "TRANSCRIBED", text: "두 번째 질문입니다." },
+    { outcome: "TRANSCRIBED", text: "세 번째 질문입니다.", askableUntilMs: "soon" },
+  ];
+  globalThis.fetch = (async () =>
+    new Response(JSON.stringify(bodies.shift()), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    })) as unknown as typeof fetch;
+  try {
+    const { transcribeQuestionClip } = createConsoleSessionClient("https://private.example.test");
+    if (transcribeQuestionClip === undefined) throw new Error("client lacks clip transcription");
+    const clip = new Blob([new Uint8Array([1])], { type: "audio/webm;codecs=opus" });
+
+    // A server-declared deadline flows through verbatim; absent or malformed values degrade
+    // to `askableUntilMs: null` so the console applies its own bound instead of a garbage one.
+    const withDeadline = await transcribeQuestionClip("csrf_1", clip, 1_200);
+    expect(withDeadline).toEqual({
+      outcome: "TRANSCRIBED",
+      text: "질문입니다.",
+      askableUntilMs: 1_700_000,
+    });
+    const withoutDeadline = await transcribeQuestionClip("csrf_1", clip, 1_200);
+    expect(withoutDeadline).toEqual({
+      outcome: "TRANSCRIBED",
+      text: "두 번째 질문입니다.",
+      askableUntilMs: null,
+    });
+    const malformed = await transcribeQuestionClip("csrf_1", clip, 1_200);
+    expect(malformed).toEqual({
+      outcome: "TRANSCRIBED",
+      text: "세 번째 질문입니다.",
+      askableUntilMs: null,
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
