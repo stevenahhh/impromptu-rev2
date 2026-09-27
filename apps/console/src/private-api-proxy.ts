@@ -1,9 +1,8 @@
 import { consolePrivateApiOrigin } from "./next-runtime-config";
 
-type Fetcher = (
-  input: string | URL | Request,
-  init?: RequestInit & { readonly duplex?: "half" },
-) => Promise<Response>;
+type ProxyInit = RequestInit & { readonly duplex?: "half" };
+
+type Fetcher = (input: string | URL | Request, init?: ProxyInit) => Promise<Response>;
 
 export async function proxyPrivateApi(
   request: Request,
