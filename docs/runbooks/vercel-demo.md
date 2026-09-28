@@ -2,7 +2,7 @@
 
 This runbook covers the current review demo. It is not a production deployment guide and it does
 not certify a venue. Vercel serves the two browser apps. Compose owns the stateful services.
-Cloudflare quick tunnels provide temporary HTTPS paths between them.
+Tailscale Funnel provides a stable, fixed-hostname HTTPS ingress between them (no per-restart rotation).
 
 ## Topology
 
@@ -13,10 +13,10 @@ Cloudflare quick tunnels provide temporary HTTPS paths between them.
 | private-backend | Compose `127.0.0.1:3001` | Accounts, decks, owner controls, private data |
 | projection-gateway | Compose `127.0.0.1:3002` | Display invitations, public slide state, SSE, receipts, and public assets |
 | PostgreSQL and migrations | Compose internal network | Durable private and projection state |
-| Cloudflare tunnel A | Temporary HTTPS origin for port 3001 | Vercel Console server proxy to private-backend |
-| Cloudflare tunnel B | Temporary HTTPS origin for port 3002 | Stage `/v1` rewrite and Console deck-asset proxy |
+| Tailscale Funnel :443 | Stable HTTPS origin `pro-square.tail9c00c4.ts.net` → private-backend 3001 | Vercel Console private-API and audio proxy |
+| Tailscale Funnel :8443 | Stable HTTPS origin `pro-square.tail9c00c4.ts.net:8443` → projection-gateway 3002 | Stage `/v1` rewrite and Console deck-asset proxy |
 
-The Stage Vercel project rewrites `/v1/:path*` to the current projection-gateway tunnel. Keeping
+The Stage Vercel project rewrites `/v1/:path*` to the projection-gateway funnel origin (:8443). Keeping
 that API path on the Stage origin preserves the display cookie and the browser SSE event path; the
 applied receipts ride on plain HTTP POST. Vercel should not be treated as the owner of PostgreSQL
 or deck artifacts.
@@ -27,8 +27,7 @@ the body of GET SSE until the stream closes, preventing the browser from receivi
 redeploying Console or private-backend, verify READY on the POST stream and at least one
 `/v1/audio/frames` response with status 202 in a browser using the demo account.
 
-The aliases above are the demo project domains. A quick-tunnel hostname is
-perishable. Never put a tunnel hostname in customer material or treat it as a stable URL.
+The aliases above are the demo project domains. The funnel hostname is bound to the tailnet node and does not rotate on reconnect; treat it as the stable demo ingress.
 
 ## Start the demo stack
 
@@ -45,21 +44,23 @@ Use a task-owned account, deck, and browser profile. Keep `.env` outside version
    ```
 
    Do not add `--volumes`. Inspect a failed migration instead of bypassing it.
-3. Start two separate Cloudflare quick tunnels. One targets private-backend and one targets the
-   projection-gateway:
+3. Expose both backends through Tailscale Funnel on this host (a non-App-Store / standalone or
+   funnel-capable Tailscale variant is required for funnel port sharing; verify
+   `tailscale funnel status` shows both mounts):
 
    ```sh
-   cloudflared tunnel --url http://127.0.0.1:3001
-   cloudflared tunnel --url http://127.0.0.1:3002
+   tailscale funnel --bg 3001
+   tailscale funnel --bg --https=8443 http://127.0.0.1:3002
    ```
 
-   Record only the two assigned HTTPS origins in a private operator note. Check each origin's
-   `/health` response. Do not record credentials, cookies, invitation tokens, or response bodies
+   The public origins are then `https://<node>.<tailnet>.ts.net` (443 → private-backend) and
+   `https://<node>.<tailnet>.ts.net:8443` (8443 → projection-gateway). Check each origin's
+   `/readyz` response. Do not record credentials, cookies, invitation tokens, or response bodies
    that contain deck data.
 4. Set the Vercel environment values for the current deployment:
 
-   - Console `CONSOLE_PRIVATE_API_ORIGIN` is the private-backend tunnel origin.
-   - Console `CONSOLE_DECK_ASSET_ORIGIN` is the projection-gateway tunnel origin.
+   - Console `CONSOLE_PRIVATE_API_ORIGIN` is the private-backend funnel origin.
+   - Console `CONSOLE_DECK_ASSET_ORIGIN` is the projection-gateway funnel origin.
    - Console `STAGE_ORIGIN` or `NEXT_PUBLIC_STAGE_ORIGIN` is the Stage Vercel origin.
    - The Stage rewrite destination in `apps/stage/vercel.json` is the projection-gateway tunnel
      origin followed by `/v1/:path*`.
@@ -132,8 +133,7 @@ Run these from a private operations context with redacted output:
 
 ## Tunnel rotation
 
-A quick tunnel rotation is an expected demo operation, not a reason to keep a dead hostname in
-configuration.
+Funnel hostnames are stable; rotation applies only when the tailnet node or ports change.
 
 1. Confirm the old tunnel is unavailable and stop its process. Start fresh private-backend and
    projection-gateway tunnels. Check both `/health` endpoints.
