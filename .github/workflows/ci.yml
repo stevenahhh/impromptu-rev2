@@ -53,6 +53,13 @@ jobs:
     name: check / Bun tests
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      # The browser E2Es and runtime verifier read CHROME_EXECUTABLE_PATH before playwright's
+      # bundled binary; ubuntu-24.04 runners ship google-chrome at this path. The deck-upload
+      # E2E renders PPTX through LibreOffice and embeds a sha-pinned DejaVu Sans TTF.
+      CHROME_EXECUTABLE_PATH: /usr/bin/google-chrome
+      SOFFICE_PATH: /usr/bin/soffice
+      IMPROMPTU_E2E_FONT_PATH: /usr/local/share/fonts/dejavu/DejaVuSans.ttf
     services:
       postgres:
         image: postgres:17.6-alpine
@@ -86,6 +93,33 @@ jobs:
           python-version: ${{ matrix.runtime.python }}
       - name: Install JavaScript dependencies
         run: bun install --frozen-lockfile
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - name: Install locked Python dependencies
+        run: uv sync --project services/ingestion --frozen
+      - name: Install LibreOffice and DejaVu fonts for the deck-upload E2E
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libreoffice-impress fonts-dejavu-core
+          "${{ env.SOFFICE_PATH }}" --version
+      # Debian builds DejaVuSans.ttf from sources rather than shipping the upstream TTF, so
+      # apt's bytes cannot satisfy the fixture's sha256 pin. Download the pinned upstream
+      # release and verify it; generate.py embeds exactly these bytes into the PPTX fixture.
+      - name: Install the pinned DejaVu Sans 2.37 TTF
+        env:
+          DEJAVU_SHA256: 7da195a74c55bef988d0d48f9508bd5d849425c1770dba5d7bfc6ce9ed848954
+        run: |
+          curl --fail --location --silent --show-error \
+            --output "${{ runner.temp }}/dejavu-fonts-ttf-2.37.zip" \
+            "https://github.com/dejavu-fonts/dejavu-fonts/releases/download/version_2_37/dejavu-fonts-ttf-2.37.zip"
+          unzip -q -o "${{ runner.temp }}/dejavu-fonts-ttf-2.37.zip" -d "${{ runner.temp }}/dejavu-extract"
+          sudo install -D -m 0644 \
+            "$(find "${{ runner.temp }}/dejavu-extract" -type f -name DejaVuSans.ttf -print -quit)" \
+            "${{ env.IMPROMPTU_E2E_FONT_PATH }}"
+          echo "$DEJAVU_SHA256  ${{ env.IMPROMPTU_E2E_FONT_PATH }}" | sha256sum --check --strict
+          sudo fc-cache -f
       - name: Prepare test databases
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
@@ -109,6 +143,7 @@ jobs:
     name: check / browser build and boundaries
     runs-on: ubuntu-24.04
     env:
+      CHROME_EXECUTABLE_PATH: /usr/bin/google-chrome
       CONSOLE_PRIVATE_API_ORIGIN: https://private-backend.ci.invalid
       STAGE_PUBLIC_API_ORIGIN: https://projection-gateway.ci.invalid
       NEXT_PUBLIC_STAGE_ORIGIN: https://stage.ci.invalid
