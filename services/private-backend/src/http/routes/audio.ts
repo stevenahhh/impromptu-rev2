@@ -37,13 +37,25 @@ export async function audioRoutes(ctx: AuthedRouteContext): Promise<Response | n
       );
     }
 
-    if (request.method === "GET" && url.pathname === "/v1/audio/events") {
+    // GET stays for local tooling and older clients. POST is the browser path: Cloudflare
+    // quick tunnels buffer GET text/event-stream bodies until close (cloudflared #1449) and
+    // EventSource cannot send POST, so fetch POST opens the identical stream. As a mutation
+    // it additionally passes the handler's exact Origin/Referer and x-csrf-token boundary,
+    // which the GET cannot satisfy; the __Host-capture grant cookie authenticates both.
+    if (
+      (request.method === "GET" || request.method === "POST") &&
+      url.pathname === "/v1/audio/events"
+    ) {
       const grantId = captureCookie(request);
       if (grantId === null) return json({ error: "capture_grant_required" }, 401, origin);
       const opened = audio.openEvents(accountSessionId, grantId, dependencies.now());
       if (opened.outcome === "REJECTED") return audioRejection(opened.reason, origin);
       origin.set("content-type", "text/event-stream; charset=utf-8");
-      origin.set("cache-control", "no-store");
+      // no-store keeps caches out; no-transform additionally forbids intermediary payload
+      // transforms. Next.js/Vercel response compression buffers this stream's zlib output
+      // for seconds at a time, which held READY back until close and starved capture before
+      // the first frame (production incident 2026-09-28).
+      origin.set("cache-control", "no-store, no-transform");
       origin.set("x-accel-buffering", "no");
       return new Response(opened.stream, { status: 200, headers: origin });
     }

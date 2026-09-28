@@ -8,8 +8,8 @@ Cloudflare quick tunnels provide temporary HTTPS paths between them.
 
 | Component | Current location | Purpose |
 | --- | --- | --- |
-| Console | `https://impromptu-rev2-console.vercel.app` | Private presenter app and server-side private API proxy |
-| Stage | `https://impromptu-rev2-stage.vercel.app` | Public slide-only app |
+| Console | `https://impromptu-console.vercel.app` | Private presenter app and server-side private API proxy |
+| Stage | `https://impromptu-stage.vercel.app` | Public slide-only app |
 | private-backend | Compose `127.0.0.1:3001` | Accounts, decks, owner controls, private data |
 | projection-gateway | Compose `127.0.0.1:3002` | Display invitations, public slide state, SSE, receipts, and public assets |
 | PostgreSQL and migrations | Compose internal network | Durable private and projection state |
@@ -21,7 +21,13 @@ that API path on the Stage origin preserves the display cookie and the browser S
 applied receipts ride on plain HTTP POST. Vercel should not be treated as the owner of PostgreSQL
 or deck artifacts.
 
-The aliases above were the observed demo aliases on 2026-09-27. A quick-tunnel hostname is
+Console rewrites `/v1/audio/:path*` through the edge instead of its Node API proxy. Audio capture
+opens `/v1/audio/events` with an authenticated, CSRF-protected POST stream: quick tunnels buffer
+the body of GET SSE until the stream closes, preventing the browser from receiving READY. After
+redeploying Console or private-backend, verify READY on the POST stream and at least one
+`/v1/audio/frames` response with status 202 in a browser using the demo account.
+
+The aliases above are the demo project domains. A quick-tunnel hostname is
 perishable. Never put a tunnel hostname in customer material or treat it as a stable URL.
 
 ## Start the demo stack
@@ -102,14 +108,10 @@ contract is:
    Stage DOM and network responses must contain no cards, candidates, questions, transcripts,
    private source details, account data, or provider data.
 
-The backend invitation routes and a live HTTP receipt at the production aliases support this
-contract, and this working tree carries the matching UI: Console issues the invitation and shows
-the pending fingerprint check, and Stage consumes the `#invite` fragment. The deployed Vercel
-build predates that UI wiring — the served Stage bundle never reads `location.hash` and the
-served Console chunks contain no `display-invitations` call — so on production today only the
-same-device opener path pairs a display. Treat the independent-device flow as a release gate
-until both Vercel projects are redeployed and the invitation path is exercised in a real browser.
-Do not replace it with a bare Stage URL or a manual join object.
+The independent-device path was exercised at the deployed aliases: a separate Stage browser
+context consumed a fresh invitation, the owner approved its fingerprint, and Stage rendered a
+public slide. Recheck that path after rotating either tunnel or redeploying either app. Do not
+replace it with a bare Stage URL or a manual join object.
 
 ## Negative checks
 

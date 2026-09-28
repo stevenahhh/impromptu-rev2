@@ -616,6 +616,10 @@ describe("private audio ingest HTTP transport", () => {
     const eventsResponse = await handler(browserRequest("/v1/audio/events", session));
     expect(eventsResponse.status).toBe(200);
     expect(eventsResponse.headers.get("content-type")).toBe("text/event-stream; charset=utf-8");
+    // no-transform forbids intermediary payload transforms: Next.js/Vercel response
+    // compression buffers the stream's zlib output for seconds at a time, which held READY
+    // back until the whole buffered response flushed (production incident 2026-09-28).
+    expect(eventsResponse.headers.get("cache-control")).toContain("no-transform");
     const reader = eventsResponse.body?.getReader();
     if (reader === undefined) throw new Error("audio event stream body missing");
     expect(await readSseEvent(reader)).toEqual({ kind: "READY" });
@@ -649,6 +653,98 @@ describe("private audio ingest HTTP transport", () => {
     expect(
       logEvents.filter((event) => event.path === "/v1/audio/frames" && event.status === 202),
     ).toHaveLength(1);
+  });
+
+  test("opens the capture event stream over an authenticated POST under the mutation policy", async () => {
+    // Cloudflare quick tunnels buffer GET text/event-stream responses until close (cloudflared
+    // #1449), and EventSource cannot send POST. The capture client therefore opens the same
+    // stream with fetch POST; the route must answer identically under the same cookie, exact
+    // Origin/Referer, and CSRF mutation boundary as every other mutation.
+    const router = new ConsumingRouter();
+    const { handler } = createSystem(router);
+    const account = await signIn(handler);
+    const session = await issueGrant(handler, account);
+
+    const openPost = (browserSession?: BrowserSession, headers: Record<string, string> = {}) =>
+      handler(
+        browserRequest("/v1/audio/events", browserSession, {
+          method: "POST",
+          headers,
+        }),
+      );
+
+    // Mutations without the exact Origin and Referer never reach the route.
+    const foreignOrigin = await handler(
+      new Request("https://private.example.test/v1/audio/events", {
+        method: "POST",
+        headers: { Origin: "https://evil.example.test", Referer: "https://evil.example.test/" },
+      }),
+    );
+    expect(foreignOrigin.status).toBe(403);
+    expect(await foreignOrigin.json()).toEqual({ error: "origin_forbidden" });
+    const noOrigin = await handler(
+      new Request("https://private.example.test/v1/audio/events", { method: "POST" }),
+    );
+    expect(noOrigin.status).toBe(403);
+    expect(await noOrigin.json()).toEqual({ error: "mutation_origin_forbidden" });
+
+    // Exact origin without the account session is unauthenticated.
+    const anonymous = await openPost();
+    expect(anonymous.status).toBe(401);
+    expect(await anonymous.json()).toEqual({ error: "account_session_required" });
+
+    // The account session alone is not enough: the CSRF token binds the mutation.
+    const noCsrf = await openPost({ accountCookie: account.accountCookie, csrfToken: "" });
+    expect(noCsrf.status).toBe(403);
+    expect(await noCsrf.json()).toEqual({ error: "csrf_rejected" });
+    const wrongCsrf = await openPost({ accountCookie: account.accountCookie, csrfToken: "wrong" });
+    expect(wrongCsrf.status).toBe(403);
+    expect(await wrongCsrf.json()).toEqual({ error: "csrf_rejected" });
+
+    // Fully authenticated but missing the __Host-capture grant cookie.
+    const noGrant = await openPost(account);
+    expect(noGrant.status).toBe(401);
+    expect(await noGrant.json()).toEqual({ error: "capture_grant_required" });
+
+    // The authorized POST carries the same stream contract as the GET open.
+    const eventsResponse = await openPost(session);
+    expect(eventsResponse.status).toBe(200);
+    expect(eventsResponse.headers.get("content-type")).toBe("text/event-stream; charset=utf-8");
+    expect(eventsResponse.headers.get("cache-control")).toContain("no-transform");
+    const reader = eventsResponse.body?.getReader();
+    if (reader === undefined) throw new Error("audio event stream body missing");
+    expect(await readSseEvent(reader)).toEqual({ kind: "READY" });
+
+    // One stream per grant regardless of method.
+    const replay = await openPost(session);
+    expect(replay.status).toBe(409);
+    expect(await replay.json()).toEqual({ error: "EVENTS_ALREADY_OPEN" });
+
+    // The same grant lifecycle runs end to end: frames ingest, transcripts publish, stop
+    // terminates the stream.
+    expect((await audioMutation(handler, session, "/v1/audio/stream/start")).status).toBe(202);
+    const frame = await audioMutation(handler, session, "/v1/audio/frames", {
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-audio-sequence": "0",
+        "x-audio-duration-ms": "100",
+      },
+      body: new Uint8Array([1, 2, 3]),
+    });
+    expect(frame.status).toBe(202);
+    expect(await readSseEvent(reader)).toEqual({
+      kind: "TRANSCRIPT",
+      event: {
+        sessionGeneration: 1,
+        sequence: 0,
+        segmentId: "segment-http",
+        kind: "PARTIAL",
+        transcript: { text: "브라우저 오디오", language: "ko-KR", durationMs: 100, words: [] },
+      },
+    });
+    expect((await audioMutation(handler, session, "/v1/audio/stream/stop")).status).toBe(202);
+    expect(await readSseEvent(reader)).toEqual({ kind: "TERMINAL", outcome: "COMPLETED" });
+    expect(router.frames).toEqual([0]);
   });
 
   test("rejects sequence gaps, the buffered-duration overflow, and late frames after revoke", async () => {

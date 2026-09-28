@@ -151,6 +151,75 @@ function requestCount(requests: readonly CapturedRequest[], suffix: string): num
   return requests.filter((request) => request.url.endsWith(suffix)).length;
 }
 
+async function bounded<T>(promise: Promise<T>, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), 5_000);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+/**
+ * Feeds the real default event transport: the uploader opens the stream with an authenticated
+ * POST fetch and parses SSE frames itself. The test controls the exact chunk boundaries so
+ * frames, comments, and multi-byte codepoints can be split anywhere.
+ */
+function fetchSseRuntime(onServerEvent?: (event: unknown) => void) {
+  const recorder = new FakeMediaRecorder();
+  const requests: CapturedRequest[] = [];
+  const credentials: string[] = [];
+  let eventsSignal: AbortSignal | undefined;
+  let eventsController: ReadableStreamDefaultController<Uint8Array> | undefined;
+  const encoder = new TextEncoder();
+  const eventsStream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      eventsController = controller;
+    },
+  });
+  const fakeFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push({
+      url: String(input),
+      method: init?.method ?? "GET",
+      headers: new Headers(init?.headers),
+      body: init?.body ?? null,
+    });
+    if (String(input).endsWith("/v1/audio/events")) {
+      eventsSignal = init?.signal ?? undefined;
+      credentials.push(init?.credentials ?? "omitted");
+      return new Response(eventsStream, {
+        status: 200,
+        headers: { "content-type": "text/event-stream; charset=utf-8" },
+      });
+    }
+    return new Response(JSON.stringify({ status: "ok" }), { status: 202 });
+  }) as typeof fetch;
+  const uploader = new WebmOpusCaptureUploader({
+    csrfToken: "csrf-alpha",
+    fetch: fakeFetch,
+    createMediaRecorder: (_stream, options) => {
+      expect(options.mimeType).toBe(WEBM_OPUS_MIME_TYPE);
+      return recorder;
+    },
+    ...(onServerEvent === undefined ? {} : { onServerEvent }),
+  });
+  const write = (chunk: string | Uint8Array) => {
+    eventsController?.enqueue(typeof chunk === "string" ? encoder.encode(chunk) : chunk);
+  };
+  return {
+    recorder,
+    requests,
+    credentials,
+    uploader,
+    write,
+    eventsStream,
+    signal: () => eventsSignal,
+  };
+}
+
 describe("browser audio capture", () => {
   test("answers the browser prompt before anything reaches the network", async () => {
     const { events, controller } = runtime();
@@ -288,6 +357,106 @@ describe("WebM Opus private upload", () => {
     expect(requestCount(requests, "/v1/audio/grant")).toBe(1);
     expect(requestCount(requests, "/v1/audio/frames")).toBe(0);
     expect(requestCount(requests, "/v1/audio/stream/stop")).toBe(0);
+  });
+
+  test("default transport opens POST SSE and parses named events across chunk boundaries", async () => {
+    const events: unknown[] = [];
+    const { credentials, recorder, requests, signal, uploader, write } = fetchSseRuntime((event) =>
+      events.push(event),
+    );
+    const starting = uploader.start(grant, { getTracks: () => [] } as unknown as MediaStream);
+
+    // The event stream is a cookie-carrying CSRF mutation, not an EventSource GET.
+    expect(requests.map(({ method, url }) => `${method} ${url}`)).toEqual([
+      "POST /v1/audio/events",
+    ]);
+    expect(requests[0]?.headers.get("x-csrf-token")).toBe("csrf-alpha");
+    expect(credentials).toEqual(["include"]);
+    expect(recorder.starts).toEqual([]);
+
+    // READY arrives with its event line split mid-token and its data line split mid-value;
+    // a keep-alive comment frame (also split across chunks) must neither satisfy READY nor
+    // reach the forwarding callback.
+    write("event: REA");
+    write('DY\ndata: {"kind":"REA');
+    write('DY"}\n\n: keep-al');
+    write("ive\n\n");
+    await bounded(starting, "capture never became ready over the POST event stream");
+    expect(recorder.starts).toEqual([MEDIA_RECORDER_TIMESLICE_MS]);
+    expect(requests[1]?.method).toBe("POST");
+    expect(requests[1]?.url).toBe("/v1/audio/stream/start");
+
+    // A TRANSCRIPT whose UTF-8 payload is split inside a multi-byte character still parses.
+    const transcript =
+      'event: TRANSCRIPT\ndata: {"kind":"TRANSCRIPT","event":{"kind":"PARTIAL","transcript":{"text":"반가워요"}}}\n\n';
+    const encoded = new TextEncoder().encode(transcript);
+    const split = encoded.findIndex((byte, index) => index > 20 && byte > 0x7f);
+    write(encoded.subarray(0, split + 1));
+    write(encoded.subarray(split + 1));
+
+    recorder.emitFrame([1, 2, 3]);
+    recorder.emitFrame([4, 5]);
+    write('event: TERMINAL\ndata: {"kind":"TERMINAL","outcome":"COMPLETED"}\n\n');
+    await uploader.finish();
+
+    expect(events).toEqual([
+      { kind: "READY" },
+      {
+        kind: "TRANSCRIPT",
+        event: { kind: "PARTIAL", transcript: { text: "반가워요" } },
+      },
+      { kind: "TERMINAL", outcome: "COMPLETED" },
+    ]);
+    const frames = requests.filter((request) => request.url.endsWith("/v1/audio/frames"));
+    expect(frames.map((frame) => frame.headers.get("x-audio-sequence"))).toEqual(["0", "1"]);
+    expect(requestCount(requests, "/v1/audio/stream/stop")).toBe(1);
+    expect(signal()?.aborted).toBe(true);
+  });
+
+  test("a rejected POST event stream fails before stream start and still revokes the grant", async () => {
+    const requests: CapturedRequest[] = [];
+    const recorder = new FakeMediaRecorder();
+    const fakeFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push({
+        url: String(input),
+        method: init?.method ?? "GET",
+        headers: new Headers(init?.headers),
+        body: init?.body ?? null,
+      });
+      if (String(input).endsWith("/v1/audio/events")) {
+        return new Response(JSON.stringify({ error: "capture_grant_required" }), {
+          status: 401,
+        });
+      }
+      return new Response(JSON.stringify({ status: "ok" }), { status: 202 });
+    }) as typeof fetch;
+    const uploader = new WebmOpusCaptureUploader({
+      csrfToken: "csrf-alpha",
+      fetch: fakeFetch,
+      createMediaRecorder: () => recorder,
+    });
+
+    await expect(
+      uploader.start(grant, { getTracks: () => [] } as unknown as MediaStream),
+    ).rejects.toThrow("Audio event stream failed");
+
+    expect(recorder.starts).toEqual([]);
+    expect(requests.map(({ method, url }) => `${method} ${url}`)).toEqual([
+      "POST /v1/audio/events",
+      "DELETE /v1/audio/grant",
+    ]);
+  });
+
+  test("cancel before READY aborts the POST event stream and revokes the grant", async () => {
+    const { requests, signal, uploader } = fetchSseRuntime();
+    const starting = uploader.start(grant, { getTracks: () => [] } as unknown as MediaStream);
+    uploader.cancel();
+    await expect(starting).rejects.toThrow("cancelled");
+    await uploader.whenIdle();
+
+    expect(signal()?.aborted).toBe(true);
+    expect(requestCount(requests, "/v1/audio/grant")).toBe(1);
+    expect(requestCount(requests, "/v1/audio/stream/start")).toBe(0);
   });
 
   test("grant requester sends the frozen MIME and complete explicit consent", async () => {

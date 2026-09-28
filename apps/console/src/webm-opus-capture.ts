@@ -11,6 +11,118 @@ interface CaptureEventSource {
   close(): void;
 }
 
+/**
+ * Opens the capture event stream with `fetch` POST instead of `EventSource` GET. Cloudflare
+ * quick tunnels buffer GET `text/event-stream` bodies until the upstream closes (cloudflared
+ * #1449), which starved READY past the capture deadline in production; the POST body of the
+ * same stream arrived unbuffered. Parsing reassembles `event:`/`data:` frames across arbitrary
+ * chunk boundaries - including UTF-8 sequences split mid-codepoint and SSE lines split across
+ * reads - and ignores keep-alive comment frames. `close()` aborts the fetch, which is also
+ * how the uploader tears the stream down.
+ */
+class FetchSseEventSource extends EventTarget implements CaptureEventSource {
+  readonly #abort = new AbortController();
+  readonly #decoder = new TextDecoder();
+  #buffer = "";
+  #data = "";
+  #eventName = "";
+  #closed = false;
+
+  constructor(url: string, fetchImpl: CaptureFetch, csrfToken: string, signal: AbortSignal) {
+    super();
+    signal.addEventListener("abort", () => this.#abort.abort(), { once: true });
+    void this.#open(url, fetchImpl, csrfToken);
+  }
+
+  close(): void {
+    if (this.#closed) return;
+    this.#closed = true;
+    this.#abort.abort();
+  }
+
+  async #open(url: string, fetchImpl: CaptureFetch, csrfToken: string): Promise<void> {
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    try {
+      const response = await fetchImpl(url, {
+        method: "POST",
+        credentials: "include",
+        headers: mutationHeaders(csrfToken),
+        signal: this.#abort.signal,
+      });
+      if (!response.ok || response.body === null) {
+        throw new Error(`Audio event stream failed (${response.status})`);
+      }
+      reader = response.body.getReader();
+      for (;;) {
+        const item = await reader.read();
+        if (item.done) break;
+        this.#push(this.#decoder.decode(item.value, { stream: true }));
+      }
+      this.#push(this.#decoder.decode());
+      // A stream that ends before TERMINAL is a severed connection, not a normal close: the
+      // READY waiter must reject instead of timing out or hanging until the deadline.
+      this.#fail();
+    } catch {
+      // AbortError from close()/cancel() is the normal teardown path; any other failure
+      // surfaces as the EventSource-style "error" event.
+      this.#fail();
+    } finally {
+      reader?.releaseLock();
+    }
+  }
+
+  #fail(): void {
+    if (this.#closed) return;
+    this.#closed = true;
+    this.dispatchEvent(new Event("error"));
+  }
+
+  /** Consumes decoded text, dispatching an event for every complete blank-line-terminated frame. */
+  #push(chunk: string): void {
+    this.#buffer += chunk;
+    for (;;) {
+      if (this.#buffer.length === 0) return;
+      const lf = this.#buffer.indexOf("\n");
+      const cr = this.#buffer.indexOf("\r");
+      if (cr !== -1 && (lf === -1 || cr < lf)) {
+        // A trailing CR may precede an LF arriving in the next chunk; hold it back.
+        if (cr === this.#buffer.length - 1) return;
+        const length = this.#buffer[cr + 1] === "\n" ? cr + 2 : cr + 1;
+        this.#line(this.#buffer.slice(0, cr));
+        this.#buffer = this.#buffer.slice(length);
+      } else if (lf !== -1) {
+        this.#line(this.#buffer.slice(0, lf));
+        this.#buffer = this.#buffer.slice(lf + 1);
+      } else {
+        return;
+      }
+    }
+  }
+
+  #line(line: string): void {
+    if (line === "") {
+      if (this.#data !== "") {
+        this.dispatchEvent(
+          new MessageEvent(this.#eventName === "" ? "message" : this.#eventName, {
+            data: this.#data,
+          }),
+        );
+      }
+      this.#data = "";
+      this.#eventName = "";
+      return;
+    }
+    if (line.startsWith(":")) return;
+    const colon = line.indexOf(":");
+    const field = colon === -1 ? line : line.slice(0, colon);
+    const value = colon === -1 ? "" : line.slice(colon + 1).replace(/^ /, "");
+    if (field === "event") this.#eventName = value;
+    else if (field === "data") {
+      this.#data = this.#data === "" ? value : `${this.#data}\n${value}`;
+    }
+  }
+}
+
 interface CaptureMediaRecorder extends EventTarget {
   readonly state: RecordingState;
   start(timeslice?: number): void;
@@ -23,6 +135,7 @@ export interface WebmOpusCaptureUploaderOptions {
   readonly csrfToken: string;
   readonly baseUrl?: string;
   readonly fetch?: CaptureFetch;
+  /** Overrides the event-stream transport for tests; production always uses POST fetch SSE. */
   readonly createEventSource?: (url: string) => CaptureEventSource;
   readonly createMediaRecorder?: (
     stream: MediaStream,
@@ -138,7 +251,7 @@ export class WebmOpusCaptureUploader implements CaptureUploader {
   readonly #baseUrl: string;
   readonly #csrfToken: string;
   readonly #fetch: CaptureFetch;
-  readonly #createEventSource: (url: string) => CaptureEventSource;
+  readonly #createEventSource: ((url: string) => CaptureEventSource) | undefined;
   readonly #createMediaRecorder: (
     stream: MediaStream,
     options: MediaRecorderOptions,
@@ -153,14 +266,14 @@ export class WebmOpusCaptureUploader implements CaptureUploader {
   #sequence = 0;
   #uploads: Promise<void> = Promise.resolve();
   #uploadError: Error | undefined;
-  #revoke: Promise<void> = Promise.resolve();
+  // Single-flight: cancel() racing a failing start() must still issue exactly one DELETE.
+  #revokePending: Promise<void> | undefined;
 
   constructor(options: WebmOpusCaptureUploaderOptions) {
     this.#baseUrl = options.baseUrl ?? "";
     this.#csrfToken = options.csrfToken;
     this.#fetch = options.fetch ?? ((input, init) => fetch(input, init));
-    this.#createEventSource =
-      options.createEventSource ?? ((url) => new EventSource(url, { withCredentials: true }));
+    this.#createEventSource = options.createEventSource;
     this.#createMediaRecorder =
       options.createMediaRecorder ??
       ((stream, recorderOptions) => new MediaRecorder(stream, recorderOptions));
@@ -176,8 +289,18 @@ export class WebmOpusCaptureUploader implements CaptureUploader {
     this.#sequence = 0;
     this.#uploads = Promise.resolve();
     this.#uploadError = undefined;
+    this.#revokePending = undefined;
     this.#abortController = new AbortController();
-    const source = this.#createEventSource(`${this.#baseUrl}/v1/audio/events`);
+    // POST fetch is the default transport (see FetchSseEventSource); injected sources keep
+    // tests off the network. Both receive the same URL and signal-driven teardown.
+    const source =
+      this.#createEventSource?.(`${this.#baseUrl}/v1/audio/events`) ??
+      new FetchSseEventSource(
+        `${this.#baseUrl}/v1/audio/events`,
+        this.#fetch,
+        this.#csrfToken,
+        this.#abortController.signal,
+      );
     this.#eventSource = source;
     for (const type of ["READY", "TRANSCRIPT", "RECOMMENDATION", "TERMINAL"] as const) {
       source.addEventListener(type, this.#forwardServerEvent);
@@ -246,12 +369,12 @@ export class WebmOpusCaptureUploader implements CaptureUploader {
       if (recorder.state !== "inactive") recorder.stop();
     }
     this.#closeLocalResources();
-    if (hadRemoteGrant) this.#revoke = this.#deleteGrant();
+    if (hadRemoteGrant) void this.#revokeOnce();
   }
 
   async whenIdle(): Promise<void> {
     await this.#uploads;
-    await this.#revoke;
+    await this.#revokePending;
   }
 
   readonly #forwardServerEvent: EventListener = (event) => {
@@ -294,8 +417,12 @@ export class WebmOpusCaptureUploader implements CaptureUploader {
     this.#readyWait?.dispose();
     this.#abortController?.abort();
     this.#closeLocalResources();
-    this.#revoke = this.#deleteGrant();
-    await this.#revoke;
+    await this.#revokeOnce();
+  }
+
+  #revokeOnce(): Promise<void> {
+    this.#revokePending ??= this.#deleteGrant();
+    return this.#revokePending;
   }
 
   async #deleteGrant(): Promise<void> {
