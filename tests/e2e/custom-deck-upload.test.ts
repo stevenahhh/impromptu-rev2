@@ -1,6 +1,23 @@
 import { describe, expect, test } from "bun:test";
 import { runCustomDeckUploadE2e } from "./custom-deck-upload.harness.ts";
 
+// The renderer pin is a per-platform contract: the developer lane runs the Homebrew
+// LibreOffice 26.8 build while ubuntu-24.04 (noble) is frozen on the LibreOffice 24.2 series
+// for its whole support window — only micro/build digits move. The font and fixture hashes
+// are shared: the Linux lane embeds the same upstream DejaVu Sans 2.37 bytes.
+const expectedToolchain =
+  process.platform === "darwin"
+    ? {
+        sofficePath: "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+        libreOfficeVersion: expect.stringContaining("LibreOffice 26.8.0.3"),
+        fontVersion: "DejaVu 2.37 (Homebrew font-dejavu cask)",
+      }
+    : {
+        sofficePath: "/usr/bin/soffice",
+        libreOfficeVersion: expect.stringMatching(/^LibreOffice 24\.2\.\d+/),
+        fontVersion: "DejaVu 2.37 (upstream dejavu-fonts-ttf-2.37 release)",
+      };
+
 describe("custom deck upload real-browser QA", () => {
   test("uploads representative PPTX and PDF fixtures through Console and proves them on Stage", async () => {
     const evidence = await runCustomDeckUploadE2e();
@@ -9,9 +26,7 @@ describe("custom deck upload real-browser QA", () => {
     // so the origin's shape is the invariant here, not one fixed port number.
     expect(evidence.environment.consoleOrigin).toMatch(/^http:\/\/localhost:\d+$/);
     expect(evidence.environment).toMatchObject({
-      sofficePath: "/Applications/LibreOffice.app/Contents/MacOS/soffice",
-      libreOfficeVersion: expect.stringContaining("LibreOffice 26.8.0.3"),
-      fontVersion: "DejaVu 2.37 (Homebrew font-dejavu cask)",
+      ...expectedToolchain,
       fontSha256: "7da195a74c55bef988d0d48f9508bd5d849425c1770dba5d7bfc6ce9ed848954",
       fixtureSha256: {
         pptx: "fd7b193c0d02756b737035caa653cd905d09c2b10b9e283ca96107e8667d8727",

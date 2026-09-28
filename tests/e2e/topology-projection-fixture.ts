@@ -155,3 +155,6 @@ const server = Bun.serve<Record<never, never>, Record<never, never>>({
 });
 
 console.log(`topology-projection-fixture listening on ${server.url}`);
+
+// Module marker: the top-level await that builds slide assets requires this file to be a module.
+export {};

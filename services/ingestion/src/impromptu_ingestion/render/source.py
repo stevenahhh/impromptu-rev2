@@ -163,10 +163,10 @@ def _svg_number(value: float) -> str:
     return str(int(value)) if value.is_integer() else f"{value:g}"
 
 
-def _declared_background_fill(root: etree._Element) -> str | None:
+def _declared_background_fill(root: etree._Element) -> str | None:  # pyright: ignore[reportPrivateUsage] - lxml exposes no public name for its element type
     """The fill the deck itself declares for its page, wherever LibreOffice parked it."""
     for group in root.iter():
-        if not isinstance(group.tag, str) or group.get("class") != "Background":
+        if group.get("class") != "Background":
             continue
         for shape in group.iter():
             fill = shape.get("fill")
