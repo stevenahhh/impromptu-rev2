@@ -8,7 +8,11 @@ import {
 } from "./audio-capture";
 import { useAuth } from "./auth-session";
 import { messages } from "./i18n";
-import { createCaptureGrantRequester, WebmOpusCaptureUploader } from "./webm-opus-capture";
+import {
+  createCaptureGrantRequester,
+  WebmOpusCaptureUploader,
+  type WebmOpusCaptureUploaderOptions,
+} from "./webm-opus-capture";
 
 export interface CockpitAudioCaptureProps {
   readonly csrfToken: string;
@@ -19,6 +23,7 @@ export interface CockpitAudioCaptureProps {
   readonly text: CockpitAudioCaptureText;
   readonly onServerEvent?: (event: unknown) => void;
   readonly baseUrl?: string;
+  readonly createEventSource?: WebmOpusCaptureUploaderOptions["createEventSource"];
 }
 
 export interface CockpitAudioCaptureText {
@@ -38,6 +43,7 @@ type CaptureState = "STARTING" | "CAPTURING" | "MICROPHONE_DENIED" | "UNAVAILABL
 export function CockpitAudioCapture({
   actorId,
   baseUrl,
+  createEventSource,
   csrfToken,
   notice,
   onServerEvent,
@@ -62,6 +68,7 @@ export function CockpitAudioCapture({
       csrfToken,
       ...(baseUrl === undefined ? {} : { baseUrl }),
       ...(onServerEvent === undefined ? {} : { onServerEvent }),
+      ...(createEventSource === undefined ? {} : { createEventSource }),
     });
     const capture = new BrowserCaptureController(navigator.mediaDevices, uploader);
     controller.current = capture;
@@ -96,6 +103,7 @@ export function CockpitAudioCapture({
   }, [
     actorId,
     baseUrl,
+    createEventSource,
     csrfToken,
     notice,
     onServerEvent,

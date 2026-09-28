@@ -62,16 +62,21 @@ class FakeMediaRecorder extends EventTarget {
   }
 }
 
-globalThis.EventSource = FakeEventSource as unknown as typeof EventSource;
 globalThis.MediaRecorder = FakeMediaRecorder as unknown as typeof MediaRecorder;
-// No manual restore in afterAll: GlobalRegistrator.unregister() already puts back the
-// fetch that existed before this file registered happy-dom. Writing realFetch back AFTER
-// unregister would instead resurrect happy-dom's closed-window fetch and poison every
-// suite scheduled behind this one (observed: private-api-proxy failing with a dead fetch).
-globalThis.fetch = (async () =>
+// The capture chain posts grants and frames through fetch. Scoping this stub to the test
+// lifecycle keeps it from poisoning sibling suites that sign in through the same global fetch
+// (a permanent stub previously stripped set-cookie headers from their sign-in responses).
+const realFetch = globalThis.fetch;
+const stubFetch = (async () =>
   new Response(JSON.stringify({ expiresAtMs: Date.now() + 3_600_000 }), {
     status: 201,
   })) as unknown as typeof fetch;
+beforeEach(() => {
+  globalThis.fetch = stubFetch;
+});
+afterEach(() => {
+  globalThis.fetch = realFetch;
+});
 
 const stubClient = {} as ConsoleSessionClient;
 
@@ -106,6 +111,7 @@ function renderCapture() {
         presentationSessionId="ps_alpha"
         presentationSessionEpoch="pse_1"
         actorId="actor_alpha"
+        createEventSource={() => new FakeEventSource()}
         notice={notice}
         text={{
           capturing: "capturing-copy",
