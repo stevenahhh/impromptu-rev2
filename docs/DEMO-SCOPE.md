@@ -33,8 +33,8 @@ transcripts, questions, private notes, account data, or provider details.
 
 The review demo uses this topology, not the single-VM Caddy production topology:
 
-- Console is served by Vercel at `https://impromptu-rev2-console.vercel.app`.
-- Stage is served by Vercel at `https://impromptu-rev2-stage.vercel.app`.
+- Console is served by Vercel at `https://impromptu-console.vercel.app`.
+- Stage is served by Vercel at `https://impromptu-stage.vercel.app`.
 - PostgreSQL, migrations, private-backend on port 3001, and projection-gateway on port 3002 run
   in the local `compose.production.yaml` stack.
 - One Cloudflare HTTPS quick tunnel exposes private-backend to the Vercel Console server proxy.

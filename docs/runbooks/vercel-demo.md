@@ -8,8 +8,8 @@ Cloudflare quick tunnels provide temporary HTTPS paths between them.
 
 | Component | Current location | Purpose |
 | --- | --- | --- |
-| Console | `https://impromptu-rev2-console.vercel.app` | Private presenter app and server-side private API proxy |
-| Stage | `https://impromptu-rev2-stage.vercel.app` | Public slide-only app |
+| Console | `https://impromptu-console.vercel.app` | Private presenter app and server-side private API proxy |
+| Stage | `https://impromptu-stage.vercel.app` | Public slide-only app |
 | private-backend | Compose `127.0.0.1:3001` | Accounts, decks, owner controls, private data |
 | projection-gateway | Compose `127.0.0.1:3002` | Display invitations, public slide state, SSE, receipts, and public assets |
 | PostgreSQL and migrations | Compose internal network | Durable private and projection state |
@@ -21,7 +21,7 @@ that API path on the Stage origin preserves the display cookie and the browser S
 applied receipts ride on plain HTTP POST. Vercel should not be treated as the owner of PostgreSQL
 or deck artifacts.
 
-The aliases above were the observed demo aliases on 2026-09-27. A quick-tunnel hostname is
+The aliases above are the demo project domains. A quick-tunnel hostname is
 perishable. Never put a tunnel hostname in customer material or treat it as a stable URL.
 
 ## Start the demo stack
