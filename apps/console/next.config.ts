@@ -1,6 +1,35 @@
 import type { NextConfig } from "next";
 
-import { consolePrivateApiOrigin } from "./src/next-runtime-config";
+const DEFAULT_PRIVATE_API_ORIGIN = "http://127.0.0.1:3001";
+
+type ConfigEnv = Readonly<Record<string, string | undefined>>;
+
+// Inlined from src/next-runtime-config: next.config.ts is compiled and evaluated with cwd equal to
+// the repo root when a harness runs `next start apps/console` from outside the app directory, so a
+// relative module import cannot be resolved. Keeping this logic here makes the config self-contained.
+function consolePrivateApiOrigin(environment: ConfigEnv = process.env): string {
+  const isProd = environment.NODE_ENV === "production";
+  const configured = environment.CONSOLE_PRIVATE_API_ORIGIN?.trim();
+  if (configured === undefined || configured.length === 0) {
+    if (isProd) {
+      throw new Error("CONSOLE_PRIVATE_API_ORIGIN is required when NODE_ENV=production");
+    }
+    return DEFAULT_PRIVATE_API_ORIGIN;
+  }
+  const parsed = new URL(configured);
+  if (
+    (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+    parsed.origin !== configured
+  ) {
+    throw new Error("CONSOLE_PRIVATE_API_ORIGIN must be an absolute HTTP(S) origin");
+  }
+  const loopback = parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]";
+  const composeInternal = parsed.hostname === "private-backend" && parsed.protocol === "http:";
+  if (isProd && parsed.protocol !== "https:" && !loopback && !composeInternal) {
+    throw new Error("CONSOLE_PRIVATE_API_ORIGIN must use https in production");
+  }
+  return configured;
+}
 
 const production = process.env.NODE_ENV === "production";
 const privateApiOrigin = process.env.CONSOLE_PRIVATE_API_ORIGIN?.trim();
