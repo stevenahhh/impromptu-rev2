@@ -25,7 +25,7 @@
   "rewrites": [
     {
       "source": "/v1/:path*",
-      "destination": "https://anticipated-displayed-prev-tournament.trycloudflare.com/v1/:path*"
+      "destination": "https://pro-square.tail9c00c4.ts.net:8443/v1/:path*"
     }
   ]
 }
