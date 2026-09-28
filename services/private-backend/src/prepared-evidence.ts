@@ -433,7 +433,7 @@ export type EndPresentationResult =
   | OperationResult<PresentationSessionLifecycle>
   | Readonly<{ outcome: "REJECTED"; reason: "PRESENTATION_ENDED"; endedBySameOwner: true }>;
 
-export type ControllerSocketCloseReason = "SUPERSEDED" | "CLIENT_CLOSED";
+export type ControllerSocketCloseReason = "SUPERSEDED" | "CLIENT_CLOSED" | "PRESENTATION_DELETED";
 
 export interface ControllerSocket {
   readonly closed: boolean;
@@ -822,6 +822,29 @@ export class PreparedEvidenceCoordinator {
       updatedAtMs: nowMs,
     });
     return { outcome: "APPLIED", value: this.#presentationSummary(owned.value) };
+  }
+
+  /**
+   * Owner-scoped delete: removes the whole presentation record — deck artifacts, playback
+   * authority, evidence candidates, and the publication ledger — so a deleted deck can never
+   * be listed, resumed, renamed, or have its report read again. Report-side routes resolve
+   * ownership through this same map, so removal alone revokes every downstream read. Open
+   * controller sockets are told why they died instead of being abandoned mid-command.
+   */
+  async deletePresentation(
+    accountSessionId: string,
+    presentationSessionId: string,
+    nowMs: number,
+  ): Promise<OperationResult<PresentationSummary>> {
+    const owned = await this.#ownedPresentation(accountSessionId, presentationSessionId, nowMs);
+    if (owned.outcome === "REJECTED") return owned;
+    const summary = this.#presentationSummary(owned.value);
+    for (const socket of [...(this.#controllerSockets.get(presentationSessionId) ?? [])]) {
+      this.#closeControllerSocket(presentationSessionId, socket, "PRESENTATION_DELETED");
+    }
+    this.#controllerSockets.delete(presentationSessionId);
+    this.#store.presentations.delete(presentationSessionId);
+    return { outcome: "APPLIED", value: summary };
   }
 
   async approveDisplay(

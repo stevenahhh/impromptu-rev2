@@ -222,6 +222,9 @@
   "presentationRenameSave": "제목 저장",
   "presentationRenameCancel": "취소",
   "presentationRenameFailed": "제목을 저장하지 못했습니다. 다시 시도해 주세요.",
+  "presentationDelete": "삭제",
+  "presentationDeleteConfirm": "정말 삭제",
+  "presentationDeleteFailed": "발표를 삭제하지 못했습니다. 다시 시도해 주세요.",
   "presentationResumeFailed": "이 발표를 열지 못했습니다. 다시 시도해 주세요.",
   "presentationsLoadMore": "발표 더 보기"
 }

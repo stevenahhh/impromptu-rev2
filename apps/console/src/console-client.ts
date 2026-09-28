@@ -22,6 +22,7 @@ import {
   readLiveCandidates,
 } from "./live-publication";
 import {
+  deletePresentation,
   listPresentations,
   type PresentationDetailView,
   type PresentationListView,
@@ -131,6 +132,7 @@ export interface ConsoleSessionClient {
     presentationSessionId: string,
     title: string,
   ): Promise<PresentationSummaryView>;
+  deletePresentation?(csrfToken: string, presentationSessionId: string): Promise<void>;
   takeoverPlaybackLease?(
     csrfToken: string,
     presentationSessionId: string,
@@ -206,6 +208,8 @@ export function createConsoleSessionClient(
     readPresentation: (presentationSessionId) => readPresentation(context, presentationSessionId),
     renamePresentation: (csrfToken, presentationSessionId, title) =>
       renamePresentation(context, csrfToken, presentationSessionId, title),
+    deletePresentation: (csrfToken, presentationSessionId) =>
+      deletePresentation(context, csrfToken, presentationSessionId),
     takeoverPlaybackLease: (csrfToken, presentationSessionId, expectedDisplayBindingEpoch) =>
       takeoverPlaybackLease(context, csrfToken, presentationSessionId, expectedDisplayBindingEpoch),
     setSlide: (csrfToken, input) => setSlide(context, csrfToken, input),

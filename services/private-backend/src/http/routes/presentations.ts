@@ -95,5 +95,19 @@ export async function presentationRoutes(ctx: AuthedRouteContext): Promise<Respo
     );
   }
 
+  // Owner-scoped delete: same cookie + CSRF boundary as rename; the coordinator re-checks
+  // ownership and drops the whole record. The response carries only an acknowledgement —
+  // nothing about the removed deck needs to come back over the wire.
+  if (request.method === "DELETE") {
+    const result = await dependencies.coordinator.deletePresentation(
+      accountSessionId,
+      presentationSessionId,
+      dependencies.now(),
+    );
+    if (result.outcome === "REJECTED") return libraryRejection(result.reason, origin);
+    await dependencies.persist?.();
+    return json({ deleted: true }, 200, origin);
+  }
+
   return json({ error: "not_found" }, 404, origin);
 }

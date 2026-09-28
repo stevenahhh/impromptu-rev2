@@ -270,6 +270,54 @@ describe("Console presentation library", () => {
     expect(document.querySelector("[data-deck-file-input]")).toBeTruthy();
   });
 
+  test("deletes a deck after an explicit confirm and drops the row", async () => {
+    const calls = { deleted: [] as string[] };
+    const { client } = libraryClient({
+      async deletePresentation(_csrfToken, presentationSessionId) {
+        calls.deleted.push(presentationSessionId);
+      },
+    });
+    renderConsole(client, { path: "/presentations" });
+    switchToEnglish();
+    await act(async () => {});
+    expect(within(document.body).getByText("Impromptu sample deck")).toBeTruthy();
+
+    // Delete is a two-tap action: the first tap only arms the confirm, nothing is deleted.
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: "Delete" }));
+    });
+    expect(calls.deleted).toEqual([]);
+
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: "Confirm delete" }));
+    });
+    expect(calls.deleted).toEqual(["ps_resume"]);
+    expect(within(document.body).queryByText("Impromptu sample deck")).toBeNull();
+  });
+
+  test("a failed delete keeps the row and reports the error", async () => {
+    const { client } = libraryClient({
+      async deletePresentation() {
+        throw new Error("backend unreachable");
+      },
+    });
+    renderConsole(client, { path: "/presentations" });
+    switchToEnglish();
+    await act(async () => {});
+
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: "Delete" }));
+    });
+    await act(async () => {
+      fireEvent.click(within(document.body).getByRole("button", { name: "Confirm delete" }));
+    });
+
+    expect(within(document.body).getByText("Impromptu sample deck")).toBeTruthy();
+    expect(
+      within(document.body).getByText("The presentation could not be deleted. Please try again."),
+    ).toBeTruthy();
+  });
+
   test("a failed list read is an honest error with retry, never an empty list", async () => {
     let attempts = 0;
     const { client } = libraryClient({

@@ -376,6 +376,69 @@ describe("owner-scoped presentation library", () => {
     expect(extraKey.status).toBe(400);
   });
 
+  test("deletes only the owner's presentation and revokes every read of it", async () => {
+    const { coordinator, handler } = presentationHarness();
+    const alpha = await signIn(handler, "alpha@example.test", "alpha-password");
+    const beta = await signIn(handler, "beta@example.test", "beta-password");
+    const keepId = await createPresentation(
+      coordinator,
+      alpha.accountSessionId,
+      "deck_keep",
+      "Keep me",
+    );
+    const dropId = await createPresentation(
+      coordinator,
+      alpha.accountSessionId,
+      "deck_drop",
+      "Delete me",
+    );
+
+    // A foreign account cannot delete or even discover the owner's presentation.
+    const foreignDelete = await handler(
+      request(`/v1/presentations/${dropId}`, {
+        method: "DELETE",
+        headers: { Cookie: beta.cookie, "X-CSRF-Token": beta.csrfToken },
+      }),
+    );
+    expect(foreignDelete.status).toBe(403);
+    const missingDelete = await handler(
+      request("/v1/presentations/ps_missingid000001", {
+        method: "DELETE",
+        headers: { Cookie: alpha.cookie, "X-CSRF-Token": alpha.csrfToken },
+      }),
+    );
+    expect(missingDelete.status).toBe(404);
+
+    const deleted = await handler(
+      request(`/v1/presentations/${dropId}`, {
+        method: "DELETE",
+        headers: { Cookie: alpha.cookie, "X-CSRF-Token": alpha.csrfToken },
+      }),
+    );
+    expect(deleted.status).toBe(200);
+    expect(await deleted.json()).toEqual({ deleted: true });
+
+    // The row is gone from the owner's list while the sibling deck survives.
+    const list = await listGet(handler, alpha);
+    const body = await list.json();
+    expect(
+      body.presentations.map((row: { presentationSessionId: string }) => row.presentationSessionId),
+    ).toEqual([keepId]);
+
+    // Every read of the deleted id now answers not-found, and a second delete fails too.
+    const detail = await handler(
+      request(`/v1/presentations/${dropId}`, { headers: { Cookie: alpha.cookie } }),
+    );
+    expect(detail.status).toBe(404);
+    const again = await handler(
+      request(`/v1/presentations/${dropId}`, {
+        method: "DELETE",
+        headers: { Cookie: alpha.cookie, "X-CSRF-Token": alpha.csrfToken },
+      }),
+    );
+    expect(again.status).toBe(404);
+  });
+
   test("paginates the owner's list and rejects an opaque cursor that was not issued", async () => {
     const { coordinator, handler } = presentationHarness();
     const alpha = await signIn(handler, "alpha@example.test", "alpha-password");

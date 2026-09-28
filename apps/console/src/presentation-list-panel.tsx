@@ -22,7 +22,14 @@ export function PresentationListPanel({
 }: {
   readonly showEmptyState?: boolean;
 }) {
-  const { client, locale, session, setActivePresentation, setDisplayBindingEpoch } = useAuth();
+  const {
+    activePresentation,
+    client,
+    locale,
+    session,
+    setActivePresentation,
+    setDisplayBindingEpoch,
+  } = useAuth();
   const text = messages(locale);
   const navigate = useNavigate();
   const accountId = session?.account.accountId;
@@ -34,6 +41,9 @@ export function PresentationListPanel({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [renameErrorId, setRenameErrorId] = useState<string | null>(null);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteErrorId, setDeleteErrorId] = useState<string | null>(null);
   // Generation counter: a response that lands after an account switch or a newer request must
   // never repopulate this panel with the previous account's rows.
   const requestRef = useRef(0);
@@ -101,6 +111,29 @@ export function PresentationListPanel({
       setResumeError(true);
     } finally {
       setResumingId(null);
+    }
+  };
+
+  const deleteItem = async (summary: PresentationSummaryView) => {
+    if (client.deletePresentation === undefined || session === null) return;
+    if (deletingId !== null) return;
+    setDeletingId(summary.presentationSessionId);
+    try {
+      await client.deletePresentation(session.csrfToken, summary.presentationSessionId);
+      setItems((current) =>
+        current.filter((row) => row.presentationSessionId !== summary.presentationSessionId),
+      );
+      // A deleted deck can never be re-entered: if it is the loaded cockpit, drop it so the
+      // workspace returns to the upload surface instead of steering a dead session.
+      if (activePresentation?.presentationSessionId === summary.presentationSessionId) {
+        setActivePresentation(null);
+      }
+      setConfirmingDeleteId(null);
+      setDeleteErrorId(null);
+    } catch {
+      setDeleteErrorId(summary.presentationSessionId);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -211,21 +244,63 @@ export function PresentationListPanel({
                   </Button>
                 )}
                 {renamingId === item.presentationSessionId ? null : (
-                  <Button
-                    variant="quiet"
-                    onClick={() => {
-                      setRenamingId(item.presentationSessionId);
-                      setRenameDraft(item.title);
-                      setRenameErrorId(null);
-                    }}
-                  >
-                    {text.presentationRename}
-                  </Button>
+                  <>
+                    <Button
+                      variant="quiet"
+                      onClick={() => {
+                        setRenamingId(item.presentationSessionId);
+                        setRenameDraft(item.title);
+                        setRenameErrorId(null);
+                      }}
+                    >
+                      {text.presentationRename}
+                    </Button>
+                    {client.deletePresentation === undefined ? null : confirmingDeleteId ===
+                      item.presentationSessionId ? (
+                      <>
+                        <Button
+                          variant="quiet"
+                          disabled={deletingId !== null}
+                          onClick={() => void deleteItem(item)}
+                        >
+                          {text.presentationDeleteConfirm}
+                        </Button>
+                        <Button
+                          variant="quiet"
+                          onClick={() => {
+                            setConfirmingDeleteId(null);
+                            setDeleteErrorId(null);
+                          }}
+                        >
+                          {text.presentationRenameCancel}
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        variant="quiet"
+                        onClick={() => {
+                          setConfirmingDeleteId(item.presentationSessionId);
+                          setDeleteErrorId(null);
+                        }}
+                      >
+                        {text.presentationDelete}
+                      </Button>
+                    )}
+                  </>
                 )}
               </span>
               {renameErrorId === item.presentationSessionId ? (
                 <p className="console-status-line console-status-line--attention" role="alert">
                   {text.presentationRenameFailed}
+                </p>
+              ) : null}
+              {deleteErrorId === item.presentationSessionId ? (
+                <p
+                  className="console-status-line console-status-line--attention"
+                  role="alert"
+                  data-presentation-delete="FAILED"
+                >
+                  {text.presentationDeleteFailed}
                 </p>
               ) : null}
             </li>
