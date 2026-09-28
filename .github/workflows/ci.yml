@@ -165,12 +165,17 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Install locked Python dependencies
         run: uv sync --project services/ingestion --frozen
+      # uv run does not change CWD: from the repo root, `ruff check src tests` resolves src/
+      # tests at the root (E902). Run inside the project so pyproject config applies.
       - name: Lint ingestion
-        run: uv run --project services/ingestion ruff check src tests
+        working-directory: services/ingestion
+        run: uv run ruff check src tests
       - name: Typecheck ingestion
-        run: uv run --project services/ingestion basedpyright
+        working-directory: services/ingestion
+        run: uv run basedpyright
       - name: Test ingestion
-        run: uv run --project services/ingestion pytest
+        working-directory: services/ingestion
+        run: uv run pytest
 
   database:
     name: PostgreSQL role topology
