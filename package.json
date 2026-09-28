@@ -16,6 +16,7 @@
     "dev": "bun run scripts/dev.ts",
     "dev:console": "bun run --cwd apps/console dev",
     "dev:stage": "bun run --cwd apps/stage dev",
+    "seed:demo": "bun run scripts/seed-demo.ts",
     "build": "export CONSOLE_PRIVATE_API_ORIGIN=${CONSOLE_PRIVATE_API_ORIGIN:-https://private-backend.build.invalid} STAGE_PUBLIC_API_ORIGIN=${STAGE_PUBLIC_API_ORIGIN:-https://projection-gateway.build.invalid} NEXT_PUBLIC_STAGE_ORIGIN=${NEXT_PUBLIC_STAGE_ORIGIN:-https://stage.build.invalid} && bun run --cwd packages/ui build && bun run --cwd apps/console build && bun run --cwd apps/stage build",
     "check:repo": "bun run scripts/verify-repo.ts",
     "check:boundaries": "bun run services/projection-gateway/test/check-architecture.ts",

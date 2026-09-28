@@ -10,9 +10,12 @@ transcripts, questions, source details, or account data to Stage.
 
 ## Current demo path
 
-1. Open the Console `/sign-in` route on the private controller and sign in with a task-owned demo
-   account.
-2. In Console `/` or `/session`, upload the PDF or PPTX and wait for the deck to finish rendering.
+1. Open the Console `/sign-in` route on the private controller and sign in with the demo account
+   shown on the page (`demo` / `12341234`). `bun run seed:demo` (or the `demo-seed` Compose
+   service) registers the account and uploads the sample deck and both reference files for you;
+   the deck then sits in My presentations ready to continue.
+2. To upload by hand instead, drop the PDF or PPTX on `/` or `/session` and wait for the deck to
+   finish rendering.
 3. Create a short-lived, one-use invitation for the active deck. Open the returned Stage path on
    the independent public device. The token belongs in the URL fragment, not a query string.
 4. In Console, check the pending display ID, fingerprint, deck version, and binding epoch. Approve

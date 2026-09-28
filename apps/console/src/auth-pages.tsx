@@ -61,6 +61,34 @@ export function SignInPage() {
         >
           {pending ? text.signingIn : text.enterWorkspace}
         </Button>
+        <section className="console-demo-account" aria-label={text.demoAccountTitle}>
+          <h2>{text.demoAccountTitle}</h2>
+          <p className="console-caption">{text.demoAccountLead}</p>
+          <dl className="console-demo-account__credentials">
+            <div>
+              <dt>{text.username}</dt>
+              <dd>
+                <code>demo</code>
+              </dd>
+            </div>
+            <div>
+              <dt>{text.password}</dt>
+              <dd>
+                <code>12341234</code>
+              </dd>
+            </div>
+          </dl>
+          <Button
+            variant="quiet"
+            data-demo-account-fill
+            onClick={() => {
+              setUsername("demo");
+              setPassword("12341234");
+            }}
+          >
+            {text.demoAccountFill}
+          </Button>
+        </section>
         <p className="console-caption" aria-live="polite">
           {error === null ? text.signInPrivacy : text.signInFailed}
         </p>

@@ -1004,7 +1004,9 @@ const accessibilityRoutes: readonly AccessibilityRoute[] = [
     app: "console",
     authenticated: true,
     forcedColorsSelector: CONSOLE_FORCED_COLORS,
-    landmarks: { h1: 1, main: 1, nav: 0 },
+    // The authenticated layout header renders one private-workspace <nav> on every
+    // authenticated route; the count documents that chrome rather than pretending it absent.
+    landmarks: { h1: 1, main: 1, nav: 1 },
     name: "workspace",
     path: "/",
   },
@@ -1012,7 +1014,7 @@ const accessibilityRoutes: readonly AccessibilityRoute[] = [
     app: "console",
     authenticated: true,
     forcedColorsSelector: CONSOLE_FORCED_COLORS,
-    landmarks: { h1: 1, main: 1, nav: 0 },
+    landmarks: { h1: 1, main: 1, nav: 1 },
     name: "session",
     path: "/session",
   },
@@ -1139,6 +1141,8 @@ async function assertKeyboardFocusOrder(page: Page, route: AccessibilityRoute) {
         element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth
       );
     };
+    const focusableSelector =
+      'a[href], button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])';
     const candidates = [...document.querySelectorAll<HTMLElement>("body *")].filter((element) => {
       if (
         getComputedStyle(element).visibility === "hidden" ||
@@ -1146,11 +1150,12 @@ async function assertKeyboardFocusOrder(page: Page, route: AccessibilityRoute) {
       ) {
         return false;
       }
-      return (
-        element.matches(
-          'a[href], button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])',
-        ) || scrollable(element)
-      );
+      // Chromium only grants a scroll container its own tab stop when there is nothing
+      // focusable inside it — a scroller with focusable children is skipped because Tab
+      // reaches the children directly (verified against headless Chrome: an overflowing
+      // <main> holding the sign-in inputs is not a stop, while an empty scroller is).
+      if (scrollable(element) && element.querySelector(focusableSelector) === null) return true;
+      return element.matches(focusableSelector);
     });
     candidates.forEach((element, index) => {
       element.dataset.a11yOrder = String(index);

@@ -168,6 +168,28 @@ services:
       - application
       - database
 
+  # One-shot demo seed: registers the demo account and uploads the bundled sample deck plus
+  # reference documents through the real HTTP surface. Idempotent — an account that already
+  # lists a presentation is left alone, so redeploys do not pile up duplicates.
+  demo-seed:
+    image: impromptu/private-backend:${IMAGE_TAG:-latest}
+    restart: "no"
+    depends_on:
+      private-backend:
+        condition: service_healthy
+    environment:
+      PRIVATE_BACKEND_ORIGIN: http://private-backend:3001
+      CONSOLE_ORIGIN: ${CONSOLE_PUBLIC_ORIGIN:?Set CONSOLE_PUBLIC_ORIGIN}
+      DEMO_USERNAME: ${DEMO_USERNAME:-demo}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-12341234}
+      SAMPLES_DIR: /samples
+    volumes:
+      - ./scripts/seed-demo.ts:/seed-demo.ts:ro
+      - ./docs/samples:/samples:ro
+    entrypoint: ["bun", "run", "/seed-demo.ts"]
+    networks:
+      - application
+
   # Local embedding server (768-dim embeddinggemma). Never published: the private backend
   # reaches it only through the embedding-tls terminator on the application network.
   ollama:
