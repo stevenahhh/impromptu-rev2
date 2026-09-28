@@ -222,6 +222,9 @@
   "presentationRenameSave": "Save title",
   "presentationRenameCancel": "Cancel",
   "presentationRenameFailed": "The title could not be saved. Please try again.",
+  "presentationDelete": "Delete",
+  "presentationDeleteConfirm": "Confirm delete",
+  "presentationDeleteFailed": "The presentation could not be deleted. Please try again.",
   "presentationResumeFailed": "This presentation could not be opened. Please try again.",
   "presentationsLoadMore": "Show more presentations"
 }

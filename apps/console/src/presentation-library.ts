@@ -250,6 +250,30 @@ export async function readPresentation(
   return detail;
 }
 
+/**
+ * Owner-scoped delete: drops the whole presentation (deck, playback authority, evidence and
+ * report access) server-side. Same credentialed CSRF mutation contract as rename; any
+ * non-OK or malformed acknowledgement throws so the row is never silently dropped.
+ */
+export async function deletePresentation(
+  context: PrivateClientContext,
+  csrfToken: string,
+  presentationSessionId: string,
+): Promise<void> {
+  const response = await fetch(
+    `${context.baseUrl}/v1/presentations/${encodeURIComponent(presentationSessionId)}`,
+    {
+      method: "DELETE",
+      credentials: "include",
+      headers: mutationHeaders(csrfToken),
+    },
+  );
+  const body = await responseBody(response);
+  if (!response.ok || record(body)?.deleted !== true) {
+    throw new Error("The presentation could not be deleted.");
+  }
+}
+
 export async function renamePresentation(
   context: PrivateClientContext,
   csrfToken: string,
