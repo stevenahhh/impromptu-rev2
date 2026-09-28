@@ -13,6 +13,7 @@ import { EvidencePreparationPanel } from "./evidence-preparation-panel";
 import { messages } from "./i18n";
 import { PlaybackPanel } from "./playback-panel";
 import { PresentationListPanel } from "./presentation-list-panel";
+import { QuickStartPanel } from "./quick-start-panel";
 import { ReferenceDocumentPanel } from "./reference-documents-panel";
 import { coachingEventFromServer, record } from "./server-payload";
 import type { ActivePresentationView } from "./session-client";
@@ -253,6 +254,7 @@ export function PresentationWorkspacePage() {
                 account id guarantees a switch remounts with zero stale rows. */}
             <PresentationListPanel key={session.account.accountId} />
             <SessionUploadPanel client={client} csrfToken={session.csrfToken} />
+            <QuickStartPanel />
           </>
         ) : (
           <div

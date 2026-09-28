@@ -292,6 +292,65 @@ html[data-surface="console"] .ui-shell__body--focused {
   font: inherit;
 }
 
+.console-demo-account {
+  display: grid;
+  gap: var(--space-2);
+  margin-block-start: var(--space-6);
+  padding: var(--space-4);
+  border: var(--size-hairline) dashed var(--border-emphasis);
+  border-radius: var(--radius-md);
+  background: var(--surface-inset);
+}
+
+.console-demo-account h2 {
+  margin: var(--space-0);
+  font-size: var(--text-small);
+  font-weight: var(--weight-emphasis);
+}
+
+.console-demo-account__credentials {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: var(--space-0);
+}
+
+.console-demo-account__credentials div {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+.console-demo-account__credentials dt {
+  color: var(--text-secondary);
+  font-size: var(--text-caption);
+}
+
+.console-demo-account__credentials dd {
+  margin: var(--space-0);
+}
+
+.console-demo-account__credentials code {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  font-family: var(--font-mono);
+}
+
+.console-demo-account .ui-button {
+  justify-self: start;
+}
+
+.console-quick-start__steps {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-3) var(--space-0);
+  padding-inline-start: var(--space-6);
+  color: var(--text-secondary);
+  font-size: var(--text-small);
+  line-height: var(--line-body);
+}
+
 .console-workspace {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);

@@ -997,6 +997,24 @@ describe("Console route boundary", () => {
     expect(within(document.body).queryByRole("heading", { name: "Session controls" })).toBeNull();
   });
 
+  test("shows the shared demo account on sign-in and fills the form on request", () => {
+    renderConsole("/sign-in", false, "en");
+
+    // The demo credentials are printed next to the form so a demo machine needs no runbook.
+    expect(within(document.body).getByText("Try the demo")).toBeTruthy();
+    expect(within(document.body).getByText("demo")).toBeTruthy();
+    expect(within(document.body).getByText("12341234")).toBeTruthy();
+
+    const usernameInput = document.querySelector<HTMLInputElement>("[data-sign-in-username]");
+    const passwordInput = document.querySelector<HTMLInputElement>("[data-sign-in-password]");
+    if (usernameInput === null || passwordInput === null) {
+      throw new Error("sign-in controls are missing");
+    }
+    fireEvent.click(within(document.body).getByRole("button", { name: "Fill in demo account" }));
+    expect(usernameInput.value).toBe("demo");
+    expect(passwordInput.value).toBe("12341234");
+  });
+
   test("keeps the sign-in route public-only once authenticated", () => {
     renderConsole("/sign-in", true);
 
@@ -1017,6 +1035,19 @@ describe("Console route boundary", () => {
     expect(
       within(document.body).queryByRole("link", { name: "Presentation preparation" }),
     ).toBeNull();
+  });
+
+  test("shows a first-visit quick start on the upload surface that stays dismissed", () => {
+    renderConsole("/", true);
+    expect(within(document.body).getByRole("heading", { name: "Quick start" })).toBeTruthy();
+
+    fireEvent.click(within(document.body).getByRole("button", { name: "Got it" }));
+    expect(within(document.body).queryByRole("heading", { name: "Quick start" })).toBeNull();
+
+    // localStorage persistence keeps it hidden on the next mount of the same profile.
+    cleanup();
+    renderConsole("/", true);
+    expect(within(document.body).queryByRole("heading", { name: "Quick start" })).toBeNull();
   });
 
   test("renders an explicit private navigation landmark", async () => {

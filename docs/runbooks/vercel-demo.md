@@ -82,11 +82,18 @@ Do not delete PostgreSQL or deck-artifact volumes during tunnel rotation.
 
 ## Account and deck setup
 
-1. Use the configured task-owned controller account, or create a task-owned account at Console
-   `/sign-up` when account creation is enabled. Never use a participant or production account.
-2. Sign in at Console `/sign-in` and work from Console `/` or `/session`.
-3. Upload `docs/samples/impromptu-sample-deck.pdf` or the generated PPTX. Wait for the upload and
-   public slide render to complete before inviting Stage.
+1. Use the shared demo account `demo` / `12341234` (also printed on the Console sign-in page),
+   or create a task-owned account at Console `/sign-up` when account creation is enabled. Never
+   use a participant or production account.
+2. Seed the demo account once against the running backend:
+   `PRIVATE_BACKEND_ORIGIN=<backend origin> CONSOLE_ORIGIN=<console origin> bun run seed:demo`.
+   The Compose stack seeds automatically through the `demo-seed` service. Seeding is idempotent
+   and skipped when the account already has a presentation.
+3. Sign in at Console `/sign-in` and work from Console `/` or `/session`. The seeded
+   `Impromptu sample deck` sits in My presentations; to upload by hand, drop
+   `docs/samples/impromptu-sample-deck.pdf` or the generated PPTX and wait for the upload and
+   public slide render to complete before inviting Stage. The `docs/samples/reference/` files
+   exercise the reference-document upload path.
 4. Keep the account cookie, CSRF value, deck version, and invitation secret out of URLs, logs,
    screenshots, support tickets, and browser storage outside the intended session.
 

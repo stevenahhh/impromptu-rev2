@@ -226,5 +226,15 @@
   "presentationDeleteConfirm": "Confirm delete",
   "presentationDeleteFailed": "The presentation could not be deleted. Please try again.",
   "presentationResumeFailed": "This presentation could not be opened. Please try again.",
-  "presentationsLoadMore": "Show more presentations"
+  "presentationsLoadMore": "Show more presentations",
+  "demoAccountTitle": "Try the demo",
+  "demoAccountLead": "Sign in with the shared demo account to explore a seeded presentation.",
+  "demoAccountFill": "Fill in demo account",
+  "quickStartTitle": "Quick start",
+  "quickStartLead": "Four steps to your first presented deck.",
+  "quickStartStepContinue": "Open the seeded deck from My presentations with Continue setup.",
+  "quickStartStepInvite": "Create a Stage invitation and approve the display's fingerprint.",
+  "quickStartStepPresent": "Start the talk and drive slides; evidence stays private to you.",
+  "quickStartStepReport": "End the talk and open the report with timings and questions.",
+  "quickStartDismiss": "Got it"
 }
