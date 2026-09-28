@@ -10,7 +10,7 @@ describe("custom deck upload real-browser QA", () => {
     expect(evidence.environment.consoleOrigin).toMatch(/^http:\/\/localhost:\d+$/);
     expect(evidence.environment).toMatchObject({
       sofficePath: "/Applications/LibreOffice.app/Contents/MacOS/soffice",
-      libreOfficeVersion: expect.stringContaining("LibreOffice 26.2.5.2"),
+      libreOfficeVersion: expect.stringContaining("LibreOffice 26.8.0.3"),
       fontVersion: "DejaVu 2.37 (Homebrew font-dejavu cask)",
       fontSha256: "7da195a74c55bef988d0d48f9508bd5d849425c1770dba5d7bfc6ce9ed848954",
       fixtureSha256: {

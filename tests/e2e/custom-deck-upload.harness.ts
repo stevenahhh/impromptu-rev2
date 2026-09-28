@@ -441,6 +441,11 @@ async function openStage(options: {
     stringField(options.upload, "deckVersion"),
   )}`;
   await options.consolePage.evaluate((url) => {
+    // openStage runs once per upload (PPTX, then PDF) on the same Console page; the one-shot
+    // click listener detaches itself but the element remains, so a second call would leave two
+    // [data-harness-open-stage] nodes and the strict-mode click below would abort before
+    // window.open — leaving waitForEvent("page") dangling until browser.close() rejects it.
+    for (const stale of document.querySelectorAll("[data-harness-open-stage]")) stale.remove();
     const gesture = document.createElement("button");
     gesture.type = "button";
     gesture.setAttribute("data-harness-open-stage", "");
