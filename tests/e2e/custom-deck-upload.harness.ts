@@ -107,8 +107,15 @@ export interface CustomDeckUploadEvidence {
 
 const fixtureRoot = resolve("tests/fixtures/custom-deck-upload");
 const evidenceRoot = resolve("artifacts/custom-deck-upload-e2e");
-const defaultSofficePath = "/Applications/LibreOffice.app/Contents/MacOS/soffice";
-const defaultFontPath = resolve(process.env.HOME ?? "", "Library/Fonts/DejaVuSans.ttf");
+const platformIsDarwin = process.platform === "darwin";
+// The Linux lane (ubuntu-24.04 CI) resolves the renderer through libreoffice-impress and the
+// pinned upstream TTF; macOS uses the Homebrew installs.
+const defaultSofficePath = platformIsDarwin
+  ? "/Applications/LibreOffice.app/Contents/MacOS/soffice"
+  : "/usr/bin/soffice";
+const defaultFontPath = platformIsDarwin
+  ? resolve(process.env.HOME ?? "", "Library/Fonts/DejaVuSans.ttf")
+  : "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
 const controllerUsername = "customdeck";
 const controllerPassword = "custom-deck-password";
 const contentTypes: Readonly<Record<string, string>> = {
@@ -646,7 +653,11 @@ export async function runCustomDeckUploadE2e(): Promise<CustomDeckUploadEvidence
   const sofficePath = process.env.SOFFICE_PATH ?? defaultSofficePath;
   const fontPath = process.env.IMPROMPTU_E2E_FONT_PATH ?? defaultFontPath;
   const libreOfficeVersion = commandVersion(sofficePath);
-  const fontVersion = "DejaVu 2.37 (Homebrew font-dejavu cask)";
+  // Provenance, not detection: macOS hashes the Homebrew cask install, the Linux lane the
+  // pinned upstream release TTF — the same 2.37 bytes, so the sha pin is shared.
+  const fontVersion = platformIsDarwin
+    ? "DejaVu 2.37 (Homebrew font-dejavu cask)"
+    : "DejaVu 2.37 (upstream dejavu-fonts-ttf-2.37 release)";
   const fontSha256 = sha256File(fontPath);
   const processes: ServiceProcess[] = [];
   const cleanup: string[] = [];
@@ -749,7 +760,14 @@ export async function runCustomDeckUploadE2e(): Promise<CustomDeckUploadEvidence
       `Started real backend/gateway mains and browser origins; Console ${consoleOrigin}; ${libreOfficeVersion}`,
     );
 
-    browser = await chromium.launch({ headless: true });
+    // The other E2E harnesses resolve Chrome through CHROME_EXECUTABLE_PATH so CI can point at
+    // the runner's preinstalled google-chrome instead of playwright's bundled (absent) binary.
+    const configuredChrome = process.env.CHROME_EXECUTABLE_PATH;
+    const chromeExecutable =
+      configuredChrome === undefined || configuredChrome === ""
+        ? chromium.executablePath()
+        : configuredChrome;
+    browser = await chromium.launch({ executablePath: chromeExecutable, headless: true });
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
     await context.addInitScript(() => {
       const responses: Array<{ status: number; body: string }> = [];
