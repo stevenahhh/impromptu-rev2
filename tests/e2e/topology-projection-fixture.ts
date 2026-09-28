@@ -1,6 +1,26 @@
 const host = "127.0.0.1";
 const port = Number(process.env.TOPOLOGY_PROJECTION_PORT ?? "44402");
-const publicSlides = ["slide_public_1", "slide_public_2", "slide_public_3"];
+// The Stage verifies every vector slide's bytes against imageContentHash before mounting and
+// reports SLIDE_FAILED instead of READY on mismatch. The old fixture advertised
+// /assets/slide-N.svg (answered with index.html) plus a fabricated hash, so every slide failed.
+// Serve real SVG bytes on the same-origin /v1/ proxy path with their actual digests.
+const topologySlideAssets = await Promise.all(
+  ["slide_public_1", "slide_public_2", "slide_public_3"].map(async (publicSlideKey, index) => {
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">' +
+      '<rect width="1280" height="720" fill="#101418"/>' +
+      '<text x="64" y="160" font-size="96" fill="#ffffff">Public slide ' +
+      String(index + 1) +
+      "</text></svg>";
+    const bytes = new TextEncoder().encode(svg);
+    const digest = await crypto.subtle.digest("SHA-256", bytes);
+    const contentHash = Array.from(new Uint8Array(digest), (b) =>
+      b.toString(16).padStart(2, "0"),
+    ).join("");
+    return { publicSlideKey, ordinal: index + 1, bytes, contentHash };
+  }),
+);
+const publicSlides = topologySlideAssets.map((asset) => asset.publicSlideKey);
 let joinSequence = 0;
 const sockets = new Set<Bun.ServerWebSocket<Record<never, never>>>();
 
@@ -72,13 +92,13 @@ const server = Bun.serve<Record<never, never>, Record<never, never>>({
         deck: {
           deckVersion: "deck_topology",
           manifestHash: "manifest_topology",
-          slides: publicSlides.map((publicSlideKey, index) => ({
-            publicSlideKey,
+          slides: topologySlideAssets.map((asset, index) => ({
+            publicSlideKey: asset.publicSlideKey,
             ordinal: index + 1,
             accessibilityLabel: `Public slide ${index + 1}`,
             image: {
-              url: `/assets/slide-${index + 1}.svg`,
-              contentHash: `slide-hash-${index + 1}`,
+              url: `/v1/deck-assets/topology/slides/slide-${asset.ordinal}.svg`,
+              contentHash: asset.contentHash,
             },
           })),
         },
@@ -95,6 +115,14 @@ const server = Bun.serve<Record<never, never>, Record<never, never>>({
         byte.toString(16).padStart(2, "0"),
       ).join("");
       return json({ ...absoluteState, stateHash });
+    }
+    if (request.method === "GET" && url.pathname.startsWith("/v1/deck-assets/")) {
+      const ordinal = Number(url.pathname.match(/slide-(\d+)\.svg$/)?.[1] ?? "0");
+      const slideAsset = topologySlideAssets.find((asset) => asset.ordinal === ordinal);
+      if (slideAsset === undefined) return json({ error: "not_found" }, 404);
+      return new Response(slideAsset.bytes, {
+        headers: { "content-type": "image/svg+xml", "cache-control": "no-store" },
+      });
     }
     if (request.method === "GET" && url.pathname === "/v1/events") {
       const body = new ReadableStream<Uint8Array>({
