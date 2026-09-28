@@ -25,7 +25,7 @@
   "rewrites": [
     {
       "source": "/v1/:path*",
-      "destination": "https://surround-brand-metals-soap.trycloudflare.com/v1/:path*"
+      "destination": "https://anticipated-displayed-prev-tournament.trycloudflare.com/v1/:path*"
     }
   ]
 }
