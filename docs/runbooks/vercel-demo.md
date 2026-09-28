@@ -31,16 +31,16 @@ The aliases above are the demo project domains. The funnel hostname is bound to 
 
 ## Start the demo stack
 
-Use a task-owned account, deck, and browser profile. Keep `.env` outside version control.
+Use a task-owned account, deck, and browser profile. Keep `.env.production` outside version control.
 
 1. Set `CONSOLE_PUBLIC_ORIGIN` to the Console alias and `STAGE_PUBLIC_ORIGIN` to the Stage alias
    in the Compose environment. The projection gateway must validate the exact Stage origin.
 2. Start the stateful services from the repository root:
 
    ```sh
-   docker compose --env-file .env -f compose.production.yaml config --quiet
-   docker compose --env-file .env -f compose.production.yaml up -d --remove-orphans
-   docker compose --env-file .env -f compose.production.yaml ps
+   docker compose --env-file .env.production -f compose.production.yaml config --quiet
+   docker compose --env-file .env.production -f compose.production.yaml up -d --remove-orphans
+   docker compose --env-file .env.production -f compose.production.yaml ps
    ```
 
    Do not add `--volumes`. Inspect a failed migration instead of bypassing it.
@@ -75,7 +75,7 @@ Use a task-owned account, deck, and browser profile. Keep `.env` outside version
    - Private-backend `/health` and projection-gateway `/health` return healthy responses through
      their private tunnel origins.
 
-If exported shell variables still contain a previous tunnel, they can override `.env`. Unset stale
+If exported shell variables still contain a previous tunnel, they can override `.env.production`. Unset stale
 origin variables or override them at the Compose command boundary, then inspect a redacted
 `docker compose config` result before recreating only the affected backend and gateway services.
 Do not delete PostgreSQL or deck-artifact volumes during tunnel rotation.

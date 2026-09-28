@@ -32,7 +32,7 @@ at either database.
 
 For a single-VM deployment, `infra/deploy/Caddyfile` supplies the missing HTTPS edge. Point
 three DNS names at the VM: Console, Stage, and the authenticated private API. Set
-`CONSOLE_PUBLIC_ORIGIN`, `STAGE_PUBLIC_ORIGIN`, and `CONSOLE_PRIVATE_API_ORIGIN` in `.env` to
+`CONSOLE_PUBLIC_ORIGIN`, `STAGE_PUBLIC_ORIGIN`, and `CONSOLE_PRIVATE_API_ORIGIN` in `.env.production` to
 their exact `https://` origins. On the VM, configure Caddy's `CONSOLE_PUBLIC_HOST`,
 `STAGE_PUBLIC_HOST`, `PRIVATE_API_PUBLIC_HOST` (hostnames without a scheme), and
 `ACME_EMAIL`, then validate with `caddy validate --config infra/deploy/Caddyfile --adapter
@@ -44,7 +44,7 @@ unbuffered SSE, and WebSocket. Keep the VM's Caddy certificate state on persiste
 
 ## Secrets and configuration
 
-1. Copy `.env.example` to `.env`.
+1. Copy `.env.example` to `.env.production`. Bun auto-loads a file named `.env`, which poisoned host-side tests and tools with Docker-only paths; compose is always invoked with an explicit `--env-file`, so the production file is named `.env.production` to keep host commands clean.
 2. Replace every `change-me` value. Generate independent values; do not reuse a database password.
 3. Restrict database passwords to URL-safe `A-Z`, `a-z`, `0-9`, `_`, and `-`. Compose embeds them in
    PostgreSQL URLs.
@@ -95,8 +95,8 @@ projection-gateway.
 From the repository root:
 
 ```sh
-docker compose --env-file .env -f compose.production.yaml config --quiet
-docker compose --env-file .env -f compose.production.yaml build --pull
+docker compose --env-file .env.production -f compose.production.yaml config --quiet
+docker compose --env-file .env.production -f compose.production.yaml build --pull
 ```
 
 The private-backend image includes Bun 1.3.14, Node 26 for isolated model adapters, Python 3.14,
@@ -123,8 +123,8 @@ the talk.
 ## Deploy
 
 ```sh
-docker compose --env-file .env -f compose.production.yaml up -d --remove-orphans
-docker compose --env-file .env -f compose.production.yaml ps
+docker compose --env-file .env.production -f compose.production.yaml up -d --remove-orphans
+docker compose --env-file .env.production -f compose.production.yaml ps
 ```
 
 Startup ordering is strict: PostgreSQL health, one-shot migrations, projection-gateway health,
@@ -132,7 +132,7 @@ private-backend health, then browser surfaces. A failed `database-migrate` conta
 application from starting. Inspect it rather than bypassing it:
 
 ```sh
-docker compose --env-file .env -f compose.production.yaml logs database-migrate
+docker compose --env-file .env.production -f compose.production.yaml logs database-migrate
 ```
 
 The migration runner is checksum-protected and safe to rerun with unchanged migration files.
@@ -149,9 +149,9 @@ curl --fail --silent --show-error "${STAGE_PUBLIC_ORIGIN}/health"
 curl --fail --silent --show-error "${CONSOLE_PRIVATE_API_ORIGIN}/health"
 # The Stage public API is same-origin at /v1; no STAGE_PUBLIC_API_ORIGIN is configured.
 # The gateway health route is internal, not exposed on a separate browser origin.
-docker compose --env-file .env -f compose.production.yaml exec private-backend \
+docker compose --env-file .env.production -f compose.production.yaml exec private-backend \
   bun -e "const r=await fetch('http://127.0.0.1:3001/health'); console.log(r.status); process.exit(r.ok?0:1)"
-docker compose --env-file .env -f compose.production.yaml exec projection-gateway \
+docker compose --env-file .env.production -f compose.production.yaml exec projection-gateway \
   bun -e "const r=await fetch('http://127.0.0.1:3002/health'); console.log(r.status); process.exit(r.ok?0:1)"
 ```
 
@@ -166,9 +166,9 @@ Then perform a browser smoke test:
 ## Logs and operational checks
 
 ```sh
-docker compose --env-file .env -f compose.production.yaml logs --since 15m \
+docker compose --env-file .env.production -f compose.production.yaml logs --since 15m \
   private-backend projection-gateway console stage
-docker compose --env-file .env -f compose.production.yaml ps --format json
+docker compose --env-file .env.production -f compose.production.yaml ps --format json
 ```
 
 Treat repeated render deadlines, persisted-state validation failures, database readiness failures,
@@ -184,7 +184,7 @@ both and recreate them together.
 Back up PostgreSQL and the durable deck artifact volume before every release:
 
 ```sh
-docker compose --env-file .env -f compose.production.yaml exec -T postgres \
+docker compose --env-file .env.production -f compose.production.yaml exec -T postgres \
   pg_dumpall --username impromptu_bootstrap > "impromptu-postgres-$(date +%Y%m%d%H%M%S).sql"
 docker run --rm \
   -v impromptu-production_deck-artifacts:/source:ro \
@@ -210,14 +210,14 @@ switching traffic.
    the pre-deployment database/volume backups or deploy a forward fix.
 
 ```sh
-docker compose --env-file .env -f compose.production.yaml up -d --no-deps --force-recreate \
+docker compose --env-file .env.production -f compose.production.yaml up -d --no-deps --force-recreate \
   projection-gateway private-backend console stage
 ```
 
 ## Shutdown
 
 ```sh
-docker compose --env-file .env -f compose.production.yaml down
+docker compose --env-file .env.production -f compose.production.yaml down
 ```
 
 Do not add `--volumes` during routine shutdown. That flag deletes PostgreSQL, staged uploads, and
